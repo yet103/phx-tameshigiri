@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>技術リスト編集</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="light">
+
+  <div class="page-links">
+    <a href="index.html">採点</a>
+    <strong>技術リスト編集</strong>
+    <a href="ranking.html">順位表示</a>
+  </div>
+
+  <div class="container" style="padding-top:16px;">
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+      <h2 style="margin:0;">技術リスト</h2>
+      <button id="btnSaveTech" class="btn-neutral" style="margin-left:auto;">保存</button>
+      <button id="btnResetTech" class="btn-fail">デフォルトに戻す</button>
+      <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="tech-table" id="techTable">
+        <thead>
+          <tr>
+            <th>技名</th>
+            <th>初太刀</th>
+            <th>二の太刀</th>
+            <th>三の太刀</th>
+            <th>四の太刀</th>
+          </tr>
+        </thead>
+        <tbody id="techTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="storage.js"></script>
+  <script>
+    var body = document.body;
+    var techTableBody = document.getElementById('techTableBody');
+
+    function applyTheme(theme) {
+      body.setAttribute('data-theme', theme);
+      document.getElementById('btnTheme').textContent = theme === 'dark' ? '☀ ライト' : '🌙 ダーク';
+    }
+
+    function getTechs() {
+      return Storage.loadCustomTechniques() || TECHNIQUES;
+    }
+
+    function renderTable(techs) {
+      techTableBody.innerHTML = '';
+      techs.forEach(function(t, i) {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td><input type="text" value="' + esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
+          [0,1,2,3].map(function(s) {
+            var v = t.strikes[s] !== null && t.strikes[s] !== undefined ? esc(String(t.strikes[s])) : '';
+            return '<td><input type="number" min="0" max="99" value="' + v +
+              '" data-field="strike" data-idx="' + i + '" data-strike="' + s + '"></td>';
+          }).join('');
+        techTableBody.appendChild(tr);
+      });
+    }
+
+    function esc(s) {
+      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function collectTechs() {
+      var techs = [];
+      var rows = techTableBody.querySelectorAll('tr');
+      rows.forEach(function(tr) {
+        var name = tr.querySelector('[data-field="name"]').value.trim();
+        var strikes = [0,1,2,3].map(function(s) {
+          var v = tr.querySelector('[data-strike="' + s + '"]').value;
+          return v === '' ? null : parseInt(v, 10);
+        });
+        techs.push({ name: name, strikes: strikes });
+      });
+      return techs;
+    }
+
+    applyTheme(Storage.loadTheme());
+    renderTable(getTechs());
+
+    document.getElementById('btnSaveTech').addEventListener('click', function() {
+      Storage.saveCustomTechniques(collectTechs());
+      alert('保存しました。');
+    });
+
+    document.getElementById('btnResetTech').addEventListener('click', function() {
+      if (confirm('デフォルト設定に戻します。よろしいですか？')) {
+        Storage.resetCustomTechniques();
+        renderTable(TECHNIQUES);
+      }
+    });
+
+    document.getElementById('btnTheme').addEventListener('click', function() {
+      var current = Storage.loadTheme();
+      var next = current === 'dark' ? 'light' : 'dark';
+      Storage.saveTheme(next);
+      applyTheme(next);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Unit Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; font-weight: bold; }
+    h2 { margin-top: 24px; }
+  </style>
+</head>
+<body>
+<h1>試し斬りアプリ テスト</h1>
+<div id="results"></div>
+<script src="data.js"></script>
+<script src="scoring.js"></script>
+<script src="storage.js"></script>
+<script>
+  var results = document.getElementById('results');
+  var passed = 0, failed = 0;
+
+  function assert(desc, actual, expected) {
+    var ok = JSON.stringify(actual) === JSON.stringify(expected);
+    var el = document.createElement('div');
+    el.className = ok ? 'pass' : 'fail';
+    el.textContent = (ok ? '✓ ' : '✗ ') + desc +
+      (ok ? '' : ' → got: ' + JSON.stringify(actual) + ' expected: ' + JSON.stringify(expected));
+    results.appendChild(el);
+    ok ? passed++ : failed++;
+  }
+
+  if (typeof TECHNIQUES === 'undefined') {
+    results.textContent = 'ERROR: data.js が読み込まれていません';
+  } else {
+    // data.js テスト
+    var h2 = document.createElement('h2');
+    h2.textContent = 'data.js';
+    results.appendChild(h2);
+
+    assert('TECHNIQUES は32件', TECHNIQUES.length, 32);
+    assert('破図味(男)の初太刀は20点', TECHNIQUES.find(function(t){ return t.name === '破図味(男)'; }).strikes[0], 20);
+    assert('立位袈裟の二の太刀はnull', TECHNIQUES.find(function(t){ return t.name === '立位袈裟'; }).strikes[1], null);
+    assert('四方の四の太刀は3点', TECHNIQUES.find(function(t){ return t.name === '四方'; }).strikes[3], 3);
+    assert('響き返しの四の太刀はnull',
+      TECHNIQUES.find(function(t){ return t.name === '響き返し'; }).strikes[3],
+      null);
+    assert('四方のstrikes全体',
+      TECHNIQUES.find(function(t){ return t.name === '四方'; }).strikes,
+      [17, 5, 7, 3]);
+
+    var h2s = document.createElement('h2');
+    h2s.textContent = 'scoring.js';
+    results.appendChild(h2s);
+
+    // encodeResult / decodeResult テスト
+    var encRows = [
+      { techName: '破図味(男)', values: ['○','×','',''], techPoint: '○' },
+      { techName: '夢想返し',   values: ['○','○','',''], techPoint: '' }
+    ];
+    var encoded = Scoring.encodeResult(encRows);
+    assert('encodeResult 2行', encoded, '10 1 1  1 ');
+    var decoded = Scoring.decodeResult(encoded, 2);
+    assert('decodeResult values[0]', decoded[0].values, ['○','×','','']);
+    assert('decodeResult techPoint[0]', decoded[0].techPoint, '○');
+    assert('decodeResult values[1]', decoded[1].values, ['○','○','','']);
+    assert('decodeResult techPoint[1]', decoded[1].techPoint, '');
+
+    // calcStrikeScore: 不明技は0
+    assert('calcStrikeScore 存在しない技', Scoring.calcStrikeScore('存在しない技', 0, '○', false), 0);
+
+    // calcTotalScore isFemale=true
+    var femaleRows = [{ techName: '水月', values: ['○','○','',''], techPoint: '' }];
+    // 水月(女): 17+13=30
+    assert('calcTotalScore isFemale=true 水月', Scoring.calcTotalScore(femaleRows, true), 30);
+
+    // findTechnique: 通常名で見つかる
+    assert('findTechnique 夢想返し', Scoring.findTechnique('夢想返し', false).name, '夢想返し');
+
+    // findTechnique: 男女サフィックスで見つかる
+    assert('findTechnique 胸尽くし(男) isFemale=false', Scoring.findTechnique('胸尽くし', false).name, '胸尽くし(男)');
+    assert('findTechnique 胸尽くし(女) isFemale=true', Scoring.findTechnique('胸尽くし', true).name, '胸尽くし(女)');
+
+    // findTechnique: 見つからない場合はnull
+    assert('findTechnique 不明技 → null', Scoring.findTechnique('不明技', false), null);
+
+    // calcStrikeScore: ○のとき定義の点数を返す
+    assert('calcStrikeScore 破図味(男) 初太刀 ○', Scoring.calcStrikeScore('破図味(男)', 0, '○', false), 20);
+    assert('calcStrikeScore 破図味(男) 二の太刀 ○', Scoring.calcStrikeScore('破図味(男)', 1, '○', false), 4);
+
+    // calcStrikeScore: ×のとき0
+    assert('calcStrikeScore 破図味(男) 初太刀 ×', Scoring.calcStrikeScore('破図味(男)', 0, '×', false), 0);
+
+    // calcStrikeScore: 空白のとき0
+    assert('calcStrikeScore 破図味(男) 初太刀 空白', Scoring.calcStrikeScore('破図味(男)', 0, '', false), 0);
+
+    // calcStrikeScore: null列（ReadOnly）は常に0
+    assert('calcStrikeScore 立位袈裟 三の太刀（null）○', Scoring.calcStrikeScore('立位袈裟', 2, '○', false), 0);
+
+    // calcTotalScore: 全行合計
+    var rows = [
+      { techName: '破図味(男)', values: ['○','○','○','○'], techPoint: '' },
+      { techName: '夢想返し',   values: ['○','○','',''],   techPoint: '○' }
+    ];
+    // 破図味(男): 20+4+4+2 = 30、夢想返し: 13+5 = 18 + 技術点3 = 21 → 合計51
+    assert('calcTotalScore', Scoring.calcTotalScore(rows, false), 51);
+
+    var h2st = document.createElement('h2');
+    h2st.textContent = 'storage.js';
+    results.appendChild(h2st);
+
+    // parseCsv: 基本動作
+    var csv = '選手名,順番,技1,技2,技3,得点,新人,女子,結果\n山田 太郎,A-男子-1-1,破図味,夢想返し,響き返し,55,,,abc';
+    var players = Storage.parseCsv(csv);
+    assert('parseCsv 1件', players.length, 1);
+    assert('parseCsv name', players[0].name, '山田 太郎');
+    assert('parseCsv order', players[0].order, 'A-男子-1-1');
+    assert('parseCsv tech1', players[0].tech1, '破図味');
+    assert('parseCsv score', players[0].score, 55);
+    assert('parseCsv isNewFace false', players[0].isNewFace, false);
+    assert('parseCsv isFemale false', players[0].isFemale, false);
+    assert('parseCsv result', players[0].result, 'abc');
+
+    // parseCsv: 新人・女子フラグ
+    var csv2 = '選手名,順番,技1,技2,技3,得点,新人,女子,結果\n田中 花子,A-女子-1-1,玉光,円要,連,30,○,○,';
+    var p2 = Storage.parseCsv(csv2);
+    assert('parseCsv isNewFace true', p2[0].isNewFace, true);
+    assert('parseCsv isFemale true', p2[0].isFemale, true);
+
+    // serializeCsv: parseCsvとの往復
+    var players3 = [{
+      name: '山田 太郎', order: 'A-男子-1-1',
+      tech1: '破図味', tech2: '夢想返し', tech3: '響き返し',
+      score: 55, isNewFace: false, isFemale: false, result: 'abc'
+    }];
+    var csv3 = Storage.serializeCsv(players3);
+    var reparsed = Storage.parseCsv(csv3);
+    assert('serializeCsv 往復 name', reparsed[0].name, '山田 太郎');
+    assert('serializeCsv 往復 score', reparsed[0].score, 55);
+
+    // parseCsv: コンマ含む選手名（RFC 4180 クォート対応）
+    var players4 = [{
+      name: '山田, 太郎', order: 'A-男子-1-1',
+      tech1: '破図味', tech2: '', tech3: '',
+      score: 10, isNewFace: false, isFemale: false, result: ''
+    }];
+    var csv4 = Storage.serializeCsv(players4);
+    var reparsed4 = Storage.parseCsv(csv4);
+    assert('parseCsv コンマ含む名前の往復', reparsed4[0].name, '山田, 太郎');
+
+    // 結果サマリ
+    var summary = document.createElement('p');
+    summary.style.marginTop = '24px';
+    summary.style.fontWeight = 'bold';
+    summary.textContent = 'Result: ' + passed + ' passed, ' + failed + ' failed';
+    results.appendChild(summary);
+  }
+</script>
+</body>
+</html>

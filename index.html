@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>試し斬り採点</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="light">
+
+  <!-- ページナビ -->
+  <div class="page-links">
+    <strong>採点</strong>
+    <a href="techniques.html">技術リスト編集</a>
+    <a href="ranking.html">順位表示</a>
+  </div>
+
+  <!-- 選手ナビゲーション -->
+  <div class="player-nav">
+    <button class="nav-btn" id="btnPrev">◀ 前の選手</button>
+    <div class="player-info">
+      <span class="court-label" id="courtLabel"></span>
+      <span id="playerOrderLabel"></span>
+      <strong id="playerNameLabel">（選手未選択）</strong>
+    </div>
+    <button class="nav-btn" id="btnNext">次の選手 ▶</button>
+  </div>
+
+  <!-- タイマー -->
+  <div class="timer-bar">
+    <button id="btnTimerStart">▶ 開始</button>
+    <button id="btnTimerStop">■ 停止</button>
+    <button id="btnTimerReset">↺ リセット</button>
+    <div class="timer-display" id="timerDisplay">05:00</div>
+  </div>
+
+  <!-- 採点テーブル -->
+  <div class="score-table-wrap">
+    <table class="score-table" id="scoreTable">
+      <thead>
+        <tr>
+          <th>技</th>
+          <th>初太刀</th>
+          <th>二の太刀</th>
+          <th>三の太刀</th>
+          <th>四の太刀</th>
+          <th>技術点</th>
+          <th>得点</th>
+        </tr>
+      </thead>
+      <tbody id="scoreTableBody">
+        <!-- app.jsが動的生成 -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- アクションバー -->
+  <div class="action-bar">
+    <button class="btn-success" id="btnAllSuccess">形成功</button>
+    <button class="btn-fail"    id="btnAllFail">失敗</button>
+    <div class="total-score" id="totalScoreDisplay">合計: 0点</div>
+  </div>
+
+  <!-- ツールバー -->
+  <div class="toolbar">
+    <button id="btnImport">CSVインポート</button>
+    <button id="btnExport">CSVエクスポート</button>
+    <button id="btnDownloadHtml">HTML保存</button>
+    <button id="btnGenNext">二巡目データ生成</button>
+    <button id="btnPlayerList">選手一覧</button>
+    <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
+    <input type="file" id="csvFileInput" accept=".csv">
+  </div>
+
+  <!-- 選手一覧フローティングパネル -->
+  <div class="player-list-panel" id="playerListPanel">
+    <div class="player-list-header">
+      <span>選手一覧</span>
+      <button class="player-list-close" id="btnPlayerListClose">✕</button>
+    </div>
+    <div class="player-list-body">
+      <table class="player-list-table" id="playerListTable">
+        <thead>
+          <tr>
+            <th>順番</th>
+            <th>選手名</th>
+            <th>技1</th>
+            <th>技2</th>
+            <th>技3</th>
+            <th>得点</th>
+          </tr>
+        </thead>
+        <tbody id="playerListBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="scoring.js"></script>
+  <script src="storage.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+
+# Database
+*.sqlite
+*.db
+
+# Server data
+server/data/

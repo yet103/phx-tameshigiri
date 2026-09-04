@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  phx-tameshigiri:
+    build: .
+    container_name: phx-tameshigiri
+    restart: always
+    ports:
+      - "3457:3457"
+    volumes:
+      - tameshigiri-data:/app/server/data
+    environment:
+      - PORT=3457
+      - NODE_ENV=production
+
+volumes:
+  tameshigiri-data:
