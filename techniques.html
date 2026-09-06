@@ -94,10 +94,12 @@
       });
 
       document.getElementById('btnResetTech').addEventListener('click', async function() {
-        if (confirm('デフォルト設定に戻します。よろしいですか？')) {
-          await Api.resetTechniques();
-          renderTable(TECHNIQUES);
-        }
+        if (!confirm('デフォルト設定に戻します。よろしいですか？')) return;
+        var ok = await Api.resetTechniques();
+        if (!ok) { alert('リセットに失敗しました。'); return; }
+        var techData = await Api.loadTechniques();
+        renderTable(techData ? techData.techniques : TECHNIQUES);
+        alert('デフォルトに戻しました。');
       });
 
       document.getElementById('btnTheme').addEventListener('click', function() {
