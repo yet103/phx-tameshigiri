@@ -58,6 +58,10 @@
     // 大会一覧を読み込む
     (async function() {
       var events = await Api.listEvents();
+      if (!events) {
+        alert('大会一覧を取得できませんでした。通信を確認してください。');
+        return;
+      }
       events.forEach(function(ev) {
         var opt = document.createElement('option');
         opt.value = ev.id;

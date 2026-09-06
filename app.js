@@ -24,13 +24,20 @@ var App = (function() {
   // --- 初期化 ---
   async function init() {
     applyTheme(Storage.loadTheme());
+    // 送信キューは何よりも先に起動する。
+    // ここから下の API 呼び出しがどう転んでも、前回未送信の採点が
+    // 復旧され、online イベントの購読も済んでいる状態にするため。
+    var recovered = Outbox.init(onSaveStatus);
     // 技術データをAPIから取得してScoringに注入
     var techData = await Api.loadTechniques();
     if (techData && techData.techniques) {
       Scoring.setTechniques(techData.techniques);
+    } else {
+      // 端末側の既定値で採点は続けられるが、サーバーのカスタム技術とは
+      // 得点が食い違いうる。黙って続けない。
+      alert('技術リストをサーバーから取得できませんでした。\n' +
+            '端末側の既定値で採点します。得点が実際と異なる可能性があります。');
     }
-    // 送信キューを起動する。前回未送信の採点があればここで再送される。
-    var recovered = Outbox.init(onSaveStatus);
     // 大会一覧を取得してドロップダウンに展開
     await refreshEventList();
     bindEvents();
@@ -209,6 +216,12 @@ var App = (function() {
   // --- 大会管理 ---
   async function refreshEventList() {
     var events = await Api.listEvents();
+    if (!events) {
+      // 取得できなかっただけで、大会が消えたわけではない。
+      // 一覧を空にすると「大会が無くなった」ように見えるので、今の表示を保つ。
+      alert('大会一覧を取得できませんでした。通信を確認してください。');
+      return;
+    }
     var select = document.getElementById('eventSelect');
     select.innerHTML = '<option value="">-- 大会を選択 --</option>';
     for (var i = 0; i < events.length; i++) {
@@ -581,7 +594,12 @@ var App = (function() {
       }
       if (result && result.success) {
         // 大会データを再読み込み
-        currentEvent = await Api.loadEvent(currentEvent.id);
+        var reloaded = await Api.loadEvent(currentEvent.id);
+        if (!reloaded) {
+          alert('インポートは成功しましたが、最新データを取得できませんでした。\n画面を再読み込みしてください。');
+          return;
+        }
+        currentEvent = reloaded;
         players = currentEvent.players || [];
         refreshCourtList();
         applyCourtFilter();
