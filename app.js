@@ -31,12 +31,17 @@ var App = (function() {
     }
     // 送信キューを起動する。前回未送信の採点があればここで再送される。
     var recovered = Outbox.init(onSaveStatus);
-    if (recovered > 0) {
-      alert('前回未送信の採点 ' + recovered + ' 件を送信します。');
-    }
     // 大会一覧を取得してドロップダウンに展開
     await refreshEventList();
     bindEvents();
+    // 通知は初期化の後に、かつ次のタスクへ逃がして出す。
+    // alert はメインスレッドを止めるため、ここで直に呼ぶと
+    // 復元した採点の再送そのものが係員がダイアログを閉じるまで進まない。
+    if (recovered > 0) {
+      setTimeout(function() {
+        alert('前回未送信の採点 ' + recovered + ' 件を送信します。');
+      }, 0);
+    }
   }
 
   // --- 保存状態の表示 ---
@@ -258,7 +263,7 @@ var App = (function() {
   }
 
   // --- 選手切り替え ---
-  async function movePlayer(delta) {
+  function movePlayer(delta) {
     if (visiblePlayers.length === 0) return;
     saveCurrentState();
     var next = currentIndex + delta;
@@ -390,7 +395,7 @@ var App = (function() {
   function pad(n) { return n < 10 ? '0' + n : String(n); }
 
   // --- 採点インタラクション ---
-  async function onStrikeClick(e) {
+  function onStrikeClick(e) {
     var td = e.currentTarget;
     if (td.classList.contains('disabled')) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
@@ -478,7 +483,7 @@ var App = (function() {
     });
   }
 
-  async function setAllSuccess() {
+  function setAllSuccess() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     var rows = scoreTableBody.querySelectorAll('tr');
     var p = visiblePlayers[currentIndex];
@@ -496,7 +501,7 @@ var App = (function() {
     saveCurrentState();
   }
 
-  async function setAllFail() {
+  function setAllFail() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     var rows = scoreTableBody.querySelectorAll('tr');
     var p = visiblePlayers[currentIndex];
