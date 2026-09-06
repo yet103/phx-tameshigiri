@@ -662,8 +662,12 @@ var App = (function() {
   async function onCsvExport() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
     if (players.length === 0) { alert('エクスポートするデータがありません。'); return; }
-    var csvText = await Api.exportCsv(currentEvent.id);
+    // await をまたぐので、対象の大会をここで固定する。
+    // 通信中に大会を切り替えられると、別の大会のCSVを保存してしまう。
+    var eventId = currentEvent.id;
+    var csvText = await Api.exportCsv(eventId);
     if (!csvText) { alert('エクスポートに失敗しました。'); return; }
+    if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
     Storage.downloadCsv('players.csv', csvText);
   }
 
