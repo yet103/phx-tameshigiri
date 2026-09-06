@@ -442,7 +442,8 @@ var App = (function() {
       var result = await Api.importCsv(currentEvent.id, text, mode);
       if (result && result.blocked) {
         var ok = confirm(
-          'この大会には採点済みの選手が ' + result.scoredCount + ' 名います。\n' +
+          'この大会には採点済みの選手が少なくとも ' + result.scoredCount + ' 名います。\n' +
+          '他のコート端末による採点も含まれます。\n' +
           '読み込みを続けると、これらの採点結果はすべて失われます。\n' +
           '本当に続行しますか？'
         );

@@ -123,6 +123,15 @@
     assert('appendは採点済みでも拒否しない', appended.success, true);
 
     await Api.deleteEvent(guardEvent.id);
+
+    // 未採点のみの大会は replace を拒否されない（誤検知の回帰テスト）
+    var cleanEvent = await Api.saveEvent({ name: 'ガードテスト2', date: '2026-01-01', venue: '', players: [] });
+    var cleanCsv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
+                   '未採点,A-男子-1-1,真,,,0,,,\n';
+    await Api.importCsv(cleanEvent.id, cleanCsv, 'replace');
+    var cleanAgain = await Api.importCsv(cleanEvent.id, cleanCsv, 'replace');
+    assert('未採点のみの大会へのreplaceは拒否されない', cleanAgain.success, true);
+    await Api.deleteEvent(cleanEvent.id);
   }
 
   (async function() {
