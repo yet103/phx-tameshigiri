@@ -143,12 +143,15 @@ var App = (function() {
     document.getElementById('btnCreateEvent').addEventListener('click', async function() {
       var name = document.getElementById('newEventName').value.trim();
       if (!name) { alert('大会名を入力してください。'); return; }
-      await createEvent(
+      var created = await createEvent(
         name,
         document.getElementById('newEventDate').value,
         document.getElementById('newEventVenue').value.trim()
       );
-      document.getElementById('newEventModal').style.display = 'none';
+      // 失敗したらモーダルは開いたままにして、入力内容を残す
+      if (created) {
+        document.getElementById('newEventModal').style.display = 'none';
+      }
     });
     document.getElementById('btnDeleteEvent').addEventListener('click', function() {
       onDeleteEvent();
@@ -220,7 +223,15 @@ var App = (function() {
     }
   }
 
+  // 大会読み込みの再入ガード。
+  // Api.loadEvent の往復中に別の大会やコートへ切り替えられると、
+  // 遅れて戻ってきた古い応答が新しい選択を上書きし、
+  // 「画面はA大会・内部状態はB大会」というねじれが起きる。
+  // 採点対象の取り違えに直結するため、最後の要求だけが状態を書き換えるようにする。
+  var loadSeq = 0;
+
   async function onEventSelect(eventId, court) {
+    var seq = ++loadSeq;
     if (!eventId) {
       currentEvent = null;
       players = [];
@@ -237,7 +248,9 @@ var App = (function() {
       refreshPlayerList();
       return;
     }
-    currentEvent = await Api.loadEvent(eventId);
+    var loaded = await Api.loadEvent(eventId);
+    if (seq !== loadSeq) return;   // 追い越された。古い応答は捨てる
+    currentEvent = loaded;
     if (!currentEvent) {
       // 復元しようとした大会が既に削除されている。
       // 前の大会の選手や得点が画面に残らないよう、未選択状態まで戻す。
@@ -252,6 +265,8 @@ var App = (function() {
     Route.set(currentEvent.id, currentCourt);
   }
 
+  // 戻り値: 作成できたら true。呼び出し元はこれを見てモーダルを閉じるか決める
+  // （失敗して閉じてしまうと、入力し直しになる）
   async function createEvent(name, date, venue) {
     var event = {
       name: name,
@@ -262,12 +277,13 @@ var App = (function() {
     var result = await Api.saveEvent(event);
     if (!result || !result.id) {
       alert('大会の作成に失敗しました。');
-      return;
+      return false;
     }
     await refreshEventList();
     document.getElementById('eventSelect').value = result.id;
     currentCourt = '';
     await onEventSelect(result.id, '');
+    return true;
   }
 
   async function onDeleteEvent() {
