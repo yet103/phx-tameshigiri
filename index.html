@@ -32,6 +32,13 @@
     </select>
     <button id="btnNewEvent">＋ 新規大会</button>
     <button id="btnDeleteEvent">大会削除</button>
+    <span class="save-status" id="saveStatus">● 保存済み</span>
+  </div>
+
+  <!-- 保存失敗バナー -->
+  <div class="save-banner" id="saveBanner" style="display:none">
+    <span id="saveBannerText">⚠ サーバーに保存できていません</span>
+    <button id="btnRetrySave">今すぐ再試行</button>
   </div>
 
   <!-- 大会作成モーダル -->

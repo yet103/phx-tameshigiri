@@ -19,6 +19,7 @@
   --btn-fail:     #c0392b;
   --btn-neutral:  #3498db;
   --score-color:  #d35400;
+  --warn:         #b7791f;
 }
 
 /* ダークテーマ */
@@ -42,6 +43,7 @@
   --btn-fail:     #c0392b;
   --btn-neutral:  #2980b9;
   --score-color:  #f1c40f;
+  --warn:         #f6ad55;
 }
 
 /* ===== リセット & ベース ===== */
@@ -336,3 +338,32 @@ input[type="file"] { display: none; }
 .player-list-table tr.current-player td:last-child {
   color: var(--accent-text);
 }
+
+/* ===== 保存状態の表示 ===== */
+.save-status {
+  margin-left: auto;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  color: var(--btn-success);
+}
+.save-status.sending { color: var(--text-muted); }
+.save-status.retrying { color: var(--warn); font-weight: bold; }
+
+.save-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--btn-fail);
+  color: #ffffff;
+  font-weight: bold;
+}
+.save-banner button {
+  padding: 4px 12px;
+  border: 1px solid #ffffff;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.save-banner button:hover { background: rgba(255, 255, 255, 0.2); }
