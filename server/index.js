@@ -145,6 +145,17 @@ function escapeCSV(field) {
   return str;
 }
 
+// JSONのアトミック書き込み
+// writeFileSync で直接上書きすると、書き込み中にプロセスが落ちたときに
+// ファイルが切り詰められ、大会データが丸ごと失われる。
+// 一時ファイルへ書いてから rename することで、読み手からは
+// 「古い完全なファイル」か「新しい完全なファイル」のどちらかしか見えなくなる。
+function writeJsonAtomic(filePath, data) {
+  const tmp = filePath + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, filePath); // 同一ファイルシステム上なのでアトミック
+}
+
 // ミドルウェア
 app.use(cors());
 // ペイロードサイズ制限を緩和
@@ -214,7 +225,7 @@ app.post('/api/events', (req, res) => {
       event.players = [];
     }
 
-    fs.writeFileSync(path.join(EVENTS_DIR, `${event.id}.json`), JSON.stringify(event, null, 2));
+    writeJsonAtomic(path.join(EVENTS_DIR, `${event.id}.json`), event);
     res.json({ success: true, id: event.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -265,8 +276,8 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       ...req.body
     };
     event.updatedAt = new Date().toISOString();
-    
-    fs.writeFileSync(eventPath, JSON.stringify(event, null, 2));
+
+    writeJsonAtomic(eventPath, event);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -326,8 +337,8 @@ app.post('/api/events/:id/import', (req, res) => {
     }
     
     event.updatedAt = new Date().toISOString();
-    fs.writeFileSync(eventPath, JSON.stringify(event, null, 2));
-    
+    writeJsonAtomic(eventPath, event);
+
     res.json({ success: true, playerCount: event.players.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -398,7 +409,7 @@ app.post('/api/techniques', (req, res) => {
       return res.status(400).json({ error: 'Invalid data' });
     }
     const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
-    fs.writeFileSync(customPath, JSON.stringify(techniques, null, 2));
+    writeJsonAtomic(customPath, techniques);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -455,7 +466,7 @@ app.post('/api/events/:id/history', (req, res) => {
     
     data.entries.push(entry);
     
-    fs.writeFileSync(historyPath, JSON.stringify(data, null, 2));
+    writeJsonAtomic(historyPath, data);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
