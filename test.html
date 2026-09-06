@@ -19,6 +19,7 @@
 <script src="storage.js"></script>
 <script src="courts.js"></script>
 <script src="route.js"></script>
+<script src="outbox.js"></script>
 <script>
   var results = document.getElementById('results');
   var passed = 0, failed = 0;
@@ -285,6 +286,30 @@
     assert('build: 日本語コート名をエンコードする',
       Route.build('abc', '未分類'), '#event/abc/' + encodeURIComponent('未分類'));
     assert('build: 大会IDが無ければ空', Route.build('', 'A'), '');
+
+    var h2o = document.createElement('h2');
+    h2o.textContent = 'outbox.js';
+    results.appendChild(h2o);
+
+    var e1 = { eventId: 'ev1', playerId: 'p1', score: 10, result: 'a', queuedAt: 't1' };
+    var e2 = { eventId: 'ev1', playerId: 'p2', score: 20, result: 'b', queuedAt: 't2' };
+    var e1b = { eventId: 'ev1', playerId: 'p1', score: 30, result: 'c', queuedAt: 't3' };
+
+    assert('coalesce: 空キューに1件', Outbox.coalesce([], e1), [e1]);
+    assert('coalesce: 別選手は併存する', Outbox.coalesce([e1], e2), [e1, e2]);
+    assert('coalesce: 同一選手は最新で置き換える', Outbox.coalesce([e1, e2], e1b), [e1b, e2]);
+    assert('coalesce: 置き換えても順序が保たれる',
+      Outbox.coalesce([e1, e2], e1b).map(function(x) { return x.playerId; }),
+      ['p1', 'p2']);
+    assert('coalesce: 元の配列を破壊しない', (function() {
+      var q = [e1];
+      Outbox.coalesce(q, e1b);
+      return q[0].score;
+    })(), 10);
+
+    var eOther = { eventId: 'ev2', playerId: 'p1', score: 40, result: 'd', queuedAt: 't4' };
+    assert('coalesce: 大会が違えば別エントリ',
+      Outbox.coalesce([e1], eOther).length, 2);
 
     await runApiTests();
 
