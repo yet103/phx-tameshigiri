@@ -1,40 +1,5 @@
 var Storage = (function() {
-  var PLAYERS_KEY     = 'tmg_players';
-  var TECHNIQUES_KEY  = 'tmg_techniques';
-  var THEME_KEY       = 'tmg_theme';
-
-  // --- localStorage ---
-  function loadPlayers() {
-    try {
-      var raw = localStorage.getItem(PLAYERS_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch(e) { return []; }
-  }
-
-  function savePlayers(players) {
-    try {
-      localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
-      return true;
-    } catch(e) { return false; }
-  }
-
-  function loadCustomTechniques() {
-    try {
-      var raw = localStorage.getItem(TECHNIQUES_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch(e) { return null; }
-  }
-
-  function saveCustomTechniques(techs) {
-    try {
-      localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(techs));
-      return true;
-    } catch(e) { return false; }
-  }
-
-  function resetCustomTechniques() {
-    localStorage.removeItem(TECHNIQUES_KEY);
-  }
+  var THEME_KEY = 'tmg_theme';
 
   function loadTheme() {
     try { return localStorage.getItem(THEME_KEY) || 'light'; }
@@ -45,73 +10,6 @@ var Storage = (function() {
     try {
       localStorage.setItem(THEME_KEY, theme);
     } catch(e) {}
-  }
-
-  // --- CSV パーサ ---
-  // 元アプリCSVフォーマット: 選手名,順番,技1,技2,技3,得点,新人,女子,結果
-  function splitCsvLine(line) {
-    var result = [], cur = '', inQ = false;
-    for (var i = 0; i < line.length; i++) {
-      var c = line[i];
-      if (inQ) {
-        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-        else if (c === '"') { inQ = false; }
-        else { cur += c; }
-      } else {
-        if (c === '"') { inQ = true; }
-        else if (c === ',') { result.push(cur); cur = ''; }
-        else { cur += c; }
-      }
-    }
-    result.push(cur);
-    return result;
-  }
-
-  function parseCsv(text) {
-    var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-    var players = [];
-    // ヘッダー行をスキップ
-    for (var i = 1; i < lines.length; i++) {
-      var line = lines[i].trim();
-      if (!line) continue;
-      var cols = splitCsvLine(line);
-      players.push({
-        name:      cols[0] || '',
-        order:     cols[1] || '',
-        tech1:     cols[2] || '',
-        tech2:     cols[3] || '',
-        tech3:     cols[4] || '',
-        score:     parseFloat(cols[5]) || 0,
-        isNewFace: cols[6] === '○',
-        isFemale:  cols[7] === '○',
-        result:    cols[8] || ''
-      });
-    }
-    return players;
-  }
-
-  // --- CSV シリアライザ ---
-  function quoteCsvField(val) {
-    var s = String(val === undefined || val === null ? '' : val);
-    if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
-      return '"' + s.replace(/"/g, '""') + '"';
-    }
-    return s;
-  }
-
-  function serializeCsv(players) {
-    var lines = ['選手名,順番,技1,技2,技3,得点,新人,女子,結果'];
-    for (var i = 0; i < players.length; i++) {
-      var p = players[i];
-      lines.push([
-        p.name, p.order, p.tech1, p.tech2, p.tech3,
-        p.score !== undefined ? p.score : '',
-        p.isNewFace ? '○' : '',
-        p.isFemale  ? '○' : '',
-        p.result || ''
-      ].map(quoteCsvField).join(','));
-    }
-    return lines.join('\r\n');
   }
 
   // --- ダウンロードヘルパ ---
@@ -127,8 +25,8 @@ var Storage = (function() {
     setTimeout(function() { URL.revokeObjectURL(url); }, 100);
   }
 
-  function downloadCsv(filename, players) {
-    downloadText(filename, '\uFEFF' + serializeCsv(players), 'text/csv;charset=utf-8');
+  function downloadCsv(filename, csvText) {
+    downloadText(filename, '\uFEFF' + csvText, 'text/csv;charset=utf-8');
   }
 
   function downloadHtml(filename, htmlContent) {
@@ -162,17 +60,12 @@ var Storage = (function() {
   }
 
   return {
-    loadPlayers: loadPlayers,
-    savePlayers: savePlayers,
-    loadCustomTechniques: loadCustomTechniques,
-    saveCustomTechniques: saveCustomTechniques,
-    resetCustomTechniques: resetCustomTechniques,
     loadTheme: loadTheme,
     saveTheme: saveTheme,
-    parseCsv: parseCsv,
-    serializeCsv: serializeCsv,
+    downloadText: downloadText,
     downloadCsv: downloadCsv,
     downloadHtml: downloadHtml,
-    buildPlayersHtml: buildPlayersHtml
+    buildPlayersHtml: buildPlayersHtml,
+    esc: esc
   };
 })();

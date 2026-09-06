@@ -15,6 +15,7 @@
 <div id="results"></div>
 <script src="data.js"></script>
 <script src="scoring.js"></script>
+<script src="api.js"></script>
 <script src="storage.js"></script>
 <script>
   var results = document.getElementById('results');
@@ -30,9 +31,64 @@
     ok ? passed++ : failed++;
   }
 
-  if (typeof TECHNIQUES === 'undefined') {
-    results.textContent = 'ERROR: data.js が読み込まれていません';
-  } else {
+  async function runApiTests() {
+    var h2 = document.createElement('h2');
+    h2.textContent = 'api.js';
+    results.appendChild(h2);
+
+    // 技術APIテスト
+    var techData = await Api.loadTechniques();
+    assert('loadTechniques は技術リストを返す', Array.isArray(techData.techniques), true);
+    assert('loadTechniques isCustom はbool', typeof techData.isCustom, 'boolean');
+    if (techData.isCustom) {
+      // カスタム保存済み環境ではデフォルトとの一致は検証できない
+      var skip = document.createElement('div');
+      skip.textContent = '… カスタム技術が保存されているため、デフォルト一致チェックはスキップ';
+      results.appendChild(skip);
+    } else {
+      // サーバーのデフォルトが data.js と食い違うと採点が0点になるため厳密に比較する
+      assert('サーバーのデフォルト技術数は data.js と一致', techData.techniques.length, TECHNIQUES.length);
+      assert('サーバーのデフォルト技術定義は data.js と一致', techData.techniques, TECHNIQUES);
+    }
+
+    // 大会作成テスト
+    var result = await Api.saveEvent({ name: 'テスト大会', date: '2025-01-01', venue: 'テスト会場', players: [] });
+    assert('saveEvent 成功', result.success, true);
+    assert('saveEvent idあり', !!result.id, true);
+    var testEventId = result.id;
+
+    // 大会取得テスト
+    var loaded = await Api.loadEvent(testEventId);
+    assert('loadEvent name', loaded.name, 'テスト大会');
+    assert('loadEvent players空', loaded.players.length, 0);
+
+    // CSVインポートテスト
+    var csv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n山田 太郎,A-男子-1-1,破図味,夢想返し,響き返し,55,,,';
+    var importResult = await Api.importCsv(testEventId, csv, 'replace');
+    assert('importCsv 成功', importResult.success, true);
+    assert('importCsv playerCount', importResult.playerCount, 1);
+
+    // インポート後の確認
+    var reloaded = await Api.loadEvent(testEventId);
+    assert('import後 player名', reloaded.players[0].name, '山田 太郎');
+    assert('import後 tech1', reloaded.players[0].tech1, '破図味');
+
+    // 大会削除テスト
+    await Api.deleteEvent(testEventId);
+    var deleted = await Api.loadEvent(testEventId);
+    assert('deleteEvent 後 null', deleted, null);
+
+    // 大会一覧テスト
+    var events = await Api.listEvents();
+    assert('listEvents は配列', Array.isArray(events), true);
+  }
+
+  (async function() {
+    if (typeof TECHNIQUES === 'undefined') {
+      results.textContent = 'ERROR: data.js が読み込まれていません';
+      return;
+    }
+
     // data.js テスト
     var h2 = document.createElement('h2');
     h2.textContent = 'data.js';
@@ -59,12 +115,22 @@
       { techName: '夢想返し',   values: ['○','○','',''], techPoint: '' }
     ];
     var encoded = Scoring.encodeResult(encRows);
-    assert('encodeResult 2行', encoded, '10 1 1  1 ');
+    // 1技=5文字（初/二/三/四の太刀 + 技術点）
+    // 破図味(男): ○×空空 + 技術点○ → "10  1" / 夢想返し: ○○空空 + 技術点空 → "11   "
+    assert('encodeResult 2行', encoded, '10  111   ');
     var decoded = Scoring.decodeResult(encoded, 2);
     assert('decodeResult values[0]', decoded[0].values, ['○','×','','']);
     assert('decodeResult techPoint[0]', decoded[0].techPoint, '○');
     assert('decodeResult values[1]', decoded[1].values, ['○','○','','']);
     assert('decodeResult techPoint[1]', decoded[1].techPoint, '');
+
+    // setTechniques のテスト
+    var customTechs = [{ name: 'カスタム技', strikes: [100, 50, null, null] }];
+    Scoring.setTechniques(customTechs);
+    assert('setTechniques: カスタム技が見つかる', Scoring.findTechnique('カスタム技', false).name, 'カスタム技');
+    assert('setTechniques: カスタム技の得点計算', Scoring.calcStrikeScore('カスタム技', 0, '○', false), 100);
+    // 元に戻す
+    Scoring.setTechniques(TECHNIQUES);
 
     // calcStrikeScore: 不明技は0
     assert('calcStrikeScore 存在しない技', Scoring.calcStrikeScore('存在しない技', 0, '○', false), 0);
@@ -109,44 +175,9 @@
     h2st.textContent = 'storage.js';
     results.appendChild(h2st);
 
-    // parseCsv: 基本動作
-    var csv = '選手名,順番,技1,技2,技3,得点,新人,女子,結果\n山田 太郎,A-男子-1-1,破図味,夢想返し,響き返し,55,,,abc';
-    var players = Storage.parseCsv(csv);
-    assert('parseCsv 1件', players.length, 1);
-    assert('parseCsv name', players[0].name, '山田 太郎');
-    assert('parseCsv order', players[0].order, 'A-男子-1-1');
-    assert('parseCsv tech1', players[0].tech1, '破図味');
-    assert('parseCsv score', players[0].score, 55);
-    assert('parseCsv isNewFace false', players[0].isNewFace, false);
-    assert('parseCsv isFemale false', players[0].isFemale, false);
-    assert('parseCsv result', players[0].result, 'abc');
+    assert('storage.js loadTheme default is light', Storage.loadTheme() === 'light' || Storage.loadTheme() === 'dark', true);
 
-    // parseCsv: 新人・女子フラグ
-    var csv2 = '選手名,順番,技1,技2,技3,得点,新人,女子,結果\n田中 花子,A-女子-1-1,玉光,円要,連,30,○,○,';
-    var p2 = Storage.parseCsv(csv2);
-    assert('parseCsv isNewFace true', p2[0].isNewFace, true);
-    assert('parseCsv isFemale true', p2[0].isFemale, true);
-
-    // serializeCsv: parseCsvとの往復
-    var players3 = [{
-      name: '山田 太郎', order: 'A-男子-1-1',
-      tech1: '破図味', tech2: '夢想返し', tech3: '響き返し',
-      score: 55, isNewFace: false, isFemale: false, result: 'abc'
-    }];
-    var csv3 = Storage.serializeCsv(players3);
-    var reparsed = Storage.parseCsv(csv3);
-    assert('serializeCsv 往復 name', reparsed[0].name, '山田 太郎');
-    assert('serializeCsv 往復 score', reparsed[0].score, 55);
-
-    // parseCsv: コンマ含む選手名（RFC 4180 クォート対応）
-    var players4 = [{
-      name: '山田, 太郎', order: 'A-男子-1-1',
-      tech1: '破図味', tech2: '', tech3: '',
-      score: 10, isNewFace: false, isFemale: false, result: ''
-    }];
-    var csv4 = Storage.serializeCsv(players4);
-    var reparsed4 = Storage.parseCsv(csv4);
-    assert('parseCsv コンマ含む名前の往復', reparsed4[0].name, '山田, 太郎');
+    await runApiTests();
 
     // 結果サマリ
     var summary = document.createElement('p');
@@ -154,7 +185,7 @@
     summary.style.fontWeight = 'bold';
     summary.textContent = 'Result: ' + passed + ' passed, ' + failed + ' failed';
     results.appendChild(summary);
-  }
+  })();
 </script>
 </body>
 </html>

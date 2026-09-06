@@ -1,12 +1,13 @@
 var Scoring = (function() {
+  var currentTechniques = null;
+
+  function setTechniques(techList) {
+    currentTechniques = techList;
+  }
+
   // 外部定義のTECHNIQUESを使用
   function getTechniques() {
-    // localStorage上書きがある場合はそちらを使う
-    try {
-      var stored = localStorage.getItem('tmg_techniques');
-      if (stored) return JSON.parse(stored);
-    } catch(e) {}
-    return TECHNIQUES;
+    return currentTechniques || TECHNIQUES;
   }
 
   // 技術名で検索（男女サフィックスにも対応）
@@ -86,6 +87,7 @@ var Scoring = (function() {
   }
 
   return {
+    setTechniques: setTechniques,
     findTechnique: findTechnique,
     calcStrikeScore: calcStrikeScore,
     calcTotalScore: calcTotalScore,

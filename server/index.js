@@ -1,15 +1,470 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3457;
 
+// データ保存先ディレクトリ
+const DATA_DIR = path.join(__dirname, 'data');
+const EVENTS_DIR = path.join(DATA_DIR, 'events');
+const TECHNIQUES_DIR = path.join(DATA_DIR, 'techniques');
+const HISTORY_DIR = path.join(DATA_DIR, 'history');
+
+// 起動時にディレクトリ自動生成
+fs.mkdirSync(EVENTS_DIR, { recursive: true });
+fs.mkdirSync(TECHNIQUES_DIR, { recursive: true });
+fs.mkdirSync(HISTORY_DIR, { recursive: true });
+
+// ID生成
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+// ID検証（パストラバーサル防止）
+// ファイル名として使うIDは英数字・ハイフン・アンダースコアのみ許可する
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+function isValidId(id) {
+  return typeof id === 'string' && ID_PATTERN.test(id);
+}
+
+// 不正なIDなら400を返して処理を打ち切る（戻り値: 妥当なら true）
+function requireValidId(req, res) {
+  if (!isValidId(req.params.id)) {
+    res.status(400).json({ error: '不正な大会IDです' });
+    return false;
+  }
+  return true;
+}
+
+// デフォルト技術リスト
+const DEFAULT_TECHNIQUES = [
+  { name: "立位袈裟",    strikes: [1,  null, null, null] },
+  { name: "立位逆袈裟",  strikes: [2,  null, null, null] },
+  { name: "立位横一",    strikes: [8,  null, null, null] },
+  { name: "座位袈裟",    strikes: [3,  null, null, null] },
+  { name: "座位逆袈裟",  strikes: [4,  null, null, null] },
+  { name: "座位横一",    strikes: [10, null, null, null] },
+  { name: "基本一",      strikes: [15, 1,    null, null] },
+  { name: "基本二",      strikes: [9,  1,    null, null] },
+  { name: "真",          strikes: [11, 3,    null, null] },
+  { name: "連",          strikes: [8,  3,    null, null] },
+  { name: "左",          strikes: [18, 3,    null, null] },
+  { name: "右",          strikes: [13, 3,    null, null] },
+  { name: "捨",          strikes: [17, 3,    null, null] },
+  { name: "胸尽くし(男)", strikes: [11, 1,    null, null] },
+  { name: "胸尽くし(女)", strikes: [13, 1,    null, null] },
+  { name: "円要",        strikes: [16, 1,    null, null] },
+  { name: "両車",        strikes: [17, 5,    1,    null] },
+  { name: "野送り",      strikes: [6,  null, null, null] },
+  { name: "玉光",        strikes: [6,  null, null, null] },
+  { name: "水月(男)",    strikes: [17, 11,   null, null] },
+  { name: "水月(女)",    strikes: [17, 13,   null, null] },
+  { name: "置藁水月",    strikes: [35, null, null, null] },
+  { name: "陰中陽",      strikes: [8,  null, null, null] },
+  { name: "陽中陰",      strikes: [17, 2,    null, null] },
+  { name: "響き返し",    strikes: [14, 4,    2,    null] },
+  { name: "破図味(男)",  strikes: [20, 4,    4,    2   ] },
+  { name: "破図味(女)",  strikes: [20, 6,    6,    2   ] },
+  { name: "前腰",        strikes: [13, 1,    null, null] },
+  { name: "夢想返し",    strikes: [13, 5,    null, null] },
+  { name: "廻り懸り",    strikes: [17, 1,    null, null] },
+  { name: "右の敵",      strikes: [15, 1,    null, null] },
+  { name: "四方",        strikes: [17, 5,    7,    3   ] }
+];
+
+// CSVパース関数（RFC 4180対応）
+function parseCSV(text) {
+  const lines = [];
+  let currentLine = [];
+  let currentField = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i+1];
+    
+    if (inQuotes) {
+      if (char === '"') {
+        if (nextChar === '"') {
+          currentField += '"';
+          i++; // エスケープされたダブルクォート
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        currentField += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        currentLine.push(currentField);
+        currentField = '';
+      } else if (char === '\r') {
+        if (nextChar === '\n') {
+          i++;
+        }
+        currentLine.push(currentField);
+        lines.push(currentLine);
+        currentLine = [];
+        currentField = '';
+      } else if (char === '\n') {
+        currentLine.push(currentField);
+        lines.push(currentLine);
+        currentLine = [];
+        currentField = '';
+      } else {
+        currentField += char;
+      }
+    }
+  }
+  
+  if (currentField !== '' || currentLine.length > 0) {
+    currentLine.push(currentField);
+    lines.push(currentLine);
+  }
+  
+  // 最後の空行を削除
+  if (lines.length > 0 && lines[lines.length - 1].length === 1 && lines[lines.length - 1][0] === '') {
+    lines.pop();
+  }
+  
+  return lines;
+}
+
+// CSVエスケープ関数
+function escapeCSV(field) {
+  if (field == null) return '';
+  const str = String(field);
+  if (/[",\r\n]/.test(str)) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
 // ミドルウェア
 app.use(cors());
-app.use(express.json());
+// ペイロードサイズ制限を緩和
+app.use(express.json({ limit: '50mb' }));
 
-// 静的ファイル配信
+// ────────────────────────────────────────
+// API ルート
+// ────────────────────────────────────────
+
+// ── Event API ──
+
+// GET /api/events : 大会一覧
+app.get('/api/events', (req, res) => {
+  try {
+    const files = fs.readdirSync(EVENTS_DIR).filter(f => f.endsWith('.json'));
+    const events = files.map(file => {
+      const data = JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, file), 'utf-8'));
+      return {
+        id: data.id,
+        name: data.name,
+        date: data.date,
+        venue: data.venue,
+        playerCount: Array.isArray(data.players) ? data.players.length : 0,
+        updatedAt: data.updatedAt,
+        createdAt: data.createdAt
+      };
+    });
+    // updatedAt 降順ソート
+    events.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    res.json(events);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/events/:id : 大会詳細
+app.get('/api/events/:id', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const filePath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/events : 大会作成・更新
+app.post('/api/events', (req, res) => {
+  try {
+    const event = req.body;
+    if (!event.id) {
+      event.id = generateId();
+    } else if (!isValidId(event.id)) {
+      return res.status(400).json({ error: '不正な大会IDです' });
+    }
+    const now = new Date().toISOString();
+    if (!event.createdAt) {
+      event.createdAt = now;
+    }
+    event.updatedAt = now;
+    
+    if (!event.players) {
+      event.players = [];
+    }
+
+    fs.writeFileSync(path.join(EVENTS_DIR, `${event.id}.json`), JSON.stringify(event, null, 2));
+    res.json({ success: true, id: event.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/events/:id : 大会削除
+app.delete('/api/events/:id', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    const historyPath = path.join(HISTORY_DIR, `${req.params.id}.json`);
+    
+    if (fs.existsSync(eventPath)) {
+      fs.unlinkSync(eventPath);
+    }
+    if (fs.existsSync(historyPath)) {
+      fs.unlinkSync(historyPath);
+    }
+    // 存在しなくても成功とする
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ── Player API ──
+
+// PATCH /api/events/:id/players/:playerId : 選手の採点結果を部分更新
+app.patch('/api/events/:id/players/:playerId', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    const playerIndex = event.players.findIndex(p => p.id === req.params.playerId);
+    
+    if (playerIndex === -1) {
+      return res.status(404).json({ error: '選手が見つかりません' });
+    }
+    
+    // 部分更新
+    event.players[playerIndex] = {
+      ...event.players[playerIndex],
+      ...req.body
+    };
+    event.updatedAt = new Date().toISOString();
+    
+    fs.writeFileSync(eventPath, JSON.stringify(event, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/events/:id/import : 選手データのCSVインポート
+app.post('/api/events/:id/import', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    const { csvText, mode } = req.body;
+    
+    const lines = parseCSV(csvText);
+    if (lines.length === 0) {
+      return res.status(400).json({ error: '空のデータです' });
+    }
+    
+    // 1行目はヘッダーなのでスキップ
+    const dataLines = lines.slice(1);
+    
+    const importedPlayers = dataLines.map(row => {
+      // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果
+      const name = row[0] || '';
+      const order = row[1] || '';
+      const tech1 = row[2] || '';
+      const tech2 = row[3] || '';
+      const tech3 = row[4] || '';
+      const scoreRaw = row[5];
+      const score = parseFloat(scoreRaw) || 0;
+      const isNewFace = row[6] === '○';
+      const isFemale = row[7] === '○';
+      const result = row[8] || '';
+      
+      return {
+        id: generateId(),
+        name,
+        order,
+        tech1,
+        tech2,
+        tech3,
+        score,
+        isNewFace,
+        isFemale,
+        result
+      };
+    }).filter(p => p.name !== ''); // 空行等を除外
+    
+    if (mode === 'replace') {
+      event.players = importedPlayers;
+    } else {
+      event.players = (event.players || []).concat(importedPlayers);
+    }
+    
+    event.updatedAt = new Date().toISOString();
+    fs.writeFileSync(eventPath, JSON.stringify(event, null, 2));
+    
+    res.json({ success: true, playerCount: event.players.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/events/:id/export : 大会の選手データをCSVエクスポート
+app.get('/api/events/:id/export', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    
+    const header = ['選手名', '順番', '技 1', '技 2', '技 3', '得点', '新人', '女子', '結果'];
+    const rows = [header];
+    
+    for (const p of (event.players || [])) {
+      rows.push([
+        p.name || '',
+        p.order || '',
+        p.tech1 || '',
+        p.tech2 || '',
+        p.tech3 || '',
+        p.score != null ? p.score : 0,
+        p.isNewFace ? '○' : '',
+        p.isFemale ? '○' : '',
+        p.result || ''
+      ]);
+    }
+    
+    const csvContent = rows.map(row => row.map(escapeCSV).join(',')).join('\r\n');
+    const bom = '\uFEFF';
+    
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="event_${req.params.id}.csv"`);
+    res.send(bom + csvContent);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ── Techniques API ──
+
+// GET /api/techniques : 技術一覧取得
+app.get('/api/techniques', (req, res) => {
+  try {
+    const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
+    if (fs.existsSync(customPath)) {
+      const customData = JSON.parse(fs.readFileSync(customPath, 'utf-8'));
+      res.json({ isCustom: true, techniques: customData });
+    } else {
+      res.json({ isCustom: false, techniques: DEFAULT_TECHNIQUES });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/techniques : カスタム技術保存
+app.post('/api/techniques', (req, res) => {
+  try {
+    const { techniques } = req.body;
+    if (!Array.isArray(techniques)) {
+      return res.status(400).json({ error: 'Invalid data' });
+    }
+    const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
+    fs.writeFileSync(customPath, JSON.stringify(techniques, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/techniques : カスタム技術削除（デフォルトに戻す）
+app.delete('/api/techniques', (req, res) => {
+  try {
+    const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
+    if (fs.existsSync(customPath)) {
+      fs.unlinkSync(customPath);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ── History API ──
+
+// GET /api/events/:id/history : 採点履歴取得
+app.get('/api/events/:id/history', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const historyPath = path.join(HISTORY_DIR, `${req.params.id}.json`);
+    if (fs.existsSync(historyPath)) {
+      const data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+      res.json(data);
+    } else {
+      res.json({ eventId: req.params.id, entries: [] });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/events/:id/history : 採点履歴保存
+app.post('/api/events/:id/history', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const historyPath = path.join(HISTORY_DIR, `${req.params.id}.json`);
+    let data = { eventId: req.params.id, entries: [] };
+    
+    if (fs.existsSync(historyPath)) {
+      data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+    }
+    
+    const entry = {
+      ...req.body,
+      timestamp: new Date().toISOString()
+    };
+    
+    data.entries.push(entry);
+    
+    fs.writeFileSync(historyPath, JSON.stringify(data, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ────────────────────────────────────────
+// 静的ファイル配信とSPAフォールバック
+// ────────────────────────────────────────
 const PUBLIC_DIR = path.resolve(__dirname, '..');
 app.use(express.static(PUBLIC_DIR, {
     etag: false,
@@ -18,12 +473,6 @@ app.use(express.static(PUBLIC_DIR, {
     }
 }));
 
-// ────────────────────────────────────────
-// API ルート（将来の拡張用）
-// ────────────────────────────────────────
-// 例: app.use('/api', apiRouter);
-
-// SPA フォールバック
 app.use((req, res, next) => {
     if (!req.path.startsWith('/api/')) {
         res.sendFile(path.join(PUBLIC_DIR, 'index.html'));

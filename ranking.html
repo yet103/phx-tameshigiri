@@ -17,23 +17,31 @@
   <div class="container" style="padding-top:16px;">
     <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
       <h2 style="margin:0;">順位表示</h2>
+      <select id="rankEventSelect">
+        <option value="">-- 大会を選択 --</option>
+      </select>
+      <button id="btnLoadFromEvent" class="btn-neutral">大会データを読み込む</button>
       <button id="btnLoadCsv" class="btn-neutral">CSVを読み込む（複数可）</button>
       <button id="btnDownloadHtml" class="btn-neutral">HTMLダウンロード</button>
       <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
-      <input type="file" id="rankCsvInput" accept=".csv" multiple>
+      <input type="file" id="rankCsvInput" accept=".csv" multiple style="display:none;">
     </div>
 
     <div class="ranking-container" id="rankingContainer">
-      <p style="color:var(--text-muted)">CSVを読み込むと順位が表示されます。</p>
+      <p style="color:var(--text-muted)">大会を選択するか、CSVを読み込むと順位が表示されます。</p>
     </div>
   </div>
 
   <script src="data.js"></script>
+  <script src="scoring.js"></script>
+  <script src="api.js"></script>
   <script src="storage.js"></script>
   <script>
     var body = document.body;
     var rankingContainer = document.getElementById('rankingContainer');
     var rankCsvInput = document.getElementById('rankCsvInput');
+    var rankEventSelect = document.getElementById('rankEventSelect');
+    var btnLoadFromEvent = document.getElementById('btnLoadFromEvent');
 
     function applyTheme(theme) {
       body.setAttribute('data-theme', theme);
@@ -47,9 +55,52 @@
       applyTheme(t);
     });
 
+    // 大会一覧を読み込む
+    (async function() {
+      var events = await Api.listEvents();
+      events.forEach(function(ev) {
+        var opt = document.createElement('option');
+        opt.value = ev.id;
+        opt.textContent = ev.name + ' (' + ev.date + ')';
+        rankEventSelect.appendChild(opt);
+      });
+    })();
+
+    // 大会データを読み込む
+    btnLoadFromEvent.addEventListener('click', async function() {
+      var eventId = rankEventSelect.value;
+      if (!eventId) {
+        alert('大会を選択してください。');
+        return;
+      }
+      var eventData = await Api.loadEvent(eventId);
+      if (eventData && eventData.players) {
+        renderRankings(eventData.players);
+      } else {
+        alert('大会データの読み込みに失敗しました。');
+      }
+    });
+
     document.getElementById('btnLoadCsv').addEventListener('click', function() {
       rankCsvInput.click();
     });
+
+    function parseCsvText(text) {
+      var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+      var players = [];
+      for (var i = 1; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line) continue;
+        var cols = line.split(',');
+        players.push({
+          name: cols[0] || '',
+          score: parseFloat(cols[5]) || 0,
+          isNewFace: cols[6] === '○',
+          isFemale: cols[7] === '○'
+        });
+      }
+      return players;
+    }
 
     rankCsvInput.addEventListener('change', function(e) {
       var files = Array.prototype.slice.call(e.target.files);
@@ -60,7 +111,7 @@
       files.forEach(function(file) {
         var reader = new FileReader();
         reader.onload = function(ev) {
-          var ps = Storage.parseCsv(ev.target.result);
+          var ps = parseCsvText(ev.target.result);
           Array.prototype.push.apply(allPlayers, ps);
           loaded++;
           if (loaded === files.length) renderRankings(allPlayers);
@@ -97,7 +148,7 @@
       var div = document.createElement('div');
       div.className = 'ranking-section';
       if (entries.length === 0) {
-        div.innerHTML = '<h3>' + esc(title) + '</h3><p style="color:var(--text-muted)">データなし</p>';
+        div.innerHTML = '<h3>' + Storage.esc(title) + '</h3><p style="color:var(--text-muted)">データなし</p>';
         return div;
       }
 
@@ -105,23 +156,19 @@
       var rank = 1, prevScore = null;
       entries.forEach(function(e, i) {
         if (prevScore !== null && e.score !== prevScore) rank = i + 1;
-        rows += '<tr><td>' + rank + '</td><td>' + esc(e.name) + '</td><td>' + esc(String(e.score)) + '</td></tr>';
+        rows += '<tr><td>' + rank + '</td><td>' + Storage.esc(e.name) + '</td><td>' + Storage.esc(String(e.score)) + '</td></tr>';
         prevScore = e.score;
       });
 
-      div.innerHTML = '<h3>' + esc(title) + '</h3>' +
+      div.innerHTML = '<h3>' + Storage.esc(title) + '</h3>' +
         '<table class="rank-table"><tr><th>順位</th><th>選手名</th><th>得点</th></tr>' +
         rows + '</table>';
       return div;
     }
 
-    function esc(s) {
-      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
-
     document.getElementById('btnDownloadHtml').addEventListener('click', function() {
       if (!rankingContainer.querySelector('.ranking-section')) {
-        alert('CSVを読み込んでから順位を表示してください。');
+        alert('大会データまたはCSVを読み込んでから順位を表示してください。');
         return;
       }
       var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +

@@ -39,6 +39,8 @@
   </div>
 
   <script src="data.js"></script>
+  <script src="scoring.js"></script>
+  <script src="api.js"></script>
   <script src="storage.js"></script>
   <script>
     var body = document.body;
@@ -49,27 +51,19 @@
       document.getElementById('btnTheme').textContent = theme === 'dark' ? '☀ ライト' : '🌙 ダーク';
     }
 
-    function getTechs() {
-      return Storage.loadCustomTechniques() || TECHNIQUES;
-    }
-
     function renderTable(techs) {
       techTableBody.innerHTML = '';
       techs.forEach(function(t, i) {
         var tr = document.createElement('tr');
         tr.innerHTML =
-          '<td><input type="text" value="' + esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
+          '<td><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
           [0,1,2,3].map(function(s) {
-            var v = t.strikes[s] !== null && t.strikes[s] !== undefined ? esc(String(t.strikes[s])) : '';
+            var v = t.strikes[s] !== null && t.strikes[s] !== undefined ? Storage.esc(String(t.strikes[s])) : '';
             return '<td><input type="number" min="0" max="99" value="' + v +
               '" data-field="strike" data-idx="' + i + '" data-strike="' + s + '"></td>';
           }).join('');
         techTableBody.appendChild(tr);
       });
-    }
-
-    function esc(s) {
-      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     function collectTechs() {
@@ -86,27 +80,33 @@
       return techs;
     }
 
-    applyTheme(Storage.loadTheme());
-    renderTable(getTechs());
+    (async function() {
+      applyTheme(Storage.loadTheme());
+      var techData = await Api.loadTechniques();
+      var techs = techData ? techData.techniques : TECHNIQUES;
+      renderTable(techs);
 
-    document.getElementById('btnSaveTech').addEventListener('click', function() {
-      Storage.saveCustomTechniques(collectTechs());
-      alert('保存しました。');
-    });
+      document.getElementById('btnSaveTech').addEventListener('click', async function() {
+        var techs = collectTechs();
+        var ok = await Api.saveTechniques(techs);
+        if (ok) alert('保存しました。');
+        else alert('保存に失敗しました。');
+      });
 
-    document.getElementById('btnResetTech').addEventListener('click', function() {
-      if (confirm('デフォルト設定に戻します。よろしいですか？')) {
-        Storage.resetCustomTechniques();
-        renderTable(TECHNIQUES);
-      }
-    });
+      document.getElementById('btnResetTech').addEventListener('click', async function() {
+        if (confirm('デフォルト設定に戻します。よろしいですか？')) {
+          await Api.resetTechniques();
+          renderTable(TECHNIQUES);
+        }
+      });
 
-    document.getElementById('btnTheme').addEventListener('click', function() {
-      var current = Storage.loadTheme();
-      var next = current === 'dark' ? 'light' : 'dark';
-      Storage.saveTheme(next);
-      applyTheme(next);
-    });
+      document.getElementById('btnTheme').addEventListener('click', function() {
+        var current = Storage.loadTheme();
+        var next = current === 'dark' ? 'light' : 'dark';
+        Storage.saveTheme(next);
+        applyTheme(next);
+      });
+    })();
   </script>
 </body>
 </html>
