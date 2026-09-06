@@ -97,9 +97,19 @@
         if (!confirm('デフォルト設定に戻します。よろしいですか？')) return;
         var ok = await Api.resetTechniques();
         if (!ok) { alert('リセットに失敗しました。'); return; }
+        // リセット自体は成功しているので、再取得に失敗しても表は出す。
+        // ただしその場合に表示できるのは端末側の既定値であって、
+        // サーバーが実際に採点で使う値ではない。黙って同じ顔をさせない。
         var techData = await Api.loadTechniques();
-        renderTable(techData ? techData.techniques : TECHNIQUES);
-        alert('デフォルトに戻しました。');
+        if (techData) {
+          renderTable(techData.techniques);
+          alert('デフォルトに戻しました。');
+        } else {
+          renderTable(TECHNIQUES);
+          alert('デフォルトに戻しました。\n' +
+                'ただし最新の技術リストを取得できなかったため、\n' +
+                'この画面には端末側の既定値を表示しています。');
+        }
       });
 
       document.getElementById('btnTheme').addEventListener('click', function() {
