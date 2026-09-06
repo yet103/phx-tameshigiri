@@ -81,6 +81,27 @@
     // 大会一覧テスト
     var events = await Api.listEvents();
     assert('listEvents は配列', Array.isArray(events), true);
+
+    // 並行PATCHの回帰テスト
+    // 書き込みハンドラが同期である限り、同時PATCHは取りこぼされない。
+    // 将来ハンドラが async 化されるとこのテストが落ちる（不変条件の番人）。
+    var raceEvent = await Api.saveEvent({ name: '並行テスト', date: '2026-01-01', venue: '', players: [] });
+    var raceCsv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n';
+    for (var ri = 1; ri <= 12; ri++) {
+      raceCsv += 'P' + ri + ',A-男子-1-' + ri + ',真,,,0,,,\n';
+    }
+    await Api.importCsv(raceEvent.id, raceCsv, 'replace');
+    var raceLoaded = await Api.loadEvent(raceEvent.id);
+    var raceIds = raceLoaded.players.map(function(p) { return p.id; });
+    await Promise.all(raceIds.map(function(pid, i) {
+      return Api.updatePlayer(raceEvent.id, pid, { score: (i + 1) * 10, result: '' });
+    }));
+    var raceAfter = await Api.loadEvent(raceEvent.id);
+    var raceExpected = raceIds.map(function(_, i) { return (i + 1) * 10; });
+    assert('並行PATCH12本が全件反映される',
+      raceAfter.players.map(function(p) { return p.score; }),
+      raceExpected);
+    await Api.deleteEvent(raceEvent.id);
   }
 
   (async function() {
