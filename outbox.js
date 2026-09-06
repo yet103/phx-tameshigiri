@@ -60,8 +60,10 @@ var Outbox = (function() {
     };
   }
 
+  // 状態通知。呼び出し元のコールバックが投げてもワーカーを巻き込まない。
   function notify() {
-    if (statusHandler) statusHandler(status());
+    if (!statusHandler) return;
+    try { statusHandler(status()); } catch (e) {}
   }
 
   // キューが空でない間だけ毎秒通知する（バナー昇格の判定に使う）。
@@ -83,39 +85,44 @@ var Outbox = (function() {
     sending = true;
     notify();
 
-    while (queue.length > 0) {
-      var entry = queue[0];
-      var ok = false;
-      try {
-        var result = await Api.updatePlayer(entry.eventId, entry.playerId, {
-          score: entry.score,
-          result: entry.result
-        });
-        ok = !!result;
-      } catch (e) {
-        ok = false;
-      }
+    // 途中で何が投げても sending を巻き戻す。
+    // ここで詰まると以降の drain() が全て無視され、送信が恒久停止するため。
+    try {
+      while (queue.length > 0) {
+        var entry = queue[0];
+        var ok = false;
+        try {
+          var result = await Api.updatePlayer(entry.eventId, entry.playerId, {
+            score: entry.score,
+            result: entry.result
+          });
+          ok = !!result;
+        } catch (e) {
+          ok = false;
+        }
 
-      if (ok) {
-        // 送信済みのエントリだけを取り除く。
-        // 送信中に同じ選手が再採点されていれば別オブジェクトに差し替わっているので、
-        // 参照が一致するときだけ削除する（新しい採点を取りこぼさない）。
-        if (queue[0] === entry) queue.shift();
-        save();
-        backoffMs = BACKOFF_MIN;
-        failingSince = null;
-        notify();
-      } else {
-        if (!failingSince) failingSince = Date.now();
-        sending = false;
-        notify();
-        startTicking();
-        scheduleRetry();
-        return;
+        if (ok) {
+          // 送信済みのエントリだけを取り除く。
+          // 送信中に同じ選手が再採点されていれば別オブジェクトに差し替わっているので、
+          // 参照が一致するときだけ削除する（新しい採点を取りこぼさない）。
+          if (queue[0] === entry) queue.shift();
+          save();
+          backoffMs = BACKOFF_MIN;
+          failingSince = null;
+          notify();
+        } else {
+          if (!failingSince) failingSince = Date.now();
+          sending = false;
+          notify();
+          startTicking();
+          scheduleRetry();
+          return;
+        }
       }
+    } finally {
+      sending = false;
     }
 
-    sending = false;
     notify();
   }
 
@@ -130,11 +137,22 @@ var Outbox = (function() {
 
   // 採点をキューに積む。通信は待たない。
   function enqueue(entry) {
-    entry.queuedAt = new Date().toISOString();
-    queue = coalesce(queue, entry);
+    // 呼び出し元がオブジェクトを使い回しても参照の一意性が壊れないよう、
+    // ここで必ず新しいオブジェクトにする。
+    // drain() の queue[0] === entry 判定がこの一意性を前提にしている。
+    var queued = {
+      eventId: entry.eventId,
+      playerId: entry.playerId,
+      score: entry.score,
+      result: entry.result,
+      queuedAt: new Date().toISOString()
+    };
+    queue = coalesce(queue, queued);
     save();
     startTicking();
-    drain();
+    // バックオフ待機中なら、その再送に任せる。
+    // タップのたびに即時送信を試みると、回線が不安定なときほどバックオフが無効になる。
+    if (!retryTimer) drain();
   }
 
   // バックオフ待ちを打ち切って即座に送信を試みる。
