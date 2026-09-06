@@ -34,6 +34,19 @@ var App = (function() {
     // 大会一覧を取得してドロップダウンに展開
     await refreshEventList();
     bindEvents();
+
+    // 選択状態を復帰する（URLハッシュ → localStorage の順）
+    var restored = Route.restore();
+    if (restored && restored.eventId) {
+      document.getElementById('eventSelect').value = restored.eventId;
+      await onEventSelect(restored.eventId, restored.court || '');
+    }
+    // ブラウザの戻る/進むに追従する
+    Route.onChange(async function(sel) {
+      if (!sel) { await onEventSelect(''); return; }
+      document.getElementById('eventSelect').value = sel.eventId;
+      await onEventSelect(sel.eventId, sel.court || '');
+    });
     // 通知は初期化の後に、かつ次のタスクへ逃がして出す。
     // alert はメインスレッドを止めるため、ここで直に呼ぶと
     // 復元した採点の再送そのものが係員がダイアログを閉じるまで進まない。
@@ -109,7 +122,8 @@ var App = (function() {
 
     // 大会管理イベント
     document.getElementById('eventSelect').addEventListener('change', function() {
-      onEventSelect(this.value);
+      currentCourt = '';   // 大会が変われば担当コートも選び直す
+      onEventSelect(this.value, '');
     });
     courtSelect.addEventListener('change', function() {
       currentCourt = this.value;
@@ -225,9 +239,10 @@ var App = (function() {
     }
     currentEvent = await Api.loadEvent(eventId);
     if (!currentEvent) {
-      // 復元しようとした大会が既に削除されている
-      Route.clear();
+      // 復元しようとした大会が既に削除されている。
+      // 前の大会の選手や得点が画面に残らないよう、未選択状態まで戻す。
       document.getElementById('eventSelect').value = '';
+      await onEventSelect('');
       return;
     }
     players = currentEvent.players || [];
@@ -245,11 +260,14 @@ var App = (function() {
       players: []
     };
     var result = await Api.saveEvent(event);
-    if (result && result.id) {
-      await refreshEventList();
-      await onEventSelect(result.id);
-      document.getElementById('eventSelect').value = result.id;
+    if (!result || !result.id) {
+      alert('大会の作成に失敗しました。');
+      return;
     }
+    await refreshEventList();
+    document.getElementById('eventSelect').value = result.id;
+    currentCourt = '';
+    await onEventSelect(result.id, '');
   }
 
   async function onDeleteEvent() {
@@ -567,9 +585,8 @@ var App = (function() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
     if (players.length === 0) { alert('エクスポートするデータがありません。'); return; }
     var csvText = await Api.exportCsv(currentEvent.id);
-    if (csvText) {
-      Storage.downloadCsv('players.csv', csvText);
-    }
+    if (!csvText) { alert('エクスポートに失敗しました。'); return; }
+    Storage.downloadCsv('players.csv', csvText);
   }
 
   function onDownloadHtml() {
