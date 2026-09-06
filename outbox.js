@@ -4,8 +4,17 @@
 // キューは localStorage に退避し、端末が落ちても次回起動時に再送する。
 var Outbox = (function() {
   var STORAGE_KEY = 'tmg_outbox';
+  var BACKOFF_MIN = 1000;
+  var BACKOFF_MAX = 30000;
+  var TICK_MS = 1000;
 
   var queue = [];
+  var sending = false;       // 送信処理が走っている最中か
+  var backoffMs = BACKOFF_MIN;
+  var failingSince = null;   // 最初に失敗した時刻（復旧したら null に戻す）
+  var retryTimer = null;     // バックオフ待ちのタイマー
+  var tickTimer = null;      // 状態通知用の毎秒タイマー
+  var statusHandler = null;
 
   // 同一の大会・選手のエントリを最新で置き換える。元の配列は変更しない。
   function coalesce(q, entry) {
@@ -40,9 +49,125 @@ var Outbox = (function() {
     return queue.length;
   }
 
-  // init / enqueue / flushNow / status は Task 7 で追加する
+  // 現在の状態。app.js はこれを見て表示を決める。
+  function status() {
+    var state = 'idle';
+    if (queue.length > 0) state = failingSince ? 'retrying' : 'sending';
+    return {
+      state: state,
+      pending: queue.length,
+      failingSince: failingSince
+    };
+  }
+
+  function notify() {
+    if (statusHandler) statusHandler(status());
+  }
+
+  // キューが空でない間だけ毎秒通知する（バナー昇格の判定に使う）。
+  function startTicking() {
+    if (tickTimer) return;
+    tickTimer = setInterval(function() {
+      if (queue.length === 0) {
+        clearInterval(tickTimer);
+        tickTimer = null;
+      }
+      notify();
+    }, TICK_MS);
+  }
+
+  // キューを先頭から順に送る。失敗したらバックオフして再挑戦する。
+  async function drain() {
+    if (sending) return;
+    if (queue.length === 0) { notify(); return; }
+    sending = true;
+    notify();
+
+    while (queue.length > 0) {
+      var entry = queue[0];
+      var ok = false;
+      try {
+        var result = await Api.updatePlayer(entry.eventId, entry.playerId, {
+          score: entry.score,
+          result: entry.result
+        });
+        ok = !!result;
+      } catch (e) {
+        ok = false;
+      }
+
+      if (ok) {
+        // 送信済みのエントリだけを取り除く。
+        // 送信中に同じ選手が再採点されていれば別オブジェクトに差し替わっているので、
+        // 参照が一致するときだけ削除する（新しい採点を取りこぼさない）。
+        if (queue[0] === entry) queue.shift();
+        save();
+        backoffMs = BACKOFF_MIN;
+        failingSince = null;
+        notify();
+      } else {
+        if (!failingSince) failingSince = Date.now();
+        sending = false;
+        notify();
+        startTicking();
+        scheduleRetry();
+        return;
+      }
+    }
+
+    sending = false;
+    notify();
+  }
+
+  function scheduleRetry() {
+    if (retryTimer) return;
+    retryTimer = setTimeout(function() {
+      retryTimer = null;
+      drain();
+    }, backoffMs);
+    backoffMs = Math.min(backoffMs * 2, BACKOFF_MAX);
+  }
+
+  // 採点をキューに積む。通信は待たない。
+  function enqueue(entry) {
+    entry.queuedAt = new Date().toISOString();
+    queue = coalesce(queue, entry);
+    save();
+    startTicking();
+    drain();
+  }
+
+  // バックオフ待ちを打ち切って即座に送信を試みる。
+  function flushNow() {
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    backoffMs = BACKOFF_MIN;
+    drain();
+  }
+
+  // 起動時に呼ぶ。localStorage の残件があれば自動送信する。
+  // 戻り値: 復元した件数（呼び出し元が「N件送信しました」を出すのに使う）
+  function init(onStatusChange) {
+    statusHandler = onStatusChange || null;
+    queue = load();
+    var recovered = queue.length;
+
+    window.addEventListener('online', flushNow);
+
+    if (recovered > 0) {
+      startTicking();
+      drain();
+    } else {
+      notify();
+    }
+    return recovered;
+  }
+
   return {
-    coalesce: coalesce,
-    pendingCount: pendingCount
+    init: init,
+    enqueue: enqueue,
+    flushNow: flushNow,
+    pendingCount: pendingCount,
+    status: status,
+    coalesce: coalesce
   };
 })();
