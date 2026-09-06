@@ -311,6 +311,56 @@
     assert('coalesce: 大会が違えば別エントリ',
       Outbox.coalesce([e1], eOther).length, 2);
 
+    var h2ow = document.createElement('h2');
+    h2ow.textContent = 'outbox.js (ワーカー)';
+    results.appendChild(h2ow);
+
+    var savedOutbox = localStorage.getItem('tmg_outbox');
+    var origUpdate = Api.updatePlayer;
+
+    // 恒久的に送れないエントリ（404）を捨てて後続を送る
+    // これを捨てないと、1件の404が先頭に張り付いて以降の採点が全部届かなくなる
+    var sent = [];
+    Api.updatePlayer = async function(eventId, playerId) {
+      sent.push(playerId);
+      return playerId === 'gone' ? { ok: false, status: 404 } : { ok: true };
+    };
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'gone',  score: 1, result: 'a', queuedAt: 't1' },
+      { eventId: 'ev1', playerId: 'alive', score: 2, result: 'b', queuedAt: 't2' }
+    ]));
+    var droppedSeen = [];
+    Outbox.init(function() {}, function(list) { droppedSeen = droppedSeen.concat(list); });
+    await new Promise(function(r) { setTimeout(r, 500); });
+    assert('404のエントリを捨てて後続を送る', sent, ['gone', 'alive']);
+    assert('捨てたエントリを呼び出し元に伝える', droppedSeen.length, 1);
+    assert('捨てた後キューが空になる', Outbox.pendingCount(), 0);
+
+    // 未送信の採点はサーバーの古い値より優先される
+    Api.updatePlayer = async function() { return { ok: false, status: 0 }; };
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'p1', score: 55, result: 'X', queuedAt: 't3' }
+    ]));
+    Outbox.init(function() {}, function() {});
+    await new Promise(function(r) { setTimeout(r, 400); });
+    assert('送れないエントリはキューに残る', Outbox.pendingCount(), 1);
+    var fromServer = [
+      { id: 'p1', score: 0, result: '' },
+      { id: 'p2', score: 9, result: 'Y' }
+    ];
+    assert('applyPending は上書きした件数を返す', Outbox.applyPending('ev1', fromServer), 1);
+    assert('未送信の採点でサーバーの値を上書きする',
+      [fromServer[0].score, fromServer[0].result], [55, 'X']);
+    assert('キューに無い選手はそのまま',
+      [fromServer[1].score, fromServer[1].result], [9, 'Y']);
+    assert('別の大会には適用しない', Outbox.applyPending('other', fromServer), 0);
+
+    // 後始末: 本物のキューの内容とメモリ上の状態を元に戻す
+    Api.updatePlayer = origUpdate;
+    if (savedOutbox === null) localStorage.removeItem('tmg_outbox');
+    else localStorage.setItem('tmg_outbox', savedOutbox);
+    Outbox.init(function() {}, function() {});
+
     await runApiTests();
 
     // 結果サマリ

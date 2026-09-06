@@ -15,6 +15,8 @@ var Outbox = (function() {
   var retryTimer = null;     // バックオフ待ちのタイマー
   var tickTimer = null;      // 状態通知用の毎秒タイマー
   var statusHandler = null;
+  var discardHandler = null;
+  var dropped = [];          // 恒久的に送れず捨てたエントリ
 
   // 同一の大会・選手のエントリを最新で置き換える。元の配列は変更しない。
   function coalesce(q, entry) {
@@ -49,6 +51,28 @@ var Outbox = (function() {
     return queue.length;
   }
 
+  // まだ送れていない採点を、サーバーから読み直した選手データに上書きする。
+  // キューにある値のほうが新しいので、画面と再エンコードの基準はこちらにする。
+  // これをしないと、サーバーの古い値で画面が巻き戻り、
+  // 次の1タップがその古い DOM から再エンコードされて未送信分を消す。
+  // 戻り値: 上書きした件数
+  function applyPending(eventId, playerList) {
+    var n = 0;
+    for (var i = 0; i < queue.length; i++) {
+      var e = queue[i];
+      if (e.eventId !== eventId) continue;
+      for (var j = 0; j < (playerList || []).length; j++) {
+        if (playerList[j].id === e.playerId) {
+          playerList[j].score = e.score;
+          playerList[j].result = e.result;
+          n++;
+          break;
+        }
+      }
+    }
+    return n;
+  }
+
   // 現在の状態。app.js はこれを見て表示を決める。
   function status() {
     var state = 'idle';
@@ -64,6 +88,16 @@ var Outbox = (function() {
   function notify() {
     if (!statusHandler) return;
     try { statusHandler(status()); } catch (e) {}
+  }
+
+  // 捨てたエントリを呼び出し元へ知らせる。黙って捨てると採点が
+  // 消えたことに誰も気付けない。
+  function flushDropped() {
+    if (dropped.length === 0) return;
+    var list = dropped;
+    dropped = [];
+    if (!discardHandler) return;
+    try { discardHandler(list); } catch (e) {}
   }
 
   // キューが空でない間だけ毎秒通知する（バナー昇格の判定に使う）。
@@ -90,18 +124,17 @@ var Outbox = (function() {
     try {
       while (queue.length > 0) {
         var entry = queue[0];
-        var ok = false;
+        var res = null;
         try {
-          var result = await Api.updatePlayer(entry.eventId, entry.playerId, {
+          res = await Api.updatePlayer(entry.eventId, entry.playerId, {
             score: entry.score,
             result: entry.result
           });
-          ok = !!result;
         } catch (e) {
-          ok = false;
+          res = null;
         }
 
-        if (ok) {
+        if (res && res.ok) {
           // 送信済みのエントリだけを取り除く。
           // 送信中に同じ選手が再採点されていれば別オブジェクトに差し替わっているので、
           // 参照が一致するときだけ削除する（新しい採点を取りこぼさない）。
@@ -109,6 +142,13 @@ var Outbox = (function() {
           save();
           backoffMs = BACKOFF_MIN;
           failingSince = null;
+          notify();
+        } else if (res && res.status === 404) {
+          // 送り先が存在しない。何度送っても通らないので捨てて先へ進む。
+          // 残すとこの1件が先頭に張り付き、以降の採点が全部届かなくなる。
+          if (queue[0] === entry) queue.shift();
+          save();
+          dropped.push(entry);
           notify();
         } else {
           if (!failingSince) failingSince = Date.now();
@@ -121,6 +161,7 @@ var Outbox = (function() {
       }
     } finally {
       sending = false;
+      flushDropped();
     }
 
     notify();
@@ -163,9 +204,11 @@ var Outbox = (function() {
   }
 
   // 起動時に呼ぶ。localStorage の残件があれば自動送信する。
+  // onDiscard は、送り先が存在せず恒久的に送れなかったエントリの配列を受け取る。
   // 戻り値: 復元した件数（呼び出し元が「N件送信しました」を出すのに使う）
-  function init(onStatusChange) {
+  function init(onStatusChange, onDiscard) {
     statusHandler = onStatusChange || null;
+    discardHandler = onDiscard || null;
     queue = load();
     var recovered = queue.length;
 
@@ -185,6 +228,7 @@ var Outbox = (function() {
     enqueue: enqueue,
     flushNow: flushNow,
     pendingCount: pendingCount,
+    applyPending: applyPending,
     status: status,
     coalesce: coalesce
   };

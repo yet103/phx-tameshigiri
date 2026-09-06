@@ -58,16 +58,20 @@ var Api = (function() {
   async function updatePlayer(eventId, playerId, data) {
     // PATCH /api/events/:eventId/players/:playerId
     // Body: { score, result, その他の更新フィールド }
+    // 戻り値: { ok: true } | { ok: false, status: <HTTPステータス> }
+    // 通信自体に失敗した場合は status: 0（再送すれば通る見込みがある失敗）。
+    // 送信キューは 404（送り先が存在しない＝何度送っても通らない）と
+    // それ以外を区別する必要があるため、真偽値ではなく状態を返す。
     try {
       var res = await fetch('/api/events/' + eventId + '/players/' + playerId, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      if (!res.ok) return null;
-      return await res.json();
+      if (!res.ok) return { ok: false, status: res.status };
+      return { ok: true };
     } catch (e) {
-      return null;
+      return { ok: false, status: 0 };
     }
   }
 

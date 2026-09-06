@@ -27,7 +27,7 @@ var App = (function() {
     // 送信キューは何よりも先に起動する。
     // ここから下の API 呼び出しがどう転んでも、前回未送信の採点が
     // 復旧され、online イベントの購読も済んでいる状態にするため。
-    var recovered = Outbox.init(onSaveStatus);
+    var recovered = Outbox.init(onSaveStatus, onSaveDiscarded);
     // 技術データをAPIから取得してScoringに注入
     var techData = await Api.loadTechniques();
     if (techData && techData.techniques) {
@@ -92,6 +92,15 @@ var App = (function() {
     } else {
       saveBannerEl.style.display = 'none';
     }
+  }
+
+  // 送り先が見つからず捨てた採点があれば伝える。
+  // 黙って捨てると、採点が消えたことに誰も気付けない。
+  function onSaveDiscarded(entries) {
+    alert('保存できなかった採点が ' + entries.length + ' 件あります。\n' +
+          '対象の選手がサーバー上に見つかりませんでした。\n' +
+          '（名簿を入れ直した直後などに起きます）\n' +
+          '該当する選手の採点を確認し、必要なら入力し直してください。');
   }
 
   // --- テーマ ---
@@ -272,6 +281,8 @@ var App = (function() {
       return;
     }
     players = currentEvent.players || [];
+    // 未送信の採点はキューが正。サーバーの古い値で画面を巻き戻さない。
+    Outbox.applyPending(currentEvent.id, players);
     if (court !== undefined) currentCourt = court;
     refreshCourtList();
     applyCourtFilter();
