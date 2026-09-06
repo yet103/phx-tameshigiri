@@ -17,6 +17,7 @@
 <script src="scoring.js"></script>
 <script src="api.js"></script>
 <script src="storage.js"></script>
+<script src="courts.js"></script>
 <script>
   var results = document.getElementById('results');
   var passed = 0, failed = 0;
@@ -227,6 +228,34 @@
     results.appendChild(h2st);
 
     assert('storage.js loadTheme default is light', Storage.loadTheme() === 'light' || Storage.loadTheme() === 'dark', true);
+
+    var h2c = document.createElement('h2');
+    h2c.textContent = 'courts.js';
+    results.appendChild(h2c);
+
+    assert('courtOf: A-男子-1-1 → A', Courts.courtOf({ order: 'A-男子-1-1' }), 'A');
+    assert('courtOf: ハイフン無しはそのまま', Courts.courtOf({ order: 'B' }), 'B');
+    assert('courtOf: 空のorderは未分類', Courts.courtOf({ order: '' }), Courts.UNASSIGNED);
+    assert('courtOf: orderが無い場合も未分類', Courts.courtOf({}), Courts.UNASSIGNED);
+    assert('courtOf: nullでも落ちない', Courts.courtOf(null), Courts.UNASSIGNED);
+
+    var courtPlayers = [
+      { order: 'B-男子-1-1' },
+      { order: 'A-男子-1-1' },
+      { order: 'A-女子-1-2' },
+      { order: '' },
+      { order: 'B-女子-1-1' }
+    ];
+    assert('listFrom: 重複を除き昇順、未分類は末尾',
+      Courts.listFrom(courtPlayers), ['A', 'B', Courts.UNASSIGNED]);
+    assert('listFrom: 未分類が無ければ含めない',
+      Courts.listFrom([{ order: 'A-男子-1-1' }]), ['A']);
+    assert('listFrom: 空配列は空配列', Courts.listFrom([]), []);
+
+    assert('filter: 空文字は全件', Courts.filter(courtPlayers, '').length, 5);
+    assert('filter: Aで2件', Courts.filter(courtPlayers, 'A').length, 2);
+    assert('filter: 未分類で1件', Courts.filter(courtPlayers, Courts.UNASSIGNED).length, 1);
+    assert('filter: 該当なしは空', Courts.filter(courtPlayers, 'Z').length, 0);
 
     await runApiTests();
 
