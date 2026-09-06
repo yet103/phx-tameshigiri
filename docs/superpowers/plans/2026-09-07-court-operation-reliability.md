@@ -346,7 +346,7 @@ function isScored(player) {
 
 - [ ] **Step 5: サーバーを再起動してテストを実行する**
 
-Expected: `Result: 45 passed, 0 failed`
+Expected: `Result: 46 passed, 0 failed`
 
 - [ ] **Step 6: `app.js` のインポート処理を 409 に対応させる**
 
@@ -487,7 +487,7 @@ var Courts = (function() {
 
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
-Expected: `Result: 57 passed, 0 failed`
+Expected: `Result: 58 passed, 0 failed`
 
 - [ ] **Step 5: `index.html` に読み込みを追加する**
 
@@ -657,7 +657,7 @@ var Route = (function() {
 
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
-Expected: `Result: 70 passed, 0 failed`
+Expected: `Result: 71 passed, 0 failed`
 
 - [ ] **Step 5: `index.html` に読み込みを追加する**
 
@@ -782,7 +782,7 @@ var Outbox = (function() {
 
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
-Expected: `Result: 76 passed, 0 failed`
+Expected: `Result: 77 passed, 0 failed`
 
 - [ ] **Step 5: `index.html` に読み込みを追加する**
 
@@ -992,7 +992,7 @@ var Outbox = (function() {
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 76 passed, 0 failed`
+Expected: `Result: 77 passed, 0 failed`
 
 > [!NOTE]
 > `test.html` は `api.js` を読み込んでいるので `Outbox` 内の `Api` 参照は解決できる。
@@ -1517,7 +1517,7 @@ Expected: すべて満たす
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 76 passed, 0 failed`
+Expected: `Result: 77 passed, 0 failed`
 
 - [ ] **Step 12: コミット**
 
@@ -1621,7 +1621,7 @@ Expected: エラーにならず「大会を選択してください」の未選�
 
 - [ ] **Step 6: テストを実行する**
 
-Expected: `Result: 76 passed, 0 failed`
+Expected: `Result: 77 passed, 0 failed`
 
 - [ ] **Step 7: コミット**
 
@@ -1718,7 +1718,7 @@ Expected: 「前回未送信の採点 3 件を送信します。」が出て、�
 
 - [ ] **Step 6: 全テストを実行する**
 
-Expected: `Result: 76 passed, 0 failed`
+Expected: `Result: 77 passed, 0 failed`
 
 - [ ] **Step 7: 全画面の目視確認**
 
@@ -1736,7 +1736,7 @@ Expected: `Result: 76 passed, 0 failed`
 
 ## 完了条件
 
-- [ ] `test.html` が `Result: 76 passed, 0 failed`
+- [ ] `test.html` が `Result: 77 passed, 0 failed`
 - [ ] Task 13 の手動確認がすべて期待どおり
 - [ ] `grep -n "fs.writeFileSync" server/index.js` が `writeJsonAtomic` 内の 1 件のみ
 - [ ] `server/data` に `.tmp` ファイルが残っていない
