@@ -311,6 +311,9 @@
     assert('coalesce: 大会が違えば別エントリ',
       Outbox.coalesce([e1], eOther).length, 2);
 
+    // 注意: このページは index.html と localStorage を共有する。
+    // 以下のテストは tmg_outbox を一時的に書き換えるため、
+    // 採点中の端末でこのページを開かないこと。
     var h2ow = document.createElement('h2');
     h2ow.textContent = 'outbox.js (ワーカー)';
     results.appendChild(h2ow);

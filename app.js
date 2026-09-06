@@ -97,9 +97,18 @@ var App = (function() {
   // 送り先が見つからず捨てた採点があれば伝える。
   // 黙って捨てると、採点が消えたことに誰も気付けない。
   function onSaveDiscarded(entries) {
+    // 後から追えるよう、捨てた中身そのものを残す
+    console.error('保存できずに破棄した採点:', entries);
+    try {
+      var keep = JSON.parse(localStorage.getItem('tmg_discarded') || '[]');
+      localStorage.setItem('tmg_discarded', JSON.stringify(keep.concat(entries)));
+    } catch (e) {}
+    var detail = entries.map(function(e) {
+      return '  選手ID ' + e.playerId + ' / ' + e.score + '点';
+    }).join('\n');
     alert('保存できなかった採点が ' + entries.length + ' 件あります。\n' +
           '対象の選手がサーバー上に見つかりませんでした。\n' +
-          '（名簿を入れ直した直後などに起きます）\n' +
+          '（名簿を入れ直した直後などに起きます）\n\n' + detail + '\n\n' +
           '該当する選手の採点を確認し、必要なら入力し直してください。');
   }
 
@@ -261,6 +270,17 @@ var App = (function() {
   // 採点対象の取り違えに直結するため、最後の要求だけが状態を書き換えるようにする。
   var loadSeq = 0;
 
+  // サーバーから読み直した大会データを画面の状態に取り込む。
+  // 未送信の採点はキューのほうが新しいので必ず上書きする。これを忘れると
+  // 画面がサーバーの古い値へ巻き戻り、次の1タップがその古いDOMから
+  // 再エンコードされて未送信分を破棄する。
+  // 読み直す経路が複数あるため、ここに一本化して付け忘れを防ぐ。
+  function adoptEvent(event) {
+    currentEvent = event;
+    players = event.players || [];
+    Outbox.applyPending(event.id, players);
+  }
+
   async function onEventSelect(eventId, court) {
     var seq = ++loadSeq;
     if (!eventId) {
@@ -281,17 +301,15 @@ var App = (function() {
     }
     var loaded = await Api.loadEvent(eventId);
     if (seq !== loadSeq) return;   // 追い越された。古い応答は捨てる
-    currentEvent = loaded;
-    if (!currentEvent) {
+    if (!loaded) {
       // 復元しようとした大会が既に削除されている。
       // 前の大会の選手や得点が画面に残らないよう、未選択状態まで戻す。
+      currentEvent = null;
       document.getElementById('eventSelect').value = '';
       await onEventSelect('');
       return;
     }
-    players = currentEvent.players || [];
-    // 未送信の採点はキューが正。サーバーの古い値で画面を巻き戻さない。
-    Outbox.applyPending(currentEvent.id, players);
+    adoptEvent(loaded);
     if (court !== undefined) currentCourt = court;
     refreshCourtList();
     applyCourtFilter();
@@ -594,6 +612,10 @@ var App = (function() {
     if (!currentEvent) { alert('先に大会を選択または作成してください。'); return; }
     var reader = new FileReader();
     reader.onload = async function(ev) {
+      // await をまたぐので、対象の大会をここで固定する。
+      // 通信中に大会を切り替えられると、force 付きの replace が
+      // 別の大会に飛んで名簿ごと消えてしまう。
+      var eventId = currentEvent.id;
       var text = ev.target.result;
       csvFileInput.value = '';
       var mode = 'replace';
@@ -601,7 +623,8 @@ var App = (function() {
         var choice = confirm('既存データをクリアして読み込みますか？\n（キャンセルで追記）');
         mode = choice ? 'replace' : 'append';
       }
-      var result = await Api.importCsv(currentEvent.id, text, mode);
+      var result = await Api.importCsv(eventId, text, mode);
+      if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
       if (result && result.blocked) {
         var ok = confirm(
           'この大会には採点済みの選手が少なくとも ' + result.scoredCount + ' 名います。\n' +
@@ -610,21 +633,22 @@ var App = (function() {
           '本当に続行しますか？'
         );
         if (!ok) return;
-        result = await Api.importCsv(currentEvent.id, text, mode, true);
+        result = await Api.importCsv(eventId, text, mode, true);
+        if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
       }
       if (result && result.success) {
         // 大会データを再読み込み
-        var reloaded = await Api.loadEvent(currentEvent.id);
+        var reloaded = await Api.loadEvent(eventId);
+        if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
         if (!reloaded) {
           alert('インポートは成功しましたが、最新データを取得できませんでした。\n画面を再読み込みしてください。');
           return;
         }
-        currentEvent = reloaded;
-        players = currentEvent.players || [];
+        adoptEvent(reloaded);
         refreshCourtList();
         applyCourtFilter();
         // 履歴記録
-        Api.addHistory(currentEvent.id, {
+        Api.addHistory(eventId, {
           action: 'csv_import',
           detail: result.playerCount + '名の選手データをインポート'
         });
@@ -647,11 +671,15 @@ var App = (function() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
     // 手元の players は自分が大会を開いた時点のもので、他コートの端末が
     // その後つけた得点が入っていない。成績表なので必ず取り直す。
-    var latest = await Api.loadEvent(currentEvent.id);
+    // await をまたぐので、対象の大会をここで固定する。
+    // 通信中に大会を切り替えられると、別の大会の内容を出力してしまう。
+    var eventId = currentEvent.id;
+    var latest = await Api.loadEvent(eventId);
     if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
+    if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
     var all = latest.players || [];
     // この端末の未送信分もキューが正なので反映する
-    Outbox.applyPending(currentEvent.id, all);
+    Outbox.applyPending(eventId, all);
     if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
     Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
   }
@@ -660,12 +688,16 @@ var App = (function() {
   async function onGenNextRound() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
     if (!confirm('二巡目データを生成します。よろしいですか？')) return;
+    // await をまたぐので、対象の大会をここで固定する。
+    // 通信中に大会を切り替えられると、別の大会の内容から生成してしまう。
+    var eventId = currentEvent.id;
     // 全選手の得点順で並べるので、他コートの採点が入っていないと
     // 二巡目のシードが狂う。必ずサーバーから取り直す。
-    var latest = await Api.loadEvent(currentEvent.id);
+    var latest = await Api.loadEvent(eventId);
     if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
+    if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
     var all = latest.players || [];
-    Outbox.applyPending(currentEvent.id, all);
+    Outbox.applyPending(eventId, all);
     if (all.length === 0) { alert('選手データがありません。'); return; }
 
     // 女子→男子の順、得点の昇順でソート

@@ -83,8 +83,17 @@
     (async function() {
       applyTheme(Storage.loadTheme());
       var techData = await Api.loadTechniques();
-      var techs = techData ? techData.techniques : TECHNIQUES;
-      renderTable(techs);
+      if (!techData) {
+        // 端末側の既定値を表示しているだけなので、この状態で保存させると
+        // サーバーのカスタム技術リストを既定値で上書きしてしまう。
+        alert('技術リストをサーバーから取得できませんでした。\n' +
+              '端末側の既定値を表示しています。\n' +
+              '上書きを防ぐため、保存は無効にしました。再読み込みしてください。');
+        renderTable(TECHNIQUES);
+        document.getElementById('btnSaveTech').disabled = true;
+      } else {
+        renderTable(techData.techniques);
+      }
 
       document.getElementById('btnSaveTech').addEventListener('click', async function() {
         var techs = collectTechs();

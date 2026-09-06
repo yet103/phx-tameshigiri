@@ -51,6 +51,14 @@ var Outbox = (function() {
     return queue.length;
   }
 
+  // 何度送っても通らない失敗か。
+  // 4xx はリクエスト自体が受け付けられていないので再送しても同じ。
+  // ただし 408（タイムアウト）と 429（レート制限）は時間を置けば通る。
+  function isPermanentFailure(status) {
+    if (status === 408 || status === 429) return false;
+    return status >= 400 && status < 500;
+  }
+
   // まだ送れていない採点を、サーバーから読み直した選手データに上書きする。
   // キューにある値のほうが新しいので、画面と再エンコードの基準はこちらにする。
   // これをしないと、サーバーの古い値で画面が巻き戻り、
@@ -94,9 +102,9 @@ var Outbox = (function() {
   // 消えたことに誰も気付けない。
   function flushDropped() {
     if (dropped.length === 0) return;
+    if (!discardHandler) return;   // ハンドラが付くまで溜めておく
     var list = dropped;
     dropped = [];
-    if (!discardHandler) return;
     try { discardHandler(list); } catch (e) {}
   }
 
@@ -143,8 +151,9 @@ var Outbox = (function() {
           backoffMs = BACKOFF_MIN;
           failingSince = null;
           notify();
-        } else if (res && res.status === 404) {
-          // 送り先が存在しない。何度送っても通らないので捨てて先へ進む。
+        } else if (res && isPermanentFailure(res.status)) {
+          // 送り先が存在しない、リクエストが受け付けられない等。
+          // 何度送っても通らないので捨てて先へ進む。
           // 残すとこの1件が先頭に張り付き、以降の採点が全部届かなくなる。
           if (queue[0] === entry) queue.shift();
           save();
