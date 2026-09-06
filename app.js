@@ -197,9 +197,18 @@ var App = (function() {
       opt.textContent = list[i] === Courts.UNASSIGNED ? Courts.UNASSIGNED : list[i] + ' コート';
       courtSelect.appendChild(opt);
     }
-    // 選択中のコートが今の大会に存在しなければ全コートへ戻す
-    if (currentCourt && list.indexOf(currentCourt) === -1) {
+    // 名簿が入っている大会で、選択中のコートがそこに無ければ全コートへ戻す
+    if (currentCourt && players.length > 0 && list.indexOf(currentCourt) === -1) {
       currentCourt = '';
+    }
+    // 名簿がまだ入っていない場合は、配布されたURLのコート指定を落とさない。
+    // 「先に端末を配ってURLを開かせ、後から名簿を入れる」段取りがあるため、
+    // 選択肢として残しておく。
+    if (currentCourt && list.indexOf(currentCourt) === -1) {
+      var pending = document.createElement('option');
+      pending.value = currentCourt;
+      pending.textContent = currentCourt + ' コート';
+      courtSelect.appendChild(pending);
     }
     courtSelect.value = currentCourt;
   }
@@ -634,19 +643,33 @@ var App = (function() {
     Storage.downloadCsv('players.csv', csvText);
   }
 
-  function onDownloadHtml() {
-    if (players.length === 0) { alert('ダウンロードするデータがありません。'); return; }
-    var html = Storage.buildPlayersHtml(players);
-    Storage.downloadHtml('result.html', html);
+  async function onDownloadHtml() {
+    if (!currentEvent) { alert('大会を選択してください。'); return; }
+    // 手元の players は自分が大会を開いた時点のもので、他コートの端末が
+    // その後つけた得点が入っていない。成績表なので必ず取り直す。
+    var latest = await Api.loadEvent(currentEvent.id);
+    if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
+    var all = latest.players || [];
+    // この端末の未送信分もキューが正なので反映する
+    Outbox.applyPending(currentEvent.id, all);
+    if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
+    Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
   }
 
   // --- 二巡目データ生成 ---
-  function onGenNextRound() {
-    if (!currentEvent || players.length === 0) { alert('選手データがありません。'); return; }
+  async function onGenNextRound() {
+    if (!currentEvent) { alert('大会を選択してください。'); return; }
     if (!confirm('二巡目データを生成します。よろしいですか？')) return;
+    // 全選手の得点順で並べるので、他コートの採点が入っていないと
+    // 二巡目のシードが狂う。必ずサーバーから取り直す。
+    var latest = await Api.loadEvent(currentEvent.id);
+    if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
+    var all = latest.players || [];
+    Outbox.applyPending(currentEvent.id, all);
+    if (all.length === 0) { alert('選手データがありません。'); return; }
 
     // 女子→男子の順、得点の昇順でソート
-    var sorted = players.slice().sort(function(a, b) {
+    var sorted = all.slice().sort(function(a, b) {
       var gA = a.isFemale ? 1 : 0;
       var gB = b.isFemale ? 1 : 0;
       if (gB !== gA) return gB - gA; // 女子(1)が先
@@ -656,8 +679,9 @@ var App = (function() {
     var femaleCount = 0, maleCount = 0;
     var lines = ['選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果'];
     sorted.forEach(function(p) {
-      var courtMatch = (p.order || '').match(/^([^-]+)/);
-      var court = courtMatch ? courtMatch[1] : 'A';
+      // コートの導出は Courts に一本化する（旧実装は独自の正規表現を持ち、
+      // order が空の選手を黙って A コートに割り当てていた）
+      var court = Courts.courtOf(p);
       var gender = p.isFemale ? '女子' : '男子';
       var num = p.isFemale ? ++femaleCount : ++maleCount;
       var order = court + '-' + gender + '-2-' + num;
