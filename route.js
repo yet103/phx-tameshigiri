@@ -5,18 +5,24 @@ var Route = (function() {
   var LAST_KEY = 'tmg_last';
 
   // ハッシュ文字列を { eventId, court } に解析する。解釈できなければ null。
+  // 壊れたURL（不正なパーセントエンコーディング）でも例外を投げず null を返す。
+  // コートごとにURLを配る運用のため、壊れたブックマークで起動時に落ちないようにする。
   function parse(hash) {
     if (!hash) return null;
     var body = hash.charAt(0) === '#' ? hash.slice(1) : hash;
     if (!body) return null;
     var parts = body.split('/');
     if (parts[0] !== 'event') return null;
-    var eventId = decodeURIComponent(parts[1] || '');
-    if (!eventId) return null;
-    return {
-      eventId: eventId,
-      court: decodeURIComponent(parts[2] || '')
-    };
+    try {
+      var eventId = decodeURIComponent(parts[1] || '');
+      if (!eventId) return null;
+      return {
+        eventId: eventId,
+        court: decodeURIComponent(parts[2] || '')
+      };
+    } catch (e) {
+      return null;
+    }
   }
 
   // { eventId, court } からハッシュ文字列を組み立てる。

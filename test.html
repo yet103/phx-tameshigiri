@@ -277,6 +277,8 @@
     assert('parse: 大会IDが無ければnull', Route.parse('#event/'), null);
     assert('parse: 余分なセグメントは無視する',
       Route.parse('#event/abc/A/extra'), { eventId: 'abc', court: 'A' });
+    assert('parse: 大会IDの不正なエンコードはnull', Route.parse('#event/abc%ZZ'), null);
+    assert('parse: コート名の不正なエンコードはnull', Route.parse('#event/abc/%E0%A4%A'), null);
 
     assert('build: 大会とコート', Route.build('abc', 'A'), '#event/abc/A');
     assert('build: コート無し', Route.build('abc', ''), '#event/abc');
