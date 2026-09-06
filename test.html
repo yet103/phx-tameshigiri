@@ -18,6 +18,7 @@
 <script src="api.js"></script>
 <script src="storage.js"></script>
 <script src="courts.js"></script>
+<script src="route.js"></script>
 <script>
   var results = document.getElementById('results');
   var passed = 0, failed = 0;
@@ -256,6 +257,32 @@
     assert('filter: Aで2件', Courts.filter(courtPlayers, 'A').length, 2);
     assert('filter: 未分類で1件', Courts.filter(courtPlayers, Courts.UNASSIGNED).length, 1);
     assert('filter: 該当なしは空', Courts.filter(courtPlayers, 'Z').length, 0);
+
+    var h2r = document.createElement('h2');
+    h2r.textContent = 'route.js';
+    results.appendChild(h2r);
+
+    assert('parse: 大会とコート',
+      Route.parse('#event/abc123/A'), { eventId: 'abc123', court: 'A' });
+    assert('parse: 大会のみ',
+      Route.parse('#event/abc123'), { eventId: 'abc123', court: '' });
+    assert('parse: 先頭の#が無くても解釈する',
+      Route.parse('event/abc123/B'), { eventId: 'abc123', court: 'B' });
+    assert('parse: 日本語コート名をデコードする',
+      Route.parse('#event/abc123/' + encodeURIComponent('未分類')),
+      { eventId: 'abc123', court: '未分類' });
+    assert('parse: 空文字はnull', Route.parse(''), null);
+    assert('parse: #だけはnull', Route.parse('#'), null);
+    assert('parse: 未知のスクリーンはnull', Route.parse('#foo/abc'), null);
+    assert('parse: 大会IDが無ければnull', Route.parse('#event/'), null);
+    assert('parse: 余分なセグメントは無視する',
+      Route.parse('#event/abc/A/extra'), { eventId: 'abc', court: 'A' });
+
+    assert('build: 大会とコート', Route.build('abc', 'A'), '#event/abc/A');
+    assert('build: コート無し', Route.build('abc', ''), '#event/abc');
+    assert('build: 日本語コート名をエンコードする',
+      Route.build('abc', '未分類'), '#event/abc/' + encodeURIComponent('未分類'));
+    assert('build: 大会IDが無ければ空', Route.build('', 'A'), '');
 
     await runApiTests();
 
