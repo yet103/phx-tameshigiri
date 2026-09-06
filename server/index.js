@@ -145,6 +145,15 @@ function escapeCSV(field) {
   return str;
 }
 
+// 採点済みかどうかの判定
+// result は 1=○, 0=×, 空白=未入力 でエンコードされているため、
+// 0 か 1 を含んでいれば何らかの採点が入っている。
+function isScored(player) {
+  if (!player) return false;
+  if (typeof player.score === 'number' && player.score > 0) return true;
+  return /[01]/.test(player.result || '');
+}
+
 // JSONのアトミック書き込み
 // writeFileSync で直接上書きすると、書き込み中にプロセスが落ちたときに
 // ファイルが切り詰められ、大会データが丸ごと失われる。
@@ -299,8 +308,20 @@ app.post('/api/events/:id/import', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
-    const { csvText, mode } = req.body;
-    
+    const { csvText, mode, force } = req.body;
+
+    // replace は players 配列を丸ごと置換するため、採点済みデータがあると
+    // 他コートの採点まで消える。件数を返して拒否し、明示的な force のときだけ通す。
+    if (mode === 'replace' && force !== true) {
+      const scoredCount = (event.players || []).filter(isScored).length;
+      if (scoredCount > 0) {
+        return res.status(409).json({
+          error: '採点済みのデータがあります',
+          scoredCount: scoredCount
+        });
+      }
+    }
+
     const lines = parseCSV(csvText);
     if (lines.length === 0) {
       return res.status(400).json({ error: '空のデータです' });

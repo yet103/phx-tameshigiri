@@ -102,6 +102,27 @@
       raceAfter.players.map(function(p) { return p.score; }),
       raceExpected);
     await Api.deleteEvent(raceEvent.id);
+
+    // インポートガードのテスト
+    var guardEvent = await Api.saveEvent({ name: 'ガードテスト', date: '2026-01-01', venue: '', players: [] });
+    var guardCsv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
+                   '採点済,A-男子-1-1,真,,,30,,,1    \n';
+    await Api.importCsv(guardEvent.id, guardCsv, 'replace');
+
+    // 採点済みデータがある大会への replace は 409 で拒否される
+    var blocked = await Api.importCsv(guardEvent.id, guardCsv, 'replace');
+    assert('採点済み大会へのreplaceは拒否される', blocked.blocked, true);
+    assert('拒否時に採点済み人数を返す', blocked.scoredCount, 1);
+
+    // force を付ければ通る
+    var forced = await Api.importCsv(guardEvent.id, guardCsv, 'replace', true);
+    assert('forceを付けたreplaceは成功する', forced.success, true);
+
+    // append は採点済みでも拒否しない
+    var appended = await Api.importCsv(guardEvent.id, guardCsv, 'append');
+    assert('appendは採点済みでも拒否しない', appended.success, true);
+
+    await Api.deleteEvent(guardEvent.id);
   }
 
   (async function() {

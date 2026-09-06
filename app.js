@@ -440,6 +440,15 @@ var App = (function() {
         mode = choice ? 'replace' : 'append';
       }
       var result = await Api.importCsv(currentEvent.id, text, mode);
+      if (result && result.blocked) {
+        var ok = confirm(
+          'この大会には採点済みの選手が ' + result.scoredCount + ' 名います。\n' +
+          '読み込みを続けると、これらの採点結果はすべて失われます。\n' +
+          '本当に続行しますか？'
+        );
+        if (!ok) return;
+        result = await Api.importCsv(currentEvent.id, text, mode, true);
+      }
       if (result && result.success) {
         // 大会データを再読み込み
         currentEvent = await Api.loadEvent(currentEvent.id);

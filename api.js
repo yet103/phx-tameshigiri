@@ -49,14 +49,20 @@ var Api = (function() {
     return await res.json();
   }
 
-  async function importCsv(eventId, csvText, mode) {
+  async function importCsv(eventId, csvText, mode, force) {
     // POST /api/events/:eventId/import
-    // Body: { csvText, mode: 'replace' | 'append' }
+    // Body: { csvText, mode: 'replace' | 'append', force }
+    // 戻り値: { success: true, playerCount } |
+    //         { blocked: true, scoredCount } (409: 採点済みデータあり) | null
     var res = await fetch('/api/events/' + eventId + '/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ csvText: csvText, mode: mode || 'replace' })
+      body: JSON.stringify({ csvText: csvText, mode: mode || 'replace', force: force === true })
     });
+    if (res.status === 409) {
+      var conflict = await res.json();
+      return { blocked: true, scoredCount: conflict.scoredCount || 0 };
+    }
     if (!res.ok) return null;
     return await res.json();
   }
