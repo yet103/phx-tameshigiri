@@ -2,6 +2,8 @@ var App = (function() {
   // --- 状態 ---
   var currentEvent = null;   // 現在選択中の大会オブジェクト
   var players = [];          // currentEvent.players の参照
+  var visiblePlayers = [];   // 選択中コートで絞り込んだ選手（巡回・一覧の対象）
+  var currentCourt = '';     // '' なら全コート
   var currentIndex = -1;  // 選択中の選手インデックス
   var timerSec = 300;     // タイマー残り秒数
   var timerRunning = false;
@@ -17,6 +19,7 @@ var App = (function() {
   var csvFileInput     = document.getElementById('csvFileInput');
   var playerListPanel  = document.getElementById('playerListPanel');
   var playerListBody   = document.getElementById('playerListBody');
+  var courtSelect      = document.getElementById('courtSelect');
 
   // --- 初期化 ---
   async function init() {
@@ -26,9 +29,44 @@ var App = (function() {
     if (techData && techData.techniques) {
       Scoring.setTechniques(techData.techniques);
     }
+    // 送信キューを起動する。前回未送信の採点があればここで再送される。
+    var recovered = Outbox.init(onSaveStatus);
+    if (recovered > 0) {
+      alert('前回未送信の採点 ' + recovered + ' 件を送信します。');
+    }
     // 大会一覧を取得してドロップダウンに展開
     await refreshEventList();
     bindEvents();
+  }
+
+  // --- 保存状態の表示 ---
+  var saveStatusEl = document.getElementById('saveStatus');
+  var saveBannerEl = document.getElementById('saveBanner');
+  var saveBannerTextEl = document.getElementById('saveBannerText');
+  var BANNER_AFTER_MS = 30000;
+
+  function onSaveStatus(st) {
+    if (!saveStatusEl) return;
+    saveStatusEl.classList.remove('sending', 'retrying');
+    if (st.state === 'idle') {
+      saveStatusEl.textContent = '● 保存済み';
+    } else if (st.state === 'sending') {
+      saveStatusEl.textContent = '◌ 保存中…';
+      saveStatusEl.classList.add('sending');
+    } else {
+      saveStatusEl.textContent = '⚠ 未保存 ' + st.pending + ' 件・再送中';
+      saveStatusEl.classList.add('retrying');
+    }
+
+    // 最初の失敗から30秒経っても未保存が残っていればバナーに昇格する
+    var stale = st.failingSince && (Date.now() - st.failingSince >= BANNER_AFTER_MS);
+    if (st.pending > 0 && stale) {
+      saveBannerTextEl.textContent =
+        '⚠ サーバーに保存できていません（' + st.pending + '件未保存）';
+      saveBannerEl.style.display = 'flex';
+    } else {
+      saveBannerEl.style.display = 'none';
+    }
   }
 
   // --- テーマ ---
@@ -68,6 +106,11 @@ var App = (function() {
     document.getElementById('eventSelect').addEventListener('change', function() {
       onEventSelect(this.value);
     });
+    courtSelect.addEventListener('change', function() {
+      currentCourt = this.value;
+      applyCourtFilter();
+      if (currentEvent) Route.set(currentEvent.id, currentCourt);
+    });
     document.getElementById('btnNewEvent').addEventListener('click', function() {
       document.getElementById('newEventModal').style.display = 'flex';
       document.getElementById('newEventName').value = '';
@@ -91,6 +134,54 @@ var App = (function() {
     document.getElementById('btnDeleteEvent').addEventListener('click', function() {
       onDeleteEvent();
     });
+
+    document.getElementById('btnRetrySave').addEventListener('click', function() {
+      Outbox.flushNow();
+    });
+
+    // 未送信の採点があるときだけ離脱を警告する
+    window.addEventListener('beforeunload', function(e) {
+      if (Outbox.pendingCount() > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+  }
+
+  // --- コート ---
+  // 現在の大会の選手からコート選択肢を作り直す
+  function refreshCourtList() {
+    var list = Courts.listFrom(players);
+    courtSelect.innerHTML = '<option value="">全コート</option>';
+    for (var i = 0; i < list.length; i++) {
+      var opt = document.createElement('option');
+      opt.value = list[i];
+      opt.textContent = list[i] === Courts.UNASSIGNED ? Courts.UNASSIGNED : list[i] + ' コート';
+      courtSelect.appendChild(opt);
+    }
+    // 選択中のコートが今の大会に存在しなければ全コートへ戻す
+    if (currentCourt && list.indexOf(currentCourt) === -1) {
+      currentCourt = '';
+    }
+    courtSelect.value = currentCourt;
+  }
+
+  // 絞り込みを適用して画面を作り直す
+  function applyCourtFilter() {
+    visiblePlayers = Courts.filter(players, currentCourt);
+    currentIndex = -1;
+    if (visiblePlayers.length > 0) {
+      selectPlayer(0);
+    } else {
+      scoreTableBody.innerHTML = '';
+      totalScoreDisplay.textContent = '合計: 0点';
+      playerNameLabel.textContent = players.length > 0
+        ? '（このコートに選手がいません）'
+        : '（選手がいません）';
+      courtLabel.textContent = '';
+      playerOrderLabel.textContent = '';
+    }
+    refreshPlayerList();
   }
 
   // --- 大会管理 ---
@@ -110,33 +201,35 @@ var App = (function() {
     }
   }
 
-  async function onEventSelect(eventId) {
+  async function onEventSelect(eventId, court) {
     if (!eventId) {
       currentEvent = null;
       players = [];
+      visiblePlayers = [];
+      currentCourt = '';
       currentIndex = -1;
+      refreshCourtList();
       scoreTableBody.innerHTML = '';
       totalScoreDisplay.textContent = '合計: 0点';
       playerNameLabel.textContent = '（大会を選択してください）';
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
+      Route.clear();
       refreshPlayerList();
       return;
     }
     currentEvent = await Api.loadEvent(eventId);
-    if (!currentEvent) return;
-    players = currentEvent.players || [];
-    currentIndex = -1;
-    if (players.length > 0) {
-      selectPlayer(0);
-    } else {
-      scoreTableBody.innerHTML = '';
-      totalScoreDisplay.textContent = '合計: 0点';
-      playerNameLabel.textContent = '（選手がいません）';
-      courtLabel.textContent = '';
-      playerOrderLabel.textContent = '';
+    if (!currentEvent) {
+      // 復元しようとした大会が既に削除されている
+      Route.clear();
+      document.getElementById('eventSelect').value = '';
+      return;
     }
-    refreshPlayerList();
+    players = currentEvent.players || [];
+    if (court !== undefined) currentCourt = court;
+    refreshCourtList();
+    applyCourtFilter();
+    Route.set(currentEvent.id, currentCourt);
   }
 
   async function createEvent(name, date, venue) {
@@ -157,32 +250,26 @@ var App = (function() {
   async function onDeleteEvent() {
     if (!currentEvent) return;
     if (!confirm('大会「' + currentEvent.name + '」を削除します。よろしいですか？')) return;
-    await Api.deleteEvent(currentEvent.id);
-    currentEvent = null;
-    players = [];
-    currentIndex = -1;
-    scoreTableBody.innerHTML = '';
-    totalScoreDisplay.textContent = '合計: 0点';
-    playerNameLabel.textContent = '（大会を選択してください）';
-    courtLabel.textContent = '';
-    playerOrderLabel.textContent = '';
+    var ok = await Api.deleteEvent(currentEvent.id);
+    if (!ok) { alert('大会の削除に失敗しました。'); return; }
     await refreshEventList();
-    refreshPlayerList();
+    document.getElementById('eventSelect').value = '';
+    await onEventSelect('');
   }
 
   // --- 選手切り替え ---
   async function movePlayer(delta) {
-    if (players.length === 0) return;
-    await saveCurrentState();
+    if (visiblePlayers.length === 0) return;
+    saveCurrentState();
     var next = currentIndex + delta;
-    if (next < 0 || next >= players.length) return;
+    if (next < 0 || next >= visiblePlayers.length) return;
     selectPlayer(next);
   }
 
   function selectPlayer(index) {
     var changed = index !== currentIndex;
     currentIndex = index;
-    var p = players[index];
+    var p = visiblePlayers[index];
     updatePlayerLabels(p);
     renderScoreGrid(p);
     if (changed) resetTimer();
@@ -314,10 +401,10 @@ var App = (function() {
     setCellDisplay(td, next);
     
     var tr = td.closest('tr');
-    var p = players[currentIndex];
+    var p = visiblePlayers[currentIndex];
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
-    await saveCurrentState();
+    saveCurrentState();
     
     // 採点履歴を記録
     if (currentEvent) {
@@ -360,14 +447,15 @@ var App = (function() {
       if (sc) total += parseFloat(sc.textContent) || 0;
     }
     totalScoreDisplay.textContent = '合計: ' + total + '点';
-    if (players[currentIndex] !== undefined) {
-      players[currentIndex].score = total;
+    if (visiblePlayers[currentIndex] !== undefined) {
+      visiblePlayers[currentIndex].score = total;
       updatePlayerListScore(currentIndex, total);
     }
   }
 
-  async function saveCurrentState() {
-    if (currentIndex < 0 || !players[currentIndex] || !currentEvent) return;
+  // 現在の採点内容をキューに積む。通信は待たない（Outboxのワーカーが送る）。
+  function saveCurrentState() {
+    if (currentIndex < 0 || !visiblePlayers[currentIndex] || !currentEvent) return;
     var rows = scoreTableBody.querySelectorAll('tr');
     var rowDataArr = [];
     for (var i = 0; i < rows.length; i++) {
@@ -379,19 +467,21 @@ var App = (function() {
       var tpCell = rows[i].querySelector('[data-strike="tp"]');
       rowDataArr.push({ values: values, techPoint: tpCell ? (tpCell.dataset.value || '') : '' });
     }
-    players[currentIndex].result = Scoring.encodeResult(rowDataArr);
-    
-    // APIで選手データを部分更新
-    await Api.updatePlayer(currentEvent.id, players[currentIndex].id, {
-      score: players[currentIndex].score,
-      result: players[currentIndex].result
+    var p = visiblePlayers[currentIndex];
+    p.result = Scoring.encodeResult(rowDataArr);
+
+    Outbox.enqueue({
+      eventId: currentEvent.id,
+      playerId: p.id,
+      score: p.score,
+      result: p.result
     });
   }
 
   async function setAllSuccess() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     var rows = scoreTableBody.querySelectorAll('tr');
-    var p = players[currentIndex];
+    var p = visiblePlayers[currentIndex];
     for (var i = 0; i < rows.length; i++) {
       for (var s = 0; s < 4; s++) {
         var cell = rows[i].querySelector('[data-strike="' + s + '"]');
@@ -403,13 +493,13 @@ var App = (function() {
       updateRowScore(rows[i], p ? p.isFemale : false);
     }
     updateTotal();
-    await saveCurrentState();
+    saveCurrentState();
   }
 
   async function setAllFail() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     var rows = scoreTableBody.querySelectorAll('tr');
-    var p = players[currentIndex];
+    var p = visiblePlayers[currentIndex];
     for (var i = 0; i < rows.length; i++) {
       for (var s = 0; s < 4; s++) {
         var cell = rows[i].querySelector('[data-strike="' + s + '"]');
@@ -422,7 +512,7 @@ var App = (function() {
       updateRowScore(rows[i], p ? p.isFemale : false);
     }
     updateTotal();
-    await saveCurrentState();
+    saveCurrentState();
   }
 
   // --- CSV インポート/エクスポート ---
@@ -454,9 +544,8 @@ var App = (function() {
         // 大会データを再読み込み
         currentEvent = await Api.loadEvent(currentEvent.id);
         players = currentEvent.players || [];
-        currentIndex = -1;
-        if (players.length > 0) selectPlayer(0);
-        renderPlayerList();
+        refreshCourtList();
+        applyCourtFilter();
         // 履歴記録
         Api.addHistory(currentEvent.id, {
           action: 'csv_import',
@@ -532,13 +621,13 @@ var App = (function() {
 
   function renderPlayerList() {
     playerListBody.innerHTML = '';
-    for (var i = 0; i < players.length; i++) {
+    for (var i = 0; i < visiblePlayers.length; i++) {
       playerListBody.appendChild(buildPlayerListRow(i));
     }
   }
 
   function buildPlayerListRow(index) {
-    var p = players[index];
+    var p = visiblePlayers[index];
     var tr = document.createElement('tr');
     tr.dataset.index = index;
     if (index === currentIndex) tr.classList.add('current-player');
@@ -549,9 +638,9 @@ var App = (function() {
       '<td>' + esc(p.tech2 || '') + '</td>' +
       '<td>' + esc(p.tech3 || '') + '</td>' +
       '<td>' + (p.score || 0) + '</td>';
-    tr.addEventListener('click', async function() {
+    tr.addEventListener('click', function() {
       var idx = parseInt(this.dataset.index, 10);
-      await saveCurrentState();
+      saveCurrentState();
       selectPlayer(idx);
     });
     return tr;
