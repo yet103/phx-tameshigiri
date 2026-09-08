@@ -1,0 +1,195 @@
+/* 運営画面（admin.html）専用のスタイル。375px 幅を基準に組む。
+   style.css は読み込まない（body{min-width:768px} をこのページに持ち込まないため）。
+   色は theme.css の変数だけを使う。
+   タップ目標は 44px 以上を守ること（スマホ片手操作が前提）。 */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
+  padding: 52px 0 64px;   /* 上下の固定バーの高さぶん本文を逃がす */
+  -webkit-text-size-adjust: 100%;
+}
+
+button {
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+
+input[type="text"], input[type="date"] {
+  font-family: inherit;
+  font-size: 16px;        /* 16px 未満だと iOS がフォーカス時にページを拡大する */
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ===== 上部バー ===== */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 52px; z-index: 30;
+  display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px;
+  background: var(--accent); color: var(--accent-text);
+}
+#topTitle {
+  flex: 1; font-weight: bold;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.theme-btn {
+  width: 44px; height: 44px; font-size: 20px;
+  background: transparent; color: var(--accent-text);
+}
+
+/* ===== 下タブ ===== */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex; background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+.tabbar button {
+  flex: 1; min-height: 56px; border-radius: 0; font-size: 13px;
+  background: transparent; color: var(--text-muted);
+  border-top: 3px solid transparent;
+}
+.tabbar button.on {
+  color: var(--accent); font-weight: bold; border-top-color: var(--accent);
+}
+
+/* ===== 本文 ===== */
+main { padding: 8px 12px 16px; }
+.section-head { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.section-head h2 { font-size: 16px; }
+.section-head .spacer { flex: 1; }
+.head-btn { min-height: 44px; padding: 0 12px; background: var(--accent); color: var(--accent-text); }
+.icon-btn { min-width: 44px; min-height: 44px; font-size: 18px; }
+.empty { color: var(--text-muted); padding: 16px 4px; }
+
+/* ===== コート絞り込みチップ =====
+   コートが増えても body の横スクロールを作らないよう、この帯の中だけで横に流す */
+.court-chips {
+  display: flex; gap: 6px; margin-bottom: 10px;
+  overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch;
+}
+.court-chip {
+  flex: 0 0 auto; min-height: 44px; padding: 0 14px; border-radius: 22px;
+  border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text);
+}
+.court-chip.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+
+/* ===== 一覧の行 ===== */
+.list { display: flex; flex-direction: column; gap: 6px; }
+.row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; min-height: 56px; padding: 8px 10px; text-align: left;
+  background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text);
+}
+.row-body { flex: 1; min-width: 0; }
+.row-main { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sub { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-badge {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: bold;
+  background: var(--bg-header); color: var(--text-muted);
+}
+.row-score { flex: 0 0 auto; font-weight: bold; color: var(--score-color); }
+.row-del { flex: 0 0 auto; min-width: 44px; min-height: 44px; background: transparent; color: var(--text-muted); font-size: 16px; }
+
+/* ===== 右下の追加ボタン ===== */
+.fab {
+  position: fixed; right: 16px; bottom: 72px; z-index: 25;
+  width: 56px; height: 56px; border-radius: 28px; font-size: 26px; line-height: 1;
+  background: var(--btn-success); color: #fff;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* ===== シート（フォーム・メニュー共用） ===== */
+.sheet-overlay {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(0, 0, 0, 0.45); display: flex; align-items: flex-end;
+}
+.sheet {
+  width: 100%; max-height: 92vh; display: flex; flex-direction: column;
+  background: var(--bg); border-radius: 14px 14px 0 0; border-top: 2px solid var(--accent);
+}
+.sheet-head {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid var(--border); font-weight: bold;
+}
+.sheet-head span { flex: 1; }
+.sheet-close { min-width: 44px; min-height: 44px; background: transparent; color: var(--text-muted); }
+.sheet-body { flex: 1; overflow-y: auto; padding: 10px 14px 14px; }
+.sheet-actions { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
+.btn { flex: 1; min-height: 48px; }
+.btn.primary { background: var(--btn-success); color: #fff; font-weight: bold; }
+.btn.danger { background: var(--btn-fail); color: #fff; }
+.menu-item { display: block; width: 100%; min-height: 52px; text-align: left; padding: 0 12px; margin-bottom: 8px; }
+
+/* ===== フォーム部品 ===== */
+.field { margin-bottom: 12px; }
+.field > label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button {
+  flex: 1 0 auto; min-width: 56px; min-height: 44px;
+  border: 1px solid var(--accent); background: var(--bg); color: var(--accent);
+}
+.seg button.on { background: var(--accent); color: var(--accent-text); font-weight: bold; }
+.toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.toggle input { width: 22px; height: 22px; }
+
+/* 技チップ */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  min-height: 44px; padding: 0 14px; border-radius: 22px;
+  background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent);
+}
+.chip.empty { background: var(--bg-secondary); color: var(--text-muted); border-color: var(--border); }
+/* 未入力を目立たせたい画面（計画3の進行タブ）は親に .chips-required を付ける */
+.chips-required .chip.empty { background: var(--btn-fail); color: var(--banner-text); border-color: var(--btn-fail); }
+
+/* ===== TechPicker のボトムシート ===== */
+.tp-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.45); display: flex; align-items: flex-end; }
+.tp-sheet {
+  width: 100%; max-height: 80vh; display: flex; flex-direction: column;
+  background: var(--bg); border-radius: 14px 14px 0 0; border-top: 2px solid var(--accent);
+}
+.tp-head {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid var(--border); font-weight: bold;
+}
+.tp-head span { flex: 1; }
+.tp-close { min-width: 64px; min-height: 44px; }
+.tp-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.tp-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; min-height: 48px; padding: 0 14px; text-align: left;
+  border-radius: 0; background: transparent; color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.tp-item.on { background: var(--bg-header); font-weight: bold; }
+.tp-no { flex: 0 0 auto; width: 20px; color: var(--accent); }
+.tp-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-pt { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); }
+
+/* ===== トースト ===== */
+#toast {
+  position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 60;
+  max-width: 90vw; padding: 10px 16px; border-radius: 20px;
+  background: var(--accent); color: var(--accent-text); font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+/* #toast に display を指定しているので、hidden 属性を明示的に効かせる */
+#toast[hidden] { display: none; }
