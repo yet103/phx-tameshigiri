@@ -31,10 +31,19 @@ var Courts = (function() {
     return (players || []).filter(function(p) { return courtOf(p) === court; });
   }
 
+  // 巡目（order の第3セグメント）。解析できなければ 1（一巡目）とみなす。
+  // 巡目は order からいつでも導出できるので、選手データには持たせない。
+  // サーバー側の同じ実装は server/index.js の roundOf。両方を test.html で固定している。
+  function roundOf(player) {
+    var m = ((player && player.order) || '').match(/^(.+)-(男子|女子)-(\d+)-(\d+)$/);
+    return m ? parseInt(m[3], 10) : 1;
+  }
+
   return {
     UNASSIGNED: UNASSIGNED,
     courtOf: courtOf,
     listFrom: listFrom,
-    filter: filter
+    filter: filter,
+    roundOf: roundOf
   };
 })();

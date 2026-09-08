@@ -154,6 +154,62 @@ function isScored(player) {
   return /[01]/.test(player.result || '');
 }
 
+// ── order（コート-性別-巡目-番号）の解析と組み立て ──
+// クライアント側の対応実装は courts.js（Courts.courtOf / Courts.roundOf）。
+// モジュールを共有できない（CommonJS と <script> の IIFE）ため同じ規則を2箇所に持ち、
+// 両方を test.html で固定している。
+const ORDER_PATTERN = /^(.+)-(男子|女子)-(\d+)-(\d+)$/;
+
+// order を { court, gender, round, number } に分解する。解析できなければ null。
+function parseOrder(order) {
+  const m = (order || '').match(ORDER_PATTERN);
+  if (!m) return null;
+  return {
+    court: m[1],
+    gender: m[2],
+    round: parseInt(m[3], 10),
+    number: parseInt(m[4], 10)
+  };
+}
+
+// 巡目（order の第3セグメント）。解析できなければ 1（一巡目）とみなす。
+function roundOf(player) {
+  const m = ((player && player.order) || '').match(ORDER_PATTERN);
+  return m ? parseInt(m[3], 10) : 1;
+}
+
+// コート名（order の先頭セグメント）。Courts.courtOf と同じ規則。
+function courtOf(player) {
+  const m = ((player && player.order) || '').match(/^([^-]+)/);
+  return m ? m[1] : '未分類';
+}
+
+// コート名の検証。
+// '-' を含むと order の解析（先頭セグメント＝コート）が壊れ、
+// '未分類' はクライアントの Courts.UNASSIGNED と衝突する。
+function isValidCourt(court) {
+  return typeof court === 'string' && court.length > 0 &&
+         court.indexOf('-') === -1 && court !== '未分類';
+}
+
+// 同一の コート×性別×巡目 における次の番号。該当が無ければ 1。
+// 件数+1 ではなく最大+1 を使う（削除で欠番があっても衝突しない）。
+function nextOrderNumber(players, court, gender, round) {
+  let max = 0;
+  (players || []).forEach(p => {
+    const parsed = parseOrder((p && p.order) || '');
+    if (!parsed) return;
+    if (parsed.court !== court || parsed.gender !== gender || parsed.round !== round) return;
+    if (parsed.number > max) max = parsed.number;
+  });
+  return max + 1;
+}
+
+// order 文字列を組み立てる。
+function buildOrder(court, isFemale, round, n) {
+  return court + '-' + (isFemale ? '女子' : '男子') + '-' + round + '-' + n;
+}
+
 // JSONのアトミック書き込み
 // writeFileSync で直接上書きすると、書き込み中にプロセスが落ちたときに
 // ファイルが切り詰められ、大会データが丸ごと失われる。

@@ -259,6 +259,12 @@
     assert('filter: 未分類で1件', Courts.filter(courtPlayers, Courts.UNASSIGNED).length, 1);
     assert('filter: 該当なしは空', Courts.filter(courtPlayers, 'Z').length, 0);
 
+    assert('roundOf: A-男子-2-3 → 2', Courts.roundOf({ order: 'A-男子-2-3' }), 2);
+    assert('roundOf: A-男子-1-1 → 1', Courts.roundOf({ order: 'A-男子-1-1' }), 1);
+    assert('roundOf: 空のorderは1', Courts.roundOf({ order: '' }), 1);
+    assert('roundOf: 不正形式は1', Courts.roundOf({ order: 'A-男子-1' }), 1);
+    assert('roundOf: nullでも落ちない', Courts.roundOf(null), 1);
+
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';
     results.appendChild(h2r);
