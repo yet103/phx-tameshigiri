@@ -628,6 +628,37 @@
     assert('fromArray: null は空配列', TechPicker.fromArray(null), []);
     assert('toArray → fromArray → toArray で往復する',
       TechPicker.toArray(TechPicker.fromArray(['真', '', '四方'])), ['真', '四方', '']);
+    assert('select: 空文字は無視する', TechPicker.select(['真'], ''), ['真']);
+    assert('fromArray: 配列以外は空配列', TechPicker.fromArray('abc'), []);
+    assert('strikesLabel: null を飛ばして / でつなぐ',
+      TechPicker.strikesLabel({ strikes: [17, 5, 7, 3] }), '17/5/7/3');
+    assert('strikesLabel: 末尾の null は出さない',
+      TechPicker.strikesLabel({ strikes: [1, null, null, null] }), '1');
+    assert('strikesLabel: strikes が無ければ空', TechPicker.strikesLabel({}), '');
+    assert('renderChips: 3枠を ①②③ で描く', (function() {
+      var el = document.createElement('div');
+      TechPicker.renderChips(el, ['真'], null);
+      return Array.prototype.map.call(el.querySelectorAll('.chip'), function(c) {
+        return c.textContent + (c.classList.contains('empty') ? '*' : '');
+      });
+    })(), ['① 真', '② ＋*', '③ ＋*']);
+    assert('renderChips: タップで dataset.name を渡す', (function() {
+      var el = document.createElement('div');
+      var got = [];
+      TechPicker.renderChips(el, ['真'], function(n) { got.push(n); });
+      var chips = el.querySelectorAll('.chip');
+      chips[0].click(); chips[1].click();
+      return got;
+    })(), ['真', '']);
+    assert('open: 別のシートを開くと前のシートの onClose が最終 state で呼ばれる', (function() {
+      var got = null;
+      TechPicker.open({ techniques: [{ name: '真' }], initial: ['水月'],
+        onClose: function(st) { got = st; } });
+      TechPicker.open({ techniques: [{ name: '真' }], initial: [] });
+      var overlays = document.querySelectorAll('.tp-overlay').length;
+      document.querySelector('.tp-close').click();
+      return [got, overlays, document.querySelectorAll('.tp-overlay').length];
+    })(), [['水月'], 1, 0]);
 
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';

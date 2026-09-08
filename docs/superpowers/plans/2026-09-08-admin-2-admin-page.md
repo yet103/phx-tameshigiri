@@ -17,7 +17,7 @@
 
 ### テスト件数
 
-計画1完了時点の `test.html` は **208 passed, 0 failed**。この計画で **15 件**足し、完了時点で **223 passed, 0 failed** になる。着手前に 208 を実測で確認すること。
+計画1完了時点の `test.html` は **208 passed, 0 failed**。この計画で **15 件**足し、完了時点で **231 passed, 0 failed** になる。着手前に 208 を実測で確認すること。
 
 ### この計画の依存（計画1が用意済み。再定義しない）
 
@@ -427,7 +427,7 @@ var TechPicker = (function() {
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 223 passed, 0 failed`
+Expected: `Result: 231 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -441,6 +441,8 @@ git commit -m "feat: 技の選択状態を扱う TechPicker の純粋関数を�
 ## Task 3: `TechPicker` のボトムシートとチップ描画
 
 `open` と `renderChips` を足す。純粋関数のテストは緑のまま維持する。
+
+（コードレビュー後の追記）`strikesLabel` は外部から呼べるよう `TechPicker` の返り値にも含めてエクスポートする。また `open` は再入時（シートを開いたまま別の行のシートを開いた場合）に前のシートの `onClose` をその時点の最終 state で呼んでから閉じる。
 
 **Files:**
 - Modify: `techpicker.js`
@@ -590,7 +592,7 @@ git commit -m "feat: 技の選択状態を扱う TechPicker の純粋関数を�
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 223 passed, 0 failed`
+Expected: `Result: 231 passed, 0 failed`
 
 - [ ] **Step 3: コミット**
 
@@ -2597,7 +2599,7 @@ Expected: 採点テーブル・ツールバー・テーマ切り替えが従来�
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 223 passed, 0 failed`
+Expected: `Result: 231 passed, 0 failed`
 
 - [ ] **Step 7: 確認用データを片付ける**
 
@@ -2620,7 +2622,7 @@ git commit -m "fix: 運営画面のタップ目標と 375px レイアウトを�
 
 ## 完了条件
 
-- [ ] `test.html` が `Result: 223 passed, 0 failed`
+- [ ] `test.html` が `Result: 231 passed, 0 failed`
 - [ ] `grep -n "^:root\|^\[data-theme" style.css` が何も出さない
 - [ ] `grep -c 'href="theme.css"' index.html ranking.html techniques.html` が3ファイルとも 1
 - [ ] `grep -n '<script src=' admin.html` が `api.js` → `storage.js` → `courts.js` → `techpicker.js` → `admin.js` → `admin-events.js` → `admin-players.js` の順

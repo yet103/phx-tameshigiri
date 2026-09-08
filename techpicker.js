@@ -12,6 +12,7 @@ var TechPicker = (function() {
   // 常に新しい配列を返す。呼び出し元の state は壊さない。
   function select(state, name) {
     var list = (state || []).slice();
+    if (!name) return list;   // 空チップ（＋）のタップは選択ではない
     var i = list.indexOf(name);
     if (i >= 0) {
       list.splice(i, 1);
@@ -34,8 +35,9 @@ var TechPicker = (function() {
 
   // ['a', '', 'c'] → ['a', 'c']。空の枠を落として詰める。
   function fromArray(names) {
+    var src = Array.isArray(names) ? names : [];
     var out = [];
-    (names || []).forEach(function(n) {
+    src.forEach(function(n) {
       if (n) out.push(n);
     });
     return out.slice(0, MAX);
@@ -57,6 +59,10 @@ var TechPicker = (function() {
 
   // 開いているシート。多重に開かないよう1枚だけ持つ。
   var openSheet = null;
+
+  // 開いているシートの done。再入時にこれを呼んで前のシートを片付ける
+  // （開いたまま別の行のシートを開かれたとき、前のシートの選択を捨てない）。
+  var pendingDone = null;
 
   function closeSheet() {
     if (openSheet && openSheet.parentNode) openSheet.parentNode.removeChild(openSheet);
@@ -88,7 +94,9 @@ var TechPicker = (function() {
   //   onChange   : 1タップごとに新しい state を受け取る
   //   onClose    : 閉じたときに最終的な state を受け取る
   function open(options) {
-    closeSheet();
+    // 開いたまま別の行のシートを開かれたとき、前のシートの選択を捨てない
+    // （closeSheet だけだと前のシートの onClose が呼ばれず、選択が消える）。
+    if (pendingDone) pendingDone();
     var opts = options || {};
     var state = (opts.initial || []).slice();
     var techs = opts.techniques || [];
@@ -148,10 +156,15 @@ var TechPicker = (function() {
     openSheet = overlay;
     refresh();
 
+    var finished = false;
     function done() {
+      if (finished) return;
+      finished = true;
+      pendingDone = null;
       closeSheet();
       if (opts.onClose) opts.onClose(state.slice());
     }
+    pendingDone = done;
     btnClose.addEventListener('click', done);
     overlay.addEventListener('click', function(e) {
       if (e.target === overlay) done();   // シートの外側をタップしたら閉じる
@@ -162,6 +175,7 @@ var TechPicker = (function() {
     select: select,
     toArray: toArray,
     fromArray: fromArray,
+    strikesLabel: strikesLabel,
     open: open,
     renderChips: renderChips
   };
