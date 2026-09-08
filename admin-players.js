@@ -5,26 +5,8 @@
   var techCache = null;    // Api.loadTechniques() の techniques
   var techPromise = null;  // 実行中の Api.loadTechniques()。同時にタップされても fetch は1回にする
 
-  // 行の並び順。order 文字列をそのまま比較すると 1-10 が 1-2 より前に来るので、
-  // 巡目 → コート → 性別（男子が先）→ 番号 に分解して比べる。
-  function orderKey(p) {
-    var m = String((p && p.order) || '').match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
-    if (!m) return { court: Courts.courtOf(p), sex: 2, round: 1, no: 0 };
-    return {
-      court: m[1],
-      sex: m[2] === '男子' ? 0 : 1,
-      round: parseInt(m[3], 10),
-      no: parseInt(m[4], 10)
-    };
-  }
-
-  function compareOrder(a, b) {
-    var x = orderKey(a), y = orderKey(b);
-    if (x.round !== y.round) return x.round - y.round;
-    if (x.court !== y.court) return x.court < y.court ? -1 : 1;
-    if (x.sex !== y.sex) return x.sex - y.sex;
-    return x.no - y.no;
-  }
+  // 行の並び順（巡目 → コート → 性別 → 番号）は courts.js の Courts.compareOrder
+  // を使う（進行タブ admin-round.js と共有）。
 
   // 技術リストを必要なときだけ取りに行く（追加・編集フォームでチップを
   // タップしたとき）。キャッシュがあればそれを返す。
@@ -96,7 +78,7 @@
 
   function renderList(list, ctx) {
     list.innerHTML = '';
-    var rows = Courts.filter(ctx.players, currentCourt).slice().sort(compareOrder);
+    var rows = Courts.filter(ctx.players, currentCourt).slice().sort(Courts.compareOrder);
     if (rows.length === 0) {
       var none = document.createElement('p');
       none.className = 'empty';
@@ -128,7 +110,9 @@
     var sub = document.createElement('span');
     sub.className = 'row-sub';
     var techs = [p.tech1, p.tech2, p.tech3].filter(function(t) { return !!t; });
-    sub.textContent = techs.length ? techs.join(' / ') : '技 未入力';
+    var subText = techs.length ? techs.join(' / ') : '技 未入力';
+    if (p.isNewFace) subText += '　新人';
+    sub.textContent = subText;
     body.appendChild(main);
     body.appendChild(sub);
 

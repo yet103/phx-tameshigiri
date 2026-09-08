@@ -383,6 +383,20 @@ var App = (function() {
   function renderScoreGrid(player) {
     scoreTableBody.innerHTML = '';
     var techNames = [player.tech1, player.tech2, player.tech3].filter(Boolean);
+    if (techNames.length === 0) {
+      // 技が未入力（進行タブでまだ入力されていない二巡目の選手など）。
+      // 空のグリッドから合計0を計算して上書き保存すると既存の得点が消えるので、
+      // 表示だけ既存の得点にして、選手データにも保存キューにも触れない。
+      var trEmpty = document.createElement('tr');
+      var tdEmpty = document.createElement('td');
+      tdEmpty.colSpan = 7;
+      tdEmpty.className = 'score-empty';
+      tdEmpty.textContent = '技が未入力です。運営画面の進行タブで技を入力してください。';
+      trEmpty.appendChild(tdEmpty);
+      scoreTableBody.appendChild(trEmpty);
+      totalScoreDisplay.textContent = '合計: ' + (player.score || 0) + '点';
+      return;
+    }
     var expectedLen = techNames.length * 5;
     var validResult = player.result && player.result.length === expectedLen;
     var decoded = validResult ? Scoring.decodeResult(player.result, techNames.length) : null;
@@ -706,24 +720,9 @@ var App = (function() {
   // 番号規則（コート×性別ごとに1から）はサーバーの生成 API が唯一の実装。
   // クライアントで CSV を作ると規則を二重に持つことになるので、API を呼ぶだけにする。
   // CSV が要るときは「CSVエクスポート」が二巡目を含む全件を出す。
-  // 確認文言は運営画面（admin-round.js の conflictMessage）とほぼ同じ。
+  // 確認文言・結果文言は courts.js の Courts.nextRoundConflictMessage /
+  // nextRoundResultMessage を運営画面（admin-round.js）と共有する。
   // 「運営画面で／選手タブで」の一言だけ、この画面向けに変えてある。
-  function nextRoundConflictMessage(result) {
-    var extra = '';
-    if (result.untrackedCount > 0) {
-      extra += '\n※CSV で作った二巡目の行が ' + result.untrackedCount + ' 件あります。続けると重複します。';
-    }
-    if (result.unassignedCount > 0) {
-      extra += '\n※コートが決まっていない選手が ' + result.unassignedCount + ' 名います（二巡目を作れません。運営画面でコートを設定してください）。';
-    }
-    if (result.reason === 'unscored') {
-      return '未採点が' + result.unscoredCount + '名います。\n' +
-             'このまま生成すると、あとから入る一巡目の得点は二巡目の並び順に反映されません。\n' +
-             '生成しますか？' + extra;
-    }
-    return '二巡目は生成済みです（' + result.existingCount + '名）。\n' +
-           '未生成の選手がいれば差分だけ追加しますか？' + extra;
-  }
 
   async function onGenNextRound() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
@@ -743,7 +742,7 @@ var App = (function() {
     if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
     if (!result) { alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。'); return; }
     if (result.blocked) {
-      if (!confirm(nextRoundConflictMessage(result))) return;
+      if (!confirm(Courts.nextRoundConflictMessage(result, '運営画面でコートを設定してください'))) return;
       result = await Api.generateNextRound(eventId, true);
       if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
       if (!result || result.blocked) {
@@ -751,9 +750,7 @@ var App = (function() {
         return;
       }
     }
-    var note = result.unassignedCount > 0
-      ? '（コート未設定の ' + result.unassignedCount + ' 名は作っていません）' : '';
-    alert('二巡目を生成しました（' + result.created + '名）' + note);
+    alert(Courts.nextRoundResultMessage(result));
     await onEventSelect(currentEvent.id, currentCourt);
   }
 

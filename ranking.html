@@ -113,7 +113,7 @@
       var div = document.createElement('div');
       div.className = 'ranking-section';
       if (rows.length === 0) {
-        div.innerHTML = '<h3>' + Storage.esc(title) + '</h3><p style="color:var(--text-muted)">データなし</p>';
+        div.innerHTML = '<h3>' + Storage.esc(title) + '</h3><p style="color:#666">データなし</p>';
         return div;
       }
       var trs = rows.map(function(r) {

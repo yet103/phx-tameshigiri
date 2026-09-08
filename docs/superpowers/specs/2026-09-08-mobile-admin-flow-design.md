@@ -191,6 +191,7 @@ function roundOf(player) {
 
 - 400: 一巡目の選手が0名。404: 大会なし
 - どちらの 409 も `force: true` で越えられる。生成済みで `force` のときは**未生成の一巡目行だけを差分追加**し、`skipped` に既存件数を返す
+- 409 の本文には上記に加えて `existingCount`・`untrackedCount`・`unassignedCount` の3件が常に入る（`unscored` はさらに `unscoredCount` も持つので計4種の件数になる）。200 にも同じ `existingCount`・`untrackedCount`・`unassignedCount` が入る（クライアントの確認・結果文言はこれらを使う。`courts.js` の `Courts.nextRoundConflictMessage` / `nextRoundResultMessage` を参照）
 
 ### 順位データ
 

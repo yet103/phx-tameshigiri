@@ -28,7 +28,7 @@ var AdminRound = (function() {
 
   // 現在のコート絞り込みで見えている二巡目の行
   function visibleRows() {
-    return Courts.filter(roundTwo(CTX ? CTX.players : []), currentCourt);
+    return Courts.filter(roundTwo(CTX ? CTX.players : []), currentCourt).slice().sort(Courts.compareOrder);
   }
 
   // sourcePlayerId が指す一巡目の行。削除済みなら null
@@ -165,6 +165,7 @@ var AdminRound = (function() {
     if (!src) {
       copy.disabled = true;
       copy.title = '一巡目の行が削除されています';
+      copy.textContent = '一巡目の行がありません';
     } else {
       copy.addEventListener('click', function(ev) {
         ev.stopPropagation();   // 行タップ（シートを開く）と二重に反応させない
@@ -264,24 +265,8 @@ var AdminRound = (function() {
 
   // --- 二巡目の生成 ---
   // 番号規則はサーバーの生成 API が唯一の実装。クライアントは確認と再送だけを持つ。
-  // 同じ文言を app.js の onGenNextRound も持つ（採点画面と運営画面で流れを揃えるため）。
-
-  function conflictMessage(result) {
-    var extra = '';
-    if (result.untrackedCount > 0) {
-      extra += '\n※CSV で作った二巡目の行が ' + result.untrackedCount + ' 件あります。続けると重複します。';
-    }
-    if (result.unassignedCount > 0) {
-      extra += '\n※コートが決まっていない選手が ' + result.unassignedCount + ' 名います（二巡目を作れません。選手タブでコートを設定してください）。';
-    }
-    if (result.reason === 'unscored') {
-      return '未採点が' + result.unscoredCount + '名います。\n' +
-             'このまま生成すると、あとから入る一巡目の得点は二巡目の並び順に反映されません。\n' +
-             '生成しますか？' + extra;
-    }
-    return '二巡目は生成済みです（' + result.existingCount + '名）。\n' +
-           '未生成の選手がいれば差分だけ追加しますか？' + extra;
-  }
+  // 確認文言・結果文言は courts.js の Courts.nextRoundConflictMessage /
+  // nextRoundResultMessage を app.js の onGenNextRound と共有する（採点画面と運営画面で流れを揃えるため）。
 
   async function onGenerate() {
     var ctx = CTX;
@@ -297,7 +282,7 @@ var AdminRound = (function() {
       return;
     }
     if (result.blocked) {
-      if (!confirm(conflictMessage(result))) return;
+      if (!confirm(Courts.nextRoundConflictMessage(result, '選手タブでコートを設定してください'))) return;
       result = await Api.generateNextRound(eventId, true);
       if (ctx.isStale()) return;
       if (!result || result.blocked) {
@@ -305,9 +290,7 @@ var AdminRound = (function() {
         return;
       }
     }
-    var note = result.unassignedCount > 0
-      ? '（コート未設定の ' + result.unassignedCount + ' 名は作っていません）' : '';
-    Admin.toast('二巡目を生成しました（' + result.created + '名）' + note);
+    Admin.toast(Courts.nextRoundResultMessage(result));
     await Admin.reloadEvent();
   }
 
