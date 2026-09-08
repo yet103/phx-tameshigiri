@@ -95,6 +95,26 @@ var Api = (function() {
     }
   }
 
+  async function deletePlayer(eventId, playerId, force) {
+    // DELETE /api/events/:eventId/players/:playerId?force=1
+    // 戻り値: true（削除成功）
+    //       | { blocked: true, player: { name, order, score } }（409: 採点済み）
+    //       | false（404・400・通信失敗）
+    // 削除後の再採番はしないので、番号には欠番が残る。
+    try {
+      var url = '/api/events/' + eventId + '/players/' + playerId +
+                (force === true ? '?force=1' : '');
+      var res = await fetch(url, { method: 'DELETE' });
+      if (res.status === 409) {
+        var conflict = await res.json();
+        return { blocked: true, player: conflict.player || null };
+      }
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function importCsv(eventId, csvText, mode, force) {
     // POST /api/events/:eventId/import
     // Body: { csvText, mode: 'replace' | 'append', force }
@@ -200,6 +220,7 @@ var Api = (function() {
     deleteEvent: deleteEvent,
     updatePlayer: updatePlayer,
     createPlayer: createPlayer,
+    deletePlayer: deletePlayer,
     importCsv: importCsv,
     exportCsv: exportCsv,
     loadTechniques: loadTechniques,

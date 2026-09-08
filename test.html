@@ -164,6 +164,35 @@
     assert('存在しない大会は null',
       await Api.createPlayer('nosuchevent', { name: '四郎', court: 'A' }), null);
     await Api.deleteEvent(addEvent.id);
+
+    // --- 選手の削除 ---
+    var delEvent = await Api.saveEvent({ name: '削除テスト', date: '2026-02-01', venue: '', players: [] });
+    var d1 = await Api.createPlayer(delEvent.id, { name: '一郎', court: 'A', isFemale: false });
+    var d2 = await Api.createPlayer(delEvent.id, { name: '二郎', court: 'A', isFemale: false });
+    var d3 = await Api.createPlayer(delEvent.id, { name: '三郎', court: 'A', isFemale: false });
+    assert('deletePlayer は true を返す', await Api.deletePlayer(delEvent.id, d2.id, false), true);
+    assert('削除された選手は大会から消える',
+      (await Api.loadEvent(delEvent.id)).players.map(function(p) { return p.name; }), ['一郎', '三郎']);
+    var d4 = await Api.createPlayer(delEvent.id, { name: '四郎', court: 'A', isFemale: false });
+    assert('削除後の追加は欠番を埋めない（最大+1）', d4.order, 'A-男子-1-4');
+    assert('残った選手の順番は動かない',
+      (await Api.loadEvent(delEvent.id)).players.map(function(p) { return p.order; }),
+      ['A-男子-1-1', 'A-男子-1-3', 'A-男子-1-4']);
+    assert('存在しない選手の削除は false',
+      await Api.deletePlayer(delEvent.id, 'nosuchplayer', false), false);
+
+    // 採点済みは 409 で拒否し、force で通す
+    await Api.updatePlayer(delEvent.id, d1.id, { score: 30, result: '1    ' });
+    var delBlocked = await Api.deletePlayer(delEvent.id, d1.id, false);
+    assert('採点済みの削除は拒否される', delBlocked.blocked, true);
+    assert('拒否時に得点を返す', delBlocked.player.score, 30);
+    assert('拒否時に選手名を返す', delBlocked.player.name, '一郎');
+    assert('拒否時に順番を返す', delBlocked.player.order, 'A-男子-1-1');
+    assert('拒否されても選手は残る', (await Api.loadEvent(delEvent.id)).players.length, 3);
+    assert('force=true なら採点済みでも削除できる',
+      await Api.deletePlayer(delEvent.id, d1.id, true), true);
+    assert('force 削除後は2名', (await Api.loadEvent(delEvent.id)).players.length, 2);
+    await Api.deleteEvent(delEvent.id);
   }
 
   (async function() {

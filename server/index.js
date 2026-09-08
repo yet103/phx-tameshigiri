@@ -411,6 +411,50 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
   }
 });
 
+// DELETE /api/events/:id/players/:playerId : 選手を削除
+// 採点済みなら 409 で得点を返して拒否し、?force=1 のときだけ通す。
+// 削除後の再採番はしない。order は表示と並び順のためだけの値であり、
+// 再採番すると採点中の端末が持つラベルと絞り込み対象が実行中に動いてしまう。
+// 一巡目を消しても、sourcePlayerId で結ばれた二巡目の行はそのまま残す（二巡目の採点を消さない）。
+app.delete('/api/events/:id/players/:playerId', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    if (!isValidId(req.params.playerId)) {
+      return res.status(400).json({ error: '不正な選手IDです' });
+    }
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    const players = Array.isArray(event.players) ? event.players : [];
+    const idx = players.findIndex(p => p.id === req.params.playerId);
+    if (idx === -1) {
+      return res.status(404).json({ error: '選手が見つかりません' });
+    }
+
+    const target = players[idx];
+    if (isScored(target) && req.query.force !== '1') {
+      return res.status(409).json({
+        error: '採点済みの選手です',
+        player: {
+          name: target.name || '',
+          order: target.order || '',
+          score: target.score || 0
+        }
+      });
+    }
+
+    players.splice(idx, 1);
+    event.players = players;
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/events/:id/import : 選手データのCSVインポート
 app.post('/api/events/:id/import', (req, res) => {
   try {

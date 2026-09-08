@@ -448,11 +448,15 @@ git commit -m "feat: 選手を1名ずつ追加するAPIとコート×性別ご�
     var delEvent = await Api.saveEvent({ name: '削除テスト', date: '2026-02-01', venue: '', players: [] });
     var d1 = await Api.createPlayer(delEvent.id, { name: '一郎', court: 'A', isFemale: false });
     var d2 = await Api.createPlayer(delEvent.id, { name: '二郎', court: 'A', isFemale: false });
+    var d3 = await Api.createPlayer(delEvent.id, { name: '三郎', court: 'A', isFemale: false });
     assert('deletePlayer は true を返す', await Api.deletePlayer(delEvent.id, d2.id, false), true);
     assert('削除された選手は大会から消える',
-      (await Api.loadEvent(delEvent.id)).players.map(function(p) { return p.name; }), ['一郎']);
-    var d3 = await Api.createPlayer(delEvent.id, { name: '三郎', court: 'A', isFemale: false });
-    assert('削除後の追加は欠番を埋めない', d3.order, 'A-男子-1-3');
+      (await Api.loadEvent(delEvent.id)).players.map(function(p) { return p.name; }), ['一郎', '三郎']);
+    var d4 = await Api.createPlayer(delEvent.id, { name: '四郎', court: 'A', isFemale: false });
+    assert('削除後の追加は欠番を埋めない（最大+1）', d4.order, 'A-男子-1-4');
+    assert('残った選手の順番は動かない',
+      (await Api.loadEvent(delEvent.id)).players.map(function(p) { return p.order; }),
+      ['A-男子-1-1', 'A-男子-1-3', 'A-男子-1-4']);
     assert('存在しない選手の削除は false',
       await Api.deletePlayer(delEvent.id, 'nosuchplayer', false), false);
 
@@ -463,10 +467,10 @@ git commit -m "feat: 選手を1名ずつ追加するAPIとコート×性別ご�
     assert('拒否時に得点を返す', delBlocked.player.score, 30);
     assert('拒否時に選手名を返す', delBlocked.player.name, '一郎');
     assert('拒否時に順番を返す', delBlocked.player.order, 'A-男子-1-1');
-    assert('拒否されても選手は残る', (await Api.loadEvent(delEvent.id)).players.length, 2);
+    assert('拒否されても選手は残る', (await Api.loadEvent(delEvent.id)).players.length, 3);
     assert('force=true なら採点済みでも削除できる',
       await Api.deletePlayer(delEvent.id, d1.id, true), true);
-    assert('force 削除後は1名', (await Api.loadEvent(delEvent.id)).players.length, 1);
+    assert('force 削除後は2名', (await Api.loadEvent(delEvent.id)).players.length, 2);
     await Api.deleteEvent(delEvent.id);
 ```
 
@@ -562,7 +566,7 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 116 passed, 0 failed`
+Expected: `Result: 121 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -793,7 +797,7 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 129 passed, 0 failed`（テスト15「並行PATCH12本が全件反映される」も緑のままであることを目視で確認する）
+Expected: `Result: 130 passed, 0 failed`（テスト15「並行PATCH12本が全件反映される」も緑のままであることを目視で確認する）
 
 - [ ] **Step 6: コミット**
 
@@ -1029,7 +1033,7 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 149 passed, 0 failed`
+Expected: `Result: 150 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -1204,7 +1208,7 @@ app.get('/api/events/:id/ranking', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 157 passed, 0 failed`
+Expected: `Result: 158 passed, 0 failed`
 
 - [ ] **Step 7: コミット**
 
@@ -1487,7 +1491,7 @@ app.get('/api/links/:token/ranking', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 172 passed, 0 failed`
+Expected: `Result: 173 passed, 0 failed`
 
 また、リンクのディレクトリが作られ、テストの後始末で空になっていることを確認する。
 
@@ -1563,7 +1567,7 @@ Expected: どちらも**何も出力されない**（ヒット0件）。1件で�
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。`mcp__Claude_Browser__find` で `並行PATCH` も探して緑（`✓`）であることを確認する。
 
-Expected: `Result: 172 passed, 0 failed`、かつ `✓ 並行PATCH12本が全件反映される` が表示されている。
+Expected: `Result: 173 passed, 0 failed`、かつ `✓ 並行PATCH12本が全件反映される` が表示されている。
 
 - [ ] **Step 4: 一時ファイルとテスト残骸が無いことを確認する**
 
@@ -1588,7 +1592,7 @@ git commit -m "docs: 同期実行の不変条件に新しい書き込みハン�
 |---|---|---|
 | 1 | `createPlayer` の `order` が `A-男子-1-1`、2人目は `-1-2` | Task 2 |
 | 2 | 別コート・女子で番号が1に戻る | Task 2 |
-| 3 | 削除しても欠番を埋めない（次は `-1-3`） | Task 3 |
+| 3 | 削除しても欠番を埋めない（3人目を消さず2人目を消すと次は `-1-4`） | Task 3 |
 | 4 | `name` 変更で `id` 不変、body の `id` は無視 | Task 4 |
 | 5 | `court` を `B` にすると `order` を再組立て | Task 4 |
 | 6 | 採点済みの削除が `blocked`、`force` で成功 | Task 3 |
@@ -1614,14 +1618,14 @@ git commit -m "docs: 同期実行の不変条件に新しい書き込みハン�
 | 着手前 | 87 passed, 0 failed |
 | Task 1 完了 | 92 passed, 0 failed |
 | Task 2 完了 | 105 passed, 0 failed |
-| Task 3 完了 | 116 passed, 0 failed |
-| Task 4 完了 | 129 passed, 0 failed |
-| Task 5 完了 | 149 passed, 0 failed |
-| Task 6 完了 | 157 passed, 0 failed |
-| Task 7 完了 | **172 passed, 0 failed** |
-| Task 8 完了 | **172 passed, 0 failed**（テスト追加なし） |
+| Task 3 完了 | 121 passed, 0 failed |
+| Task 4 完了 | 130 passed, 0 failed |
+| Task 5 完了 | 150 passed, 0 failed |
+| Task 6 完了 | 158 passed, 0 failed |
+| Task 7 完了 | **173 passed, 0 failed** |
+| Task 8 完了 | **173 passed, 0 failed**（テスト追加なし） |
 
-**この計画の完了条件は `Result: 172 passed, 0 failed`。**
+**この計画の完了条件は `Result: 173 passed, 0 failed`。**
 
 ---
 
