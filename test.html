@@ -200,6 +200,43 @@
       await Api.deletePlayer(delEvent.id, d1.id, true), true);
     assert('force 削除後は2名', (await Api.loadEvent(delEvent.id)).players.length, 2);
     await Api.deleteEvent(delEvent.id);
+
+    // --- 選手情報の編集 ---
+    var edEvent = await Api.saveEvent({ name: '編集テスト', date: '2026-02-01', venue: '', players: [] });
+    var edP = await Api.createPlayer(edEvent.id, { name: '一郎', court: 'A', isFemale: false, tech1: '真' });
+    var edRes = await Api.updatePlayerInfo(edEvent.id, edP.id, {
+      name: '一郎改', id: 'hacked', order: 'Z-男子-9-9', foo: 'bar'
+    });
+    assert('updatePlayerInfo は ok を返す', edRes.ok, true);
+    assert('updatePlayerInfo は更新後の選手を返す', edRes.player.name, '一郎改');
+    assert('id は書き換えられない', edRes.player.id, edP.id);
+    assert('order は body で書き換えられない', edRes.player.order, 'A-男子-1-1');
+    assert('allowlist 外のフィールドは保存しない', edRes.player.foo, undefined);
+
+    var movedRes = await Api.updatePlayerInfo(edEvent.id, edP.id, { court: 'B' });
+    assert('court を変えると order が組み立て直される', movedRes.player.order, 'B-男子-1-1');
+    assert('court は選手に保存しない', movedRes.player.court, undefined);
+    assert('round は選手に保存しない', movedRes.player.round, undefined);
+
+    // 二巡目の行はコートを変えても巡目が据え置かれる
+    var edP2 = await Api.createPlayer(edEvent.id, { name: '二郎', court: 'A', isFemale: false, round: 2 });
+    assert('round を指定して追加できる', edP2.order, 'A-男子-2-1');
+    var movedRound2 = await Api.updatePlayerInfo(edEvent.id, edP2.id, { court: 'C' });
+    assert('round 省略時は巡目が据え置かれる', movedRound2.player.order, 'C-男子-2-1');
+
+    // 性別を変えると order も追従する
+    var femaleRes = await Api.updatePlayerInfo(edEvent.id, edP.id, { isFemale: true });
+    assert('性別を変えると order が女子になる', femaleRes.player.order, 'B-女子-1-1');
+
+    // 変わっていない値の再送では番号が動かない
+    var sameRes = await Api.updatePlayerInfo(edEvent.id, edP.id, {
+      name: '一郎改2', court: 'B', isFemale: true
+    });
+    assert('コート・性別が同じなら番号は動かない', sameRes.player.order, 'B-女子-1-1');
+
+    assert('存在しない選手は status 404',
+      (await Api.updatePlayerInfo(edEvent.id, 'nosuchplayer', { name: 'x' })).status, 404);
+    await Api.deleteEvent(edEvent.id);
   }
 
   (async function() {

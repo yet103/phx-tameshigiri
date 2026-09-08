@@ -382,30 +382,80 @@ app.post('/api/events/:id/players', (req, res) => {
   }
 });
 
-// PATCH /api/events/:id/players/:playerId : 選手の採点結果を部分更新
+// PATCH /api/events/:id/players/:playerId : 選手の部分更新（採点と運営編集の共用）
+// 受理するフィールドは allowlist に限る。単純マージだと id / order / 未知のキーまで
+// クライアントが書き込めてしまう。
+// court と round は order を組み立てる入力としてだけ使い、選手オブジェクトには保存しない
+// （巡目は order から導出できる値なので、二重に持つと不整合の元になる）。
+// 採点済みガードは掛けない（誤字修正は採点中でも必要。性別変更の警告はクライアント側）。
 app.patch('/api/events/:id/players/:playerId', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
+    if (!isValidId(req.params.playerId)) {
+      return res.status(400).json({ error: '不正な選手IDです' });
+    }
     const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
     if (!fs.existsSync(eventPath)) {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
-    const playerIndex = event.players.findIndex(p => p.id === req.params.playerId);
-    
+    if (!Array.isArray(event.players)) event.players = [];
+    const playerIndex = event.players.findIndex(p => p && p.id === req.params.playerId);
+
     if (playerIndex === -1) {
       return res.status(404).json({ error: '選手が見つかりません' });
     }
-    
-    // 部分更新
-    event.players[playerIndex] = {
-      ...event.players[playerIndex],
-      ...req.body
-    };
+
+    const body = req.body || {};
+    const player = event.players[playerIndex];
+
+    ['name', 'tech1', 'tech2', 'tech3', 'result'].forEach(key => {
+      if (typeof body[key] === 'string') player[key] = body[key];
+    });
+    ['isNewFace', 'isFemale'].forEach(key => {
+      if (typeof body[key] === 'boolean') player[key] = body[key];
+    });
+    if (typeof body.score === 'number') player.score = body.score;
+
+    // court / round / isFemale が来たときだけ order を組み立て直す。
+    // ただし (コート, 性別, 巡目) が実際に変わったときだけにする。
+    // 運営フォームは保存のたびに isFemale を送るため、変わっていないのに
+    // 採番し直すと編集のたびに番号が動いてしまう。
+    if (body.court !== undefined || body.round !== undefined ||
+        typeof body.isFemale === 'boolean') {
+      const cur = parseOrder(player.order || '');
+      let court;
+      if (body.court !== undefined) {
+        court = typeof body.court === 'string' ? body.court.trim() : '';
+        if (!isValidCourt(court)) {
+          return res.status(400).json({ error: '不正なコート名です' });
+        }
+      } else {
+        court = cur ? cur.court : '';
+      }
+      // round を省略したときは現在の order の巡目を据え置く（一巡目扱いにしない）。
+      const round = body.round !== undefined ? body.round : roundOf(player);
+      if (!Number.isInteger(round) || round < 1 || round > 9) {
+        return res.status(400).json({ error: '不正な巡目です' });
+      }
+      const gender = player.isFemale === true ? '女子' : '男子';
+      // order を解析できない選手（CSV由来の空 order など）は、
+      // コートの指定が無い限り触らない。
+      const changed = cur
+        ? (cur.court !== court || cur.gender !== gender || cur.round !== round)
+        : (body.court !== undefined);
+      if (changed && isValidCourt(court)) {
+        const others = event.players.filter((p, i) => i !== playerIndex);
+        player.order = buildOrder(court, player.isFemale === true, round,
+          nextOrderNumber(others, court, gender, round));
+      }
+    }
+
+    event.players[playerIndex] = player;
     event.updatedAt = new Date().toISOString();
 
     writeJsonAtomic(eventPath, event);
-    res.json({ success: true });
+    res.json({ success: true, player: player });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

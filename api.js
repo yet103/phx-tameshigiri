@@ -97,6 +97,27 @@ var Api = (function() {
     }
   }
 
+  async function updatePlayerInfo(eventId, playerId, data) {
+    // PATCH /api/events/:eventId/players/:playerId（運営画面の編集専用）
+    // Body: { name, tech1, tech2, tech3, isNewFace, isFemale, score, result, court, round }
+    //       のうち送りたいものだけ。id と order は送っても無視される。
+    // 戻り値: { ok: true, player } | { ok: false, status: <HTTPステータス> }
+    // 通信自体に失敗した場合は status: 0。
+    // 採点経路（Outbox → updatePlayer）と混ぜないため、同じPATCHでも別関数にしている。
+    try {
+      var res = await fetch('/api/events/' + eventId + '/players/' + playerId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) return { ok: false, status: res.status };
+      var json = await res.json();
+      return { ok: true, player: json.player || null };
+    } catch (e) {
+      return { ok: false, status: 0 };
+    }
+  }
+
   async function deletePlayer(eventId, playerId, force) {
     // DELETE /api/events/:eventId/players/:playerId?force=1
     // 戻り値: true（削除成功）
@@ -222,6 +243,7 @@ var Api = (function() {
     deleteEvent: deleteEvent,
     updatePlayer: updatePlayer,
     createPlayer: createPlayer,
+    updatePlayerInfo: updatePlayerInfo,
     deletePlayer: deletePlayer,
     importCsv: importCsv,
     exportCsv: exportCsv,
