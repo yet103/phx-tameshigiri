@@ -102,6 +102,8 @@ var Admin = (function() {
 
   async function applyRoute() {
     closeAllSheets();
+    // シートの onClose が起動する reloadEvent を、これから描く画面より古い扱いにする
+    renderSeq++;
     var route = parseHash(location.hash);
     if (!route) {
       // ハッシュが無いときは前回の続きから。それも無ければ大会一覧。
@@ -147,7 +149,7 @@ var Admin = (function() {
 
   // 現在の大会を読み直して、いま開いているタブを描き直す
   async function reloadEvent() {
-    if (!selectedEventId) return;
+    if (currentTab === 'events' || !selectedEventId) return;
     var seq = ++renderSeq;
     var ev = await Api.loadEvent(selectedEventId);
     if (seq !== renderSeq) return;
@@ -257,6 +259,7 @@ var Admin = (function() {
       var i = openSheets.indexOf(handle);
       if (i >= 0) openSheets.splice(i, 1);
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      TechPicker.dismiss();   // ピッカーは常にシートの上に乗るので、シートを閉じたら残さない
       if (onClose) onClose();
     }
     function tryClose() {

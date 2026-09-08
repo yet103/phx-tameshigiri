@@ -41,11 +41,20 @@ var Courts = (function() {
     return m ? parseInt(m[3], 10) : 1;
   }
 
+  // 採点済みの判定。server/index.js の isScored と同じ規則。
+  // サーバー側は API テスト、クライアント側は下の test.html で固定する。
+  function isScored(player) {
+    if (!player) return false;
+    if (typeof player.score === 'number' && player.score > 0) return true;
+    return /[01]/.test(player.result || '');
+  }
+
   return {
     UNASSIGNED: UNASSIGNED,
     courtOf: courtOf,
     listFrom: listFrom,
     filter: filter,
-    roundOf: roundOf
+    roundOf: roundOf,
+    isScored: isScored
   };
 })();

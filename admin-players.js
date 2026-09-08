@@ -5,14 +5,6 @@
   var techCache = null;    // Api.loadTechniques() の techniques
   var techPromise = null;  // 実行中の Api.loadTechniques()。同時にタップされても fetch は1回にする
 
-  // 採点済みかどうか。サーバーの isScored と同じ判定を持つ。
-  // result は 1=○, 0=×, 空白=未入力 でエンコードされている。
-  function isScored(p) {
-    if (!p) return false;
-    if (typeof p.score === 'number' && p.score > 0) return true;
-    return /[01]/.test(p.result || '');
-  }
-
   // 行の並び順。order 文字列をそのまま比較すると 1-10 が 1-2 より前に来るので、
   // 巡目 → コート → 性別（男子が先）→ 番号 に分解して比べる。
   function orderKey(p) {
@@ -414,7 +406,7 @@
 
       // 採点済みの選手の性別を変えても、サーバーは得点を再計算しない。
       // 男女で配点が違う技があるため、採点画面で開き直してもらう必要がある。
-      if (isScored(player) && data.isFemale !== !!player.isFemale) {
+      if (Courts.isScored(player) && data.isFemale !== !!player.isFemale) {
         var ok = confirm(
           'この選手は採点済みです（' + (player.score || 0) + '点）。\n' +
           '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
@@ -532,7 +524,9 @@
     // ダイアログを閉じてウィンドウに戻ってきた最初の focus で片付ける。
     // change が先に来た場合はそちらの removeChild が先に効き、cleanup は何もしない。
     function onFocus() {
-      cleanup();
+      // change がこの同じ tick で来ることがある（フォーカスが先に戻る環境）。
+      // ここで即 cleanup すると、その change を取りこぼす。
+      setTimeout(cleanup, 0);
     }
     input.addEventListener('cancel', cleanup);
     window.addEventListener('focus', onFocus);
@@ -558,6 +552,13 @@
         '大会「' + eventName + '」に読み込みます。' +
         '既存データをクリアして読み込みますか？（キャンセルで追記）'
       ) ? 'replace' : 'append';
+      if (mode === 'append') {
+        var okAppend = confirm(
+          '既存の ' + ctx.players.length + ' 名に追記します。' +
+          '同じ順番の選手がいると重複します。追記しますか？'
+        );
+        if (!okAppend) return;
+      }
     }
     // 大会が切り替わっていたら、確認ダイアログの後・Api.importCsv の前で必ず止める
     // （古い ctx の大会に書き込んでしまわないため）。

@@ -4,21 +4,13 @@
 var AdminRound = (function() {
 
   var CTX = null;          // { eventId, event, players, isStale }
-  var containerEl = null;  // タブの入れ物（描き直しに使う）
   var currentCourt = '';   // '' なら全コート
   var lastEventId = null;  // 大会が変わったらコート絞り込みを戻すため
   var techniques = null;   // Api.loadTechniques() の結果のキャッシュ
   var pickerOpen = false;  // チップと行の両方がタップを拾うので二重に開かない
   var counterEl = null;
   var listEl = null;
-
-  // 採点済みの判定。server/index.js の isScored と同じ規則をクライアントにも持つ。
-  // 得点が正なら採点済み。○×（結果文字列の 0/1）が1つでもあれば採点済み。
-  function isScored(p) {
-    if (!p) return false;
-    if (typeof p.score === 'number' && p.score > 0) return true;
-    return /[01]/.test(p.result || '');
-  }
+  var outsideClickBound = false;  // '⋯' メニューの外側タップ検知は document に1回だけ付ける
 
   // 技が3つ揃っていない行を「未入力」と数える（一巡目のデータは常に3つ入っている）
   function isTechIncomplete(p) {
@@ -51,7 +43,6 @@ var AdminRound = (function() {
   // --- 描画 ---
 
   function render(container, ctx) {
-    containerEl = container;
     CTX = ctx;
     pickerOpen = false;
     container.innerHTML = '';
@@ -74,7 +65,7 @@ var AdminRound = (function() {
     var head = document.createElement('div');
     head.className = 'round-head';
     var src = roundOne(players);
-    var scored = src.filter(isScored).length;
+    var scored = src.filter(Courts.isScored).length;
     var stat = document.createElement('div');
     stat.className = 'round-stat';
     stat.id = 'roundScoredStat';
@@ -133,7 +124,12 @@ var AdminRound = (function() {
     if (!counterEl) return;
     var rows = visibleRows();
     var n = rows.filter(isTechIncomplete).length;
-    counterEl.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + n;
+    var prefix = '';
+    if (currentCourt) {
+      // 未分類はそのままの表記。それ以外は「A コート」のように「コート」を付ける。
+      prefix = (currentCourt === Courts.UNASSIGNED ? currentCourt : currentCourt + ' コート') + '　';
+    }
+    counterEl.textContent = prefix + '二巡目 ' + rows.length + '名　技 未入力 ' + n;
     counterEl.className = 'round-counter' + (n === 0 ? ' done' : '');
   }
 
@@ -203,12 +199,13 @@ var AdminRound = (function() {
 
   async function openPicker(p, row) {
     if (pickerOpen) return;   // チップと行の両方がタップを拾うので二重に開かない
-    if (!(await ensureTechniques())) return;
+    pickerOpen = true;
     var ctx = CTX;
     var eventId = ctx.eventId;
+    if (!(await ensureTechniques())) { pickerOpen = false; return; }
+    if (ctx.isStale()) { pickerOpen = false; return; }  // 待っている間に画面を離れていた
     // 最新の選択は onChange で控える
     var latest = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
-    pickerOpen = true;
     TechPicker.open({
       techniques: techniques,
       initial: latest,
@@ -227,15 +224,16 @@ var AdminRound = (function() {
           return;   // 変わっていないなら送らない
         }
         if (ctx.isStale()) return;   // シートを開いたまま画面を離れていたら書かない
-        await saveTech(p, arr, row, eventId);
+        await saveTech(p, arr, row, eventId, ctx);
       }
     });
   }
 
   // 保存できたら true。失敗したら画面もサーバーに合わせて元に戻す。
-  async function saveTech(p, arr, row, eventId) {
+  async function saveTech(p, arr, row, eventId, ctx) {
     var res = await Api.updatePlayerInfo(eventId, p.id,
       { tech1: arr[0], tech2: arr[1], tech3: arr[2] });
+    if (ctx.isStale()) return !!(res && res.ok);   // 画面を離れていたら DOM に触れない（alert もしない）
     if (!res || !res.ok) {
       alert('技を保存できませんでした。通信を確認してもう一度お試しください。');
       drawChips(p, row);
@@ -250,8 +248,9 @@ var AdminRound = (function() {
   }
 
   async function onCopyFromRound1(p, src, row) {
+    var ctx = CTX;
     var ok = await saveTech(p, [src.tech1 || '', src.tech2 || '', src.tech3 || ''],
-      row, CTX.eventId);
+      row, ctx.eventId, ctx);
     if (ok) Admin.toast('一巡目の技をコピーしました');
   }
 
@@ -281,13 +280,16 @@ var AdminRound = (function() {
     var eventId = ctx.eventId;
     var result = await Api.generateNextRound(eventId, false);
     if (ctx.isStale()) return;  // 通信中に大会やタブを切り替えられた
-    if (!result) { alert('二巡目の生成に失敗しました。通信を確認してください。'); return; }
+    if (!result) {
+      alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。');
+      return;
+    }
     if (result.blocked) {
       if (!confirm(conflictMessage(result))) return;
       result = await Api.generateNextRound(eventId, true);
       if (ctx.isStale()) return;
       if (!result || result.blocked) {
-        alert('二巡目の生成に失敗しました。通信を確認してください。');
+        alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。');
         return;
       }
     }
@@ -299,7 +301,21 @@ var AdminRound = (function() {
 
   // --- メニュー（二次導線） ---
 
+  // details/summary の外側をタップしたら閉じる。document への登録は1回だけ
+  // （render のたびに buildMenu が呼ばれてもリスナーが積み重ならないように）。
+  function bindOutsideClickOnce() {
+    if (outsideClickBound) return;
+    outsideClickBound = true;
+    document.addEventListener('click', function(e) {
+      var menus = document.querySelectorAll('.round-menu[open]');
+      for (var i = 0; i < menus.length; i++) {
+        if (!menus[i].contains(e.target)) menus[i].open = false;
+      }
+    });
+  }
+
   function buildMenu() {
+    bindOutsideClickOnce();
     var menu = document.createElement('details');
     menu.className = 'round-menu';
     var sum = document.createElement('summary');
@@ -325,7 +341,7 @@ var AdminRound = (function() {
 
   return {
     render: render,
-    isScored: isScored,
+    isScored: Courts.isScored,  // 互換のためここからも呼べるようにしておく（実体は Courts.isScored）
     isTechIncomplete: isTechIncomplete
   };
 })();

@@ -70,10 +70,10 @@
     var body = document.createElement('button');
     body.type = 'button';
     body.className = 'row-body';
-    var main = document.createElement('div');
+    var main = document.createElement('span');
     main.className = 'row-main';
     main.textContent = ev.name || '(名称未設定)';
-    var sub = document.createElement('div');
+    var sub = document.createElement('span');
     sub.className = 'row-sub';
     sub.textContent = (ev.date || '日付なし') + ' ・ ' + (ev.playerCount || 0) + '名';
     body.appendChild(main);
