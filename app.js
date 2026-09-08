@@ -622,6 +622,12 @@ var App = (function() {
       if (players.length > 0) {
         var choice = confirm('既存データをクリアして読み込みますか？\n（キャンセルで追記）');
         mode = choice ? 'replace' : 'append';
+        if (mode === 'append') {
+          var appendOk = confirm(
+            '既存の ' + players.length + ' 名に追記します。同じ順番の選手がいると重複します。追記しますか？'
+          );
+          if (!appendOk) return;
+        }
       }
       var result = await Api.importCsv(eventId, text, mode);
       if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
@@ -689,41 +695,49 @@ var App = (function() {
   }
 
   // --- 二巡目データ生成 ---
+  // 番号規則（コート×性別ごとに1から）はサーバーの生成 API が唯一の実装。
+  // クライアントで CSV を作ると規則を二重に持つことになるので、API を呼ぶだけにする。
+  // CSV が要るときは「CSVエクスポート」が二巡目を含む全件を出す。
+  // 確認文言は運営画面（admin-round.js の conflictMessage）と同じ。
+  function nextRoundConflictMessage(result) {
+    var extra = '';
+    if (result.untrackedCount > 0) {
+      extra += '\n※CSV で作った二巡目の行が ' + result.untrackedCount + ' 件あります。続けると重複します。';
+    }
+    if (result.unassignedCount > 0) {
+      extra += '\n※コートが決まっていない選手が ' + result.unassignedCount + ' 名います（二巡目を作れません。運営画面でコートを設定してください）。';
+    }
+    if (result.reason === 'unscored') {
+      return '未採点が' + result.unscoredCount + '名います。\n' +
+             'このまま生成すると、あとから入る一巡目の得点は二巡目の並び順に反映されません。\n' +
+             '生成しますか？' + extra;
+    }
+    return '二巡目は生成済みです（' + result.existingCount + '名）。\n' +
+           '未生成の選手がいれば差分だけ追加しますか？' + extra;
+  }
+
   async function onGenNextRound() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
     if (!confirm('二巡目データを生成します。よろしいですか？')) return;
     // await をまたぐので、対象の大会をここで固定する。
-    // 通信中に大会を切り替えられると、別の大会の内容から生成してしまう。
+    // 通信中に大会を切り替えられると、別の大会に生成してしまう。
     var eventId = currentEvent.id;
-    // 全選手の得点順で並べるので、他コートの採点が入っていないと
-    // 二巡目のシードが狂う。必ずサーバーから取り直す。
-    var latest = await Api.loadEvent(eventId);
-    if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
+    var result = await Api.generateNextRound(eventId, false);
     if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
-    var all = latest.players || [];
-    Outbox.applyPending(eventId, all);
-    if (all.length === 0) { alert('選手データがありません。'); return; }
-
-    // 女子→男子の順、得点の昇順でソート
-    var sorted = all.slice().sort(function(a, b) {
-      var gA = a.isFemale ? 1 : 0;
-      var gB = b.isFemale ? 1 : 0;
-      if (gB !== gA) return gB - gA; // 女子(1)が先
-      return (a.score || 0) - (b.score || 0); // 得点昇順
-    });
-
-    var femaleCount = 0, maleCount = 0;
-    var lines = ['選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果'];
-    sorted.forEach(function(p) {
-      // コートの導出は Courts に一本化する（旧実装は独自の正規表現を持ち、
-      // order が空の選手を黙って A コートに割り当てていた）
-      var court = Courts.courtOf(p);
-      var gender = p.isFemale ? '女子' : '男子';
-      var num = p.isFemale ? ++femaleCount : ++maleCount;
-      var order = court + '-' + gender + '-2-' + num;
-      lines.push([p.name, order, '', '', '', '0', p.isNewFace ? '○' : '', p.isFemale ? '○' : '', ''].join(','));
-    });
-    Storage.downloadCsv('players_二巡目.csv', lines.join('\r\n'));
+    if (!result) { alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。'); return; }
+    if (result.blocked) {
+      if (!confirm(nextRoundConflictMessage(result))) return;
+      result = await Api.generateNextRound(eventId, true);
+      if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
+      if (!result || result.blocked) {
+        alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。');
+        return;
+      }
+    }
+    var note = result.unassignedCount > 0
+      ? '（コート未設定の ' + result.unassignedCount + ' 名は作っていません）' : '';
+    alert('二巡目を生成しました（' + result.created + '名）' + note);
+    await onEventSelect(currentEvent.id, currentCourt);
   }
 
   // --- 選手一覧パネル ---
