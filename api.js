@@ -172,6 +172,36 @@ var Api = (function() {
     }
   }
 
+  // --- Rounds ---
+  async function generateNextRound(eventId, force) {
+    // POST /api/events/:eventId/rounds/2/generate
+    // 戻り値: { success: true, created, skipped }
+    //       | { blocked: true, reason: 'unscored', unscoredCount, existingCount: 0 }
+    //       | { blocked: true, reason: 'exists', existingCount, unscoredCount: 0 }
+    //       | null（400: 一巡目が0名 / 404 / 通信失敗）
+    // どちらの 409 も force: true で越えられる。
+    try {
+      var res = await fetch('/api/events/' + eventId + '/rounds/2/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: force === true })
+      });
+      if (res.status === 409) {
+        var conflict = await res.json();
+        return {
+          blocked: true,
+          reason: conflict.reason || '',
+          unscoredCount: conflict.unscoredCount || 0,
+          existingCount: conflict.existingCount || 0
+        };
+      }
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
   // --- Techniques ---
   async function loadTechniques() {
     // GET /api/techniques
@@ -247,6 +277,7 @@ var Api = (function() {
     deletePlayer: deletePlayer,
     importCsv: importCsv,
     exportCsv: exportCsv,
+    generateNextRound: generateNextRound,
     loadTechniques: loadTechniques,
     saveTechniques: saveTechniques,
     resetTechniques: resetTechniques,

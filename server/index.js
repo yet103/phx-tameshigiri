@@ -616,6 +616,92 @@ app.get('/api/events/:id/export', (req, res) => {
   }
 });
 
+// ── Round API ──
+
+// POST /api/events/:id/rounds/2/generate : 二巡目の行を生成
+// 並べ替えは 女子先 → 得点昇順 → 同点は既存 order の文字列順で安定化。
+// 採番は コート×性別ごとに1から（現行CSV生成のコート横断通番は廃止）。
+// 一巡目の行は一切変更せず、新規行を末尾に追記するだけにする。
+app.post('/api/events/:id/rounds/2/generate', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    const players = Array.isArray(event.players) ? event.players : [];
+    const force = !!(req.body && req.body.force === true);
+
+    const src = players.filter(p => p && roundOf(p) === 1);
+    if (src.length === 0) {
+      return res.status(400).json({ error: '一巡目の選手がいません' });
+    }
+
+    const unscored = src.filter(p => !isScored(p));
+    if (unscored.length > 0 && !force) {
+      return res.status(409).json({
+        error: '一巡目に未採点の選手がいます',
+        reason: 'unscored',
+        unscoredCount: unscored.length
+      });
+    }
+
+    const existing = players.filter(p => p && roundOf(p) === 2);
+    if (existing.length > 0 && !force) {
+      return res.status(409).json({
+        error: '二巡目は既に生成されています',
+        reason: 'exists',
+        existingCount: existing.length
+      });
+    }
+
+    // force のときは未生成の一巡目行だけを差分追加する。既存の二巡目行には触れない。
+    // sourcePlayerId を持たない二巡目行（CSV経由）は「未生成」と見なされる。
+    const generated = {};
+    existing.forEach(p => { if (p && p.sourcePlayerId) generated[p.sourcePlayerId] = true; });
+    const targets = src.filter(p => p && !generated[p.id]);
+
+    targets.sort((a, b) => {
+      const fa = a.isFemale === true ? 0 : 1;
+      const fb = b.isFemale === true ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      const sa = typeof a.score === 'number' ? a.score : 0;
+      const sb = typeof b.score === 'number' ? b.score : 0;
+      if (sa !== sb) return sa - sb;
+      return (a.order || '').localeCompare(b.order || '');
+    });
+
+    const newRows = [];
+    targets.forEach(p => {
+      const court = courtOf(p);
+      const isFemale = p.isFemale === true;
+      const gender = isFemale ? '女子' : '男子';
+      // 既存の二巡目行があればその続きから、無ければ 1 から始まる。
+      const n = nextOrderNumber(players.concat(newRows), court, gender, 2);
+      newRows.push({
+        id: generateId(),
+        name: p.name || '',
+        order: buildOrder(court, isFemale, 2, n),
+        tech1: '',
+        tech2: '',
+        tech3: '',
+        score: 0,
+        isNewFace: p.isNewFace === true,
+        isFemale: isFemale,
+        result: '',
+        sourcePlayerId: p.id
+      });
+    });
+
+    event.players = players.concat(newRows);
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true, created: newRows.length, skipped: existing.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── Techniques API ──
 
