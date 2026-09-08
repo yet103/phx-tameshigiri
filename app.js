@@ -280,6 +280,18 @@ var App = (function() {
     Outbox.applyPending(event.id, players);
   }
 
+  // 運営画面リンクに選択中の大会を引き継がせる。採点画面と運営画面は
+  // 控え（localStorage）を別キー（tmg_last / tmg_admin_last）で持つため、
+  // ハッシュ無しの遷移だと相手側が最後に見ていた大会に着地してしまう。
+  // ハッシュを付けて運営画面の選手タブへ直接渡す。
+  function updateAdminLink(eventId) {
+    var link = document.getElementById('linkAdmin');
+    if (!link) return;   // このリンクを持たないページから呼ばれても落ちないように
+    link.href = eventId
+      ? 'admin.html#players/' + encodeURIComponent(eventId)
+      : 'admin.html';
+  }
+
   async function onEventSelect(eventId, court) {
     var seq = ++loadSeq;
     if (!eventId) {
@@ -296,6 +308,7 @@ var App = (function() {
       playerOrderLabel.textContent = '';
       Route.clear();
       refreshPlayerList();
+      updateAdminLink('');
       return;
     }
     var loaded = await Api.loadEvent(eventId);
@@ -313,6 +326,7 @@ var App = (function() {
     refreshCourtList();
     applyCourtFilter();
     Route.set(currentEvent.id, currentCourt);
+    updateAdminLink(currentEvent.id);
   }
 
   // 戻り値: 作成できたら true。呼び出し元はこれを見てモーダルを閉じるか決める

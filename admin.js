@@ -309,7 +309,13 @@ var Admin = (function() {
   }
 
   // 運営画面から他の画面へ戻る導線（下タブは運営画面内のタブなので、ページ間の移動はここに置く）
+  // ボタンはシートが開いている間も DOM フォーカスを保持するため、Enter の
+  // オートリピートなどで連続発火するとシートが二重に開いてしまう。再入を防ぐ。
+  var adminMenuOpen = false;
   function openAdminMenu() {
+    if (adminMenuOpen) return;
+    adminMenuOpen = true;
+
     var body = document.createElement('div');
 
     var btnScoring = document.createElement('button');
@@ -335,12 +341,28 @@ var Admin = (function() {
     btnClose.className = 'btn';
     btnClose.textContent = '閉じる';
 
-    var sheet = openSheet('メニュー', body, [btnClose]);
+    var sheet = openSheet('メニュー', body, [btnClose], function() { adminMenuOpen = false; });
     btnClose.addEventListener('click', sheet.close);
 
-    btnScoring.addEventListener('click', function() { location.href = 'index.html'; });
-    btnTechniques.addEventListener('click', function() { location.href = 'techniques.html'; });
-    btnRanking.addEventListener('click', function() { location.href = 'ranking.html'; });
+    // route.js は admin.html では読み込んでいないので、ハッシュの形は
+    // ここで直接組み立てる（Route.build と同じ '#event/<id>' の形）。
+    // 選択中の大会があれば採点画面にもそのまま引き継ぐ（tmg_last / tmg_admin_last が
+    // 別々の控えキーのため、ハッシュ無しだと採点画面側の控えに戻ってしまう）。
+    btnScoring.addEventListener('click', function() {
+      sheet.close();
+      var eventId = currentEventId();
+      location.href = eventId
+        ? 'index.html#event/' + encodeURIComponent(eventId)
+        : 'index.html';
+    });
+    btnTechniques.addEventListener('click', function() {
+      sheet.close();
+      location.href = 'techniques.html';
+    });
+    btnRanking.addEventListener('click', function() {
+      sheet.close();
+      location.href = 'ranking.html';
+    });
   }
 
   // --- テーマ ---
