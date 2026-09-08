@@ -79,6 +79,7 @@ Admin.reloadEvent()            // async。再取得して現在のタブを描�
 Admin.currentEventId()
 Admin.toast(msg)               // 2秒の通知
 Admin.renderCourtChips(container, players, current, onChange)  // 「全コート」＋ Courts.listFrom のチップ列
+Admin.openSheet(title, bodyEl, buttons, onClose)  // → { close, lock }（lock(true) の間は ✕ と外側タップで閉じない）
 
 TechPicker.select(state, name); TechPicker.toArray(state); TechPicker.fromArray(names)
 TechPicker.open({ techniques, initial, onChange, onClose })   // 下部シート

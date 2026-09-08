@@ -117,11 +117,6 @@
     sub.className = 'row-sub';
     var techs = [p.tech1, p.tech2, p.tech3].filter(function(t) { return !!t; });
     sub.textContent = techs.length ? techs.join(' / ') : '技 未入力';
-    // admin.css の .row-main/.row-sub は ellipsis 用のプロパティだけ持ち、
-    // display は未指定。<span> のままだと横並びのまま省略記号が効かず縦に
-    // 積まれないので、ここで明示的にブロック化する。
-    main.style.display = 'block';
-    sub.style.display = 'block';
     body.appendChild(main);
     body.appendChild(sub);
 
@@ -317,54 +312,6 @@
     return { el: el, read: read, reset: reset };
   }
 
-  // シートの外枠。中身と操作ボタンを渡す。
-  // onClose はシートがどの経路で閉じても（✕・外側タップ・close()）1回だけ呼ばれる。
-  // 戻り値: close 関数
-  function openSheet(titleText, bodyEl, buttons, onClose) {
-    var overlay = document.createElement('div');
-    overlay.className = 'sheet-overlay';
-    var sheet = document.createElement('div');
-    sheet.className = 'sheet';
-
-    var head = document.createElement('div');
-    head.className = 'sheet-head';
-    var title = document.createElement('span');
-    title.textContent = titleText;
-    var btnClose = document.createElement('button');
-    btnClose.type = 'button';
-    btnClose.className = 'sheet-close';
-    btnClose.textContent = '✕';
-    head.appendChild(title);
-    head.appendChild(btnClose);
-
-    var body = document.createElement('div');
-    body.className = 'sheet-body';
-    body.appendChild(bodyEl);
-
-    var actions = document.createElement('div');
-    actions.className = 'sheet-actions';
-    buttons.forEach(function(b) { actions.appendChild(b); });
-
-    sheet.appendChild(head);
-    sheet.appendChild(body);
-    sheet.appendChild(actions);
-    overlay.appendChild(sheet);
-    document.body.appendChild(overlay);
-
-    var closed = false;
-    function close() {
-      if (closed) return;
-      closed = true;
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      if (onClose) onClose();
-    }
-    btnClose.addEventListener('click', close);
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) close();
-    });
-    return close;
-  }
-
   // 追加フォーム
   function openAddSheet(ctx) {
     var form = buildPlayerForm(ctx, null);
@@ -381,7 +328,7 @@
     btnSaveNext.textContent = '保存して次を追加';
 
     // どの経路で閉じても、追加した分があれば一覧へ反映する
-    var close = openSheet('選手を追加', form.el, [btnSaveClose, btnSaveNext], function() {
+    var sheet = Admin.openSheet('選手を追加', form.el, [btnSaveClose, btnSaveNext], function() {
       if (added > 0) Admin.reloadEvent();
     });
 
@@ -392,9 +339,11 @@
       data.round = 1;
       btnSaveClose.disabled = true;
       btnSaveNext.disabled = true;
+      sheet.lock(true);
       var created = await Api.createPlayer(ctx.eventId, data);
       btnSaveClose.disabled = false;
       btnSaveNext.disabled = false;
+      sheet.lock(false);
       if (!created) {
         // 失敗してもシートは閉じない（入力を残す）
         alert('選手を追加できませんでした。\n入力内容と通信を確認してください。');
@@ -407,7 +356,7 @@
 
     btnSaveClose.addEventListener('click', async function() {
       if (!(await save())) return;
-      close();   // onClose が一覧を反映する
+      sheet.close();   // onClose が一覧を反映する
     });
 
     btnSaveNext.addEventListener('click', async function() {

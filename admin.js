@@ -206,6 +206,66 @@ var Admin = (function() {
     toastTimer = setTimeout(function() { el.hidden = true; }, 2000);
   }
 
+  // シートの外枠。中身と操作ボタンを渡す。大会タブ・選手タブ・（計画3の）進行タブで共用する。
+  // onClose はシートがどの経路で閉じても（✕・外側タップ・close()）1回だけ呼ばれる。
+  // 戻り値: { close, lock }
+  //   close()     : シートを閉じる
+  //   lock(flag)  : true の間は ✕ と外側タップで閉じない（保存の通信中に入力を失わないため）
+  function openSheet(titleText, bodyEl, buttons, onClose) {
+    var overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    var sheet = document.createElement('div');
+    sheet.className = 'sheet';
+
+    var head = document.createElement('div');
+    head.className = 'sheet-head';
+    var title = document.createElement('span');
+    title.textContent = titleText;
+    var btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'sheet-close';
+    btnClose.textContent = '✕';
+    head.appendChild(title);
+    head.appendChild(btnClose);
+
+    var body = document.createElement('div');
+    body.className = 'sheet-body';
+    body.appendChild(bodyEl);
+
+    var actions = document.createElement('div');
+    actions.className = 'sheet-actions';
+    buttons.forEach(function(b) { actions.appendChild(b); });
+
+    sheet.appendChild(head);
+    sheet.appendChild(body);
+    sheet.appendChild(actions);
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    var closed = false;
+    var locked = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (onClose) onClose();
+    }
+    function tryClose() {
+      if (!locked) close();
+    }
+    btnClose.addEventListener('click', tryClose);
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) tryClose();
+    });
+    return {
+      close: close,
+      lock: function(flag) {
+        locked = !!flag;
+        btnClose.disabled = !!flag;
+      }
+    };
+  }
+
   // コート絞り込みのチップ列。「全コート」（court = ''）＋ Courts.listFrom の並び。
   // 選手タブと進行タブで共用する。
   function renderCourtChips(container, players, current, onChange) {
@@ -265,6 +325,7 @@ var Admin = (function() {
     reloadEvent: reloadEvent,
     currentEventId: currentEventId,
     toast: toast,
-    renderCourtChips: renderCourtChips
+    renderCourtChips: renderCourtChips,
+    openSheet: openSheet
   };
 })();

@@ -1,7 +1,8 @@
 // 大会タブ（#events）。大会の一覧・新規作成・削除。
 (function() {
+  var fieldSeq = 0;   // addField が発行する input id の連番（label の for と対にする）
 
-  async function render(container) {
+  async function render(container, ctx) {
     container.innerHTML = '';
 
     var head = document.createElement('div');
@@ -31,8 +32,9 @@
     list.appendChild(loading);
 
     var events = await Api.listEvents();
+    if (ctx.isStale()) return;   // 待っている間にタブや大会を切り替えられた
     list.innerHTML = '';
-    if (!events) {
+    if (!Array.isArray(events)) {
       // 取得できなかっただけで、大会が消えたわけではない。「0件」と誤解させない。
       var err = document.createElement('p');
       err.className = 'empty';
@@ -85,7 +87,8 @@
     del.className = 'row-del';
     del.textContent = '✕';
     del.addEventListener('click', function() {
-      onDelete(ev);
+      del.disabled = true;
+      onDelete(ev, del);
     });
 
     row.appendChild(body);
@@ -93,11 +96,15 @@
     return row;
   }
 
-  async function onDelete(ev) {
-    if (!confirm('大会「' + (ev.name || '') + '」を削除します。\n選手データも一緒に消えます。よろしいですか？')) return;
+  async function onDelete(ev, del) {
+    if (!confirm('大会「' + (ev.name || '(名称未設定)') + '」を削除します。\n選手データも一緒に消えます。よろしいですか？')) {
+      del.disabled = false;
+      return;
+    }
     var ok = await Api.deleteEvent(ev.id);
     if (!ok) {
       alert('大会の削除に失敗しました。');
+      del.disabled = false;
       return;
     }
     Admin.toast('大会を削除しました');
@@ -117,56 +124,25 @@
   // 新規大会のシート。
   // 保存に失敗したらシートを閉じない（閉じると入力し直しになる）。
   function openNewSheet() {
-    var overlay = document.createElement('div');
-    overlay.className = 'sheet-overlay';
-    var sheet = document.createElement('div');
-    sheet.className = 'sheet';
-
-    var head = document.createElement('div');
-    head.className = 'sheet-head';
-    var title = document.createElement('span');
-    title.textContent = '新規大会';
-    var btnClose = document.createElement('button');
-    btnClose.type = 'button';
-    btnClose.className = 'sheet-close';
-    btnClose.textContent = '✕';
-    head.appendChild(title);
-    head.appendChild(btnClose);
-
     var body = document.createElement('div');
-    body.className = 'sheet-body';
     var inName = addField(body, '大会名', 'text');
     var inDate = addField(body, '日付', 'date');
     var inVenue = addField(body, '会場', 'text');
     inDate.value = todayLocal();
 
-    var actions = document.createElement('div');
-    actions.className = 'sheet-actions';
     var btnSave = document.createElement('button');
     btnSave.type = 'button';
     btnSave.className = 'btn primary';
     btnSave.textContent = '作成';
-    actions.appendChild(btnSave);
 
-    sheet.appendChild(head);
-    sheet.appendChild(body);
-    sheet.appendChild(actions);
-    overlay.appendChild(sheet);
-    document.body.appendChild(overlay);
+    var sheet = Admin.openSheet('新規大会', body, [btnSave]);
     inName.focus();
-
-    function close() {
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-    }
-    btnClose.addEventListener('click', close);
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) close();
-    });
 
     btnSave.addEventListener('click', async function() {
       var name = inName.value.trim();
       if (!name) { alert('大会名を入力してください。'); return; }
       btnSave.disabled = true;
+      sheet.lock(true);
       var result = await Api.saveEvent({
         name: name,
         date: inDate.value,
@@ -174,11 +150,12 @@
         players: []
       });
       btnSave.disabled = false;
+      sheet.lock(false);
       if (!result || !result.id) {
         alert('大会の作成に失敗しました。通信を確認してください。');
         return;   // シートは開いたまま。入力を残す
       }
-      close();
+      sheet.close();
       Admin.toast('大会を作成しました');
       Admin.navigate('players', result.id);
     });
@@ -191,6 +168,8 @@
     label.textContent = labelText;
     var input = document.createElement('input');
     input.type = type;
+    input.id = 'f_' + (++fieldSeq);
+    label.htmlFor = input.id;
     field.appendChild(label);
     field.appendChild(input);
     parent.appendChild(field);

@@ -1999,53 +1999,8 @@ git commit -m "feat: 運営画面の選手タブ（一覧とコート絞り込�
     return { el: el, read: read, reset: reset };
   }
 
-  // シートの外枠。中身と操作ボタンを渡す。
-  // onClose はシートがどの経路で閉じても（✕・外側タップ・close()）1回だけ呼ばれる。
-  // 戻り値: close 関数
-  function openSheet(titleText, bodyEl, buttons, onClose) {
-    var overlay = document.createElement('div');
-    overlay.className = 'sheet-overlay';
-    var sheet = document.createElement('div');
-    sheet.className = 'sheet';
-
-    var head = document.createElement('div');
-    head.className = 'sheet-head';
-    var title = document.createElement('span');
-    title.textContent = titleText;
-    var btnClose = document.createElement('button');
-    btnClose.type = 'button';
-    btnClose.className = 'sheet-close';
-    btnClose.textContent = '✕';
-    head.appendChild(title);
-    head.appendChild(btnClose);
-
-    var body = document.createElement('div');
-    body.className = 'sheet-body';
-    body.appendChild(bodyEl);
-
-    var actions = document.createElement('div');
-    actions.className = 'sheet-actions';
-    buttons.forEach(function(b) { actions.appendChild(b); });
-
-    sheet.appendChild(head);
-    sheet.appendChild(body);
-    sheet.appendChild(actions);
-    overlay.appendChild(sheet);
-    document.body.appendChild(overlay);
-
-    var closed = false;
-    function close() {
-      if (closed) return;
-      closed = true;
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      if (onClose) onClose();
-    }
-    btnClose.addEventListener('click', close);
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) close();
-    });
-    return close;
-  }
+  // シートの外枠（Admin.openSheet(title, bodyEl, buttons, onClose) → { close, lock }）は
+  // admin.js に集約されている。ここではローカルに持たない。
 
   // 追加フォーム
   function openAddSheet(ctx) {
@@ -2063,7 +2018,7 @@ git commit -m "feat: 運営画面の選手タブ（一覧とコート絞り込�
     btnSaveNext.textContent = '保存して次を追加';
 
     // どの経路で閉じても、追加した分があれば一覧へ反映する
-    var close = openSheet('選手を追加', form.el, [btnSaveClose, btnSaveNext], function() {
+    var sheet = Admin.openSheet('選手を追加', form.el, [btnSaveClose, btnSaveNext], function() {
       if (added > 0) Admin.reloadEvent();
     });
 
@@ -2074,9 +2029,11 @@ git commit -m "feat: 運営画面の選手タブ（一覧とコート絞り込�
       data.round = 1;
       btnSaveClose.disabled = true;
       btnSaveNext.disabled = true;
+      sheet.lock(true);
       var created = await Api.createPlayer(ctx.eventId, data);
       btnSaveClose.disabled = false;
       btnSaveNext.disabled = false;
+      sheet.lock(false);
       if (!created) {
         // 失敗してもシートは閉じない（入力を残す）
         alert('選手を追加できませんでした。\n入力内容と通信を確認してください。');
@@ -2089,7 +2046,7 @@ git commit -m "feat: 運営画面の選手タブ（一覧とコート絞り込�
 
     btnSaveClose.addEventListener('click', async function() {
       if (!(await save())) return;
-      close();   // onClose が一覧を反映する
+      sheet.close();   // onClose が一覧を反映する
     });
 
     btnSaveNext.addEventListener('click', async function() {
@@ -2224,7 +2181,7 @@ git commit -m "feat: 運営画面に選手の追加フォーム（技のボト�
     btnSave.className = 'btn primary';
     btnSave.textContent = '保存';
 
-    var close = openSheet('選手を編集', form.el, [btnDelete, btnSave]);
+    var sheet = Admin.openSheet('選手を編集', form.el, [btnDelete, btnSave]);
 
     btnSave.addEventListener('click', async function() {
       var data = form.read();
@@ -2242,15 +2199,17 @@ git commit -m "feat: 運営画面に選手の追加フォーム（技のボト�
       }
 
       btnSave.disabled = true;
+      sheet.lock(true);
       // round は送らない。サーバーは今の order から巡目を据え置く。
       var res = await Api.updatePlayerInfo(ctx.eventId, player.id, data);
       btnSave.disabled = false;
+      sheet.lock(false);
       if (!res || !res.ok) {
         // 失敗してもシートは閉じない（入力を残す）
         alert('選手の更新に失敗しました。\n入力内容と通信を確認してください。');
         return;
       }
-      close();
+      sheet.close();
       Admin.toast('保存しました');
       Admin.reloadEvent();
     });
@@ -2263,6 +2222,7 @@ git commit -m "feat: 運営画面に選手の追加フォーム（技のボト�
       )) return;
 
       btnDelete.disabled = true;
+      sheet.lock(true);
       var res = await Api.deletePlayer(ctx.eventId, player.id, false);
 
       if (res && res.blocked) {
@@ -2273,16 +2233,17 @@ git commit -m "feat: 運営画面に選手の追加フォーム（技のボト�
           '削除すると採点結果は戻せません。二巡目の行は残ります。\n\n' +
           '本当に削除しますか？'
         );
-        if (!ok) { btnDelete.disabled = false; return; }
+        if (!ok) { btnDelete.disabled = false; sheet.lock(false); return; }
         res = await Api.deletePlayer(ctx.eventId, player.id, true);
       }
 
       btnDelete.disabled = false;
+      sheet.lock(false);
       if (res !== true) {
         alert('選手の削除に失敗しました。');
         return;
       }
-      close();
+      sheet.close();
       Admin.toast('削除しました');
       Admin.reloadEvent();
     });
@@ -2435,11 +2396,11 @@ git commit -m "feat: 運営画面で選手の編集・削除（採点済みガ�
     btnCancel.className = 'btn';
     btnCancel.textContent = '閉じる';
 
-    var close = openSheet('メニュー', body, [btnCancel]);
-    btnCancel.addEventListener('click', close);
+    var sheet = Admin.openSheet('メニュー', body, [btnCancel]);
+    btnCancel.addEventListener('click', sheet.close);
 
     btnCsv.addEventListener('click', function() {
-      close();
+      sheet.close();
       pickCsv(ctx);
     });
   }
@@ -2640,6 +2601,7 @@ git commit -m "fix: 運営画面のタップ目標と 375px レイアウトを�
 - 進行タブの技チップは、チップの親要素に `class="chips-required"` を付けると空きが赤くなる（`admin.css` に定義済み）。`TechPicker.renderChips` の引数は変えない。
 - `TechPicker.open` が作るシートのクラスは `.tp-overlay`（外枠）と `.tp-sheet`（本体）。
 - コート絞り込みは `Admin.renderCourtChips(container, players, current, onChange)` を使う。選手タブと同じ見た目になる。
+- シートの外枠は `Admin.openSheet(title, bodyEl, buttons, onClose) → { close, lock }` を使う。`lock(true)` の間は ✕ と外側タップで閉じない（保存の通信中に入力を失わないため）。
 - `admin-players.js` の `isScored` / `compareOrder` は選手タブ内のローカル関数。進行タブで必要なら `admin-round.js` に同じものを置くか、共有が増えるなら `courts.js` への移動を検討する（今回は2箇所目が無いので移動しない）。
 - `ctx.isStale()` — `render(container, ctx)` の ctx に生えている。await の直後に見て true なら描画をやめる（タブや大会を切り替えられた後の古い応答を画面に反映しないため）。`Admin.currentEventId() !== eventId` の代わりにこれを使うこと。
 - 同じタブをもう一度タップすると再取得・再描画される（コート絞り込みは各タブが自分で保持する）。
