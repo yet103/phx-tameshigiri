@@ -698,7 +698,8 @@ var App = (function() {
   // 番号規則（コート×性別ごとに1から）はサーバーの生成 API が唯一の実装。
   // クライアントで CSV を作ると規則を二重に持つことになるので、API を呼ぶだけにする。
   // CSV が要るときは「CSVエクスポート」が二巡目を含む全件を出す。
-  // 確認文言は運営画面（admin-round.js の conflictMessage）と同じ。
+  // 確認文言は運営画面（admin-round.js の conflictMessage）とほぼ同じ。
+  // 「運営画面で／選手タブで」の一言だけ、この画面向けに変えてある。
   function nextRoundConflictMessage(result) {
     var extra = '';
     if (result.untrackedCount > 0) {
@@ -718,7 +719,14 @@ var App = (function() {
 
   async function onGenNextRound() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
-    if (!confirm('二巡目データを生成します。よろしいですか？')) return;
+    // サーバーは受け取った得点だけで二巡目を並べる。未送信があると並び順が狂う
+    if (Outbox.pendingCount() > 0) {
+      alert('未送信の採点が ' + Outbox.pendingCount() + ' 件あります。送信が終わってから生成してください。');
+      return;
+    }
+    if (!confirm('全コート分の二巡目データをサーバーに作ります。\n' +
+                  '他のコートの端末にも反映されます（取り消しは運営画面で1人ずつ削除）。\n' +
+                  'よろしいですか？')) return;
     // await をまたぐので、対象の大会をここで固定する。
     // 通信中に大会を切り替えられると、別の大会に生成してしまう。
     var eventId = currentEvent.id;

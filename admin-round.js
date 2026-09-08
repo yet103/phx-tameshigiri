@@ -198,7 +198,8 @@ var AdminRound = (function() {
   }
 
   async function openPicker(p, row) {
-    if (pickerOpen) return;   // チップと行の両方がタップを拾うので二重に開かない
+    // dismiss で閉じられた後はフラグが残るので、実際にシートがあるときだけ弾く
+    if (pickerOpen && document.querySelector('.tp-overlay')) return;
     pickerOpen = true;
     var ctx = CTX;
     var eventId = ctx.eventId;
@@ -251,6 +252,7 @@ var AdminRound = (function() {
     var ctx = CTX;
     var ok = await saveTech(p, [src.tech1 || '', src.tech2 || '', src.tech3 || ''],
       row, ctx.eventId, ctx);
+    if (ctx.isStale()) return;   // 画面を離れていたらトーストを出さない
     if (ok) Admin.toast('一巡目の技をコピーしました');
   }
 
@@ -341,7 +343,6 @@ var AdminRound = (function() {
 
   return {
     render: render,
-    isScored: Courts.isScored,  // 互換のためここからも呼べるようにしておく（実体は Courts.isScored）
     isTechIncomplete: isTechIncomplete
   };
 })();
