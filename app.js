@@ -392,7 +392,15 @@ var App = (function() {
       var tr = buildScoreRow(techNames[i], player.isFemale, rowData, i);
       scoreTableBody.appendChild(tr);
     }
-    updateTotal();
+    if (decoded) {
+      updateTotal();
+    } else {
+      // result を技内訳へ分解できない（技の再割当てなどで長さが噛み合わなくなった
+      // 既採点者など）。空欄のグリッドから合計0を計算して上書き保存してしまうと、
+      // ここで選手を切り替えるだけで既存の得点が消える。表示だけ既存の得点にして、
+      // 実際に採点し直すまでは選手データにも保存キューにも触れない。
+      totalScoreDisplay.textContent = '合計: ' + (player.score || 0) + '点';
+    }
   }
 
   function buildScoreRow(techName, isFemale, rowData, rowIndex) {
