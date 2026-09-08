@@ -22,6 +22,7 @@
 <script src="outbox.js"></script>
 <script src="techpicker.js"></script>
 <script src="admin.js"></script>
+<script src="present.js"></script>
 <script>
   var results = document.getElementById('results');
   var passed = 0, failed = 0;
@@ -784,6 +785,24 @@
     if (savedOutbox === null) localStorage.removeItem('tmg_outbox');
     else localStorage.setItem('tmg_outbox', savedOutbox);
     Outbox.init(function() {}, function() {});
+
+    // present.js（発表モードで開く順）
+    var h2p = document.createElement('h2');
+    h2p.textContent = 'present.js';
+    results.appendChild(h2p);
+
+    assert('revealOrder: 空配列は空', Present.revealOrder([]), []);
+    assert('revealOrder: null でも落ちない', Present.revealOrder(null), []);
+    assert('revealOrder: 1件は [0]', Present.revealOrder([{ rank: 1, name: 'A', score: 1 }]), [0]);
+    var revRows = [
+      { rank: 1, name: 'A', score: 74 },
+      { rank: 1, name: 'B', score: 74 },
+      { rank: 3, name: 'C', score: 62 }
+    ];
+    assert('revealOrder: 下位から順に開く', Present.revealOrder(revRows), [2, 1, 0]);
+    assert('revealOrder: 同順位もまとめず1人ずつ', Present.revealOrder(revRows).length, revRows.length);
+    assert('revealOrder: 最後に開くのは1位の行',
+      revRows[Present.revealOrder(revRows)[revRows.length - 1]].rank, 1);
 
     await runApiTests();
 

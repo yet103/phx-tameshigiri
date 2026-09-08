@@ -44,6 +44,16 @@ var Present = (function() {
     return data.rankings[cat.key] || [];
   }
 
+  // 発表（C）モードで開く順。下位から1人ずつ、最後が先頭行（＝1位）。
+  // 同順位もまとめず1人ずつ、一覧の並びの後ろから開く（司会が1人ずつ読み上げるため）。
+  // 戻り値は rankings 配列への添字の列。
+  function revealOrder(rows) {
+    var out = [];
+    var n = (rows || []).length;
+    for (var i = n - 1; i >= 0; i--) out.push(i);
+    return out;
+  }
+
   async function load(isFirst) {
     var result = await Api.loadSharedRanking(token);
 
@@ -135,22 +145,148 @@ var Present = (function() {
   }
 
   function renderReveal() {
-    // TODO: 発表モードの実装（後続タスク）。
-    renderBoard();
+    if (picking) {
+      var h1 = document.createElement('h1');
+      h1.className = 'present-title';
+      h1.textContent = '部門を選んでください';
+      elScreen.appendChild(h1);
+
+      var pick = document.createElement('div');
+      pick.className = 'present-pick';
+      for (var i = 0; i < CATEGORIES.length; i++) {
+        (function(index) {
+          var btn = document.createElement('button');
+          btn.setAttribute('data-cat', String(index));
+          btn.textContent = CATEGORIES[index].title;
+          btn.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            startCategory(index);
+          });
+          pick.appendChild(btn);
+        })(i);
+      }
+      elScreen.appendChild(pick);
+      if (elHint) elHint.textContent = '';
+      return;
+    }
+
+    var cat = CATEGORIES[catIndex];
+    var rows = rowsOf(catIndex);
+
+    var title = document.createElement('h1');
+    title.className = 'present-title';
+    title.textContent = cat.title + ' の部　発表';
+    elScreen.appendChild(title);
+
+    if (rows.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'present-error';
+      empty.textContent = 'データなし';
+      elScreen.appendChild(empty);
+
+      if (elHint) {
+        elHint.textContent = '';
+        var strongEmpty = document.createElement('strong');
+        strongEmpty.textContent = 'タップで 次の部門';
+        elHint.appendChild(strongEmpty);
+      }
+      return;
+    }
+
+    var ul = document.createElement('ul');
+    ul.className = 'present-list';
+    for (var pos = 0; pos < order.length; pos++) {
+      var row = rows[order[pos]];
+      var opened = pos < step;
+      var li = document.createElement('li');
+      var cls = '';
+      if (row.rank <= 3) cls = 'top';
+      if (!opened) cls = (cls ? cls + ' ' : '') + 'veil';
+      if (cls) li.className = cls;
+
+      var rankEl = document.createElement('span');
+      rankEl.className = 'present-rank';
+      rankEl.textContent = row.rank;
+      li.appendChild(rankEl);
+
+      var nameEl = document.createElement('span');
+      nameEl.className = 'present-name';
+      nameEl.textContent = opened ? row.name : '？？？？';
+      li.appendChild(nameEl);
+
+      var scoreEl = document.createElement('span');
+      scoreEl.className = 'present-score';
+      scoreEl.textContent = opened ? row.score : '—';
+      li.appendChild(scoreEl);
+
+      ul.appendChild(li);
+    }
+    elScreen.appendChild(ul);
+
+    if (elHint) {
+      elHint.textContent = '';
+      var strong = document.createElement('strong');
+      if (step < order.length) {
+        var nextRow = rows[order[step]];
+        strong.textContent = 'タップで ' + nextRow.rank + '位 を発表';
+      } else {
+        strong.textContent = 'タップで 次の部門';
+      }
+      elHint.appendChild(strong);
+    }
+  }
+
+  function startCategory(index) {
+    catIndex = index;
+    picking = false;
+    order = revealOrder(rowsOf(index));
+    step = 0;
+    render();
+  }
+
+  function revealNext() {
+    if (picking) return;
+    if (step < order.length) {
+      step++;
+      render();
+    } else {
+      startCategory((catIndex + 1) % CATEGORIES.length);
+    }
+  }
+
+  function revealPrev() {
+    if (picking) return;
+    if (step > 0) {
+      step--;
+      render();
+    }
   }
 
   function next() {
+    if (mode === 'reveal') {
+      revealNext();
+      return;
+    }
     catIndex = (catIndex + 1) % CATEGORIES.length;
     render();
   }
 
   function prev() {
+    if (mode === 'reveal') {
+      revealPrev();
+      return;
+    }
     catIndex = (catIndex - 1 + CATEGORIES.length) % CATEGORIES.length;
     render();
   }
 
   function setMode(m) {
     mode = m;
+    if (m === 'reveal') {
+      picking = true;
+      step = 0;
+      order = [];
+    }
     if (elModeBoard) {
       if (m === 'board') elModeBoard.classList.add('on');
       else elModeBoard.classList.remove('on');
@@ -231,5 +367,7 @@ var Present = (function() {
     if (document.getElementById('presentRoot')) init();
   });
 
-  return {};
+  return {
+    revealOrder: revealOrder
+  };
 })();
