@@ -395,14 +395,14 @@
 
     var linkInfo = await Api.loadShareLink(link1.token);
     assert('loadShareLink は対象種別を返す', linkInfo.targetType, 'event');
-    assert('loadShareLink は対象の大会IDを返す', linkInfo.targetId, shareEvent.id);
+    assert('loadShareLink は大会IDを返さない（無認証のため）', linkInfo.targetId, undefined);
     assert('loadShareLink は作成日時を返す', typeof linkInfo.createdAt, 'string');
 
     var shared = await Api.loadSharedRanking(link1.token);
     assert('loadSharedRanking は氏名合算と同点同順位（1,1,3）を返す',
       shared.rankings.male,
-      [ { rank: 1, name: '甲', score: 50 },
-        { rank: 1, name: '乙', score: 50 },
+      [ { rank: 1, name: '乙', score: 50 },
+        { rank: 1, name: '甲', score: 50 },
         { rank: 3, name: '丙', score: 10 } ]);
     assert('共有の順位の項目も rank/name/score だけ',
       Object.keys(shared.rankings.male[0]), ['rank', 'name', 'score']);
@@ -417,6 +417,41 @@
     await Api.deleteEvent(shareEvent.id);
     assert('大会を削除するとリンクも消える', await Api.loadShareLink(link1.token), null);
     assert('大会を削除すると共有の順位も消える', await Api.loadSharedRanking(link1.token), null);
+
+    // --- 順位の細部と静的配信のガード ---
+    var rank2Event = await Api.saveEvent({ name: '順位テスト', date: '2026-03-01', venue: '', players: [
+      { id: 'r1', name: '田中 ', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 7, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r2', name: '田中', order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '', score: 7, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r3', name: '__proto__', order: 'A-男子-1-2', tech1: '', tech2: '', tech3: '', score: 20, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r4', name: '鈴木', order: 'A-男子-1-3', tech1: '', tech2: '', tech3: '', score: 9, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r5', name: '高橋', order: 'A-男子-1-4', tech1: '', tech2: '', tech3: '', score: 9, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r6', name: '文字列', order: 'A-男子-1-5', tech1: '', tech2: '', tech3: '', score: '40', isNewFace: false, isFemale: false, result: '1    ' }
+    ] });
+    var rank2 = await Api.loadRanking(rank2Event.id);
+    assert('氏名の前後空白は同一人物として合算する',
+      rank2.rankings.male.filter(function(r) { return r.name === '田中'; })[0].score, 14);
+    assert('__proto__ という氏名でも順位に出る',
+      rank2.rankings.male[0], { rank: 1, name: '__proto__', score: 20 });
+    assert('同点は同順位で次の順位が飛ぶ（1,2,3,3,5）',
+      rank2.rankings.male.map(function(r) { return r.rank; }), [1, 2, 3, 3, 5]);
+    assert('同点は氏名順で安定する',
+      rank2.rankings.male.slice(2, 4).map(function(r) { return r.name; }), ['高橋', '鈴木']);
+    assert('文字列の得点は0として扱う',
+      rank2.rankings.male[4], { rank: 5, name: '文字列', score: 0 });
+    assert('順位は updatedAt を含む', typeof rank2.event.updatedAt, 'string');
+
+    var reLink = await Api.createShareLink(rank2Event.id);
+    var reSaved = await Api.saveEvent({ id: rank2Event.id, name: '順位テスト改', date: '2026-03-01', venue: '', players: [] });
+    assert('大会を保存し直しても shareToken が残る',
+      (await Api.loadEvent(rank2Event.id)).shareToken, reLink.token);
+    assert('保存し直した後も同じトークンが返る',
+      (await Api.createShareLink(rank2Event.id)).token, reLink.token);
+
+    var staticRes = await fetch('/server/data/events/' + rank2Event.id + '.json');
+    assert('server/data は静的配信されない', staticRes.status, 404);
+    var staticSrc = await fetch('/server/index.js');
+    assert('server/index.js は静的配信されない', staticSrc.status, 404);
+    await Api.deleteEvent(rank2Event.id);
   }
 
   (async function() {

@@ -312,7 +312,7 @@ var Api = (function() {
 
   async function loadShareLink(token) {
     // GET /api/links/:token（無認証）
-    // 戻り値: { token, targetType, targetId, createdAt } | null
+    // 戻り値: { token, targetType, createdAt } | null
     // 不正・失効したトークンは null。呼び出し元は「このリンクは無効です」を出す。
     try {
       var res = await fetch('/api/links/' + encodeURIComponent(token));

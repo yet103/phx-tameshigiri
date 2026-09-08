@@ -231,14 +231,16 @@ function writeJsonAtomic(filePath, data) {
 // 氏名で合算する（一巡目＋二巡目）。得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
 // ○×の生データ（result）や order は返さない（共有リンクから無認証で読まれるため）。
 function computeRanking(event) {
-  const male = {};
-  const female = {};
-  const newFace = {};
+  // 選手名が __proto__ / constructor などでも壊れないよう、プロトタイプ無しの辞書を使う
+  const male = Object.create(null);
+  const female = Object.create(null);
+  const newFace = Object.create(null);
 
   const add = (dict, name, score) => { dict[name] = (dict[name] || 0) + score; };
 
   ((event && event.players) || []).forEach(p => {
-    const name = (p && p.name) || '';
+    // CSV エクスポートは氏名の前後に空白が付くことがある。trim して合算する（表示名もこちらを使う）。
+    const name = String((p && p.name) || '').trim();
     if (!name) return;
     const score = typeof p.score === 'number' ? p.score : 0;
     if (p.isFemale) add(female, name, score);
@@ -249,7 +251,8 @@ function computeRanking(event) {
   const rank = dict => {
     const entries = Object.keys(dict)
       .map(name => ({ name: name, score: dict[name] }))
-      .sort((a, b) => b.score - a.score);
+      // 同点は氏名順で安定させる
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ja'));
     let current = 1;
     let prev = null;
     return entries.map((e, i) => {
@@ -349,7 +352,19 @@ app.post('/api/events', (req, res) => {
       event.players = [];
     }
 
-    writeJsonAtomic(path.join(EVENTS_DIR, `${event.id}.json`), event);
+    const eventPath = path.join(EVENTS_DIR, `${event.id}.json`);
+    // 既存の shareToken を落とさない。落とすと links/<token>.json が孤児になり、
+    // 連鎖削除も効かなくなる（消えた大会を指すトークンが生き残る）。
+    if (event.shareToken === undefined && fs.existsSync(eventPath)) {
+      try {
+        const prev = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+        if (isValidId(prev.shareToken)) event.shareToken = prev.shareToken;
+      } catch (e) {
+        // 壊れた既存ファイルは上書きを止めない
+      }
+    }
+
+    writeJsonAtomic(eventPath, event);
     res.json({ success: true, id: event.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -922,8 +937,18 @@ app.post('/api/links', (req, res) => {
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
 
     // 発行済みならそのまま返す。リンクを配ったあとに変わると困る。
-    if (isValidId(event.shareToken) &&
-        fs.existsSync(path.join(LINKS_DIR, `${event.shareToken}.json`))) {
+    if (isValidId(event.shareToken)) {
+      const existingLinkPath = path.join(LINKS_DIR, `${event.shareToken}.json`);
+      if (fs.existsSync(existingLinkPath)) {
+        return res.json({ token: event.shareToken });
+      }
+      // リンクファイルだけ消えていた場合は同じトークンで作り直す（配布済みの URL を死なせない）。
+      writeJsonAtomic(existingLinkPath, {
+        token: event.shareToken,
+        targetType: 'event',
+        targetId: body.targetId,
+        createdAt: new Date().toISOString()
+      });
       return res.json({ token: event.shareToken });
     }
 
@@ -955,7 +980,10 @@ app.get('/api/links/:token', (req, res) => {
     if (!fs.existsSync(linkPath)) {
       return res.status(404).json({ error: 'リンクが見つかりません' });
     }
-    res.json(JSON.parse(fs.readFileSync(linkPath, 'utf-8')));
+    const link = JSON.parse(fs.readFileSync(linkPath, 'utf-8'));
+    // targetId は返さない。無認証で読める応答から /api/events/:id の宛先を漏らさないため。
+    // 順位は /api/links/:token/ranking から取る
+    res.json({ token: link.token, targetType: link.targetType, createdAt: link.createdAt });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -990,6 +1018,15 @@ app.get('/api/links/:token/ranking', (req, res) => {
 // 静的ファイル配信とSPAフォールバック
 // ────────────────────────────────────────
 const PUBLIC_DIR = path.resolve(__dirname, '..');
+
+// server/ 配下はデータとサーバー本体。静的配信の対象から外す。
+// 共有リンクは無認証で開かれるので、/server/data/events/<id>.json が読めてはいけない。
+// （Windows はパスの大文字小文字を区別しないので、判定も区別しない）
+app.use((req, res, next) => {
+  if (/^\/server(\/|$)/i.test(req.path)) return res.status(404).end();
+  next();
+});
+
 app.use(express.static(PUBLIC_DIR, {
     etag: false,
     setHeaders(res) {

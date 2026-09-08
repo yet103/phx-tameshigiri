@@ -110,7 +110,7 @@ Api.generateNextRound(eventId, force)           // → { success, created, skipp
                                                 //   | { blocked: true, reason, unscoredCount, existingCount, untrackedCount, unassignedCount } | null
 Api.loadRanking(eventId)                        // → { event, rankings } | null
 Api.createShareLink(eventId)                    // → { token } | null
-Api.loadShareLink(token)                        // → { token, targetType, targetId, createdAt } | null
+Api.loadShareLink(token)                        // → { token, targetType, createdAt } | null
 Api.loadSharedRanking(token)                    // → { event, rankings } | null
 
 // courts.js
@@ -1450,7 +1450,7 @@ app.get('/api/links/:token/ranking', (req, res) => {
 
   async function loadShareLink(token) {
     // GET /api/links/:token（無認証）
-    // 戻り値: { token, targetType, targetId, createdAt } | null
+    // 戻り値: { token, targetType, createdAt } | null
     // 不正・失効したトークンは null。呼び出し元は「このリンクは無効です」を出す。
     try {
       var res = await fetch('/api/links/' + encodeURIComponent(token));
@@ -1493,7 +1493,7 @@ app.get('/api/links/:token/ranking', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 194 passed, 0 failed`
+Expected: `Result: 204 passed, 0 failed`
 
 また、リンクのディレクトリが作られ、テストの後始末で空になっていることを確認する。
 
@@ -1569,7 +1569,7 @@ Expected: どちらも**何も出力されない**（ヒット0件）。1件で�
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。`mcp__Claude_Browser__find` で `並行PATCH` も探して緑（`✓`）であることを確認する。
 
-Expected: `Result: 194 passed, 0 failed`、かつ `✓ 並行PATCH12本が全件反映される` が表示されている。
+Expected: `Result: 204 passed, 0 failed`、かつ `✓ 並行PATCH12本が全件反映される` が表示されている。
 
 - [ ] **Step 4: 一時ファイルとテスト残骸が無いことを確認する**
 
@@ -1624,10 +1624,10 @@ git commit -m "docs: 同期実行の不変条件に新しい書き込みハン�
 | Task 4 完了 | 137 passed, 0 failed |
 | Task 5 完了 | 171 passed, 0 failed |
 | Task 6 完了 | 179 passed, 0 failed |
-| Task 7 完了 | **194 passed, 0 failed** |
-| Task 8 完了 | **194 passed, 0 failed**（テスト追加なし） |
+| Task 7 完了 | **204 passed, 0 failed** |
+| Task 8 完了 | **204 passed, 0 failed**（テスト追加なし） |
 
-**この計画の完了条件は `Result: 194 passed, 0 failed`。**
+**この計画の完了条件は `Result: 204 passed, 0 failed`。**
 
 ---
 

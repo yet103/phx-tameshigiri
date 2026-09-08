@@ -216,7 +216,7 @@ function roundOf(player) {
 | メソッド | パス | 認証 | 要点 |
 |---|---|---|---|
 | `POST` | `/api/links` | 将来は保護 | Body `{ "targetType": "event", "targetId": "<大会ID>" }` → `{ "token": "kX3p_a9Q" }`。**冪等**（`event.shareToken` があればそれを返す） |
-| `GET` | `/api/links/:token` | **なし** | `{ token, targetType, targetId, createdAt }`。400（`isValidId` 不通過）／404 |
+| `GET` | `/api/links/:token` | **なし** | `{ token, targetType, createdAt }`（`targetId` は含めない。無認証で読める応答から `/api/events/:id` の宛先を漏らさないため）。400（`isValidId` 不通過）／404 |
 
 - トークンは `crypto.randomBytes(6).toString('base64url')`（8文字、`ID_PATTERN` に適合）
 - 起動時に `LINKS_DIR` を `mkdirSync`
@@ -359,6 +359,7 @@ TechPicker.renderChips(el, state, onTap)  // チップ①②③を描く
 **無認証のまま通すこと**
 - `GET /api/links/:token`、`GET /api/links/:token/ranking`
 - `share.html`、`present.html`、`share.js`、`present.js`、`share.css`、`present.css`、`theme.css`、`api.js`
+- 静的配信から `/server` 配下を除外している（`server/data` の生 JSON が無認証で読めないようにするため）。認証を足す際もこの除外を外さないこと。`GET /api/links/:token` は `targetId` を返さない（`{ token, targetType, createdAt }` のみ）
 
 **保護対象**
 - `/api/events*` の全メソッド、`POST /api/links`、`/api/techniques` の書き込み
