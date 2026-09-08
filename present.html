@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>発表モード</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="present.css">
+</head>
+<body data-theme="dark">
+
+  <div class="present-root" id="presentRoot">
+    <header class="present-bar">
+      <div class="present-modes">
+        <button id="btnModeBoard" class="on">掲示</button>
+        <button id="btnModeReveal">発表</button>
+      </div>
+      <div class="present-tools">
+        <span class="present-status" id="presentStatus"></span>
+        <button id="btnPresentRefresh">更新</button>
+        <button id="btnPresentFull">全画面</button>
+      </div>
+    </header>
+    <main class="present-screen" id="presentScreen"></main>
+    <div class="present-hint" id="presentHint"></div>
+  </div>
+
+  <script src="api.js"></script>
+  <script src="present.js"></script>
+</body>
+</html>
