@@ -19,7 +19,6 @@ var App = (function() {
   var scoreTableBody   = document.getElementById('scoreTableBody');
   var totalScoreDisplay= document.getElementById('totalScoreDisplay');
   var timerDisplay     = document.getElementById('timerDisplay');
-  var csvFileInput     = document.getElementById('csvFileInput');
   var playerListPanel  = document.getElementById('playerListPanel');
   var playerListBody   = document.getElementById('playerListBody');
   var courtSelect      = document.getElementById('courtSelect');
@@ -140,11 +139,8 @@ var App = (function() {
     document.getElementById('btnAllSuccess').addEventListener('click', setAllSuccess);
     document.getElementById('btnAllFail').addEventListener('click', setAllFail);
 
-    document.getElementById('btnImport').addEventListener('click', function() { csvFileInput.click(); });
-    csvFileInput.addEventListener('change', onCsvImport);
     document.getElementById('btnExport').addEventListener('click', onCsvExport);
     document.getElementById('btnDownloadHtml').addEventListener('click', onDownloadHtml);
-    document.getElementById('btnGenNext').addEventListener('click', onGenNextRound);
     document.getElementById('btnPlayerList').addEventListener('click', togglePlayerList);
     document.getElementById('btnPlayerListClose').addEventListener('click', closePlayerList);
 
@@ -687,66 +683,7 @@ var App = (function() {
     saveCurrentState();
   }
 
-  // --- CSV インポート/エクスポート ---
-  function onCsvImport(e) {
-    var file = e.target.files[0];
-    if (!file) return;
-    if (!currentEvent) { alert('先に大会を選択または作成してください。'); return; }
-    var reader = new FileReader();
-    reader.onload = async function(ev) {
-      // await をまたぐので、対象の大会をここで固定する。
-      // 通信中に大会を切り替えられると、force 付きの replace が
-      // 別の大会に飛んで名簿ごと消えてしまう。
-      var eventId = currentEvent.id;
-      var text = ev.target.result;
-      csvFileInput.value = '';
-      var mode = 'replace';
-      if (players.length > 0) {
-        var choice = confirm('既存データをクリアして読み込みますか？\n（キャンセルで追記）');
-        mode = choice ? 'replace' : 'append';
-        if (mode === 'append') {
-          var appendOk = confirm(
-            '既存の ' + players.length + ' 名に追記します。同じ順番の選手がいると重複します。追記しますか？'
-          );
-          if (!appendOk) return;
-        }
-      }
-      var result = await Api.importCsv(eventId, text, mode);
-      if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
-      if (result && result.blocked) {
-        var ok = confirm(
-          'この大会には採点済みの選手が少なくとも ' + result.scoredCount + ' 名います。\n' +
-          '他のコート端末による採点も含まれます。\n' +
-          '読み込みを続けると、これらの採点結果はすべて失われます。\n' +
-          '本当に続行しますか？'
-        );
-        if (!ok) return;
-        result = await Api.importCsv(eventId, text, mode, true);
-        if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
-      }
-      if (result && result.success) {
-        // 大会データを再読み込み
-        var reloaded = await Api.loadEvent(eventId);
-        if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
-        if (!reloaded) {
-          alert('インポートは成功しましたが、最新データを取得できませんでした。\n画面を再読み込みしてください。');
-          return;
-        }
-        adoptEvent(reloaded);
-        refreshCourtList();
-        applyCourtFilter();
-        // 履歴記録
-        Api.addHistory(eventId, {
-          action: 'csv_import',
-          detail: result.playerCount + '名の選手データをインポート'
-        });
-      } else {
-        alert('インポートに失敗しました。');
-      }
-    };
-    reader.readAsText(file, 'UTF-8');
-  }
-
+  // --- CSV エクスポート ---
   async function onCsvExport() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
     if (players.length === 0) { alert('エクスポートするデータがありません。'); return; }
@@ -774,44 +711,6 @@ var App = (function() {
     Outbox.applyPending(eventId, all);
     if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
     Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
-  }
-
-  // --- 二巡目データ生成 ---
-  // 番号規則（コート×性別ごとに1から）はサーバーの生成 API が唯一の実装。
-  // クライアントで CSV を作ると規則を二重に持つことになるので、API を呼ぶだけにする。
-  // CSV が要るときは「CSVエクスポート」が二巡目を含む全件を出す。
-  // 確認文言・結果文言は courts.js の Courts.nextRoundConflictMessage /
-  // nextRoundResultMessage を運営画面（admin-round.js）と共有する。
-  // 「運営画面で／選手タブで」の一言だけ、この画面向けに変えてある。
-
-  async function onGenNextRound() {
-    if (!currentEvent) { alert('大会を選択してください。'); return; }
-    // サーバーは受け取った得点だけで二巡目を並べる。未送信があると並び順が狂う
-    var pending = Outbox.pendingCount();
-    if (pending > 0) {
-      alert('未送信の採点が ' + pending + ' 件あります。送信が終わってから生成してください。');
-      return;
-    }
-    if (!confirm('全コート分の二巡目データをサーバーに作ります。\n' +
-                  '他のコートの端末にも反映されます（取り消しは運営画面で1人ずつ削除）。\n' +
-                  'よろしいですか？')) return;
-    // await をまたぐので、対象の大会をここで固定する。
-    // 通信中に大会を切り替えられると、別の大会に生成してしまう。
-    var eventId = currentEvent.id;
-    var result = await Api.generateNextRound(eventId, false);
-    if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
-    if (!result) { alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。'); return; }
-    if (result.blocked) {
-      if (!confirm(Courts.nextRoundConflictMessage(result, '運営画面でコートを設定してください'))) return;
-      result = await Api.generateNextRound(eventId, true);
-      if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
-      if (!result || result.blocked) {
-        alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。');
-        return;
-      }
-    }
-    alert(Courts.nextRoundResultMessage(result));
-    await onEventSelect(currentEvent.id, currentCourt);
   }
 
   // --- 選手一覧パネル ---
