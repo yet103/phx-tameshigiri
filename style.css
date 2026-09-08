@@ -126,6 +126,17 @@ input[type="file"] { display: none; }
   padding: 4px 8px;
   min-width: 44px;
 }
+.score-table td.score-empty {
+  text-align: center;
+  padding: 18px 8px;
+  color: var(--text-muted);
+}
+.score-table td.score-notice {
+  text-align: center;
+  padding: 18px 8px;
+  color: var(--warn);
+  font-weight: bold;
+}
 
 /* ===== アクションバー ===== */
 .action-bar {

@@ -97,12 +97,13 @@ var Courts = (function() {
 
   // 二巡目生成 API の成功応答を結果文言にする（採点画面と運営画面で共有）。
   function nextRoundResultMessage(result) {
-    if (result.created === 0) {
-      return '追加する選手はいませんでした（二巡目は ' + result.existingCount + ' 名分のまま）';
-    }
+    var created = result.created || 0;
     var note = result.unassignedCount > 0
       ? '（コート未設定の ' + result.unassignedCount + ' 名は作っていません）' : '';
-    return '二巡目を生成しました（' + result.created + '名）' + note;
+    if (created === 0) {
+      return '追加する選手はいませんでした（二巡目は ' + result.existingCount + ' 名分のまま）' + note;
+    }
+    return '二巡目を生成しました（' + created + '名）' + note;
   }
 
   return {

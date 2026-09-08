@@ -625,13 +625,21 @@
       Courts.compareOrder({ order: 'A-男子-1-1' }, { order: 'A-女子-1-1' }) < 0, true);
     assert('compareOrder: コートに関わらず巡目1が巡目2より前',
       Courts.compareOrder({ order: 'B-男子-1-1' }, { order: 'A-男子-2-1' }) < 0, true);
+    assert('compareOrder: 同じ順番なら 0',
+      Courts.compareOrder({ order: 'A-男子-1-1' }, { order: 'A-男子-1-1' }), 0);
+    assert('compareOrder: 解析できない順番は後ろに回す',
+      Courts.compareOrder({ order: '' }, { order: 'A-男子-1-1' }) > 0, true);
 
     assert('nextRoundConflictMessage: 未採点は生成済み件数も出す',
       Courts.nextRoundConflictMessage({ reason: 'unscored', unscoredCount: 2, existingCount: 4, untrackedCount: 0, unassignedCount: 0 }, 'X').indexOf('既に 4 名分') >= 0, true);
+    assert('nextRoundConflictMessage: 未採点でも生成済みが0件なら「既に」は出さない',
+      Courts.nextRoundConflictMessage({ reason: 'unscored', unscoredCount: 2, existingCount: 0, untrackedCount: 0, unassignedCount: 0 }, 'X').indexOf('既に') >= 0, false);
     assert('nextRoundConflictMessage: 生成済みは exists 文言',
       Courts.nextRoundConflictMessage({ reason: 'exists', unscoredCount: 0, existingCount: 4, untrackedCount: 1, unassignedCount: 0 }, 'X').indexOf('二巡目は生成済みです（4名）') === 0, true);
     assert('nextRoundConflictMessage: コート未設定は fixHint を含む',
       Courts.nextRoundConflictMessage({ reason: 'exists', unscoredCount: 0, existingCount: 1, untrackedCount: 0, unassignedCount: 1 }, 'HINT').indexOf('HINT') >= 0, true);
+    assert('nextRoundConflictMessage: CSV由来の未追跡行があれば注意文を出す',
+      Courts.nextRoundConflictMessage({ reason: 'exists', unscoredCount: 0, existingCount: 4, untrackedCount: 2, unassignedCount: 0 }, 'X').indexOf('CSV で作った二巡目の行が 2 件あります') >= 0, true);
     assert('nextRoundResultMessage: 0件は追加なしの文言',
       Courts.nextRoundResultMessage({ created: 0, existingCount: 4, unassignedCount: 0 }), '追加する選手はいませんでした（二巡目は 4 名分のまま）');
     assert('nextRoundResultMessage: 通常',

@@ -29,7 +29,7 @@ node server/index.js > "$TEMP/tmg_server.log" 2>&1 &
 
 1. ブラウザで `http://localhost:3457/test.html` を開く
 2. ページ末尾の `Result: N passed, M failed` を読む。**`M` が 0 であることが合格条件**
-3. 計画2 完了時点は **234 passed**。本計画で増えるのは（レビューでの追加分を含め）、最終的に **261 passed, 0 failed** になる
+3. 計画2 完了時点は **234 passed**。本計画で増えるのは（レビューでの追加分を含め）、最終的に **265 passed, 0 failed** になる
 
 **モジュールの書き方**
 
@@ -1736,7 +1736,7 @@ Expected: ページ末尾に `Result:` が**出ない**（`Present.revealOrder i
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 261 passed, 0 failed`
+Expected: `Result: 265 passed, 0 failed`
 
 - [ ] **Step 3: 発表モードの描画と進行を実装する**
 
@@ -1956,7 +1956,7 @@ Expected: 例外が出ない（`read_console_messages` の `onlyErrors: true` �
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 261 passed, 0 failed`
+Expected: `Result: 265 passed, 0 failed`
 
 - [ ] **Step 9: コミット**
 
@@ -2418,7 +2418,7 @@ Expected: `true`（`onEventSelect` で取り直したので二巡目の行が見
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 261 passed, 0 failed`
+Expected: `Result: 265 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -2553,10 +2553,10 @@ git commit -m "fix: 通し確認で見つかった不具合を直す" -m "Co-Aut
 | 時点 | 件数 |
 |---|---|
 | 着手前（計画2完了） | 234 passed, 0 failed |
-| Task 7 完了 | **261 passed, 0 failed** |
-| Task 10 完了 | **261 passed, 0 failed** |
+| Task 7 完了 | **265 passed, 0 failed** |
+| Task 10 完了 | **265 passed, 0 failed** |
 
-**この計画の完了条件は `Result: 261 passed, 0 failed`。**
+**この計画の完了条件は `Result: 265 passed, 0 failed`。**
 
 ---
 

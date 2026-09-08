@@ -369,8 +369,8 @@ var App = (function() {
   }
 
   function updatePlayerLabels(p) {
-    // 順番パース: コート-性別-巡目-番号
-    var m = (p.order || '').match(/^(.+)-(男子|女子)-(\d+)-(\d+)$/);
+    // 順番パース: コート-性別-巡目-番号（コート名は Courts.roundOf 等と同じく「-」を含まない前提）
+    var m = (p.order || '').match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
     if (m) {
       courtLabel.textContent = m[1] + 'コート';
       playerOrderLabel.textContent = m[2] + ' ' + m[3] + '巡目 ' + m[4] + '番';
@@ -401,7 +401,9 @@ var App = (function() {
       setTotalDisplay(player.score || 0);
       return;
     }
-    gridRestorable = Scoring.canDecode(player.result, techNames.length);
+    // 未採点の選手は空のグリッドが正しい状態（result が空でも復元不能扱いにしない）
+    gridRestorable = Scoring.canDecode(player.result, techNames.length) ||
+      (!player.result && !(player.score > 0));
     var decoded = gridRestorable ? Scoring.decodeResult(player.result, techNames.length) : null;
 
     if (!decoded) {
@@ -535,6 +537,8 @@ var App = (function() {
     var td = e.currentTarget;
     if (td.classList.contains('disabled')) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
+    // 技が無い選手は採点できない
+    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) return;
     if (!confirmReplaceIfNeeded()) return;
 
     var current = td.dataset.value || '';
@@ -582,8 +586,10 @@ var App = (function() {
   }
 
   function updateTotal() {
-    var total = 0;
     var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
+    // 技が無い選手は採点できない
+    if (rows.length === 0) return;
+    var total = 0;
     for (var i = 0; i < rows.length; i++) {
       var sc = rows[i].querySelector('.score-col');
       if (sc) total += parseFloat(sc.textContent) || 0;
@@ -625,6 +631,8 @@ var App = (function() {
 
   function setAllSuccess() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
+    // 技が無い選手は採点できない
+    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) return;
     if (!confirmReplaceIfNeeded()) return;
     var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var p = visiblePlayers[currentIndex];
@@ -644,6 +652,8 @@ var App = (function() {
 
   function setAllFail() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
+    // 技が無い選手は採点できない
+    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) return;
     if (!confirmReplaceIfNeeded()) return;
     var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var p = visiblePlayers[currentIndex];
