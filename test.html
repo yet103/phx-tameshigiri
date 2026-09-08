@@ -413,6 +413,13 @@
       Object.keys(shared.rankings.male[0]), ['rank', 'name', 'score']);
     assert('共有の順位は大会名を含む', shared.event.name, '共有テスト');
 
+    assert('fetchSharedRanking は成功時に ok と data を返す',
+      (await Api.fetchSharedRanking(link1.token)).ok, true);
+    assert('fetchSharedRanking は存在しないトークンで status 404',
+      await Api.fetchSharedRanking('zzzzzzzz'), { ok: false, status: 404 });
+    assert('fetchSharedRanking は不正なトークンで status 400',
+      await Api.fetchSharedRanking('../x'), { ok: false, status: 400 });
+
     assert('不正なトークンは null',
       await Api.loadShareLink('../../events/' + shareEvent.id), null);
     assert('不正なトークンの順位も null',

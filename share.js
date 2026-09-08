@@ -17,8 +17,10 @@ var Share = (function() {
   var lastFetchedAt = null;
   var timerId = null;
   var busy = false;
+  var pendingRefresh = false;
   var rendered = false;
   var invalid = false;
+  var tokenSeq = 0;
 
   var elHead = null;
   var elStatus = null;
@@ -45,10 +47,33 @@ var Share = (function() {
     return h + ':' + m;
   }
 
+  function stopTimer() {
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+  }
+
+  function startTimer() {
+    stopTimer();
+    timerId = setInterval(function() { refresh(); }, REFRESH_MS);
+  }
+
+  function decodeToken() {
+    var hash = location.hash.replace(/^#/, '');
+    try {
+      return decodeURIComponent(hash);
+    } catch (e) {
+      return hash;
+    }
+  }
+
   function showInvalid() {
-    // タイマーは止めない：トークンが後で有効になる（通信復旧）ケースのために
-    // ポーリングを続け、次の成功で自動的に復帰できるようにする。
+    // 404/400 はトークンが無効と確定しているので、ポーリングを止めて叩き続けない。
     invalid = true;
+    rendered = false;
+    lastUpdatedAt = null;
+    stopTimer();
     if (elHead) elHead.textContent = '';
     if (elStatus) elStatus.textContent = '';
     if (elBody) {
@@ -56,6 +81,18 @@ var Share = (function() {
       var div = document.createElement('div');
       div.className = 'share-error';
       div.textContent = 'このリンクは無効です';
+      elBody.appendChild(div);
+    }
+  }
+
+  function showFetchError() {
+    // まだ一度も描画できていない状態での通信失敗。前回表示がないので専用メッセージを出す。
+    if (elStatus) elStatus.textContent = '取得できませんでした';
+    if (elBody) {
+      elBody.textContent = '';
+      var div = document.createElement('div');
+      div.className = 'share-error';
+      div.textContent = '順位を取得できませんでした。通信を確認してください。';
       elBody.appendChild(div);
     }
   }
@@ -123,54 +160,65 @@ var Share = (function() {
     }
   }
 
-  // isFirst: true（初回） | false（通常の再取得） | 'retry'（初回失敗後の1回だけの再試行）
-  async function refresh(isFirst) {
-    if (busy) return;
+  // Api.fetchSharedRanking の結果で状態を進める。busy 中に来た呼び出しは捨てず
+  // pendingRefresh に立てておき、進行中の取得が終わった時点でもう一度だけ実行する。
+  async function refresh() {
+    if (busy) {
+      pendingRefresh = true;
+      return;
+    }
     busy = true;
-    try {
-      var data = await Api.loadSharedRanking(token);
+    var mySeq = tokenSeq;
+    var result = await Api.fetchSharedRanking(token);
+    if (mySeq !== tokenSeq) {
+      // hashchange で別トークンに切り替わった後に届いた古い応答は無視する
+      // （busy/pendingRefresh は切替後の呼び出し側が管理している）。
+      return;
+    }
+    busy = false;
 
-      if (!data) {
-        if (isFirst === true) {
-          // 初回読み込み失敗時は3秒後に一度だけ再試行してから無効表示にする
-          setTimeout(function() { refresh('retry'); }, 3000);
-        } else if (isFirst === 'retry') {
-          showInvalid();
-        } else if (lastFetchedAt) {
-          elStatus.className = 'share-status warn';
-          elStatus.textContent = '更新できませんでした（前回 ' + hhmm(lastFetchedAt) + ' 時点）';
-        }
-        return;
-      }
-
+    if (result.ok) {
       var isFirstSuccess = !rendered;
       invalid = false;
       lastFetchedAt = new Date();
-      elStatus.className = 'share-status';
-      elStatus.textContent = hhmm(lastFetchedAt) + ' 時点';
+      if (elStatus) {
+        elStatus.className = 'share-status';
+        elStatus.textContent = hhmm(lastFetchedAt) + ' 時点';
+      }
 
-      var updatedAt = data.event ? data.event.updatedAt : null;
+      var updatedAt = result.data.event ? result.data.event.updatedAt : null;
       if (!rendered || updatedAt !== lastUpdatedAt) {
         lastUpdatedAt = updatedAt;
         rendered = true;
-        renderHead(data.event || {});
-        renderBody(data.rankings || {});
+        renderHead(result.data.event || {});
+        renderBody(result.data.rankings || {});
       }
 
-      if (isFirstSuccess && data.event && data.event.name) {
-        document.title = data.event.name + ' の順位';
+      if (isFirstSuccess && result.data.event && result.data.event.name) {
+        document.title = result.data.event.name + ' の順位';
       }
-    } finally {
-      busy = false;
+    } else if (result.status === 400 || result.status === 404) {
+      showInvalid();
+    } else if (!rendered) {
+      showFetchError();
+    } else if (elStatus) {
+      elStatus.className = 'share-status warn';
+      elStatus.textContent = '更新できませんでした（前回 ' + hhmm(lastFetchedAt) + ' 時点）';
+    }
+
+    if (pendingRefresh) {
+      pendingRefresh = false;
+      refresh();
     }
   }
 
-  function startToken(isFirst) {
+  function start() {
     if (!token) {
       showInvalid();
       return;
     }
-    refresh(isFirst);
+    startTimer();
+    refresh();
   }
 
   function init() {
@@ -180,25 +228,28 @@ var Share = (function() {
     elStatus = document.getElementById('shareStatus');
     elBody = document.getElementById('shareBody');
 
-    token = location.hash.replace(/^#/, '');
-
-    timerId = setInterval(function() { refresh(false); }, REFRESH_MS);
-    startToken(true);
+    token = decodeToken();
+    start();
 
     document.addEventListener('visibilitychange', function() {
       if (document.hidden) return;
+      if (invalid) return;
       // 直近取得から5秒未満なら floor（可視化のたびに叩き過ぎない）
       if (lastFetchedAt && (new Date() - lastFetchedAt) < 5000) return;
-      refresh(false);
+      refresh();
     });
 
     window.addEventListener('hashchange', function() {
-      token = location.hash.replace(/^#/, '');
+      stopTimer();
+      tokenSeq++;
       invalid = false;
       rendered = false;
       lastUpdatedAt = null;
       lastFetchedAt = null;
-      startToken(true);
+      busy = false;
+      pendingRefresh = false;
+      token = decodeToken();
+      start();
     });
   }
 

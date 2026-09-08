@@ -112,6 +112,7 @@ Api.loadRanking(eventId)                        // → { event, rankings } | nul
 Api.createShareLink(eventId)                    // → { token } | null
 Api.loadShareLink(token)                        // → { token, targetType, createdAt } | null
 Api.loadSharedRanking(token)                    // → { event, rankings } | null
+Api.fetchSharedRanking(token)                   // → { ok: true, data } | { ok: false, status }
 
 // courts.js
 Courts.roundOf(player)                          // → 1 以上の整数。解析できなければ 1

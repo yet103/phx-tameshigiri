@@ -18,6 +18,10 @@ var Present = (function() {
   var lastUpdatedAt = null;
   var rendered = false;
   var invalid = false;
+  var busy = false;
+  var pendingRefresh = false;
+  var tokenSeq = 0;
+  var timerId = null;
 
   // 発表（reveal）モードの状態（後続タスクで使用）。
   var picking = true;
@@ -40,6 +44,50 @@ var Present = (function() {
     return h + ':' + m;
   }
 
+  function stopTimer() {
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+  }
+
+  function startTimer() {
+    stopTimer();
+    timerId = setInterval(function() {
+      if (mode === 'board') load();
+    }, REFRESH_MS);
+  }
+
+  function decodeToken() {
+    var hash = window.location.hash || '';
+    if (hash.charAt(0) === '#') hash = hash.slice(1);
+    try {
+      return decodeURIComponent(hash);
+    } catch (e) {
+      return hash;
+    }
+  }
+
+  function showFetchError() {
+    // まだ一度も描画できていない状態での通信失敗。前回表示がないので専用メッセージを出す。
+    if (!elScreen) return;
+    elScreen.textContent = '';
+    if (elHint) elHint.textContent = '';
+    var err = document.createElement('div');
+    err.className = 'present-error';
+    err.textContent = '順位を取得できませんでした。通信を確認してください。';
+    elScreen.appendChild(err);
+  }
+
+  function setInvalid() {
+    // 404/400 はトークンが無効と確定しているので、ポーリングを止めて叩き続けない。
+    invalid = true;
+    rendered = false;
+    lastUpdatedAt = null;
+    stopTimer();
+    render();
+  }
+
   function rowsOf(index) {
     var cat = CATEGORIES[index];
     if (!cat || !data || !data.rankings) return [];
@@ -56,40 +104,54 @@ var Present = (function() {
     return out;
   }
 
-  // isFirst: true（初回） | false（通常の再取得） | 'retry'（初回失敗後の1回だけの再試行）
-  async function load(isFirst) {
-    var result = await Api.loadSharedRanking(token);
-
-    if (!result) {
-      if (isFirst === true) {
-        // 初回読み込み失敗時は3秒後に一度だけ再試行してから無効表示にする
-        setTimeout(function() { load('retry'); }, 3000);
-      } else if (isFirst === 'retry') {
-        invalid = true;
-        render();
-      } else {
-        elStatus.textContent = '更新できませんでした（前回 ' +
-          (lastFetchedAt ? hhmm(lastFetchedAt) : '—') + ' 時点）';
-      }
+  // Api.fetchSharedRanking の結果で状態を進める。busy 中に来た呼び出しは捨てず
+  // pendingRefresh に立てておき、進行中の取得が終わった時点でもう一度だけ実行する。
+  async function load() {
+    if (busy) {
+      pendingRefresh = true;
       return;
     }
+    busy = true;
+    var mySeq = tokenSeq;
+    var result = await Api.fetchSharedRanking(token);
+    if (mySeq !== tokenSeq) {
+      // hashchange で別トークンに切り替わった後に届いた古い応答は無視する
+      // （busy/pendingRefresh は切替後の呼び出し側が管理している）。
+      return;
+    }
+    busy = false;
 
-    invalid = false;
-    data = result;
-    lastFetchedAt = new Date();
-    elStatus.textContent = hhmm(lastFetchedAt) + ' 時点';
+    if (result.ok) {
+      invalid = false;
+      data = result.data;
+      lastFetchedAt = new Date();
+      if (elStatus) elStatus.textContent = hhmm(lastFetchedAt) + ' 時点';
 
-    // 発表中に人数が変わっても添字がずれないように order を取り直す
-    if (mode === 'reveal' && !picking) {
-      order = revealOrder(rowsOf(catIndex));
-      if (step > order.length) step = order.length;
+      // 発表中に人数が変わっても添字がずれないように order を取り直す
+      if (mode === 'reveal' && !picking) {
+        order = revealOrder(rowsOf(catIndex));
+        if (step > order.length) step = order.length;
+      }
+
+      var updatedAt = data.event ? data.event.updatedAt : null;
+      if (!rendered || updatedAt !== lastUpdatedAt) {
+        lastUpdatedAt = updatedAt;
+        rendered = true;
+        render();
+      }
+    } else if (result.status === 400 || result.status === 404) {
+      setInvalid();
+    } else if (!rendered) {
+      if (elStatus) elStatus.textContent = '取得できませんでした';
+      showFetchError();
+    } else if (elStatus) {
+      elStatus.textContent = '更新できませんでした（前回 ' +
+        (lastFetchedAt ? hhmm(lastFetchedAt) : '—') + ' 時点）';
     }
 
-    var updatedAt = data.event ? data.event.updatedAt : null;
-    if (!rendered || updatedAt !== lastUpdatedAt) {
-      lastUpdatedAt = updatedAt;
-      rendered = true;
-      render();
+    if (pendingRefresh) {
+      pendingRefresh = false;
+      load();
     }
   }
 
@@ -255,8 +317,8 @@ var Present = (function() {
     if (elHint) {
       elHint.textContent = '';
       var strong = document.createElement('strong');
-      if (step < order.length) {
-        var nextRow = rows[order[step]];
+      var nextRow = step < order.length ? rows[order[step]] : null;
+      if (nextRow) {
         strong.textContent = 'タップで ' + nextRow.rank + '位 を発表';
       } else {
         strong.textContent = 'タップで 次の部門';
@@ -352,6 +414,15 @@ var Present = (function() {
     }
   }
 
+  function start() {
+    if (!token) {
+      setInvalid();
+      return;
+    }
+    startTimer();
+    load();
+  }
+
   function init() {
     elScreen = document.getElementById('presentScreen');
     elHint = document.getElementById('presentHint');
@@ -361,13 +432,7 @@ var Present = (function() {
     elRefresh = document.getElementById('btnPresentRefresh');
     elFull = document.getElementById('btnPresentFull');
 
-    var hash = window.location.hash || '';
-    if (hash.charAt(0) === '#') hash = hash.slice(1);
-    try {
-      token = decodeURIComponent(hash);
-    } catch (e) {
-      token = hash;
-    }
+    token = decodeToken();
 
     elScreen.addEventListener('click', function() {
       next();
@@ -383,27 +448,44 @@ var Present = (function() {
     });
     elRefresh.addEventListener('click', function() {
       this.blur();
-      load(false);
+      load();
     });
     elFull.addEventListener('click', function() {
       this.blur();
       toggleFull();
     });
 
-    setInterval(function() {
-      if (mode === 'board' && !invalid) load(false);
-    }, REFRESH_MS);
-
     document.addEventListener('visibilitychange', function() {
-      if (!document.hidden && mode === 'board' && !invalid) load(false);
+      if (document.hidden) return;
+      if (invalid) return;
+      if (mode !== 'board') return;
+      // 直近取得から5秒未満なら floor（可視化のたびに叩き過ぎない）
+      if (lastFetchedAt && (new Date() - lastFetchedAt) < 5000) return;
+      load();
     });
 
-    if (!token) {
-      invalid = true;
-      render();
-      return;
-    }
-    load(true);
+    window.addEventListener('hashchange', function() {
+      stopTimer();
+      tokenSeq++;
+      invalid = false;
+      rendered = false;
+      lastUpdatedAt = null;
+      lastFetchedAt = null;
+      busy = false;
+      pendingRefresh = false;
+      data = null;
+      picking = true;
+      order = [];
+      step = 0;
+      catIndex = 0;
+      mode = 'board';
+      if (elModeBoard) elModeBoard.classList.add('on');
+      if (elModeReveal) elModeReveal.classList.remove('on');
+      token = decodeToken();
+      start();
+    });
+
+    start();
   }
 
   document.addEventListener('DOMContentLoaded', function() {

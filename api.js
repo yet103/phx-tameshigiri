@@ -335,6 +335,21 @@ var Api = (function() {
     }
   }
 
+  async function fetchSharedRanking(token) {
+    // GET /api/links/:token/ranking（無認証）。loadSharedRanking の結果を状態つきで返す版。
+    // 戻り値: { ok: true, data } | { ok: false, status }
+    //   status 400/404 → トークンが無効（画面は「このリンクは無効です」を出して取得をやめる）
+    //   status 0       → 通信失敗（画面は前回の内容を残して取得を続ける）
+    //   その他         → サーバー側の失敗（同上）
+    try {
+      var res = await fetch('/api/links/' + encodeURIComponent(token) + '/ranking');
+      if (!res.ok) return { ok: false, status: res.status };
+      return { ok: true, data: await res.json() };
+    } catch (e) {
+      return { ok: false, status: 0 };
+    }
+  }
+
   return {
     listEvents: listEvents,
     loadEvent: loadEvent,
@@ -355,6 +370,7 @@ var Api = (function() {
     loadRanking: loadRanking,
     createShareLink: createShareLink,
     loadShareLink: loadShareLink,
-    loadSharedRanking: loadSharedRanking
+    loadSharedRanking: loadSharedRanking,
+    fetchSharedRanking: fetchSharedRanking
   };
 })();
