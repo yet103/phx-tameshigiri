@@ -266,7 +266,7 @@ var AdminRound = (function() {
   // --- 二巡目の生成 ---
   // 番号規則はサーバーの生成 API が唯一の実装。クライアントは確認と再送だけを持つ。
   // 確認文言・結果文言は courts.js の Courts.nextRoundConflictMessage /
-  // nextRoundResultMessage を app.js の onGenNextRound と共有する（採点画面と運営画面で流れを揃えるため）。
+  // nextRoundResultMessage にある（生成の入口はこの画面だけ。コート端末には置かない）。
 
   async function onGenerate() {
     var ctx = CTX;

@@ -571,7 +571,7 @@
       return;
     }
     Admin.toast(result.playerCount + '名を読み込みました');
-    // 履歴記録（app.js の onCsvImport と同じ形）
+    // 履歴記録（server/data/history に残す。CSV の一括登録は履歴を辿れるようにする）
     Api.addHistory(eventId, {
       action: 'csv_import',
       detail: result.playerCount + '名の選手データをインポート'
