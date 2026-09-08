@@ -69,6 +69,13 @@ var TechPicker = (function() {
     openSheet = null;
   }
 
+  // ハッシュ遷移などで強制的に片付けるとき。onClose は呼ばない
+  // （呼ぶと古い ctx を使う保存が走ってしまう）。
+  function dismiss() {
+    pendingDone = null;
+    closeSheet();
+  }
+
   // ①②③ のチップを el に描く。空きの枠は「＋」。
   // 空きを赤くしたい画面（計画3の進行タブ）は el に class="chips-required" を付ける。
   function renderChips(el, state, onTap) {
@@ -177,6 +184,7 @@ var TechPicker = (function() {
     fromArray: fromArray,
     strikesLabel: strikesLabel,
     open: open,
+    dismiss: dismiss,
     renderChips: renderChips
   };
 })();

@@ -17,6 +17,10 @@ var Admin = (function() {
   var selectedEventId = null;
   var toastTimer = null;
 
+  // 現在開いているシートのハンドル。ハッシュ遷移で古い ctx のまま
+  // 残らないよう、ルートが変わったら全部閉じる。
+  var openSheets = [];
+
   // 描画の再入ガード。Api.loadEvent の往復中にタブを切り替えられると、
   // 遅れて戻ってきた古い応答が新しい画面を上書きする。
   var renderSeq = 0;
@@ -97,6 +101,7 @@ var Admin = (function() {
   }
 
   async function applyRoute() {
+    closeAllSheets();
     var route = parseHash(location.hash);
     if (!route) {
       // ハッシュが無いときは前回の続きから。それも無ければ大会一覧。
@@ -247,6 +252,8 @@ var Admin = (function() {
     function close() {
       if (closed) return;
       closed = true;
+      var i = openSheets.indexOf(handle);
+      if (i >= 0) openSheets.splice(i, 1);
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       if (onClose) onClose();
     }
@@ -257,13 +264,23 @@ var Admin = (function() {
     overlay.addEventListener('click', function(e) {
       if (e.target === overlay) tryClose();
     });
-    return {
+    var handle = {
       close: close,
       lock: function(flag) {
         locked = !!flag;
         btnClose.disabled = !!flag;
       }
     };
+    openSheets.push(handle);
+    return handle;
+  }
+
+  // 戻るボタンなどでハッシュが変わったら、前の画面のシートを残さない
+  // （古い ctx で保存してしまう）。lock 中でも問答無用で閉じる
+  // （ユーザーはもう別の画面に移っている）。
+  function closeAllSheets() {
+    openSheets.slice().forEach(function(s) { s.close(); });
+    TechPicker.dismiss();
   }
 
   // コート絞り込みのチップ列。「全コート」（court = ''）＋ Courts.listFrom の並び。

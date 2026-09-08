@@ -17,7 +17,7 @@
 
 ### テスト件数
 
-計画1完了時点の `test.html` は **208 passed, 0 failed**。この計画で **15 件**足し、完了時点で **231 passed, 0 failed** になる。着手前に 208 を実測で確認すること。
+計画1完了時点の `test.html` は **208 passed, 0 failed**。この計画で **15 件**足し、完了時点で **232 passed, 0 failed** になる。着手前に 208 を実測で確認すること。
 
 ### この計画の依存（計画1が用意済み。再定義しない）
 
@@ -427,7 +427,7 @@ var TechPicker = (function() {
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 231 passed, 0 failed`
+Expected: `Result: 232 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -592,7 +592,7 @@ git commit -m "feat: 技の選択状態を扱う TechPicker の純粋関数を�
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 231 passed, 0 failed`
+Expected: `Result: 232 passed, 0 failed`
 
 - [ ] **Step 3: コミット**
 
@@ -2560,7 +2560,7 @@ Expected: 採点テーブル・ツールバー・テーマ切り替えが従来�
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 231 passed, 0 failed`
+Expected: `Result: 232 passed, 0 failed`
 
 - [ ] **Step 7: 確認用データを片付ける**
 
@@ -2583,7 +2583,7 @@ git commit -m "fix: 運営画面のタップ目標と 375px レイアウトを�
 
 ## 完了条件
 
-- [ ] `test.html` が `Result: 231 passed, 0 failed`
+- [ ] `test.html` が `Result: 232 passed, 0 failed`
 - [ ] `grep -n "^:root\|^\[data-theme" style.css` が何も出さない
 - [ ] `grep -c 'href="theme.css"' index.html ranking.html techniques.html` が3ファイルとも 1
 - [ ] `grep -n '<script src=' admin.html` が `api.js` → `storage.js` → `courts.js` → `techpicker.js` → `admin.js` → `admin-events.js` → `admin-players.js` の順

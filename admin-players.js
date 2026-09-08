@@ -33,11 +33,22 @@
     return x.no - y.no;
   }
 
+  // 技術リストを必要なときだけ取りに行く（追加・編集フォームでチップを
+  // タップしたとき）。キャッシュがあればそれを返す。
+  async function ensureTechniques() {
+    if (techCache) return techCache;
+    var td = await Api.loadTechniques();
+    if (td && td.techniques) techCache = td.techniques;
+    return techCache;
+  }
+
   async function render(container, ctx) {
     if (courtOwner !== ctx.eventId) {
       currentCourt = '';
       courtOwner = ctx.eventId;
     }
+    // 絞り込み中のコートの選手が全員いなくなったら全コートに戻す
+    if (currentCourt && Courts.listFrom(ctx.players).indexOf(currentCourt) === -1) currentCourt = '';
 
     container.innerHTML = '';
 
@@ -75,11 +86,9 @@
     Admin.renderCourtChips(chips, ctx.players, currentCourt, onCourtChange);
     renderList(list, ctx);
 
-    // 技術リストは追加・編集フォームで使う。タブを開いたときに1回だけ取る。
-    if (!techCache) {
-      var td = await Api.loadTechniques();
-      if (td && td.techniques) techCache = td.techniques;
-    }
+    // 技術リストは追加・編集フォームで使う。フォームを開くまで待たず、
+    // ここで先読みしておく（DOM の描画は待たない）。
+    ensureTechniques();
   }
 
   function renderList(list, ctx) {
@@ -145,6 +154,8 @@
     });
     var court = player ? Courts.courtOf(player) : (courts[0] || '');
     if (court === Courts.UNASSIGNED) court = courts[0] || '';
+    // 最初の選手はコート未定なので A を初期値にする（1タップで変えられる）
+    if (!court && courts.length === 0) court = 'A';
     if (court && courts.indexOf(court) === -1) courts.push(court);
 
     var isFemale = player ? !!player.isFemale : false;
@@ -265,7 +276,8 @@
     el.appendChild(fTech);
 
     function renderTechChips() {
-      TechPicker.renderChips(chips, techState, function() {
+      TechPicker.renderChips(chips, techState, async function() {
+        await ensureTechniques();
         if (!techCache) {
           alert('技術リストを取得できませんでした。技以外は保存できます。');
           return;

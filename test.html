@@ -659,6 +659,7 @@
       document.querySelector('.tp-close').click();
       return [got, overlays, document.querySelectorAll('.tp-overlay').length];
     })(), [['水月'], 1, 0]);
+    assert('dismiss: onClose を呼ばずに閉じる', (function(){ var called=false; TechPicker.open({techniques:[{name:'真'}], initial:['真'], onClose:function(){ called=true; }}); TechPicker.dismiss(); return [called, document.querySelectorAll('.tp-overlay').length]; })(), [false, 0]);
 
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';
