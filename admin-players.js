@@ -133,6 +133,10 @@
     score.className = 'row-score';
     score.textContent = String(p.score || 0);
 
+    row.addEventListener('click', function() {
+      openEditSheet(ctx, p);
+    });
+
     row.appendChild(badge);
     row.appendChild(body);
     row.appendChild(score);
@@ -374,6 +378,99 @@
     btnSaveNext.addEventListener('click', async function() {
       if (!(await save())) return;
       form.reset();   // コート・性別・新人は保つ
+    });
+  }
+
+  // 編集フォーム（行タップ）
+  function openEditSheet(ctx, player) {
+    var form = buildPlayerForm(ctx, player);
+
+    var btnDelete = document.createElement('button');
+    btnDelete.type = 'button';
+    btnDelete.className = 'btn danger';
+    btnDelete.textContent = 'この選手を削除';
+
+    var btnSave = document.createElement('button');
+    btnSave.type = 'button';
+    btnSave.className = 'btn primary';
+    btnSave.textContent = '保存';
+
+    var sheet = Admin.openSheet('選手を編集', form.el, [btnDelete, btnSave]);
+
+    btnSave.addEventListener('click', async function() {
+      var data = form.read();
+      if (!data) return;
+
+      // 採点済みの選手の性別を変えても、サーバーは得点を再計算しない。
+      // 男女で配点が違う技があるため、採点画面で開き直してもらう必要がある。
+      if (isScored(player) && data.isFemale !== !!player.isFemale) {
+        var ok = confirm(
+          'この選手は採点済みです（' + (player.score || 0) + '点）。\n' +
+          '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
+          'このまま保存しますか？'
+        );
+        if (!ok) return;
+      }
+
+      btnSave.disabled = true;
+      btnDelete.disabled = true;
+      sheet.lock(true);
+      // round は送らない。サーバーは今の order から巡目を据え置く。
+      var res = await Api.updatePlayerInfo(ctx.eventId, player.id, data);
+      sheet.lock(false);
+      btnSave.disabled = false;
+      btnDelete.disabled = false;
+      if (!res || !res.ok) {
+        // 失敗してもシートは閉じない（入力を残す）
+        alert('選手の更新に失敗しました。\n入力内容と通信を確認してください。');
+        return;
+      }
+      sheet.close();
+      Admin.toast('保存しました');
+      Admin.reloadEvent();
+    });
+
+    btnDelete.addEventListener('click', async function() {
+      if (!confirm(
+        '選手「' + (player.name || '') + '」（' + (player.order || '') + '）を削除します。\n' +
+        '二巡目の行は残ります。\n' +
+        'よろしいですか？'
+      )) return;
+
+      btnDelete.disabled = true;
+      btnSave.disabled = true;
+      sheet.lock(true);
+      var res = await Api.deletePlayer(ctx.eventId, player.id, false);
+
+      if (res && res.blocked) {
+        // 採点済みガード。得点を出してもう一度確認し、承諾したときだけ force。
+        // player はサーバー側の実装次第で null になり得るので、その場合は空扱いにする。
+        var blockedPlayer = res.player || {};
+        var ok = confirm(
+          '「' + blockedPlayer.name + '」（' + blockedPlayer.order + '）は採点済みです（' +
+          blockedPlayer.score + '点）。\n' +
+          '削除すると採点結果は戻せません。二巡目の行は残ります。\n\n' +
+          '本当に削除しますか？'
+        );
+        if (!ok) {
+          sheet.lock(false);
+          btnDelete.disabled = false;
+          btnSave.disabled = false;
+          return;
+        }
+        res = await Api.deletePlayer(ctx.eventId, player.id, true);
+      }
+
+      sheet.lock(false);
+      btnDelete.disabled = false;
+      btnSave.disabled = false;
+      if (res !== true) {
+        alert('選手の削除に失敗しました。');
+        return;
+      }
+      sheet.close();
+      Admin.toast('削除しました');
+      Admin.reloadEvent();
     });
   }
 
