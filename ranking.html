@@ -22,14 +22,12 @@
         <option value="">-- 大会を選択 --</option>
       </select>
       <button id="btnLoadFromEvent" class="btn-neutral">大会データを読み込む</button>
-      <button id="btnLoadCsv" class="btn-neutral">CSVを読み込む（複数可）</button>
       <button id="btnDownloadHtml" class="btn-neutral">HTMLダウンロード</button>
       <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
-      <input type="file" id="rankCsvInput" accept=".csv" multiple style="display:none;">
     </div>
 
     <div class="ranking-container" id="rankingContainer">
-      <p style="color:var(--text-muted)">大会を選択するか、CSVを読み込むと順位が表示されます。</p>
+      <p style="color:var(--text-muted)">大会を選択すると順位が表示されます。</p>
     </div>
   </div>
 
@@ -40,9 +38,15 @@
   <script>
     var body = document.body;
     var rankingContainer = document.getElementById('rankingContainer');
-    var rankCsvInput = document.getElementById('rankCsvInput');
     var rankEventSelect = document.getElementById('rankEventSelect');
     var btnLoadFromEvent = document.getElementById('btnLoadFromEvent');
+
+    // 順位の集計はサーバーの computeRanking が唯一の実装。この画面は描くだけ。
+    var CATEGORIES = [
+      { key: 'male',    title: '一般男子' },
+      { key: 'newFace', title: '新人' },
+      { key: 'female',  title: '一般女子' }
+    ];
 
     function applyTheme(theme) {
       body.setAttribute('data-theme', theme);
@@ -78,102 +82,42 @@
         alert('大会を選択してください。');
         return;
       }
-      var eventData = await Api.loadEvent(eventId);
-      if (eventData && eventData.players) {
-        renderRankings(eventData.players);
-      } else {
-        alert('大会データの読み込みに失敗しました。');
+      var data = await Api.loadRanking(eventId);
+      if (!data) {
+        alert('順位データの読み込みに失敗しました。');
+        return;
       }
+      renderRankings(data);
     });
 
-    document.getElementById('btnLoadCsv').addEventListener('click', function() {
-      rankCsvInput.click();
-    });
-
-    function parseCsvText(text) {
-      var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-      var players = [];
-      for (var i = 1; i < lines.length; i++) {
-        var line = lines[i].trim();
-        if (!line) continue;
-        var cols = line.split(',');
-        players.push({
-          name: cols[0] || '',
-          score: parseFloat(cols[5]) || 0,
-          isNewFace: cols[6] === '○',
-          isFemale: cols[7] === '○'
-        });
-      }
-      return players;
-    }
-
-    rankCsvInput.addEventListener('change', function(e) {
-      var files = Array.prototype.slice.call(e.target.files);
-      rankCsvInput.value = '';
-      if (files.length === 0) return;
-      var allPlayers = [];
-      var loaded = 0;
-      files.forEach(function(file) {
-        var reader = new FileReader();
-        reader.onload = function(ev) {
-          var ps = parseCsvText(ev.target.result);
-          Array.prototype.push.apply(allPlayers, ps);
-          loaded++;
-          if (loaded === files.length) renderRankings(allPlayers);
-        };
-        reader.readAsText(file, 'UTF-8');
-      });
-    });
-
-    function renderRankings(players) {
-      var maleScores = {}, femaleScores = {}, newFaceScores = {};
-      players.forEach(function(p) {
-        if (!p.name) return;
-        var score = p.score || 0;
-        if (!p.isFemale) addScore(maleScores, p.name, score);
-        if (p.isFemale)  addScore(femaleScores, p.name, score);
-        if (p.isNewFace) addScore(newFaceScores, p.name, score);
-      });
-
+    function renderRankings(data) {
       rankingContainer.innerHTML = '';
-      rankingContainer.appendChild(buildRankTable('一般男子', maleScores));
-      rankingContainer.appendChild(buildRankTable('新人', newFaceScores));
-      rankingContainer.appendChild(buildRankTable('一般女子', femaleScores));
+      CATEGORIES.forEach(function(c) {
+        rankingContainer.appendChild(
+          buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || []));
+      });
     }
 
-    function addScore(dict, name, score) {
-      dict[name] = (dict[name] || 0) + score;
-    }
-
-    function buildRankTable(title, scores) {
-      var entries = Object.keys(scores).map(function(k) {
-        return { name: k, score: scores[k] };
-      }).sort(function(a, b) { return b.score - a.score; });
-
+    function buildRankTable(title, rows) {
       var div = document.createElement('div');
       div.className = 'ranking-section';
-      if (entries.length === 0) {
+      if (rows.length === 0) {
         div.innerHTML = '<h3>' + Storage.esc(title) + '</h3><p style="color:var(--text-muted)">データなし</p>';
         return div;
       }
-
-      var rows = '';
-      var rank = 1, prevScore = null;
-      entries.forEach(function(e, i) {
-        if (prevScore !== null && e.score !== prevScore) rank = i + 1;
-        rows += '<tr><td>' + rank + '</td><td>' + Storage.esc(e.name) + '</td><td>' + Storage.esc(String(e.score)) + '</td></tr>';
-        prevScore = e.score;
-      });
-
+      var trs = rows.map(function(r) {
+        return '<tr><td>' + Storage.esc(String(r.rank)) + '</td><td>' + Storage.esc(r.name) +
+               '</td><td>' + Storage.esc(String(r.score)) + '</td></tr>';
+      }).join('');
       div.innerHTML = '<h3>' + Storage.esc(title) + '</h3>' +
         '<table class="rank-table"><tr><th>順位</th><th>選手名</th><th>得点</th></tr>' +
-        rows + '</table>';
+        trs + '</table>';
       return div;
     }
 
     document.getElementById('btnDownloadHtml').addEventListener('click', function() {
       if (!rankingContainer.querySelector('.ranking-section')) {
-        alert('大会データまたはCSVを読み込んでから順位を表示してください。');
+        alert('大会データを読み込んでから順位を表示してください。');
         return;
       }
       var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
