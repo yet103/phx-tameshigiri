@@ -20,6 +20,7 @@
 <script src="courts.js"></script>
 <script src="route.js"></script>
 <script src="outbox.js"></script>
+<script src="techpicker.js"></script>
 <script>
   var results = document.getElementById('results');
   var passed = 0, failed = 0;
@@ -593,6 +594,40 @@
     assert('roundOf: 2桁の巡目', Courts.roundOf({ order: 'A-男子-10-2' }), 10);
     assert('roundOf: order が無くても落ちない', Courts.roundOf({}), 1);
     assert('roundOf: order が文字列でなくても落ちない', Courts.roundOf({ order: 5 }), 1);
+
+    var h2tp = document.createElement('h2');
+    h2tp.textContent = 'techpicker.js';
+    results.appendChild(h2tp);
+
+    // select: 未選択なら末尾に追加（最大3）、選択済みならタップで外して後ろを詰める
+    assert('select: 空の state に1つ追加', TechPicker.select([], '真'), ['真']);
+    assert('select: 2つ目は末尾に付く',
+      TechPicker.select(['真'], '水月'), ['真', '水月']);
+    assert('select: 3つ目まで入る',
+      TechPicker.select(['真', '水月'], '四方'), ['真', '水月', '四方']);
+    assert('select: 4つ目は無視される',
+      TechPicker.select(['真', '水月', '四方'], '夢想返し'), ['真', '水月', '四方']);
+    assert('select: 選択済みをもう一度選ぶと外れて後ろが詰まる',
+      TechPicker.select(['真', '水月', '四方'], '水月'), ['真', '四方']);
+    assert('select: 元の state を破壊しない', (function() {
+      var st = ['真', '水月'];
+      TechPicker.select(st, '四方');
+      return st;
+    })(), ['真', '水月']);
+    assert('select: state が null でも落ちない', TechPicker.select(null, '真'), ['真']);
+
+    assert('toArray: 未選択は空文字で3枠', TechPicker.toArray([]), ['', '', '']);
+    assert('toArray: 2つなら3枠目が空文字',
+      TechPicker.toArray(['真', '水月']), ['真', '水月', '']);
+    assert('toArray: 3つはそのまま',
+      TechPicker.toArray(['真', '水月', '四方']), ['真', '水月', '四方']);
+    assert('toArray: null は空3枠', TechPicker.toArray(null), ['', '', '']);
+    assert('fromArray: 空文字を落として詰める',
+      TechPicker.fromArray(['真', '', '四方']), ['真', '四方']);
+    assert('fromArray: 全部空なら空配列', TechPicker.fromArray(['', '', '']), []);
+    assert('fromArray: null は空配列', TechPicker.fromArray(null), []);
+    assert('toArray → fromArray → toArray で往復する',
+      TechPicker.toArray(TechPicker.fromArray(['真', '', '四方'])), ['真', '四方', '']);
 
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';
