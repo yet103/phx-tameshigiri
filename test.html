@@ -264,6 +264,10 @@
     assert('roundOf: 空のorderは1', Courts.roundOf({ order: '' }), 1);
     assert('roundOf: 不正形式は1', Courts.roundOf({ order: 'A-男子-1' }), 1);
     assert('roundOf: nullでも落ちない', Courts.roundOf(null), 1);
+    assert('roundOf: コート名に - を含む順番は解析しない', Courts.roundOf({ order: 'A-1-男子-2-2' }), 1);
+    assert('roundOf: 2桁の巡目', Courts.roundOf({ order: 'A-男子-10-2' }), 10);
+    assert('roundOf: order が無くても落ちない', Courts.roundOf({}), 1);
+    assert('roundOf: order が文字列でなくても落ちない', Courts.roundOf({ order: 5 }), 1);
 
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';

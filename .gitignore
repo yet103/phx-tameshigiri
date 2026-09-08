@@ -26,3 +26,7 @@ server/data/
 
 # Brainstorm mockups (visual companion)
 .superpowers/
+
+# Browser-downloaded CSVs (repo root)
+/data_*.csv
+/test_*.csv
