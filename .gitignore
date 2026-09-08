@@ -23,3 +23,6 @@ package-lock.json
 
 # Server data
 server/data/
+
+# Brainstorm mockups (visual companion)
+.superpowers/
