@@ -15,9 +15,11 @@ var Present = (function() {
   var catIndex = 0;
   var data = null;
   var lastFetchedAt = null;
+  var lastAttemptAt = null;
   var lastUpdatedAt = null;
   var rendered = false;
   var invalid = false;
+  var fetchError = false;
   var busy = false;
   var pendingRefresh = false;
   var tokenSeq = 0;
@@ -68,23 +70,13 @@ var Present = (function() {
     }
   }
 
-  function showFetchError() {
-    // まだ一度も描画できていない状態での通信失敗。前回表示がないので専用メッセージを出す。
-    if (!elScreen) return;
-    elScreen.textContent = '';
-    if (elHint) elHint.textContent = '';
-    var err = document.createElement('div');
-    err.className = 'present-error';
-    err.textContent = '順位を取得できませんでした。通信を確認してください。';
-    elScreen.appendChild(err);
-  }
-
   function setInvalid() {
     // 404/400 はトークンが無効と確定しているので、ポーリングを止めて叩き続けない。
     invalid = true;
     rendered = false;
     lastUpdatedAt = null;
     stopTimer();
+    if (elStatus) elStatus.textContent = '';
     render();
   }
 
@@ -112,6 +104,7 @@ var Present = (function() {
       return;
     }
     busy = true;
+    lastAttemptAt = new Date();
     var mySeq = tokenSeq;
     var result = await Api.fetchSharedRanking(token);
     if (mySeq !== tokenSeq) {
@@ -123,6 +116,8 @@ var Present = (function() {
 
     if (result.ok) {
       invalid = false;
+      fetchError = false;
+      if (!timerId) startTimer();
       data = result.data;
       lastFetchedAt = new Date();
       if (elStatus) elStatus.textContent = hhmm(lastFetchedAt) + ' 時点';
@@ -142,8 +137,9 @@ var Present = (function() {
     } else if (result.status === 400 || result.status === 404) {
       setInvalid();
     } else if (!rendered) {
+      fetchError = true;
       if (elStatus) elStatus.textContent = '取得できませんでした';
-      showFetchError();
+      render();
     } else if (elStatus) {
       elStatus.textContent = '更新できませんでした（前回 ' +
         (lastFetchedAt ? hhmm(lastFetchedAt) : '—') + ' 時点）';
@@ -165,6 +161,14 @@ var Present = (function() {
       err.className = 'present-error';
       err.textContent = 'このリンクは無効です';
       elScreen.appendChild(err);
+      return;
+    }
+
+    if (fetchError) {
+      var fetchErr = document.createElement('div');
+      fetchErr.className = 'present-error';
+      fetchErr.textContent = '順位を取得できませんでした。通信を確認してください。';
+      elScreen.appendChild(fetchErr);
       return;
     }
 
@@ -459,8 +463,8 @@ var Present = (function() {
       if (document.hidden) return;
       if (invalid) return;
       if (mode !== 'board') return;
-      // 直近取得から5秒未満なら floor（可視化のたびに叩き過ぎない）
-      if (lastFetchedAt && (new Date() - lastFetchedAt) < 5000) return;
+      // 直近の取得試行から5秒未満なら floor（可視化のたびに叩き過ぎない）
+      if (lastAttemptAt && (new Date() - lastAttemptAt) < 5000) return;
       load();
     });
 
@@ -468,9 +472,11 @@ var Present = (function() {
       stopTimer();
       tokenSeq++;
       invalid = false;
+      fetchError = false;
       rendered = false;
       lastUpdatedAt = null;
       lastFetchedAt = null;
+      lastAttemptAt = null;
       busy = false;
       pendingRefresh = false;
       data = null;

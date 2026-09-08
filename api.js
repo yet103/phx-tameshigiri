@@ -326,13 +326,8 @@ var Api = (function() {
   async function loadSharedRanking(token) {
     // GET /api/links/:token/ranking（無認証）
     // 戻り値: loadRanking と同じ { event, rankings } | null
-    try {
-      var res = await fetch('/api/links/' + encodeURIComponent(token) + '/ranking');
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      return null;
-    }
+    var r = await fetchSharedRanking(token);
+    return r.ok ? r.data : null;
   }
 
   async function fetchSharedRanking(token) {

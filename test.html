@@ -415,10 +415,12 @@
 
     assert('fetchSharedRanking は成功時に ok と data を返す',
       (await Api.fetchSharedRanking(link1.token)).ok, true);
+    var fetch404 = await Api.fetchSharedRanking('zzzzzzzz');
     assert('fetchSharedRanking は存在しないトークンで status 404',
-      await Api.fetchSharedRanking('zzzzzzzz'), { ok: false, status: 404 });
+      [fetch404.ok, fetch404.status], [false, 404]);
+    var fetch400 = await Api.fetchSharedRanking('../x');
     assert('fetchSharedRanking は不正なトークンで status 400',
-      await Api.fetchSharedRanking('../x'), { ok: false, status: 400 });
+      [fetch400.ok, fetch400.status], [false, 400]);
 
     assert('不正なトークンは null',
       await Api.loadShareLink('../../events/' + shareEvent.id), null);

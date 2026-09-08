@@ -15,6 +15,7 @@ var Share = (function() {
   var token = '';
   var lastUpdatedAt = null;
   var lastFetchedAt = null;
+  var lastAttemptAt = null;
   var timerId = null;
   var busy = false;
   var pendingRefresh = false;
@@ -76,6 +77,7 @@ var Share = (function() {
     stopTimer();
     if (elHead) elHead.textContent = '';
     if (elStatus) elStatus.textContent = '';
+    document.title = '順位';
     if (elBody) {
       elBody.textContent = '';
       var div = document.createElement('div');
@@ -87,7 +89,12 @@ var Share = (function() {
 
   function showFetchError() {
     // まだ一度も描画できていない状態での通信失敗。前回表示がないので専用メッセージを出す。
-    if (elStatus) elStatus.textContent = '取得できませんでした';
+    if (elHead) elHead.textContent = '';
+    if (elStatus) {
+      elStatus.className = 'share-status';
+      elStatus.textContent = '取得できませんでした';
+    }
+    document.title = '順位';
     if (elBody) {
       elBody.textContent = '';
       var div = document.createElement('div');
@@ -168,6 +175,7 @@ var Share = (function() {
       return;
     }
     busy = true;
+    lastAttemptAt = new Date();
     var mySeq = tokenSeq;
     var result = await Api.fetchSharedRanking(token);
     if (mySeq !== tokenSeq) {
@@ -180,6 +188,7 @@ var Share = (function() {
     if (result.ok) {
       var isFirstSuccess = !rendered;
       invalid = false;
+      if (!timerId) startTimer();
       lastFetchedAt = new Date();
       if (elStatus) {
         elStatus.className = 'share-status';
@@ -234,8 +243,8 @@ var Share = (function() {
     document.addEventListener('visibilitychange', function() {
       if (document.hidden) return;
       if (invalid) return;
-      // 直近取得から5秒未満なら floor（可視化のたびに叩き過ぎない）
-      if (lastFetchedAt && (new Date() - lastFetchedAt) < 5000) return;
+      // 直近の取得試行から5秒未満なら floor（可視化のたびに叩き過ぎない）
+      if (lastAttemptAt && (new Date() - lastAttemptAt) < 5000) return;
       refresh();
     });
 
@@ -246,6 +255,7 @@ var Share = (function() {
       rendered = false;
       lastUpdatedAt = null;
       lastFetchedAt = null;
+      lastAttemptAt = null;
       busy = false;
       pendingRefresh = false;
       token = decodeToken();
