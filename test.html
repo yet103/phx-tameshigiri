@@ -375,6 +375,48 @@
     assert('順位に result は含まれない', ranking.rankings.male[0].result, undefined);
     assert('存在しない大会の順位は null', await Api.loadRanking('nosuchevent'), null);
     await Api.deleteEvent(rankEvent.id);
+
+    // --- 共有リンク ---
+    var shareEvent = await Api.saveEvent({ name: '共有テスト', date: '2026-03-02', venue: '', players: [] });
+    var shareCsv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
+                   '甲,A-男子-1-1,真,,,25,,,1    \n' +
+                   '乙,A-男子-1-2,真,,,50,,,1    \n' +
+                   '丙,A-男子-1-3,真,,,10,,,1    \n' +
+                   '甲,A-男子-2-1,真,,,25,,,1    \n';
+    await Api.importCsv(shareEvent.id, shareCsv, 'replace');
+
+    var link1 = await Api.createShareLink(shareEvent.id);
+    assert('createShareLink はトークンを返す', typeof link1.token, 'string');
+    assert('トークンは8文字', link1.token.length, 8);
+    var link2 = await Api.createShareLink(shareEvent.id);
+    assert('createShareLink は冪等（同じトークンを返す）', link2.token, link1.token);
+    assert('トークンは大会に保存される',
+      (await Api.loadEvent(shareEvent.id)).shareToken, link1.token);
+
+    var linkInfo = await Api.loadShareLink(link1.token);
+    assert('loadShareLink は対象種別を返す', linkInfo.targetType, 'event');
+    assert('loadShareLink は対象の大会IDを返す', linkInfo.targetId, shareEvent.id);
+    assert('loadShareLink は作成日時を返す', typeof linkInfo.createdAt, 'string');
+
+    var shared = await Api.loadSharedRanking(link1.token);
+    assert('loadSharedRanking は氏名合算と同点同順位（1,1,3）を返す',
+      shared.rankings.male,
+      [ { rank: 1, name: '甲', score: 50 },
+        { rank: 1, name: '乙', score: 50 },
+        { rank: 3, name: '丙', score: 10 } ]);
+    assert('共有の順位の項目も rank/name/score だけ',
+      Object.keys(shared.rankings.male[0]), ['rank', 'name', 'score']);
+    assert('共有の順位は大会名を含む', shared.event.name, '共有テスト');
+
+    assert('不正なトークンは null',
+      await Api.loadShareLink('../../events/' + shareEvent.id), null);
+    assert('不正なトークンの順位も null',
+      await Api.loadSharedRanking('../../events/' + shareEvent.id), null);
+    assert('存在しないトークンは null', await Api.loadShareLink('zzzzzzzz'), null);
+
+    await Api.deleteEvent(shareEvent.id);
+    assert('大会を削除するとリンクも消える', await Api.loadShareLink(link1.token), null);
+    assert('大会を削除すると共有の順位も消える', await Api.loadSharedRanking(link1.token), null);
   }
 
   (async function() {

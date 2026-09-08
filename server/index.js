@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3457;
@@ -11,11 +12,13 @@ const DATA_DIR = path.join(__dirname, 'data');
 const EVENTS_DIR = path.join(DATA_DIR, 'events');
 const TECHNIQUES_DIR = path.join(DATA_DIR, 'techniques');
 const HISTORY_DIR = path.join(DATA_DIR, 'history');
+const LINKS_DIR = path.join(DATA_DIR, 'links');
 
 // 起動時にディレクトリ自動生成
 fs.mkdirSync(EVENTS_DIR, { recursive: true });
 fs.mkdirSync(TECHNIQUES_DIR, { recursive: true });
 fs.mkdirSync(HISTORY_DIR, { recursive: true });
+fs.mkdirSync(LINKS_DIR, { recursive: true });
 
 // ID生成
 function generateId() {
@@ -361,6 +364,18 @@ app.delete('/api/events/:id', (req, res) => {
     const historyPath = path.join(HISTORY_DIR, `${req.params.id}.json`);
     
     if (fs.existsSync(eventPath)) {
+      // 共有リンクを孤児にしない。残すと消えた大会を指すトークンが生き続ける。
+      try {
+        const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+        if (isValidId(event.shareToken)) {
+          const linkPath = path.join(LINKS_DIR, `${event.shareToken}.json`);
+          if (fs.existsSync(linkPath)) {
+            fs.unlinkSync(linkPath);
+          }
+        }
+      } catch (e) {
+        // 大会ファイルが壊れていてもリンク削除の失敗で削除自体を止めない
+      }
       fs.unlinkSync(eventPath);
     }
     if (fs.existsSync(historyPath)) {
@@ -880,6 +895,92 @@ app.post('/api/events/:id/history', (req, res) => {
     
     writeJsonAtomic(historyPath, data);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Share Link API ──
+// GET 系は参加者が無認証で開く（share.html / present.html）。認証を足す際も保護しないこと。
+// トークンは必ず isValidId で検証してから path.join する
+// （検証せずに join するとパストラバーサルでデータ全体が読める）。
+
+// POST /api/links : 共有トークンの発行。大会ごとに1つで冪等。
+app.post('/api/links', (req, res) => {
+  try {
+    const body = req.body || {};
+    if (body.targetType !== 'event') {
+      return res.status(400).json({ error: '不正な対象種別です' });
+    }
+    if (!isValidId(body.targetId)) {
+      return res.status(400).json({ error: '不正な大会IDです' });
+    }
+    const eventPath = path.join(EVENTS_DIR, `${body.targetId}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+
+    // 発行済みならそのまま返す。リンクを配ったあとに変わると困る。
+    if (isValidId(event.shareToken) &&
+        fs.existsSync(path.join(LINKS_DIR, `${event.shareToken}.json`))) {
+      return res.json({ token: event.shareToken });
+    }
+
+    // 6バイトの base64url は8文字で、ID_PATTERN（英数字・- ・_）に収まる。
+    const token = crypto.randomBytes(6).toString('base64url');
+    writeJsonAtomic(path.join(LINKS_DIR, `${token}.json`), {
+      token: token,
+      targetType: 'event',
+      targetId: body.targetId,
+      createdAt: new Date().toISOString()
+    });
+
+    event.shareToken = token;
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ token: token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/links/:token : トークンの参照先（無認証）
+app.get('/api/links/:token', (req, res) => {
+  try {
+    if (!isValidId(req.params.token)) {
+      return res.status(400).json({ error: '不正なトークンです' });
+    }
+    const linkPath = path.join(LINKS_DIR, `${req.params.token}.json`);
+    if (!fs.existsSync(linkPath)) {
+      return res.status(404).json({ error: 'リンクが見つかりません' });
+    }
+    res.json(JSON.parse(fs.readFileSync(linkPath, 'utf-8')));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/links/:token/ranking : 共有リンク越しの順位（無認証）
+// 返すのは computeRanking の結果だけで、○×や order といった生データは含まれない。
+app.get('/api/links/:token/ranking', (req, res) => {
+  try {
+    if (!isValidId(req.params.token)) {
+      return res.status(400).json({ error: '不正なトークンです' });
+    }
+    const linkPath = path.join(LINKS_DIR, `${req.params.token}.json`);
+    if (!fs.existsSync(linkPath)) {
+      return res.status(404).json({ error: 'リンクが見つかりません' });
+    }
+    const link = JSON.parse(fs.readFileSync(linkPath, 'utf-8'));
+    if (link.targetType !== 'event' || !isValidId(link.targetId)) {
+      return res.status(404).json({ error: 'リンクが見つかりません' });
+    }
+    const eventPath = path.join(EVENTS_DIR, `${link.targetId}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    res.json(computeRanking(JSON.parse(fs.readFileSync(eventPath, 'utf-8'))));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

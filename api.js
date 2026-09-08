@@ -293,6 +293,48 @@ var Api = (function() {
     }
   }
 
+  async function createShareLink(eventId) {
+    // POST /api/links
+    // 戻り値: { token } | null（400/404/通信失敗）
+    // 冪等。大会に shareToken があればそれをそのまま返す。
+    try {
+      var res = await fetch('/api/links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetType: 'event', targetId: eventId })
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function loadShareLink(token) {
+    // GET /api/links/:token（無認証）
+    // 戻り値: { token, targetType, targetId, createdAt } | null
+    // 不正・失効したトークンは null。呼び出し元は「このリンクは無効です」を出す。
+    try {
+      var res = await fetch('/api/links/' + encodeURIComponent(token));
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function loadSharedRanking(token) {
+    // GET /api/links/:token/ranking（無認証）
+    // 戻り値: loadRanking と同じ { event, rankings } | null
+    try {
+      var res = await fetch('/api/links/' + encodeURIComponent(token) + '/ranking');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
   return {
     listEvents: listEvents,
     loadEvent: loadEvent,
@@ -310,6 +352,9 @@ var Api = (function() {
     resetTechniques: resetTechniques,
     loadHistory: loadHistory,
     addHistory: addHistory,
-    loadRanking: loadRanking
+    loadRanking: loadRanking,
+    createShareLink: createShareLink,
+    loadShareLink: loadShareLink,
+    loadSharedRanking: loadSharedRanking
   };
 })();
