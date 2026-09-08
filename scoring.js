@@ -73,6 +73,12 @@ var Scoring = (function() {
     return rows;
   }
 
+  // result が現在の技数に対して復元可能かどうか
+  // result は技ごとに5文字。技の数が変わると復元できない
+  function canDecode(result, techCount) {
+    return !!result && result.length === techCount * 5;
+  }
+
   // 行データからresultエンコード文字列を生成
   function encodeResult(rows) {
     var str = '';
@@ -92,6 +98,7 @@ var Scoring = (function() {
     calcStrikeScore: calcStrikeScore,
     calcTotalScore: calcTotalScore,
     decodeResult: decodeResult,
-    encodeResult: encodeResult
+    encodeResult: encodeResult,
+    canDecode: canDecode
   };
 })();

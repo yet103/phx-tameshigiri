@@ -562,6 +562,13 @@
     // 破図味(男): 20+4+4+2 = 30、夢想返し: 13+5 = 18 + 技術点3 = 21 → 合計51
     assert('calcTotalScore', Scoring.calcTotalScore(rows, false), 51);
 
+    // canDecode: result は技ごとに5文字。技の数が変わると復元できない
+    assert('canDecode 空のresult → false', Scoring.canDecode('', 3), false);
+    assert('canDecode ちょうどの長さ(技数3→15文字) → true', Scoring.canDecode('123456789012345', 3), true);
+    assert('canDecode 短い → false', Scoring.canDecode('1234', 3), false);
+    assert('canDecode 長い → false', Scoring.canDecode('1234567890123456', 3), false);
+    assert('canDecode 技数1で5文字 → true', Scoring.canDecode('12345', 1), true);
+
     var h2st = document.createElement('h2');
     h2st.textContent = 'storage.js';
     results.appendChild(h2st);

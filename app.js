@@ -5,6 +5,8 @@ var App = (function() {
   var visiblePlayers = [];   // 選択中コートで絞り込んだ選手（巡回・一覧の対象）
   var currentCourt = '';     // '' なら全コート
   var currentIndex = -1;  // 選択中の選手インデックス
+  var gridRestorable = true; // 表示中のグリッドが player.result から復元できたか
+  var gridDirty = false;     // 復元できなかったグリッドを、実際に採点し直したか
   var timerSec = 300;     // タイマー残り秒数
   var timerRunning = false;
   var timerInterval = null;
@@ -230,7 +232,7 @@ var App = (function() {
       selectPlayer(0);
     } else {
       scoreTableBody.innerHTML = '';
-      totalScoreDisplay.textContent = '合計: 0点';
+      setTotalDisplay(0);
       playerNameLabel.textContent = players.length > 0
         ? '（このコートに選手がいません）'
         : '（選手がいません）';
@@ -291,7 +293,7 @@ var App = (function() {
       currentIndex = -1;
       refreshCourtList();
       scoreTableBody.innerHTML = '';
-      totalScoreDisplay.textContent = '合計: 0点';
+      setTotalDisplay(0);
       playerNameLabel.textContent = '（大会を選択してください）';
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
@@ -382,11 +384,13 @@ var App = (function() {
   // --- スコアグリッド描画 ---
   function renderScoreGrid(player) {
     scoreTableBody.innerHTML = '';
+    gridDirty = false;
     var techNames = [player.tech1, player.tech2, player.tech3].filter(Boolean);
     if (techNames.length === 0) {
       // 技が未入力（進行タブでまだ入力されていない二巡目の選手など）。
       // 空のグリッドから合計0を計算して上書き保存すると既存の得点が消えるので、
       // 表示だけ既存の得点にして、選手データにも保存キューにも触れない。
+      gridRestorable = false;
       var trEmpty = document.createElement('tr');
       var tdEmpty = document.createElement('td');
       tdEmpty.colSpan = 7;
@@ -394,12 +398,26 @@ var App = (function() {
       tdEmpty.textContent = '技が未入力です。運営画面の進行タブで技を入力してください。';
       trEmpty.appendChild(tdEmpty);
       scoreTableBody.appendChild(trEmpty);
-      totalScoreDisplay.textContent = '合計: ' + (player.score || 0) + '点';
+      setTotalDisplay(player.score || 0);
       return;
     }
-    var expectedLen = techNames.length * 5;
-    var validResult = player.result && player.result.length === expectedLen;
-    var decoded = validResult ? Scoring.decodeResult(player.result, techNames.length) : null;
+    gridRestorable = Scoring.canDecode(player.result, techNames.length);
+    var decoded = gridRestorable ? Scoring.decodeResult(player.result, techNames.length) : null;
+
+    if (!decoded) {
+      // result を技内訳へ分解できない（技の再割当てなどで長さが噛み合わなくなった
+      // 既採点者など）。空欄のグリッドから合計0を計算して上書き保存してしまうと、
+      // ここで選手を切り替えるだけで既存の得点が消える。採点し直すまでは
+      // 選手データにも保存キューにも触れない（saveCurrentState 側で抑止）。
+      var trNotice = document.createElement('tr');
+      var tdNotice = document.createElement('td');
+      tdNotice.colSpan = 7;
+      tdNotice.className = 'score-notice';
+      tdNotice.textContent = '内訳を復元できません（技が変更されています）。' +
+        '採点し直すと現在の得点 ' + (player.score || 0) + '点 は置き換わります。';
+      trNotice.appendChild(tdNotice);
+      scoreTableBody.appendChild(trNotice);
+    }
 
     for (var i = 0; i < techNames.length; i++) {
       var rowData = decoded ? decoded[i] : { values: ['','','',''], techPoint: '' };
@@ -409,11 +427,7 @@ var App = (function() {
     if (decoded) {
       updateTotal();
     } else {
-      // result を技内訳へ分解できない（技の再割当てなどで長さが噛み合わなくなった
-      // 既採点者など）。空欄のグリッドから合計0を計算して上書き保存してしまうと、
-      // ここで選手を切り替えるだけで既存の得点が消える。表示だけ既存の得点にして、
-      // 実際に採点し直すまでは選手データにも保存キューにも触れない。
-      totalScoreDisplay.textContent = '合計: ' + (player.score || 0) + '点';
+      setTotalDisplay(player.score || 0);
     }
   }
 
@@ -501,12 +515,28 @@ var App = (function() {
 
   function pad(n) { return n < 10 ? '0' + n : String(n); }
 
+  function setTotalDisplay(n) {
+    totalScoreDisplay.textContent = '合計: ' + n + '点';
+  }
+
+  // 復元できないグリッドへ最初に触れたときだけ、既存の得点を置き換える旨を確認する。
+  // OK なら gridDirty を立てて以降は毎回聞かない。キャンセルなら呼び出し元は何もしない。
+  function confirmReplaceIfNeeded() {
+    if (gridRestorable || gridDirty) { gridDirty = true; return true; }
+    var p = visiblePlayers[currentIndex];
+    var n = p ? (p.score || 0) : 0;
+    if (!confirm('記録済みの ' + n + '点 を、いま入力する内容で置き換えます。よろしいですか？')) return false;
+    gridDirty = true;
+    return true;
+  }
+
   // --- 採点インタラクション ---
   function onStrikeClick(e) {
     var td = e.currentTarget;
     if (td.classList.contains('disabled')) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
-    
+    if (!confirmReplaceIfNeeded()) return;
+
     var current = td.dataset.value || '';
     var next = current === '' ? '○' : current === '○' ? '×' : '';
     td.dataset.value = next;
@@ -553,12 +583,12 @@ var App = (function() {
 
   function updateTotal() {
     var total = 0;
-    var rows = scoreTableBody.querySelectorAll('tr');
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     for (var i = 0; i < rows.length; i++) {
       var sc = rows[i].querySelector('.score-col');
       if (sc) total += parseFloat(sc.textContent) || 0;
     }
-    totalScoreDisplay.textContent = '合計: ' + total + '点';
+    setTotalDisplay(total);
     if (visiblePlayers[currentIndex] !== undefined) {
       visiblePlayers[currentIndex].score = total;
       updatePlayerListScore(currentIndex, total);
@@ -568,7 +598,10 @@ var App = (function() {
   // 現在の採点内容をキューに積む。通信は待たない（Outboxのワーカーが送る）。
   function saveCurrentState() {
     if (currentIndex < 0 || !visiblePlayers[currentIndex] || !currentEvent) return;
-    var rows = scoreTableBody.querySelectorAll('tr');
+    // 内訳を復元できない選手は、採点し直すまで保存しない
+    // （空のグリッドを送ると内訳が消え、次回 0 点で上書きされる）
+    if (!gridRestorable && !gridDirty) return;
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var rowDataArr = [];
     for (var i = 0; i < rows.length; i++) {
       var values = [];
@@ -592,7 +625,8 @@ var App = (function() {
 
   function setAllSuccess() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
-    var rows = scoreTableBody.querySelectorAll('tr');
+    if (!confirmReplaceIfNeeded()) return;
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var p = visiblePlayers[currentIndex];
     for (var i = 0; i < rows.length; i++) {
       for (var s = 0; s < 4; s++) {
@@ -610,7 +644,8 @@ var App = (function() {
 
   function setAllFail() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
-    var rows = scoreTableBody.querySelectorAll('tr');
+    if (!confirmReplaceIfNeeded()) return;
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var p = visiblePlayers[currentIndex];
     for (var i = 0; i < rows.length; i++) {
       for (var s = 0; s < 4; s++) {
