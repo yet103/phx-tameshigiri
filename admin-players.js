@@ -59,6 +59,13 @@
     list.className = 'list';
     container.appendChild(list);
 
+    var fab = document.createElement('button');
+    fab.type = 'button';
+    fab.className = 'fab';
+    fab.textContent = '＋';
+    fab.addEventListener('click', function() { openAddSheet(ctx); });
+    container.appendChild(fab);
+
     // コートを切り替えたらチップと一覧を描き直す
     function onCourtChange(court) {
       currentCourt = court;
@@ -126,6 +133,287 @@
     row.appendChild(body);
     row.appendChild(score);
     return row;
+  }
+
+  // --- フォーム部品（追加・編集で共用） ---
+  // 戻り値: { el, read, reset }
+  //   el    : シートの body に入れる DOM
+  //   read(): { name, court, isFemale, isNewFace, tech1, tech2, tech3 } | null
+  //           （不正なら alert を出して null）
+  //   reset(): 名前と技だけ空にする（コート・性別は保つ。受付を連続処理するため）
+  function buildPlayerForm(ctx, player) {
+    var el = document.createElement('div');
+
+    // 既存のコート一覧（未分類はサーバーが受け付けないので候補に出さない）
+    var courts = Courts.listFrom(ctx.players).filter(function(c) {
+      return c !== Courts.UNASSIGNED;
+    });
+    var court = player ? Courts.courtOf(player) : (courts[0] || '');
+    if (court === Courts.UNASSIGNED) court = courts[0] || '';
+    if (court && courts.indexOf(court) === -1) courts.push(court);
+
+    var isFemale = player ? !!player.isFemale : false;
+    var techState = player
+      ? TechPicker.fromArray([player.tech1, player.tech2, player.tech3])
+      : [];
+
+    // 名前
+    var fName = document.createElement('div');
+    fName.className = 'field';
+    var lName = document.createElement('label');
+    lName.textContent = '名前';
+    var inName = document.createElement('input');
+    inName.type = 'text';
+    inName.value = player ? (player.name || '') : '';
+    fName.appendChild(lName);
+    fName.appendChild(inName);
+    el.appendChild(fName);
+
+    // コート（セグメント＋「＋」で新しいコート名）
+    var fCourt = document.createElement('div');
+    fCourt.className = 'field';
+    var lCourt = document.createElement('label');
+    lCourt.textContent = 'コート';
+    var segCourt = document.createElement('div');
+    segCourt.className = 'seg';
+    fCourt.appendChild(lCourt);
+    fCourt.appendChild(segCourt);
+    el.appendChild(fCourt);
+
+    function renderCourtSeg() {
+      segCourt.innerHTML = '';
+      courts.forEach(function(c) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = (c === court) ? 'on' : '';
+        b.textContent = c;
+        b.addEventListener('click', function() {
+          court = c;
+          renderCourtSeg();
+        });
+        segCourt.appendChild(b);
+      });
+      var add = document.createElement('button');
+      add.type = 'button';
+      add.textContent = '＋';
+      add.addEventListener('click', function() {
+        var name = prompt('新しいコート名を入力してください（例: D）');
+        if (name === null) return;
+        name = name.trim();
+        if (!name) { alert('コート名を入力してください。'); return; }
+        // order は「コート-性別-巡目-番号」。コート名に - を含めると解析できなくなる。
+        if (name.indexOf('-') >= 0) { alert('コート名に「-」は使えません。'); return; }
+        if (name === Courts.UNASSIGNED) {
+          alert('「' + Courts.UNASSIGNED + '」はコート名に使えません。');
+          return;
+        }
+        if (name.length > 32) { alert('コート名は32文字までです。'); return; }
+        if (courts.indexOf(name) === -1) courts.push(name);
+        court = name;
+        renderCourtSeg();
+      });
+      segCourt.appendChild(add);
+    }
+    renderCourtSeg();
+
+    // 性別
+    var fSex = document.createElement('div');
+    fSex.className = 'field';
+    var lSex = document.createElement('label');
+    lSex.textContent = '性別';
+    var segSex = document.createElement('div');
+    segSex.className = 'seg';
+    fSex.appendChild(lSex);
+    fSex.appendChild(segSex);
+    el.appendChild(fSex);
+
+    function renderSexSeg() {
+      segSex.innerHTML = '';
+      [['男子', false], ['女子', true]].forEach(function(pair) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = (isFemale === pair[1]) ? 'on' : '';
+        b.textContent = pair[0];
+        b.addEventListener('click', function() {
+          isFemale = pair[1];
+          renderSexSeg();
+        });
+        segSex.appendChild(b);
+      });
+    }
+    renderSexSeg();
+
+    // 新人
+    var fNew = document.createElement('div');
+    fNew.className = 'field';
+    var toggle = document.createElement('label');
+    toggle.className = 'toggle';
+    var chkNew = document.createElement('input');
+    chkNew.type = 'checkbox';
+    chkNew.checked = player ? !!player.isNewFace : false;
+    var txtNew = document.createElement('span');
+    txtNew.textContent = '新人';
+    toggle.appendChild(chkNew);
+    toggle.appendChild(txtNew);
+    fNew.appendChild(toggle);
+    el.appendChild(fNew);
+
+    // 技
+    var fTech = document.createElement('div');
+    fTech.className = 'field';
+    var lTech = document.createElement('label');
+    lTech.textContent = '技（タップして一覧から順に選ぶ）';
+    var chips = document.createElement('div');
+    chips.className = 'chips';
+    fTech.appendChild(lTech);
+    fTech.appendChild(chips);
+    el.appendChild(fTech);
+
+    function renderTechChips() {
+      TechPicker.renderChips(chips, techState, function() {
+        if (!techCache) {
+          alert('技術リストを取得できませんでした。技以外は保存できます。');
+          return;
+        }
+        TechPicker.open({
+          techniques: techCache,
+          initial: techState,
+          onChange: function(next) {
+            techState = next;
+            renderTechChips();
+          },
+          onClose: function(next) {
+            techState = next;
+            renderTechChips();
+          }
+        });
+      });
+    }
+    renderTechChips();
+
+    function read() {
+      var name = inName.value.trim();
+      if (!name) { alert('名前を入力してください。'); return null; }
+      if (!court) { alert('コートを選んでください。「＋」で新しいコートを作れます。'); return null; }
+      var t = TechPicker.toArray(techState);
+      return {
+        name: name,
+        court: court,
+        isFemale: isFemale,
+        isNewFace: chkNew.checked,
+        tech1: t[0],
+        tech2: t[1],
+        tech3: t[2]
+      };
+    }
+
+    function reset() {
+      inName.value = '';
+      techState = [];
+      renderTechChips();
+      inName.focus();
+    }
+
+    return { el: el, read: read, reset: reset };
+  }
+
+  // シートの外枠。中身と操作ボタンを渡す。
+  // onClose はシートがどの経路で閉じても（✕・外側タップ・close()）1回だけ呼ばれる。
+  // 戻り値: close 関数
+  function openSheet(titleText, bodyEl, buttons, onClose) {
+    var overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    var sheet = document.createElement('div');
+    sheet.className = 'sheet';
+
+    var head = document.createElement('div');
+    head.className = 'sheet-head';
+    var title = document.createElement('span');
+    title.textContent = titleText;
+    var btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'sheet-close';
+    btnClose.textContent = '✕';
+    head.appendChild(title);
+    head.appendChild(btnClose);
+
+    var body = document.createElement('div');
+    body.className = 'sheet-body';
+    body.appendChild(bodyEl);
+
+    var actions = document.createElement('div');
+    actions.className = 'sheet-actions';
+    buttons.forEach(function(b) { actions.appendChild(b); });
+
+    sheet.appendChild(head);
+    sheet.appendChild(body);
+    sheet.appendChild(actions);
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    var closed = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (onClose) onClose();
+    }
+    btnClose.addEventListener('click', close);
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) close();
+    });
+    return close;
+  }
+
+  // 追加フォーム
+  function openAddSheet(ctx) {
+    var form = buildPlayerForm(ctx, null);
+    var added = 0;
+
+    var btnSaveClose = document.createElement('button');
+    btnSaveClose.type = 'button';
+    btnSaveClose.className = 'btn';
+    btnSaveClose.textContent = '保存して閉じる';
+
+    var btnSaveNext = document.createElement('button');
+    btnSaveNext.type = 'button';
+    btnSaveNext.className = 'btn primary';
+    btnSaveNext.textContent = '保存して次を追加';
+
+    // どの経路で閉じても、追加した分があれば一覧へ反映する
+    var close = openSheet('選手を追加', form.el, [btnSaveClose, btnSaveNext], function() {
+      if (added > 0) Admin.reloadEvent();
+    });
+
+    // 追加は常に一巡目。二巡目の行は生成 API が作る（計画3）。
+    async function save() {
+      var data = form.read();
+      if (!data) return false;
+      data.round = 1;
+      btnSaveClose.disabled = true;
+      btnSaveNext.disabled = true;
+      var created = await Api.createPlayer(ctx.eventId, data);
+      btnSaveClose.disabled = false;
+      btnSaveNext.disabled = false;
+      if (!created) {
+        // 失敗してもシートは閉じない（入力を残す）
+        alert('選手を追加できませんでした。\n入力内容と通信を確認してください。');
+        return false;
+      }
+      added++;
+      Admin.toast(created.order + ' ' + created.name + ' を追加しました');
+      return true;
+    }
+
+    btnSaveClose.addEventListener('click', async function() {
+      if (!(await save())) return;
+      close();   // onClose が一覧を反映する
+    });
+
+    btnSaveNext.addEventListener('click', async function() {
+      if (!(await save())) return;
+      form.reset();   // コート・性別・新人は保つ
+    });
   }
 
   Admin.registerTab('players', { render: render });
