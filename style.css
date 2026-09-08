@@ -1,52 +1,5 @@
-/* ===== CSS変数（ライトテーマ デフォルト） ===== */
-:root {
-  --bg:           #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-header:    #e8e8f0;
-  --border:       #cccccc;
-  --text:         #222222;
-  --text-muted:   #666666;
-  --accent:       #2c5282;
-  --accent-text:  #ffffff;
-  --cell-success: #d4edda;
-  --cell-success-text: #155724;
-  --cell-fail:    #f8d7da;
-  --cell-fail-text:    #721c24;
-  --cell-disabled:#cccccc;
-  --timer-bg:     #c0392b;
-  --timer-text:   #ffffff;
-  --btn-success:  #27ae60;
-  --btn-fail:     #c0392b;
-  --btn-neutral:  #3498db;
-  --score-color:  #d35400;
-  --warn:         #b7791f;
-  --banner-text:  #ffffff;
-}
-
-/* ダークテーマ */
-[data-theme="dark"] {
-  --bg:           #1a1a2e;
-  --bg-secondary: #16213e;
-  --bg-header:    #2a2a4e;
-  --border:       #444466;
-  --text:         #e0e0ff;
-  --text-muted:   #9999bb;
-  --accent:       #4a90d9;
-  --accent-text:  #ffffff;
-  --cell-success: #1a5c2a;
-  --cell-success-text: #4ade80;
-  --cell-fail:    #5c1a1a;
-  --cell-fail-text:    #ff8888;
-  --cell-disabled:#333355;
-  --timer-bg:     #c0392b;
-  --timer-text:   #ffffff;
-  --btn-success:  #27ae60;
-  --btn-fail:     #c0392b;
-  --btn-neutral:  #2980b9;
-  --score-color:  #f1c40f;
-  --warn:         #f6ad55;
-  --banner-text:  #ffffff;
-}
+/* ===== 採点画面のレイアウト =====
+   色は theme.css の変数を使う。このファイル単体では読み込まないこと。 */
 
 /* ===== リセット & ベース ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -55,7 +8,7 @@ body {
   font-size: 14px;
   background: var(--bg);
   color: var(--text);
-  min-width: 768px;
+  min-width: 768px; /* 採点画面は意図的にタブレット専用。運営画面は admin.html 側 */
 }
 button {
   cursor: pointer;
