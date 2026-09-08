@@ -97,6 +97,7 @@ main { padding: 8px 12px 16px; }
   color: var(--text);
 }
 .row-body { flex: 1; min-width: 0; }
+.row button.row-body { background: transparent; color: inherit; text-align: left; min-height: 44px; border-radius: 0; }
 .row-main { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-sub { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-badge {
@@ -122,7 +123,8 @@ main { padding: 8px 12px 16px; }
   background: rgba(0, 0, 0, 0.45); display: flex; align-items: flex-end;
 }
 .sheet {
-  width: 100%; max-height: 92vh; display: flex; flex-direction: column;
+  /* vh はモバイルのURLバー分だけ大きく解決されるので % を使う */
+  width: 100%; max-height: 92%; display: flex; flex-direction: column;
   background: var(--bg); border-radius: 14px 14px 0 0; border-top: 2px solid var(--accent);
 }
 .sheet-head {
@@ -163,7 +165,8 @@ main { padding: 8px 12px 16px; }
 /* ===== TechPicker のボトムシート ===== */
 .tp-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.45); display: flex; align-items: flex-end; }
 .tp-sheet {
-  width: 100%; max-height: 80vh; display: flex; flex-direction: column;
+  /* vh はモバイルのURLバー分だけ大きく解決されるので % を使う */
+  width: 100%; max-height: 80%; display: flex; flex-direction: column;
   background: var(--bg); border-radius: 14px 14px 0 0; border-top: 2px solid var(--accent);
 }
 .tp-head {
@@ -186,10 +189,10 @@ main { padding: 8px 12px 16px; }
 
 /* ===== トースト ===== */
 #toast {
-  position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 60;
+  position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); z-index: 60;   /* FAB（右下 56px）に被らない高さ */
   max-width: 90vw; padding: 10px 16px; border-radius: 20px;
   background: var(--accent); color: var(--accent-text); font-size: 14px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
-/* #toast に display を指定しているので、hidden 属性を明示的に効かせる */
+/* hidden 属性は UA スタイルで display:none になるが、将来 #toast に display を足しても効くよう明示しておく */
 #toast[hidden] { display: none; }

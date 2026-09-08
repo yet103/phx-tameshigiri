@@ -73,7 +73,7 @@ Courts.courtOf(player) / listFrom(players) / filter(players, court) / UNASSIGNED
 
 ```javascript
 Admin.registerTab(name, def)   // def = { render: function(container, ctx) }（async 可）
-                               // ctx = { eventId, event, players }
+                               // ctx = { eventId, event, players, isStale }
 Admin.navigate(tab, eventId)
 Admin.reloadEvent()            // async。再取得して現在のタブを描き直す
 Admin.currentEventId()
@@ -84,6 +84,10 @@ TechPicker.select(state, name); TechPicker.toArray(state); TechPicker.fromArray(
 TechPicker.open({ techniques, initial, onChange, onClose })   // 下部シート
 TechPicker.renderChips(el, state, onTap)                      // ①②③、空きは「＋」
 ```
+
+- `ctx.isStale()` — await の直後に見て true なら描画をやめる（タブや大会を切り替えられた後の古い応答を画面に反映しないため）
+- 同じタブをもう一度タップすると再取得・再描画される（コート絞り込みは各タブが自分で保持する）
+- `Admin.reloadEvent()` は大会タブ（events）では何もしない
 
 `Admin.registerTab` はスクリプト評価時（＝`admin.js` の読み込み直後、DOMContentLoaded より前）に呼ぶ。`admin.js` の初期化は DOMContentLoaded で走るので登録が間に合う。
 
@@ -364,7 +368,7 @@ var AdminRound = (function() {
       menu.open = false;
       var eventId = CTX.eventId;
       var csv = await Api.exportCsv(eventId);
-      if (Admin.currentEventId() !== eventId) return;  // 通信中に大会を切り替えられた
+      if (CTX.isStale()) return;  // 通信中に大会を切り替えられた
       if (!csv) { alert('エクスポートに失敗しました。'); return; }
       Storage.downloadCsv('players.csv', csv);
     });
@@ -517,12 +521,12 @@ git commit -m "feat: 運営画面の進行タブに二巡目一覧と採点済�
   async function onGenerate() {
     var eventId = CTX.eventId;
     var result = await Api.generateNextRound(eventId, false);
-    if (Admin.currentEventId() !== eventId) return;  // 通信中に大会を切り替えられた
+    if (CTX.isStale()) return;  // 通信中に大会を切り替えられた
     if (!result) { alert('二巡目の生成に失敗しました。通信を確認してください。'); return; }
     if (result.blocked) {
       if (!confirm(conflictMessage(result))) return;
       result = await Api.generateNextRound(eventId, true);
-      if (Admin.currentEventId() !== eventId) return;
+      if (CTX.isStale()) return;
       if (!result || result.blocked) {
         alert('二巡目の生成に失敗しました。通信を確認してください。');
         return;
@@ -851,7 +855,7 @@ var AdminResults = (function() {
     container.appendChild(body);
 
     var data = await Api.loadRanking(eventId);
-    if (Admin.currentEventId() !== eventId) return;  // 通信中に大会を切り替えられた
+    if (ctx.isStale()) return;  // 通信中に大会を切り替えられた
     if (!data) {
       body.textContent = '順位を取得できませんでした。「最新に更新」でやり直してください。';
       return;

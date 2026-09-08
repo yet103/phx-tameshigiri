@@ -24,7 +24,9 @@ var Admin = (function() {
   // --- タブ登録 ---
 
   // def = { render: function(container, ctx) }  render は async でもよい
-  // ctx = { eventId, event, players }（events タブでは event / players は null）
+  // ctx = { eventId, event, players, isStale }（events タブでは event / players は null）
+  // ctx.isStale() — await の直後に見て true なら描画をやめる
+  // （タブや大会を切り替えられた後の古い応答を画面に反映しないため）
   function registerTab(name, def) {
     defs[name] = def;
   }
@@ -76,9 +78,21 @@ var Admin = (function() {
     var id = (eventId === undefined || eventId === null) ? selectedEventId : eventId;
     var hash = buildHash(tab, id);
     if (location.hash === hash) {
-      applyRoute();          // 同じハッシュでは hashchange が出ないので直接描く
+      applyRoute().catch(function(e) { console.error(e); });  // 同じハッシュでは hashchange が出ないので直接描く
     } else {
       location.hash = hash;  // hashchange → applyRoute
+    }
+  }
+
+  // ユーザー操作を経ない自動の戻し用。
+  // 自動の戻しは履歴に積まない（戻るボタンで #round → #events → #round … と往復してしまう）。
+  function redirect(tab, eventId) {
+    var id = (eventId === undefined || eventId === null) ? selectedEventId : eventId;
+    var hash = buildHash(tab, id);
+    if (location.hash === hash) {
+      applyRoute().catch(function(e) { console.error(e); });  // 同じハッシュでは hashchange が出ないので直接描く
+    } else {
+      location.replace(location.pathname + location.search + hash);  // hashchange → applyRoute（履歴には積まない）
     }
   }
 
@@ -87,17 +101,18 @@ var Admin = (function() {
     if (!route) {
       // ハッシュが無いときは前回の続きから。それも無ければ大会一覧。
       var last = loadLast() || { tab: 'events', eventId: '' };
-      navigate(last.tab, last.eventId);
+      redirect(last.tab, last.eventId);
       return;
     }
     if (route.tab !== 'events' && !route.eventId) {
-      navigate('events');
+      toast('先に大会を選んでください');
+      redirect('events');
       return;
     }
 
     currentTab = route.tab;
     selectedEventId = route.eventId || null;
-    saveLast();
+    if (currentTab === 'events') saveLast();
     highlightTabs();
 
     var seq = ++renderSeq;
@@ -117,9 +132,10 @@ var Admin = (function() {
     if (seq !== renderSeq) return;   // 追い越された
     if (!ev) {
       alert('大会データを取得できませんでした。通信を確認してください。');
-      navigate('events');
+      redirect('events');
       return;
     }
+    saveLast();
     setTitle(ev.name || '試し斬り 運営');
     renderTab(seq, { eventId: selectedEventId, event: ev, players: ev.players || [] });
   }
@@ -148,7 +164,21 @@ var Admin = (function() {
       content.appendChild(p);
       return;
     }
-    await def.render(content, ctx);
+    // タブの render が await をまたぐ間にタブや大会を切り替えられたかどうか。
+    // 各タブは await の直後にこれを見て、古ければ描画をやめる
+    // （大会IDの比較だけでは、同じ大会内のタブ切り替えを検出できない）。
+    ctx.isStale = function() { return seq !== renderSeq; };
+    try {
+      await def.render(content, ctx);
+    } catch (e) {
+      if (seq !== renderSeq) return;   // 古い描画の失敗は無視する
+      console.error(e);
+      content.innerHTML = '';
+      var err = document.createElement('p');
+      err.className = 'empty';
+      err.textContent = '画面の表示に失敗しました。タブを選び直してください。';
+      content.appendChild(err);
+    }
   }
 
   function currentEventId() {
@@ -221,8 +251,8 @@ var Admin = (function() {
       });
     }
 
-    window.addEventListener('hashchange', function() { applyRoute(); });
-    applyRoute();
+    window.addEventListener('hashchange', function() { applyRoute().catch(function(e) { console.error(e); }); });
+    applyRoute().catch(function(e) { console.error(e); });
   }
 
   // 各タブの登録（admin-events.js など）はスクリプト読み込み時に済むので、

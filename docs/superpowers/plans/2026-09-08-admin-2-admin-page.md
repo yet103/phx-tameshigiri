@@ -2641,3 +2641,6 @@ git commit -m "fix: 運営画面のタップ目標と 375px レイアウトを�
 - `TechPicker.open` が作るシートのクラスは `.tp-overlay`（外枠）と `.tp-sheet`（本体）。
 - コート絞り込みは `Admin.renderCourtChips(container, players, current, onChange)` を使う。選手タブと同じ見た目になる。
 - `admin-players.js` の `isScored` / `compareOrder` は選手タブ内のローカル関数。進行タブで必要なら `admin-round.js` に同じものを置くか、共有が増えるなら `courts.js` への移動を検討する（今回は2箇所目が無いので移動しない）。
+- `ctx.isStale()` — `render(container, ctx)` の ctx に生えている。await の直後に見て true なら描画をやめる（タブや大会を切り替えられた後の古い応答を画面に反映しないため）。`Admin.currentEventId() !== eventId` の代わりにこれを使うこと。
+- 同じタブをもう一度タップすると再取得・再描画される（コート絞り込みは各タブが自分で保持する）。
+- `Admin.reloadEvent()` は大会タブ（events）では何もしない。

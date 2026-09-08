@@ -68,10 +68,6 @@
     var body = document.createElement('button');
     body.type = 'button';
     body.className = 'row-body';
-    body.style.background = 'transparent';
-    body.style.color = 'inherit';
-    body.style.textAlign = 'left';
-    body.style.minHeight = '44px';
     var main = document.createElement('div');
     main.className = 'row-main';
     main.textContent = ev.name || '(名称未設定)';
