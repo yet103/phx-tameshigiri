@@ -16,6 +16,9 @@ var Share = (function() {
   var lastUpdatedAt = null;
   var lastFetchedAt = null;
   var timerId = null;
+  var busy = false;
+  var rendered = false;
+  var invalid = false;
 
   var elHead = null;
   var elStatus = null;
@@ -43,10 +46,9 @@ var Share = (function() {
   }
 
   function showInvalid() {
-    if (timerId !== null) {
-      clearInterval(timerId);
-      timerId = null;
-    }
+    // タイマーは止めない：トークンが後で有効になる（通信復旧）ケースのために
+    // ポーリングを続け、次の成功で自動的に復帰できるようにする。
+    invalid = true;
     if (elHead) elHead.textContent = '';
     if (elStatus) elStatus.textContent = '';
     if (elBody) {
@@ -121,29 +123,54 @@ var Share = (function() {
     }
   }
 
+  // isFirst: true（初回） | false（通常の再取得） | 'retry'（初回失敗後の1回だけの再試行）
   async function refresh(isFirst) {
-    var data = await Api.loadSharedRanking(token);
+    if (busy) return;
+    busy = true;
+    try {
+      var data = await Api.loadSharedRanking(token);
 
-    if (!data) {
-      if (isFirst) {
-        showInvalid();
-      } else if (lastFetchedAt) {
-        elStatus.className = 'share-status warn';
-        elStatus.textContent = '更新できませんでした（前回 ' + hhmm(lastFetchedAt) + ' 時点）';
+      if (!data) {
+        if (isFirst === true) {
+          // 初回読み込み失敗時は3秒後に一度だけ再試行してから無効表示にする
+          setTimeout(function() { refresh('retry'); }, 3000);
+        } else if (isFirst === 'retry') {
+          showInvalid();
+        } else if (lastFetchedAt) {
+          elStatus.className = 'share-status warn';
+          elStatus.textContent = '更新できませんでした（前回 ' + hhmm(lastFetchedAt) + ' 時点）';
+        }
+        return;
       }
+
+      var isFirstSuccess = !rendered;
+      invalid = false;
+      lastFetchedAt = new Date();
+      elStatus.className = 'share-status';
+      elStatus.textContent = hhmm(lastFetchedAt) + ' 時点';
+
+      var updatedAt = data.event ? data.event.updatedAt : null;
+      if (!rendered || updatedAt !== lastUpdatedAt) {
+        lastUpdatedAt = updatedAt;
+        rendered = true;
+        renderHead(data.event || {});
+        renderBody(data.rankings || {});
+      }
+
+      if (isFirstSuccess && data.event && data.event.name) {
+        document.title = data.event.name + ' の順位';
+      }
+    } finally {
+      busy = false;
+    }
+  }
+
+  function startToken(isFirst) {
+    if (!token) {
+      showInvalid();
       return;
     }
-
-    lastFetchedAt = new Date();
-    elStatus.className = 'share-status';
-    elStatus.textContent = hhmm(lastFetchedAt) + ' 時点';
-
-    var updatedAt = data.event ? data.event.updatedAt : null;
-    if (updatedAt !== lastUpdatedAt) {
-      lastUpdatedAt = updatedAt;
-      renderHead(data.event || {});
-      renderBody(data.rankings || {});
-    }
+    refresh(isFirst);
   }
 
   function init() {
@@ -155,16 +182,23 @@ var Share = (function() {
 
     token = location.hash.replace(/^#/, '');
 
-    if (!token) {
-      showInvalid();
-      return;
-    }
-
     timerId = setInterval(function() { refresh(false); }, REFRESH_MS);
-    refresh(true);
+    startToken(true);
 
     document.addEventListener('visibilitychange', function() {
-      if (!document.hidden) refresh(false);
+      if (document.hidden) return;
+      // 直近取得から5秒未満なら floor（可視化のたびに叩き過ぎない）
+      if (lastFetchedAt && (new Date() - lastFetchedAt) < 5000) return;
+      refresh(false);
+    });
+
+    window.addEventListener('hashchange', function() {
+      token = location.hash.replace(/^#/, '');
+      invalid = false;
+      rendered = false;
+      lastUpdatedAt = null;
+      lastFetchedAt = null;
+      startToken(true);
     });
   }
 

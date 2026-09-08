@@ -107,22 +107,27 @@ var AdminResults = (function() {
       alert('大会を選んでください。');
       return;
     }
+    var btn = this;
+    btn.disabled = true;
     // ポップアップブロッカーは「クリックイベント処理中の同期的な window.open」しか
     // 許可しないブラウザが多い。await をまたいでから開こうとするとブロックされる
     // ことがあるので、まず空タブを同期的に開いておき、トークン取得後に location を差し替える。
     var w = window.open('', '_blank');
-    var token = await shareToken(eventId);
-    if (!token) {
-      if (w) w.close();
-      return;
+    try {
+      var token = await shareToken(eventId);
+      if (!token) {
+        if (w) w.close();
+        return;
+      }
+      var url = new URL('present.html#' + token, location.href).href;
+      if (!w) {
+        alert('新しいタブを開けませんでした。次のURLを開いてください。\n' + url);
+        return;
+      }
+      w.location = url;
+    } finally {
+      btn.disabled = false;
     }
-    var url = 'present.html#' + token;
-    if (!w) {
-      alert('新しいタブを開けませんでした。次のURLを開いてください。\n' +
-            location.origin + '/' + url);
-      return;
-    }
-    w.location = url;
   }
 
   async function onCopy() {
@@ -131,19 +136,25 @@ var AdminResults = (function() {
       alert('大会を選んでください。');
       return;
     }
-    var token = await shareToken(eventId);
-    if (!token) return;
-    var url = location.origin + '/share.html#' + token;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      try {
-        await navigator.clipboard.writeText(url);
-        Admin.toast('リンクをコピーしました');
-        return;
-      } catch (e) {
-        // 権限が無い・HTTPS でない等。下の prompt に落とす
+    var btn = this;
+    btn.disabled = true;
+    try {
+      var token = await shareToken(eventId);
+      if (!token) return;
+      var url = new URL('share.html#' + token, location.href).href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(url);
+          Admin.toast('リンクをコピーしました');
+          return;
+        } catch (e) {
+          // 権限が無い・HTTPS でない等。下の prompt に落とす
+        }
       }
+      window.prompt('このURLをコピーしてください', url);
+    } finally {
+      btn.disabled = false;
     }
-    window.prompt('このURLをコピーしてください', url);
   }
 
   Admin.registerTab('results', { render: render });

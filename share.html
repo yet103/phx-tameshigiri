@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
   <title>順位</title>
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="share.css">
@@ -11,8 +12,8 @@
 
   <div class="share-root" id="shareRoot">
     <div class="share-head" id="shareHead"></div>
-    <span class="share-status" id="shareStatus"></span>
-    <div id="shareBody"></div>
+    <span class="share-status" id="shareStatus" aria-live="polite"></span>
+    <div id="shareBody"><p class="share-empty">読み込み中…</p></div>
   </div>
 
   <script src="api.js"></script>

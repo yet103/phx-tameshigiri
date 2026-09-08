@@ -15,6 +15,8 @@ var Present = (function() {
   var catIndex = 0;
   var data = null;
   var lastFetchedAt = null;
+  var lastUpdatedAt = null;
+  var rendered = false;
   var invalid = false;
 
   // 発表（reveal）モードの状態（後続タスクで使用）。
@@ -54,15 +56,20 @@ var Present = (function() {
     return out;
   }
 
+  // isFirst: true（初回） | false（通常の再取得） | 'retry'（初回失敗後の1回だけの再試行）
   async function load(isFirst) {
     var result = await Api.loadSharedRanking(token);
 
     if (!result) {
-      if (isFirst) {
+      if (isFirst === true) {
+        // 初回読み込み失敗時は3秒後に一度だけ再試行してから無効表示にする
+        setTimeout(function() { load('retry'); }, 3000);
+      } else if (isFirst === 'retry') {
         invalid = true;
         render();
-      } else if (lastFetchedAt) {
-        elStatus.textContent = '更新できませんでした（前回 ' + hhmm(lastFetchedAt) + ' 時点）';
+      } else {
+        elStatus.textContent = '更新できませんでした（前回 ' +
+          (lastFetchedAt ? hhmm(lastFetchedAt) : '—') + ' 時点）';
       }
       return;
     }
@@ -71,7 +78,19 @@ var Present = (function() {
     data = result;
     lastFetchedAt = new Date();
     elStatus.textContent = hhmm(lastFetchedAt) + ' 時点';
-    render();
+
+    // 発表中に人数が変わっても添字がずれないように order を取り直す
+    if (mode === 'reveal' && !picking) {
+      order = revealOrder(rowsOf(catIndex));
+      if (step > order.length) step = order.length;
+    }
+
+    var updatedAt = data.event ? data.event.updatedAt : null;
+    if (!rendered || updatedAt !== lastUpdatedAt) {
+      lastUpdatedAt = updatedAt;
+      rendered = true;
+      render();
+    }
   }
 
   function render() {
@@ -114,6 +133,15 @@ var Present = (function() {
     pageSpan.textContent = (catIndex + 1) + ' / ' + CATEGORIES.length;
     h1.appendChild(pageSpan);
     elScreen.appendChild(h1);
+
+    if (rows.length === 0) {
+      var boardEmpty = document.createElement('div');
+      boardEmpty.className = 'present-error';
+      boardEmpty.textContent = 'データなし';
+      elScreen.appendChild(boardEmpty);
+      if (elHint) elHint.textContent = 'タップ／→ で次の部門　←で前';
+      return;
+    }
 
     var ul = document.createElement('ul');
     ul.className = 'present-list';
@@ -197,6 +225,7 @@ var Present = (function() {
     ul.className = 'present-list';
     for (var pos = 0; pos < order.length; pos++) {
       var row = rows[order[pos]];
+      if (!row) continue;
       var opened = pos < step;
       var li = document.createElement('li');
       var cls = '';
@@ -263,6 +292,7 @@ var Present = (function() {
   }
 
   function next() {
+    if (invalid || !data) return;
     if (mode === 'reveal') {
       revealNext();
       return;
@@ -272,6 +302,7 @@ var Present = (function() {
   }
 
   function prev() {
+    if (invalid || !data) return;
     if (mode === 'reveal') {
       revealPrev();
       return;
@@ -332,7 +363,11 @@ var Present = (function() {
 
     var hash = window.location.hash || '';
     if (hash.charAt(0) === '#') hash = hash.slice(1);
-    token = decodeURIComponent(hash);
+    try {
+      token = decodeURIComponent(hash);
+    } catch (e) {
+      token = hash;
+    }
 
     elScreen.addEventListener('click', function() {
       next();
@@ -347,13 +382,21 @@ var Present = (function() {
       setMode('reveal');
     });
     elRefresh.addEventListener('click', function() {
+      this.blur();
       load(false);
     });
-    elFull.addEventListener('click', toggleFull);
+    elFull.addEventListener('click', function() {
+      this.blur();
+      toggleFull();
+    });
 
     setInterval(function() {
       if (mode === 'board' && !invalid) load(false);
     }, REFRESH_MS);
+
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && mode === 'board' && !invalid) load(false);
+    });
 
     if (!token) {
       invalid = true;
