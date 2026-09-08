@@ -7,6 +7,7 @@ var App = (function() {
   var currentIndex = -1;  // 選択中の選手インデックス
   var gridRestorable = true; // 表示中のグリッドが player.result から復元できたか
   var gridDirty = false;     // 復元できなかったグリッドを、実際に採点し直したか
+  var noticeRow = null;      // 復元不能を知らせる行（DOM）。置き換え確定時に取り除く
   var timerSec = 300;     // タイマー残り秒数
   var timerRunning = false;
   var timerInterval = null;
@@ -385,6 +386,7 @@ var App = (function() {
   function renderScoreGrid(player) {
     scoreTableBody.innerHTML = '';
     gridDirty = false;
+    noticeRow = null;
     var techNames = [player.tech1, player.tech2, player.tech3].filter(Boolean);
     if (techNames.length === 0) {
       // 技が未入力（進行タブでまだ入力されていない二巡目の選手など）。
@@ -401,9 +403,9 @@ var App = (function() {
       setTotalDisplay(player.score || 0);
       return;
     }
-    // 未採点の選手は空のグリッドが正しい状態（result が空でも復元不能扱いにしない）
-    gridRestorable = Scoring.canDecode(player.result, techNames.length) ||
-      (!player.result && !(player.score > 0));
+    // 何も記録されていない選手（得点0で○×も無い）は空のグリッドが正しい状態。
+    // result が空白だけでも同じ
+    gridRestorable = Scoring.canDecode(player.result, techNames.length) || !Courts.isScored(player);
     var decoded = gridRestorable ? Scoring.decodeResult(player.result, techNames.length) : null;
 
     if (!decoded) {
@@ -415,10 +417,11 @@ var App = (function() {
       var tdNotice = document.createElement('td');
       tdNotice.colSpan = 7;
       tdNotice.className = 'score-notice';
-      tdNotice.textContent = '内訳を復元できません（技が変更されています）。' +
+      tdNotice.textContent = '内訳を復元できません（技の数が変わっています）。' +
         '採点し直すと現在の得点 ' + (player.score || 0) + '点 は置き換わります。';
       trNotice.appendChild(tdNotice);
       scoreTableBody.appendChild(trNotice);
+      noticeRow = trNotice;
     }
 
     for (var i = 0; i < techNames.length; i++) {
@@ -524,11 +527,17 @@ var App = (function() {
   // 復元できないグリッドへ最初に触れたときだけ、既存の得点を置き換える旨を確認する。
   // OK なら gridDirty を立てて以降は毎回聞かない。キャンセルなら呼び出し元は何もしない。
   function confirmReplaceIfNeeded() {
-    if (gridRestorable || gridDirty) { gridDirty = true; return true; }
+    if (gridRestorable) return true;
+    if (gridDirty) return true;
     var p = visiblePlayers[currentIndex];
     var n = p ? (p.score || 0) : 0;
     if (!confirm('記録済みの ' + n + '点 を、いま入力する内容で置き換えます。よろしいですか？')) return false;
     gridDirty = true;
+    // 置き換えが確定したので、復元不能を知らせる行はもう不要
+    if (noticeRow && noticeRow.parentNode) {
+      noticeRow.parentNode.removeChild(noticeRow);
+    }
+    noticeRow = null;
     return true;
   }
 
@@ -632,7 +641,10 @@ var App = (function() {
   function setAllSuccess() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     // 技が無い選手は採点できない
-    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) return;
+    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) {
+      alert('技が未入力のため採点できません。運営画面の進行タブで技を入力してください。');
+      return;
+    }
     if (!confirmReplaceIfNeeded()) return;
     var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var p = visiblePlayers[currentIndex];
@@ -653,7 +665,10 @@ var App = (function() {
   function setAllFail() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     // 技が無い選手は採点できない
-    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) return;
+    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) {
+      alert('技が未入力のため採点できません。運営画面の進行タブで技を入力してください。');
+      return;
+    }
     if (!confirmReplaceIfNeeded()) return;
     var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var p = visiblePlayers[currentIndex];

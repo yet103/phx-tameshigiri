@@ -74,9 +74,10 @@ var Scoring = (function() {
   }
 
   // result が現在の技数に対して復元可能かどうか
-  // result は技ごとに5文字。技の数が変わると復元できない
+  // result は技ごとに5文字。技の数が変わると復元できない。
+  // 手で編集された結果列が混ざっても復元しない
   function canDecode(result, techCount) {
-    return !!result && result.length === techCount * 5;
+    return !!result && result.length === techCount * 5 && /^[01 ]*$/.test(result);
   }
 
   // 行データからresultエンコード文字列を生成

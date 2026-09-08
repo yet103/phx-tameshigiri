@@ -564,10 +564,12 @@
 
     // canDecode: result は技ごとに5文字。技の数が変わると復元できない
     assert('canDecode 空のresult → false', Scoring.canDecode('', 3), false);
-    assert('canDecode ちょうどの長さ(技数3→15文字) → true', Scoring.canDecode('123456789012345', 3), true);
+    assert('canDecode ちょうどの長さ(技数3→15文字) → true', Scoring.canDecode('101010101010101', 3), true);
     assert('canDecode 短い → false', Scoring.canDecode('1234', 3), false);
     assert('canDecode 長い → false', Scoring.canDecode('1234567890123456', 3), false);
-    assert('canDecode 技数1で5文字 → true', Scoring.canDecode('12345', 1), true);
+    assert('canDecode 技数1で5文字 → true', Scoring.canDecode('10101', 1), true);
+    assert('canDecode 手で編集された結果列(0/1/空白以外を含む) → false', Scoring.canDecode('1x   1    1    ', 3), false);
+    assert('canDecode 空白のみのresult(技数3→15文字) → true', Scoring.canDecode('               ', 3), true);
 
     var h2st = document.createElement('h2');
     h2st.textContent = 'storage.js';
