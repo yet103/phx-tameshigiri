@@ -415,7 +415,8 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     ['isNewFace', 'isFemale'].forEach(key => {
       if (typeof body[key] === 'boolean') player[key] = body[key];
     });
-    if (typeof body.score === 'number') player.score = body.score;
+    // 負数・NaN・Infinity は無視する
+    if (Number.isFinite(body.score) && body.score >= 0) player.score = body.score;
 
     // court / round / isFemale が来たときだけ order を組み立て直す。
     // ただし (コート, 性別, 巡目) が実際に変わったときだけにする。
@@ -444,7 +445,9 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       const changed = cur
         ? (cur.court !== court || cur.gender !== gender || cur.round !== round)
         : (body.court !== undefined);
-      if (changed && isValidCourt(court)) {
+      // body.court は上で検証済み。指定が無いときは現在の order のコートをそのまま使う
+      // （'未分類' でも再検証しない。再検証すると isFemale だけ書き換わって order と食い違う）。
+      if (changed && court) {
         const others = event.players.filter((p, i) => i !== playerIndex);
         player.order = buildOrder(court, player.isFemale === true, round,
           nextOrderNumber(others, court, gender, round));
@@ -622,6 +625,14 @@ app.get('/api/events/:id/export', (req, res) => {
 // 並べ替えは 女子先 → 得点昇順 → 同点は既存 order の文字列順で安定化。
 // 採番は コート×性別ごとに1から（現行CSV生成のコート横断通番は廃止）。
 // 一巡目の行は一切変更せず、新規行を末尾に追記するだけにする。
+// source は order が解析できる一巡目の行だけ（parseOrder できない選手は
+// コートが決まらないので二巡目を作れない。'未分類' を製造すると isValidCourt と
+// 衝突する）。解析できない行は unassignedCount として件数だけ返し、
+// 運営画面で選手情報を直してもらう。
+// skipped は「source のうち既に二巡目行を生成済みだった人数」を表す
+// （force での差分追加時に意味を持つ）。sourcePlayerId を持たない二巡目行は
+// CSV インポート由来で、force するとそれとは別に重複生成されてしまうため
+// untrackedCount として件数を返し、クライアントが force 前に警告できるようにする。
 app.post('/api/events/:id/rounds/2/generate', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -633,26 +644,37 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
     const players = Array.isArray(event.players) ? event.players : [];
     const force = !!(req.body && req.body.force === true);
 
-    const src = players.filter(p => p && roundOf(p) === 1);
+    const round1Candidates = players.filter(p => p && roundOf(p) === 1);
+    const src = round1Candidates.filter(p => parseOrder(p && p.order) !== null);
+    const unassignedCount = round1Candidates.length - src.length;
     if (src.length === 0) {
       return res.status(400).json({ error: '一巡目の選手がいません' });
     }
+
+    const existing = players.filter(p => p && roundOf(p) === 2);
+    // sourcePlayerId を持たない二巡目行（CSV経由）は force で作り直すと重複するため件数を返す。
+    const untrackedCount = existing.filter(p => !p.sourcePlayerId).length;
 
     const unscored = src.filter(p => !isScored(p));
     if (unscored.length > 0 && !force) {
       return res.status(409).json({
         error: '一巡目に未採点の選手がいます',
         reason: 'unscored',
-        unscoredCount: unscored.length
+        unscoredCount: unscored.length,
+        existingCount: existing.length,
+        untrackedCount: untrackedCount,
+        unassignedCount: unassignedCount
       });
     }
 
-    const existing = players.filter(p => p && roundOf(p) === 2);
     if (existing.length > 0 && !force) {
       return res.status(409).json({
         error: '二巡目は既に生成されています',
         reason: 'exists',
-        existingCount: existing.length
+        unscoredCount: unscored.length,
+        existingCount: existing.length,
+        untrackedCount: untrackedCount,
+        unassignedCount: unassignedCount
       });
     }
 
@@ -697,7 +719,14 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
     event.players = players.concat(newRows);
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
-    res.json({ success: true, created: newRows.length, skipped: existing.length });
+    res.json({
+      success: true,
+      created: newRows.length,
+      skipped: src.length - targets.length,
+      existingCount: existing.length,
+      untrackedCount: untrackedCount,
+      unassignedCount: unassignedCount
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

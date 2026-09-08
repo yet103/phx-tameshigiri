@@ -9,7 +9,7 @@
 **Tech Stack:** 素の JavaScript（IIFE、`var` と `function(){}`、`async`/`await` 可）、Express 5 の静的配信、ビルド工程・バンドラ・テストランナーなし。テストは `test.html` をブラウザで開いて読む。
 
 **設計書:** [docs/superpowers/specs/2026-09-08-mobile-admin-flow-design.md](../specs/2026-09-08-mobile-admin-flow-design.md)
-**前提計画:** [2026-09-08-admin-1-server-api.md](2026-09-08-admin-1-server-api.md)（**着地していること**。完了時点のテスト件数は 180）
+**前提計画:** [2026-09-08-admin-1-server-api.md](2026-09-08-admin-1-server-api.md)（**着地していること**。完了時点のテスト件数は 194）
 
 ---
 
@@ -17,7 +17,7 @@
 
 ### テスト件数
 
-計画1完了時点の `test.html` は **180 passed, 0 failed**。この計画で **15 件**足し、完了時点で **195 passed, 0 failed** になる。着手前に 180 を実測で確認すること。
+計画1完了時点の `test.html` は **194 passed, 0 failed**。この計画で **15 件**足し、完了時点で **209 passed, 0 failed** になる。着手前に 194 を実測で確認すること。
 
 ### この計画の依存（計画1が用意済み。再定義しない）
 
@@ -123,7 +123,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 
 サーバーを起動し、`http://localhost:3457/test.html` を開く。
 
-Expected: `Result: 180 passed, 0 failed`
+Expected: `Result: 194 passed, 0 failed`
 
 - [ ] **Step 2: `theme.css` を新規作成する**
 
@@ -282,7 +282,7 @@ Expected: 0件（`theme.css` の 404 が出ていないこと）
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 180 passed, 0 failed`
+Expected: `Result: 194 passed, 0 failed`
 
 - [ ] **Step 8: コミット**
 
@@ -427,7 +427,7 @@ var TechPicker = (function() {
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 195 passed, 0 failed`
+Expected: `Result: 209 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -590,7 +590,7 @@ git commit -m "feat: 技の選択状態を扱う TechPicker の純粋関数を�
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 195 passed, 0 failed`
+Expected: `Result: 209 passed, 0 failed`
 
 - [ ] **Step 3: コミット**
 
@@ -2597,7 +2597,7 @@ Expected: 採点テーブル・ツールバー・テーマ切り替えが従来�
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 195 passed, 0 failed`
+Expected: `Result: 209 passed, 0 failed`
 
 - [ ] **Step 7: 確認用データを片付ける**
 
@@ -2620,7 +2620,7 @@ git commit -m "fix: 運営画面のタップ目標と 375px レイアウトを�
 
 ## 完了条件
 
-- [ ] `test.html` が `Result: 195 passed, 0 failed`
+- [ ] `test.html` が `Result: 209 passed, 0 failed`
 - [ ] `grep -n "^:root\|^\[data-theme" style.css` が何も出さない
 - [ ] `grep -c 'href="theme.css"' index.html ranking.html techniques.html` が3ファイルとも 1
 - [ ] `grep -n '<script src=' admin.html` が `api.js` → `storage.js` → `courts.js` → `techpicker.js` → `admin.js` → `admin-events.js` → `admin-players.js` の順

@@ -106,8 +106,8 @@ git commit -m "feat: ..." -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropi
 Api.createPlayer(eventId, data)                 // → player | null
 Api.updatePlayerInfo(eventId, playerId, data)   // → { ok: true, player } | { ok: false, status }
 Api.deletePlayer(eventId, playerId, force)      // → true | { blocked: true, player } | false
-Api.generateNextRound(eventId, force)           // → { success, created, skipped }
-                                                //   | { blocked: true, reason, unscoredCount, existingCount } | null
+Api.generateNextRound(eventId, force)           // → { success, created, skipped, existingCount, untrackedCount, unassignedCount }
+                                                //   | { blocked: true, reason, unscoredCount, existingCount, untrackedCount, unassignedCount } | null
 Api.loadRanking(eventId)                        // → { event, rankings } | null
 Api.createShareLink(eventId)                    // → { token } | null
 Api.loadShareLink(token)                        // → { token, targetType, targetId, createdAt } | null
@@ -995,11 +995,13 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
   // --- Rounds ---
   async function generateNextRound(eventId, force) {
     // POST /api/events/:eventId/rounds/2/generate
-    // 戻り値: { success: true, created, skipped }
-    //       | { blocked: true, reason: 'unscored', unscoredCount, existingCount: 0 }
-    //       | { blocked: true, reason: 'exists', existingCount, unscoredCount: 0 }
+    // 戻り値: { success: true, created, skipped, existingCount, untrackedCount, unassignedCount }
+    //       | { blocked: true, reason: 'unscored' | 'exists',
+    //           unscoredCount, existingCount, untrackedCount, unassignedCount }
     //       | null（400: 一巡目が0名 / 404 / 通信失敗）
     // どちらの 409 も force: true で越えられる。
+    // 注: untrackedCount / unassignedCount は本タスクの直後の修正（F4, F3）で足された
+    // フィールド。この Step を実装する時点では existingCount / unscoredCount のみでよい。
     try {
       var res = await fetch('/api/events/' + eventId + '/rounds/2/generate', {
         method: 'POST',
@@ -1033,7 +1035,7 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 157 passed, 0 failed`
+Expected: `Result: 171 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -1208,7 +1210,7 @@ app.get('/api/events/:id/ranking', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 165 passed, 0 failed`
+Expected: `Result: 179 passed, 0 failed`
 
 - [ ] **Step 7: コミット**
 
@@ -1491,7 +1493,7 @@ app.get('/api/links/:token/ranking', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 180 passed, 0 failed`
+Expected: `Result: 194 passed, 0 failed`
 
 また、リンクのディレクトリが作られ、テストの後始末で空になっていることを確認する。
 
@@ -1567,7 +1569,7 @@ Expected: どちらも**何も出力されない**（ヒット0件）。1件で�
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。`mcp__Claude_Browser__find` で `並行PATCH` も探して緑（`✓`）であることを確認する。
 
-Expected: `Result: 180 passed, 0 failed`、かつ `✓ 並行PATCH12本が全件反映される` が表示されている。
+Expected: `Result: 194 passed, 0 failed`、かつ `✓ 並行PATCH12本が全件反映される` が表示されている。
 
 - [ ] **Step 4: 一時ファイルとテスト残骸が無いことを確認する**
 
@@ -1620,12 +1622,12 @@ git commit -m "docs: 同期実行の不変条件に新しい書き込みハン�
 | Task 2 完了 | 109 passed, 0 failed |
 | Task 3 完了 | 124 passed, 0 failed |
 | Task 4 完了 | 137 passed, 0 failed |
-| Task 5 完了 | 157 passed, 0 failed |
-| Task 6 完了 | 165 passed, 0 failed |
-| Task 7 完了 | **180 passed, 0 failed** |
-| Task 8 完了 | **180 passed, 0 failed**（テスト追加なし） |
+| Task 5 完了 | 171 passed, 0 failed |
+| Task 6 完了 | 179 passed, 0 failed |
+| Task 7 完了 | **194 passed, 0 failed** |
+| Task 8 完了 | **194 passed, 0 failed**（テスト追加なし） |
 
-**この計画の完了条件は `Result: 180 passed, 0 failed`。**
+**この計画の完了条件は `Result: 194 passed, 0 failed`。**
 
 ---
 

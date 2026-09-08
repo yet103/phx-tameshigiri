@@ -175,11 +175,21 @@ var Api = (function() {
   // --- Rounds ---
   async function generateNextRound(eventId, force) {
     // POST /api/events/:eventId/rounds/2/generate
-    // 戻り値: { success: true, created, skipped }
-    //       | { blocked: true, reason: 'unscored', unscoredCount, existingCount: 0 }
-    //       | { blocked: true, reason: 'exists', existingCount, unscoredCount: 0 }
-    //       | null（400: 一巡目が0名 / 404 / 通信失敗）
-    // どちらの 409 も force: true で越えられる。
+    // 戻り値:
+    //   { success: true, created, skipped, existingCount, untrackedCount, unassignedCount }
+    //     created: 新規に作った二巡目行数
+    //     skipped: source（order が解析できる一巡目）のうち既に二巡目行を生成済みだった人数
+    //              （force での差分追加時に意味を持つ。それ以外は 0）
+    //     existingCount: 呼び出し時点で既にあった二巡目行数
+    //     untrackedCount: 既存の二巡目行のうち sourcePlayerId を持たない件数
+    //                     （CSVインポート由来。force すると重複生成される）
+    //     unassignedCount: order が解析できず二巡目を作れなかった一巡目選手の人数
+    //   | { blocked: true, reason: 'unscored' | 'exists',
+    //       unscoredCount, existingCount, untrackedCount, unassignedCount }
+    //       （該当しない件数は 0）
+    //   | null（400: 一巡目が0名 / 404 / 通信失敗）
+    // どちらの 409 も force: true で越えられる。untrackedCount が 0 でないときは
+    // force すると CSV由来の二巡目行と重複するので、呼び出し元で警告すること。
     try {
       var res = await fetch('/api/events/' + eventId + '/rounds/2/generate', {
         method: 'POST',
@@ -192,7 +202,9 @@ var Api = (function() {
           blocked: true,
           reason: conflict.reason || '',
           unscoredCount: conflict.unscoredCount || 0,
-          existingCount: conflict.existingCount || 0
+          existingCount: conflict.existingCount || 0,
+          untrackedCount: conflict.untrackedCount || 0,
+          unassignedCount: conflict.unassignedCount || 0
         };
       }
       if (!res.ok) return null;
