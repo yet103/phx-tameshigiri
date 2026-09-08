@@ -233,7 +233,7 @@ generateNextRound(eventId, force)           // → { success, created, skipped }
                                             //   | { blocked: true, reason, unscoredCount|existingCount } | null
 loadRanking(eventId)                        // → { event, rankings } | null
 createShareLink(eventId)                    // → { token } | null
-loadShareLink(token)                        // → { token, targetType, targetId, createdAt } | null
+loadShareLink(token)                        // → { token, targetType, createdAt } | null
 loadSharedRanking(token)                    // → { event, rankings } | null
 ```
 

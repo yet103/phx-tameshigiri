@@ -168,6 +168,8 @@
       await Api.createPlayer(addEvent.id, { name: '四郎', court: 'A-1' }), null);
     assert('コート名が未分類なら null',
       await Api.createPlayer(addEvent.id, { name: '四郎', court: '未分類' }), null);
+    assert('コート名が33文字以上なら null',
+      await Api.createPlayer(addEvent.id, { name: '四郎', court: new Array(34).join('A') }), null);
     assert('存在しない大会は null',
       await Api.createPlayer('nosuchevent', { name: '四郎', court: 'A' }), null);
     await Api.deleteEvent(addEvent.id);
@@ -319,8 +321,8 @@
                   'D2,A-男子-1-2,真,,,10,,,1    \n';
     await Api.importCsv(diffEvent.id, diffCsv, 'replace');
     await Api.generateNextRound(diffEvent.id, false);
-    var d3 = await Api.createPlayer(diffEvent.id, { name: 'D3', court: 'A', isFemale: false });
-    await Api.updatePlayer(diffEvent.id, d3.id, { score: 20, result: '1    ' });
+    var diffP3 = await Api.createPlayer(diffEvent.id, { name: 'D3', court: 'A', isFemale: false });
+    await Api.updatePlayer(diffEvent.id, diffP3.id, { score: 20, result: '1    ' });
     var diffGen = await Api.generateNextRound(diffEvent.id, true);
     assert('差分追加の created は1', diffGen.created, 1);
     assert('差分追加の skipped は生成済みの一巡目人数', diffGen.skipped, 2);
@@ -328,7 +330,7 @@
     var diffRows = (await Api.loadEvent(diffEvent.id)).players.filter(function(p) { return Courts.roundOf(p) === 2; });
     assert('差分追加は既存の二巡目の続き番号', diffRows.map(function(p) { return p.order; }),
       ['A-男子-2-1', 'A-男子-2-2', 'A-男子-2-3']);
-    assert('差分追加の行は追加した一巡目を指す', diffRows[2].sourcePlayerId, d3.id);
+    assert('差分追加の行は追加した一巡目を指す', diffRows[2].sourcePlayerId, diffP3.id);
     await Api.deleteEvent(diffEvent.id);
 
     // order が解析できない選手はコートが決まらないので二巡目を作らず件数だけ返す
@@ -451,6 +453,12 @@
     assert('server/data は静的配信されない', staticRes.status, 404);
     var staticSrc = await fetch('/server/index.js');
     assert('server/index.js は静的配信されない', staticSrc.status, 404);
+    var bypass1 = await fetch('/%73erver/data/events/' + rank2Event.id + '.json');
+    assert('静的配信ガードは %73erver も塞ぐ', bypass1.status, 404);
+    var bypass2 = await fetch('/server%2Fdata/events/' + rank2Event.id + '.json');
+    assert('静的配信ガードは server%2Fdata も塞ぐ', bypass2.status, 404);
+    var bypass3 = await fetch('/%73erver/index.js');
+    assert('静的配信ガードは %73erver/index.js も塞ぐ', bypass3.status, 404);
     await Api.deleteEvent(rank2Event.id);
   }
 

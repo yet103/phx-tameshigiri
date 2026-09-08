@@ -192,8 +192,10 @@ function courtOf(player) {
 // コート名の検証。
 // '-' を含むと order の解析（先頭セグメント＝コート）が壊れ、
 // '未分類' はクライアントの Courts.UNASSIGNED と衝突する。
+// 長さは32文字までに制限する。
 function isValidCourt(court) {
   return typeof court === 'string' && court.length > 0 &&
+         court.length <= 32 &&
          court.indexOf('-') === -1 && court !== '未分類';
 }
 
@@ -367,7 +369,7 @@ app.post('/api/events', (req, res) => {
     const eventPath = path.join(EVENTS_DIR, `${event.id}.json`);
     // 既存の shareToken を落とさない。落とすと links/<token>.json が孤児になり、
     // 連鎖削除も効かなくなる（消えた大会を指すトークンが生き残る）。
-    if (event.shareToken === undefined && fs.existsSync(eventPath)) {
+    if (!isValidId(event.shareToken) && fs.existsSync(eventPath)) {
       try {
         const prev = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
         if (isValidId(prev.shareToken)) event.shareToken = prev.shareToken;
@@ -770,7 +772,7 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
 
     // force のときは未生成の一巡目行だけを差分追加する。既存の二巡目行には触れない。
     // sourcePlayerId を持たない二巡目行（CSV経由）は「未生成」と見なされる。
-    const generated = {};
+    const generated = Object.create(null);
     existing.forEach(p => { if (p && p.sourcePlayerId) generated[p.sourcePlayerId] = true; });
     const targets = src.filter(p => p && !generated[p.id]);
 
@@ -994,6 +996,7 @@ app.get('/api/links/:token', (req, res) => {
     }
     const link = JSON.parse(fs.readFileSync(linkPath, 'utf-8'));
     // targetId は返さない。無認証で読める応答から /api/events/:id の宛先を漏らさないため。
+    // （認証が入るまでは GET /api/events から ID が引けるので、これは認証後に効く対策）
     // 順位は /api/links/:token/ranking から取る
     res.json({ token: link.token, targetType: link.targetType, createdAt: link.createdAt });
   } catch (err) {
@@ -1033,9 +1036,21 @@ const PUBLIC_DIR = path.resolve(__dirname, '..');
 
 // server/ 配下はデータとサーバー本体。静的配信の対象から外す。
 // 共有リンクは無認証で開かれるので、/server/data/events/<id>.json が読めてはいけない。
-// （Windows はパスの大文字小文字を区別しないので、判定も区別しない）
+// 生の req.path を正規表現で見るだけでは %73erver や //server、/a/../server で迂回できる。
+// express.static と同じようにデコード・正規化した実パスで判定する
+// （Windows はパスの大文字小文字を区別しないので、比較も区別しない）。
+const SERVER_DIR = path.resolve(__dirname);
 app.use((req, res, next) => {
-  if (/^\/server(\/|$)/i.test(req.path)) return res.status(404).end();
+  let decoded;
+  try {
+    decoded = decodeURIComponent(req.path);
+  } catch (e) {
+    return res.status(400).end();
+  }
+  const target = path.resolve(PUBLIC_DIR, '.' + decoded.replace(/\\/g, '/'));
+  const t = target.toLowerCase();
+  const s = SERVER_DIR.toLowerCase();
+  if (t === s || t.startsWith(s + path.sep)) return res.status(404).end();
   next();
 });
 
