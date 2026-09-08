@@ -17,7 +17,7 @@
 
 ### テスト件数
 
-計画1完了時点の `test.html` は **208 passed, 0 failed**。この計画で **15 件**足し、完了時点で **232 passed, 0 failed** になる。着手前に 208 を実測で確認すること。
+計画1完了時点の `test.html` は **208 passed, 0 failed**。この計画で **15 件**足し、完了時点で **234 passed, 0 failed** になる。着手前に 208 を実測で確認すること。
 
 ### この計画の依存（計画1が用意済み。再定義しない）
 
@@ -427,7 +427,7 @@ var TechPicker = (function() {
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 232 passed, 0 failed`
+Expected: `Result: 234 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -592,7 +592,7 @@ git commit -m "feat: 技の選択状態を扱う TechPicker の純粋関数を�
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 232 passed, 0 failed`
+Expected: `Result: 234 passed, 0 failed`
 
 - [ ] **Step 3: コミット**
 
@@ -2560,7 +2560,7 @@ Expected: 採点テーブル・ツールバー・テーマ切り替えが従来�
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 232 passed, 0 failed`
+Expected: `Result: 234 passed, 0 failed`
 
 - [ ] **Step 7: 確認用データを片付ける**
 
@@ -2583,7 +2583,7 @@ git commit -m "fix: 運営画面のタップ目標と 375px レイアウトを�
 
 ## 完了条件
 
-- [ ] `test.html` が `Result: 232 passed, 0 failed`
+- [ ] `test.html` が `Result: 234 passed, 0 failed`
 - [ ] `grep -n "^:root\|^\[data-theme" style.css` が何も出さない
 - [ ] `grep -c 'href="theme.css"' index.html ranking.html techniques.html` が3ファイルとも 1
 - [ ] `grep -n '<script src=' admin.html` が `api.js` → `storage.js` → `courts.js` → `techpicker.js` → `admin.js` → `admin-events.js` → `admin-players.js` の順
@@ -2601,7 +2601,8 @@ git commit -m "fix: 運営画面のタップ目標と 375px レイアウトを�
 - 進行タブの技チップは、チップの親要素に `class="chips-required"` を付けると空きが赤くなる（`admin.css` に定義済み）。`TechPicker.renderChips` の引数は変えない。
 - `TechPicker.open` が作るシートのクラスは `.tp-overlay`（外枠）と `.tp-sheet`（本体）。
 - コート絞り込みは `Admin.renderCourtChips(container, players, current, onChange)` を使う。選手タブと同じ見た目になる。
-- シートの外枠は `Admin.openSheet(title, bodyEl, buttons, onClose) → { close, lock }` を使う。`lock(true)` の間は ✕ と外側タップで閉じない（保存の通信中に入力を失わないため）。
+- シートの外枠は `Admin.openSheet(title, bodyEl, buttons, onClose) → { close, lock }` を使う。`lock(true)` の間は ✕ と外側タップで閉じない（保存の通信中に入力を失わないため）。`onClose` はハッシュ遷移（`Admin.closeAllSheets()`）でも呼ばれるので、`onClose` の中でサーバーに書き込まないこと（古い ctx で書いてしまう）。
+- `Admin.closeAllSheets()` — 開いているシートを全部閉じる。`applyRoute` がハッシュ遷移のたびに呼ぶ。
 - `admin-players.js` の `isScored` / `compareOrder` は選手タブ内のローカル関数。進行タブで必要なら `admin-round.js` に同じものを置くか、共有が増えるなら `courts.js` への移動を検討する（今回は2箇所目が無いので移動しない）。
 - `ctx.isStale()` — `render(container, ctx)` の ctx に生えている。await の直後に見て true なら描画をやめる（タブや大会を切り替えられた後の古い応答を画面に反映しないため）。`Admin.currentEventId() !== eventId` の代わりにこれを使うこと。
 - 同じタブをもう一度タップすると再取得・再描画される（コート絞り込みは各タブが自分で保持する）。

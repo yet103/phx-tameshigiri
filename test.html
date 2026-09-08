@@ -21,6 +21,7 @@
 <script src="route.js"></script>
 <script src="outbox.js"></script>
 <script src="techpicker.js"></script>
+<script src="admin.js"></script>
 <script>
   var results = document.getElementById('results');
   var passed = 0, failed = 0;
@@ -660,6 +661,24 @@
       return [got, overlays, document.querySelectorAll('.tp-overlay').length];
     })(), [['水月'], 1, 0]);
     assert('dismiss: onClose を呼ばずに閉じる', (function(){ var called=false; TechPicker.open({techniques:[{name:'真'}], initial:['真'], onClose:function(){ called=true; }}); TechPicker.dismiss(); return [called, document.querySelectorAll('.tp-overlay').length]; })(), [false, 0]);
+    assert('openSheet: 2枚開いて closeAllSheets で全部閉じ、onClose は1回ずつ', (function() {
+      var n = 0;
+      var a = Admin.openSheet('A', document.createElement('div'), [], function() { n++; });
+      var b = Admin.openSheet('B', document.createElement('div'), [], function() { n++; });
+      b.lock(true);
+      Admin.closeAllSheets();
+      a.close(); b.close();
+      return [n, document.querySelectorAll('.sheet-overlay').length];
+    })(), [2, 0]);
+    assert('openSheet: lock 中は ✕ で閉じない', (function() {
+      var s = Admin.openSheet('L', document.createElement('div'), [], null);
+      s.lock(true);
+      document.querySelector('.sheet-close').click();
+      var still = document.querySelectorAll('.sheet-overlay').length;
+      s.lock(false);
+      document.querySelector('.sheet-close').click();
+      return [still, document.querySelectorAll('.sheet-overlay').length];
+    })(), [1, 0]);
 
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';

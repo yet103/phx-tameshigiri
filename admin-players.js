@@ -3,6 +3,7 @@
   var currentCourt = '';
   var courtOwner = null;   // currentCourt がどの大会のものか（大会が変われば全コートに戻す）
   var techCache = null;    // Api.loadTechniques() の techniques
+  var techPromise = null;  // 実行中の Api.loadTechniques()。同時にタップされても fetch は1回にする
 
   // 採点済みかどうか。サーバーの isScored と同じ判定を持つ。
   // result は 1=○, 0=×, 空白=未入力 でエンコードされている。
@@ -37,7 +38,10 @@
   // タップしたとき）。キャッシュがあればそれを返す。
   async function ensureTechniques() {
     if (techCache) return techCache;
-    var td = await Api.loadTechniques();
+    // 同時にタップされても Api.loadTechniques() は1回だけ叩く。
+    if (!techPromise) techPromise = Api.loadTechniques();
+    var td = await techPromise;
+    techPromise = null;   // 失敗（null）していれば次のタップで取り直せるようにする
     if (td && td.techniques) techCache = td.techniques;
     return techCache;
   }
@@ -438,9 +442,11 @@
     });
 
     btnDelete.addEventListener('click', async function() {
+      // 一巡目の行だけ「二巡目の行は残ります」と断る（二巡目の行自体を削除するときは不要）。
+      var roundFragment = (Courts.roundOf(player) === 1) ? '二巡目の行は残ります。\n' : '';
       if (!confirm(
         '選手「' + (player.name || '') + '」（' + (player.order || '') + '）を削除します。\n' +
-        '二巡目の行は残ります。\n' +
+        roundFragment +
         'よろしいですか？'
       )) return;
 
@@ -451,12 +457,13 @@
 
       if (res && res.blocked) {
         // 採点済みガード。得点を出してもう一度確認し、承諾したときだけ force。
-        // player はサーバー側の実装次第で null になり得るので、その場合は空扱いにする。
-        var blockedPlayer = res.player || {};
+        // player はサーバー側の実装次第で null になり得るので、その場合は
+        // 直前に読んだクロージャの値（name/order/score）にフォールバックする。
+        var bp = res.player || { name: player.name, order: player.order, score: player.score };
         var ok = confirm(
-          '「' + blockedPlayer.name + '」（' + blockedPlayer.order + '）は採点済みです（' +
-          blockedPlayer.score + '点）。\n' +
-          '削除すると採点結果は戻せません。二巡目の行は残ります。\n\n' +
+          '「' + bp.name + '」（' + bp.order + '）は採点済みです（' +
+          bp.score + '点）。\n' +
+          '削除すると採点結果は戻せません。' + roundFragment + '\n' +
           '本当に削除しますか？'
         );
         if (!ok) {
@@ -512,6 +519,24 @@
     input.accept = '.csv';
     input.style.display = 'none';
     document.body.appendChild(input);
+
+    var removed = false;
+    function cleanup() {
+      if (removed) return;
+      removed = true;
+      window.removeEventListener('focus', onFocus);
+      if (input.parentNode) input.parentNode.removeChild(input);
+    }
+    // ファイル選択ダイアログをキャンセルすると change は発火しない。
+    // cancel イベントが取れる環境ではそれで、取れない環境（フォールバック）では
+    // ダイアログを閉じてウィンドウに戻ってきた最初の focus で片付ける。
+    // change が先に来た場合はそちらの removeChild が先に効き、cleanup は何もしない。
+    function onFocus() {
+      cleanup();
+    }
+    input.addEventListener('cancel', cleanup);
+    window.addEventListener('focus', onFocus);
+
     input.addEventListener('change', function(e) {
       var file = e.target.files[0];
       if (file) {
@@ -519,35 +544,54 @@
         reader.onload = function(ev) { importCsvText(ctx, ev.target.result); };
         reader.readAsText(file, 'UTF-8');
       }
-      if (input.parentNode) input.parentNode.removeChild(input);
+      cleanup();
     });
     input.click();
   }
 
   async function importCsvText(ctx, text) {
     var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
+    var eventName = ctx.event && ctx.event.name;
     var mode = 'replace';
     if (ctx.players.length > 0) {
-      mode = confirm('既存データをクリアして読み込みますか？\n（キャンセルで追記）') ? 'replace' : 'append';
+      mode = confirm(
+        '大会「' + eventName + '」に読み込みます。' +
+        '既存データをクリアして読み込みますか？（キャンセルで追記）'
+      ) ? 'replace' : 'append';
+    }
+    // 大会が切り替わっていたら、確認ダイアログの後・Api.importCsv の前で必ず止める
+    // （古い ctx の大会に書き込んでしまわないため）。
+    if (Admin.currentEventId() !== eventId) {
+      alert('大会が切り替わったため、CSV の読み込みを中止しました。');
+      return;
     }
     var result = await Api.importCsv(eventId, text, mode);
     if (result && result.blocked) {
       var ok = confirm(
+        '大会「' + eventName + '」\n' +
         'この大会には採点済みの選手が少なくとも ' + result.scoredCount + ' 名います。\n' +
         '他のコート端末による採点も含まれます。\n' +
         '読み込みを続けると、これらの採点結果はすべて失われます。\n' +
         '本当に続行しますか？'
       );
       if (!ok) return;
+      if (Admin.currentEventId() !== eventId) {
+        alert('大会が切り替わったため、CSV の読み込みを中止しました。');
+        return;
+      }
       result = await Api.importCsv(eventId, text, mode, true);
     }
     if (!result || !result.success) {
       alert('インポートに失敗しました。');
       return;
     }
-    if (Admin.currentEventId() !== eventId) return;   // 読み込み中に別の大会へ移った
     Admin.toast(result.playerCount + '名を読み込みました');
-    Admin.reloadEvent();
+    // 履歴記録（app.js の onCsvImport と同じ形）
+    Api.addHistory(eventId, {
+      action: 'csv_import',
+      detail: result.playerCount + '名の選手データをインポート'
+    });
+    if (Admin.currentEventId() === eventId) Admin.reloadEvent();
   }
 
   Admin.registerTab('players', { render: render });

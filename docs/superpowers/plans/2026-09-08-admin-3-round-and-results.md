@@ -29,7 +29,7 @@ node server/index.js > "$TEMP/tmg_server.log" 2>&1 &
 
 1. ブラウザで `http://localhost:3457/test.html` を開く
 2. ページ末尾の `Result: N passed, M failed` を読む。**`M` が 0 であることが合格条件**
-3. 計画2 完了時点は **232 passed**。本計画で増えるのは Task 7 の 6 件だけで、最終的に **238 passed, 0 failed** になる
+3. 計画2 完了時点は **234 passed**。本計画で増えるのは Task 7 の 6 件だけで、最終的に **240 passed, 0 failed** になる
 
 **モジュールの書き方**
 
@@ -79,7 +79,9 @@ Admin.reloadEvent()            // async。再取得して現在のタブを描�
 Admin.currentEventId()
 Admin.toast(msg)               // 2秒の通知
 Admin.renderCourtChips(container, players, current, onChange)  // 「全コート」＋ Courts.listFrom のチップ列
-Admin.openSheet(title, bodyEl, buttons, onClose)  // → { close, lock }（lock(true) の間は ✕ と外側タップで閉じない）
+Admin.openSheet(title, bodyEl, buttons, onClose)  // → { close, lock }（lock(true) の間は ✕ と外側タップで閉じない。
+                                                    //    onClose はハッシュ遷移（closeAllSheets）でも呼ばれる。onClose の中でサーバーに書き込まないこと）
+Admin.closeAllSheets()          // 開いているシートを全部閉じる。ハッシュ遷移時に applyRoute が呼ぶ
 
 TechPicker.select(state, name); TechPicker.toArray(state); TechPicker.fromArray(names)
 TechPicker.open({ techniques, initial, onChange, onClose })   // 下部シート
@@ -135,7 +137,7 @@ Browser ツール（`mcp__Claude_Browser__navigate` / `find` / `resize_window`�
 node server/index.js > "$TEMP/tmg_server.log" 2>&1 &
 ```
 
-Expected: `Result: 232 passed, 0 failed`
+Expected: `Result: 234 passed, 0 failed`
 
 - [ ] **Step 2: 検証用の捨て大会を作る**
 
@@ -1732,7 +1734,7 @@ Expected: ページ末尾に `Result:` が**出ない**（`Present.revealOrder i
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 238 passed, 0 failed`
+Expected: `Result: 240 passed, 0 failed`
 
 - [ ] **Step 3: 発表モードの描画と進行を実装する**
 
@@ -1952,7 +1954,7 @@ Expected: 例外が出ない（`read_console_messages` の `onlyErrors: true` �
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 238 passed, 0 failed`
+Expected: `Result: 240 passed, 0 failed`
 
 - [ ] **Step 9: コミット**
 
@@ -2414,7 +2416,7 @@ Expected: `true`（`onEventSelect` で取り直したので二巡目の行が見
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 238 passed, 0 failed`
+Expected: `Result: 240 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -2548,11 +2550,11 @@ git commit -m "fix: 通し確認で見つかった不具合を直す" -m "Co-Aut
 
 | 時点 | 件数 |
 |---|---|
-| 着手前（計画2完了） | 232 passed, 0 failed |
-| Task 7 完了 | **238 passed, 0 failed** |
-| Task 10 完了 | **238 passed, 0 failed** |
+| 着手前（計画2完了） | 234 passed, 0 failed |
+| Task 7 完了 | **240 passed, 0 failed** |
+| Task 10 完了 | **240 passed, 0 failed** |
 
-**この計画の完了条件は `Result: 238 passed, 0 failed`。**
+**この計画の完了条件は `Result: 240 passed, 0 failed`。**
 
 ---
 

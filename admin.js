@@ -212,7 +212,9 @@ var Admin = (function() {
   }
 
   // シートの外枠。中身と操作ボタンを渡す。大会タブ・選手タブ・（計画3の）進行タブで共用する。
-  // onClose はシートがどの経路で閉じても（✕・外側タップ・close()）1回だけ呼ばれる。
+  // onClose はシートがどの経路で閉じても（✕・外側タップ・close()・closeAllSheets()）1回だけ呼ばれる。
+  // onClose はハッシュ遷移（closeAllSheets）でも呼ばれる。onClose の中でサーバーに書き込まないこと
+  // （古い ctx で書いてしまう）。
   // 戻り値: { close, lock }
   //   close()     : シートを閉じる
   //   lock(flag)  : true の間は ✕ と外側タップで閉じない（保存の通信中に入力を失わないため）
@@ -313,6 +315,9 @@ var Admin = (function() {
   // --- 起動 ---
 
   function init() {
+    // test.html は admin.html の DOM を持たない。admin.js を読み込ませて
+    // Admin.openSheet / closeAllSheets をテストするための早期リターン。
+    if (!document.getElementById('tabContent')) return;
     content = document.getElementById('tabContent');
     applyTheme(Storage.loadTheme());
     document.getElementById('btnTheme').addEventListener('click', function() {
@@ -343,6 +348,8 @@ var Admin = (function() {
     currentEventId: currentEventId,
     toast: toast,
     renderCourtChips: renderCourtChips,
-    openSheet: openSheet
+    openSheet: openSheet,
+    // シートを全部閉じる。ハッシュ遷移時に applyRoute が呼ぶ。テストからも使う。
+    closeAllSheets: closeAllSheets
   };
 })();
