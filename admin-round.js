@@ -1,0 +1,237 @@
+// 進行タブ：二巡目の生成と技の入力
+// 設計書の選択 A「一覧で埋めていく」。行タップで TechPicker のシートを開き、
+// シートを閉じたときに PATCH で保存する。
+var AdminRound = (function() {
+
+  var CTX = null;          // { eventId, event, players, isStale }
+  var containerEl = null;  // タブの入れ物（描き直しに使う）
+  var currentCourt = '';   // '' なら全コート
+  var lastEventId = null;  // 大会が変わったらコート絞り込みを戻すため
+  var techniques = null;   // Api.loadTechniques() の結果のキャッシュ
+  var pickerOpen = false;  // チップと行の両方がタップを拾うので二重に開かない
+  var counterEl = null;
+  var listEl = null;
+
+  // 採点済みの判定。server/index.js の isScored と同じ規則をクライアントにも持つ。
+  // 得点が正なら採点済み。○×（結果文字列の 0/1）が1つでもあれば採点済み。
+  function isScored(p) {
+    if (!p) return false;
+    if (typeof p.score === 'number' && p.score > 0) return true;
+    return /[01]/.test(p.result || '');
+  }
+
+  // 技が3つ揃っていない行を「未入力」と数える（一巡目のデータは常に3つ入っている）
+  function isTechIncomplete(p) {
+    return !p.tech1 || !p.tech2 || !p.tech3;
+  }
+
+  function roundOne(players) {
+    return (players || []).filter(function(p) { return Courts.roundOf(p) === 1; });
+  }
+
+  function roundTwo(players) {
+    return (players || []).filter(function(p) { return Courts.roundOf(p) === 2; });
+  }
+
+  // 現在のコート絞り込みで見えている二巡目の行
+  function visibleRows() {
+    return Courts.filter(roundTwo(CTX ? CTX.players : []), currentCourt);
+  }
+
+  // sourcePlayerId が指す一巡目の行。削除済みなら null
+  function sourceOf(p) {
+    if (!p || !p.sourcePlayerId || !CTX) return null;
+    var all = CTX.players || [];
+    for (var i = 0; i < all.length; i++) {
+      if (all[i] && all[i].id === p.sourcePlayerId) return all[i];
+    }
+    return null;
+  }
+
+  // --- 描画 ---
+
+  function render(container, ctx) {
+    containerEl = container;
+    CTX = ctx;
+    container.innerHTML = '';
+    if (!ctx || !ctx.eventId) {
+      var msg = document.createElement('p');
+      msg.className = 'round-empty';
+      msg.textContent = '大会を選んでください。';
+      container.appendChild(msg);
+      return;
+    }
+    if (ctx.eventId !== lastEventId) {
+      currentCourt = '';
+      lastEventId = ctx.eventId;
+    }
+    var players = ctx.players || [];
+    // 絞り込み中のコートが消えていたら全コートに戻す
+    if (currentCourt && Courts.listFrom(players).indexOf(currentCourt) === -1) currentCourt = '';
+
+    // 見出し：一巡目の採点状況・生成ボタン・メニュー
+    var head = document.createElement('div');
+    head.className = 'round-head';
+    var src = roundOne(players);
+    var scored = src.filter(isScored).length;
+    var stat = document.createElement('div');
+    stat.className = 'round-stat';
+    stat.id = 'roundScoredStat';
+    stat.textContent = '一巡目 採点済み ' + scored + ' / ' + src.length;
+    head.appendChild(stat);
+    var genBtn = document.createElement('button');
+    genBtn.type = 'button';
+    genBtn.className = 'round-gen';
+    genBtn.id = 'btnGenRound2';
+    genBtn.textContent = '二巡目を生成';
+    genBtn.addEventListener('click', onGenerate);
+    head.appendChild(genBtn);
+    head.appendChild(buildMenu());
+    container.appendChild(head);
+
+    // コート絞り込み。チップは大会全体のコートから作る。
+    // 二巡目が未生成のときにチップ列が消えないようにするため。
+    var chipsWrap = document.createElement('div');
+    chipsWrap.className = 'court-chips round-courts';
+    container.appendChild(chipsWrap);
+    function onCourtChange(court) {
+      currentCourt = court;
+      Admin.renderCourtChips(chipsWrap, players, currentCourt, onCourtChange);
+      renderList();
+    }
+    Admin.renderCourtChips(chipsWrap, players, currentCourt, onCourtChange);
+
+    counterEl = document.createElement('div');
+    counterEl.className = 'round-counter';
+    counterEl.id = 'roundCounter';
+    container.appendChild(counterEl);
+
+    listEl = document.createElement('div');
+    listEl.className = 'round-list';
+    listEl.id = 'roundList';
+    container.appendChild(listEl);
+
+    renderList();
+  }
+
+  function renderList() {
+    listEl.innerHTML = '';
+    var rows = visibleRows();
+    if (rows.length === 0) {
+      var p = document.createElement('p');
+      p.className = 'round-empty';
+      p.textContent = '二巡目の選手はまだいません。「二巡目を生成」を押してください。';
+      listEl.appendChild(p);
+    } else {
+      rows.forEach(function(r) { listEl.appendChild(buildRow(r)); });
+    }
+    updateCounter();
+  }
+
+  function updateCounter() {
+    if (!counterEl) return;
+    var rows = visibleRows();
+    var n = rows.filter(isTechIncomplete).length;
+    counterEl.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + n;
+    counterEl.className = 'round-counter' + (n === 0 ? ' done' : '');
+  }
+
+  function buildRow(p) {
+    var row = document.createElement('div');
+    row.className = 'round-row';
+    row.setAttribute('data-player-id', p.id);
+
+    var src = sourceOf(p);
+    var top = document.createElement('div');
+    top.className = 'round-row-top';
+    var name = document.createElement('span');
+    name.className = 'round-name';
+    name.textContent = (p.order || '') + '　' + (p.name || '');
+    var prev = document.createElement('span');
+    prev.className = 'round-prev';
+    prev.textContent = '一巡目 ' + (src ? String(src.score || 0) : '—');
+    top.appendChild(name);
+    top.appendChild(prev);
+    row.appendChild(top);
+
+    // chips-required: 空きのチップを赤くする（admin.css）
+    var chips = document.createElement('div');
+    chips.className = 'round-chips chips chips-required';
+    row.appendChild(chips);
+    drawChips(p, row);
+
+    var copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'round-copy';
+    copy.textContent = '一巡目と同じ技をコピー';
+    if (!src) {
+      copy.disabled = true;
+      copy.title = '一巡目の行が削除されています';
+    } else {
+      copy.addEventListener('click', function(ev) {
+        ev.stopPropagation();   // 行タップ（シートを開く）と二重に反応させない
+        onCopyFromRound1(p, src, row);
+      });
+    }
+    row.appendChild(copy);
+
+    row.addEventListener('click', function() { openPicker(p, row); });
+    return row;
+  }
+
+  function drawChips(p, row) {
+    TechPicker.renderChips(
+      row.querySelector('.round-chips'),
+      TechPicker.fromArray([p.tech1, p.tech2, p.tech3]),
+      function() { openPicker(p, row); }
+    );
+  }
+
+  // --- 技の入力（Task 3 で中身を入れる） ---
+
+  function openPicker(p, row) {
+    // Task 3
+  }
+
+  function onCopyFromRound1(p, src, row) {
+    // Task 3
+  }
+
+  // --- 二巡目の生成（Task 2 で中身を入れる） ---
+
+  function onGenerate() {
+    // Task 2
+  }
+
+  // --- メニュー（二次導線） ---
+
+  function buildMenu() {
+    var menu = document.createElement('details');
+    menu.className = 'round-menu';
+    var sum = document.createElement('summary');
+    sum.textContent = '⋯';
+    menu.appendChild(sum);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btnRoundExport';
+    btn.textContent = 'CSVエクスポート';
+    btn.addEventListener('click', async function() {
+      menu.open = false;
+      var ctx = CTX;
+      var csv = await Api.exportCsv(ctx.eventId);
+      if (ctx.isStale()) return;  // 通信中に大会やタブを切り替えられた
+      if (!csv) { alert('エクスポートに失敗しました。'); return; }
+      Storage.downloadCsv('players.csv', csv);
+    });
+    menu.appendChild(btn);
+    return menu;
+  }
+
+  Admin.registerTab('round', { render: render });
+
+  return {
+    render: render,
+    isScored: isScored,
+    isTechIncomplete: isTechIncomplete
+  };
+})();
