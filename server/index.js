@@ -292,6 +292,18 @@ app.use(express.json({ limit: '50mb' }));
 // async 化して await を挟むと、コートごとの端末が同時に採点したとき
 // 更新が失われる。非同期化する場合は大会IDごとの書き込みロックを併せて導入すること。
 // test.html の「並行PATCH12本が全件反映される」がこの不変条件の番人。
+//
+// 対象:
+//   POST   /api/events
+//   DELETE /api/events/:id
+//   POST   /api/events/:id/players
+//   PATCH  /api/events/:id/players/:playerId
+//   DELETE /api/events/:id/players/:playerId
+//   POST   /api/events/:id/rounds/2/generate
+//   POST   /api/events/:id/import
+//   POST   /api/events/:id/history
+//   POST   /api/links               （大会ファイルに shareToken を書き込む）
+//   POST   /api/techniques / DELETE /api/techniques
 // ── Event API ──
 
 // GET /api/events : 大会一覧
