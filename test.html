@@ -135,6 +135,35 @@
     var cleanAgain = await Api.importCsv(cleanEvent.id, cleanCsv, 'replace');
     assert('未採点のみの大会へのreplaceは拒否されない', cleanAgain.success, true);
     await Api.deleteEvent(cleanEvent.id);
+
+    // --- 選手の手動追加 ---
+    var addEvent = await Api.saveEvent({ name: '追加テスト', date: '2026-02-01', venue: '', players: [] });
+    var p1 = await Api.createPlayer(addEvent.id, {
+      name: '一郎', court: 'A', isFemale: false, isNewFace: false, tech1: '真', tech2: '', tech3: ''
+    });
+    assert('createPlayer 1人目の order', p1.order, 'A-男子-1-1');
+    assert('createPlayer は id を採番する', typeof p1.id, 'string');
+    assert('createPlayer の初期得点は0', p1.score, 0);
+    assert('createPlayer は result を空で作る', p1.result, '');
+    assert('createPlayer は技を保存する', p1.tech1, '真');
+
+    var p2 = await Api.createPlayer(addEvent.id, { name: '二郎', court: 'A', isFemale: false });
+    assert('同条件の2人目は -1-2', p2.order, 'A-男子-1-2');
+    var p3 = await Api.createPlayer(addEvent.id, { name: '三郎', court: 'B', isFemale: false });
+    assert('別コートは番号が1に戻る', p3.order, 'B-男子-1-1');
+    var p4 = await Api.createPlayer(addEvent.id, { name: '花子', court: 'A', isFemale: true });
+    assert('同コートでも女子は別採番', p4.order, 'A-女子-1-1');
+    assert('createPlayer は選手を大会に追加する',
+      (await Api.loadEvent(addEvent.id)).players.length, 4);
+
+    assert('name が空なら null', await Api.createPlayer(addEvent.id, { name: '', court: 'A' }), null);
+    assert('コート名に - があれば null',
+      await Api.createPlayer(addEvent.id, { name: '四郎', court: 'A-1' }), null);
+    assert('コート名が未分類なら null',
+      await Api.createPlayer(addEvent.id, { name: '四郎', court: '未分類' }), null);
+    assert('存在しない大会は null',
+      await Api.createPlayer('nosuchevent', { name: '四郎', court: 'A' }), null);
+    await Api.deleteEvent(addEvent.id);
   }
 
   (async function() {

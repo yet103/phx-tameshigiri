@@ -328,6 +328,60 @@ app.delete('/api/events/:id', (req, res) => {
 
 // ── Player API ──
 
+// POST /api/events/:id/players : 選手を1名追加
+// order はサーバーが組み立てる。クライアントが送る id / order / score / result は無視する。
+// 既存行に触れないため、採点中の端末には影響しない（ガードは掛けない）。
+app.post('/api/events/:id/players', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const body = req.body || {};
+
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) {
+      return res.status(400).json({ error: '選手名が必要です' });
+    }
+    const court = typeof body.court === 'string' ? body.court.trim() : '';
+    if (!isValidCourt(court)) {
+      return res.status(400).json({ error: '不正なコート名です' });
+    }
+    const round = body.round === undefined ? 1 : body.round;
+    if (!Number.isInteger(round) || round < 1 || round > 9) {
+      return res.status(400).json({ error: '不正な巡目です' });
+    }
+
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (!Array.isArray(event.players)) event.players = [];
+
+    const isFemale = body.isFemale === true;
+    const gender = isFemale ? '女子' : '男子';
+    const n = nextOrderNumber(event.players, court, gender, round);
+
+    const player = {
+      id: generateId(),
+      name: name,
+      order: buildOrder(court, isFemale, round, n),
+      tech1: typeof body.tech1 === 'string' ? body.tech1 : '',
+      tech2: typeof body.tech2 === 'string' ? body.tech2 : '',
+      tech3: typeof body.tech3 === 'string' ? body.tech3 : '',
+      score: 0,
+      isNewFace: body.isNewFace === true,
+      isFemale: isFemale,
+      result: ''
+    };
+
+    event.players.push(player);
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.status(201).json({ success: true, player: player });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/events/:id/players/:playerId : 選手の採点結果を部分更新
 app.patch('/api/events/:id/players/:playerId', (req, res) => {
   try {

@@ -75,6 +75,26 @@ var Api = (function() {
     }
   }
 
+  async function createPlayer(eventId, data) {
+    // POST /api/events/:eventId/players
+    // Body: { name, court, isFemale, isNewFace, tech1, tech2, tech3, round }
+    // 戻り値: 追加された player オブジェクト | null（400/404/通信失敗）
+    // order はサーバーが コート×性別×巡目 ごとに採番するので、送っても無視される。
+    // round を省略すると 1（一巡目）。二巡目の行は generateNextRound が作る。
+    try {
+      var res = await fetch('/api/events/' + eventId + '/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) return null;
+      var json = await res.json();
+      return json.player || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function importCsv(eventId, csvText, mode, force) {
     // POST /api/events/:eventId/import
     // Body: { csvText, mode: 'replace' | 'append', force }
@@ -179,6 +199,7 @@ var Api = (function() {
     saveEvent: saveEvent,
     deleteEvent: deleteEvent,
     updatePlayer: updatePlayer,
+    createPlayer: createPlayer,
     importCsv: importCsv,
     exportCsv: exportCsv,
     loadTechniques: loadTechniques,
