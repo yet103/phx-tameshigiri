@@ -8,6 +8,7 @@ var AdminRound = (function() {
   var lastEventId = null;  // 大会が変わったらコート絞り込みを戻すため
   var techniques = null;   // Api.loadTechniques() の結果のキャッシュ
   var pickerOpen = false;  // チップと行の両方がタップを拾うので二重に開かない
+  var openingPicker = false;  // pickerOpen が立ってから TechPicker.open が呼ばれるまでの間の多重タップを防ぐ（await ensureTechniques 中の連打対策）
   var counterEl = null;
   var listEl = null;
   var outsideClickBound = false;  // '⋯' メニューの外側タップ検知は document に1回だけ付ける
@@ -198,13 +199,17 @@ var AdminRound = (function() {
   }
 
   async function openPicker(p, row) {
-    // dismiss で閉じられた後はフラグが残るので、実際にシートがあるときだけ弾く
-    if (pickerOpen && document.querySelector('.tp-overlay')) return;
+    // pickerOpen は dismiss で閉じられた後もフラグが残りうるので、実際にシートが
+    // あるか、まだ TechPicker.open を呼んでいる最中（openingPicker）のときだけ弾く。
+    // openingPicker は await ensureTechniques() の完了を待つ間に連打されても、
+    // シートがまだ DOM に無い（.tp-overlay 判定をすり抜ける）のを同期的にガードするため。
+    if (pickerOpen && (openingPicker || document.querySelector('.tp-overlay'))) return;
     pickerOpen = true;
+    openingPicker = true;
     var ctx = CTX;
     var eventId = ctx.eventId;
-    if (!(await ensureTechniques())) { pickerOpen = false; return; }
-    if (ctx.isStale()) { pickerOpen = false; return; }  // 待っている間に画面を離れていた
+    if (!(await ensureTechniques())) { pickerOpen = false; openingPicker = false; return; }
+    if (ctx.isStale()) { pickerOpen = false; openingPicker = false; return; }  // 待っている間に画面を離れていた
     // 最新の選択は onChange で控える
     var latest = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
     TechPicker.open({
@@ -228,6 +233,7 @@ var AdminRound = (function() {
         await saveTech(p, arr, row, eventId, ctx);
       }
     });
+    openingPicker = false;  // シートを開き終えたので、以降は .tp-overlay の有無だけで多重オープンを判定する
   }
 
   // 保存できたら true。失敗したら画面もサーバーに合わせて元に戻す。
@@ -280,6 +286,10 @@ var AdminRound = (function() {
   async function onGenerate() {
     var ctx = CTX;
     var eventId = ctx.eventId;
+    var src = roundOne(ctx.players);
+    var scored = src.filter(Courts.isScored).length;
+    if (!confirm('一巡目 採点済み ' + scored + ' / ' + src.length + '。\n' +
+        '全コート分の二巡目を作ります（採点画面にも反映されます）。\nよろしいですか？')) return;
     var result = await Api.generateNextRound(eventId, false);
     if (ctx.isStale()) return;  // 通信中に大会やタブを切り替えられた
     if (!result) {

@@ -92,11 +92,17 @@
       rankingContainer.innerHTML = '';
       var ev = data.event || {};
       // ダウンロードした単体HTMLだけを見てもどの大会か分かるよう、見出しを出す
-      var heading = document.createElement('div');
-      heading.innerHTML = '<h2>' + Storage.esc(ev.name || '') + '</h2>' +
-        '<p style="color:var(--text-muted)">' +
-        Storage.esc(ev.date || '') + '　' + Storage.esc(ev.venue || '') + '</p>';
-      rankingContainer.appendChild(heading);
+      // （大会名が無ければ、意味のある見出しにならないので省略する）。
+      // rank-heading クラスは HTML ダウンロード時に表本体と切り分けるための目印。
+      // theme.css がダウンロード先には無いので、色は変数でなくリテラルで指定する。
+      if (ev.name) {
+        var heading = document.createElement('div');
+        heading.className = 'rank-heading';
+        heading.innerHTML = '<h2>' + Storage.esc(ev.name) + '</h2>' +
+          '<p style="color:#666">' +
+          Storage.esc(ev.date || '') + '　' + Storage.esc(ev.venue || '') + '</p>';
+        rankingContainer.appendChild(heading);
+      }
       CATEGORIES.forEach(function(c) {
         rankingContainer.appendChild(
           buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || []));
@@ -121,15 +127,23 @@
     }
 
     document.getElementById('btnDownloadHtml').addEventListener('click', function() {
-      if (!rankingContainer.querySelector('.ranking-section')) {
+      var sections = rankingContainer.querySelectorAll('.ranking-section');
+      if (sections.length === 0) {
         alert('大会データを読み込んでから順位を表示してください。');
         return;
       }
+      // 見出し（rank-heading）は表と同じ innerHTML をそのまま flex 行に入れると
+      // 横に並ぶ列の1つになってしまうため、表本体（.ranking-section）とは別に
+      // 取り出して flex の外に置く。
+      var headingEl = rankingContainer.querySelector('.rank-heading');
+      var headingHTML = headingEl ? headingEl.outerHTML : '';
+      var sectionsHTML = '';
+      for (var i = 0; i < sections.length; i++) sectionsHTML += sections[i].outerHTML;
       var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
         '<style>body{font-family:sans-serif}table{border-collapse:collapse;display:inline-table;margin:0 16px 16px 0}' +
         'th,td{border:1px solid #999;padding:6px 12px}th{background:#eee}h3{margin-bottom:8px}</style></head>' +
-        '<body><div style="display:flex;flex-wrap:wrap">' +
-        rankingContainer.innerHTML + '</div></body></html>';
+        '<body>' + headingHTML + '<div style="display:flex;flex-wrap:wrap">' +
+        sectionsHTML + '</div></body></html>';
       Storage.downloadHtml('ranking.html', html);
     });
   </script>

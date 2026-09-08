@@ -720,8 +720,9 @@ var App = (function() {
   async function onGenNextRound() {
     if (!currentEvent) { alert('大会を選択してください。'); return; }
     // サーバーは受け取った得点だけで二巡目を並べる。未送信があると並び順が狂う
-    if (Outbox.pendingCount() > 0) {
-      alert('未送信の採点が ' + Outbox.pendingCount() + ' 件あります。送信が終わってから生成してください。');
+    var pending = Outbox.pendingCount();
+    if (pending > 0) {
+      alert('未送信の採点が ' + pending + ' 件あります。送信が終わってから生成してください。');
       return;
     }
     if (!confirm('全コート分の二巡目データをサーバーに作ります。\n' +
