@@ -197,10 +197,46 @@ var AdminRound = (function() {
     // Task 3
   }
 
-  // --- 二巡目の生成（Task 2 で中身を入れる） ---
+  // --- 二巡目の生成 ---
+  // 番号規則はサーバーの生成 API が唯一の実装。クライアントは確認と再送だけを持つ。
+  // 同じ文言を app.js の onGenNextRound も持つ（採点画面と運営画面で流れを揃えるため）。
 
-  function onGenerate() {
-    // Task 2
+  function conflictMessage(result) {
+    var extra = '';
+    if (result.untrackedCount > 0) {
+      extra += '\n※CSV で作った二巡目の行が ' + result.untrackedCount + ' 件あります。続けると重複します。';
+    }
+    if (result.unassignedCount > 0) {
+      extra += '\n※コートが決まっていない選手が ' + result.unassignedCount + ' 名います（二巡目を作れません。選手タブでコートを設定してください）。';
+    }
+    if (result.reason === 'unscored') {
+      return '未採点が' + result.unscoredCount + '名います。\n' +
+             'このまま生成すると、あとから入る一巡目の得点は二巡目の並び順に反映されません。\n' +
+             '生成しますか？' + extra;
+    }
+    return '二巡目は生成済みです（' + result.existingCount + '名）。\n' +
+           '未生成の選手がいれば差分だけ追加しますか？' + extra;
+  }
+
+  async function onGenerate() {
+    var ctx = CTX;
+    var eventId = ctx.eventId;
+    var result = await Api.generateNextRound(eventId, false);
+    if (ctx.isStale()) return;  // 通信中に大会やタブを切り替えられた
+    if (!result) { alert('二巡目の生成に失敗しました。通信を確認してください。'); return; }
+    if (result.blocked) {
+      if (!confirm(conflictMessage(result))) return;
+      result = await Api.generateNextRound(eventId, true);
+      if (ctx.isStale()) return;
+      if (!result || result.blocked) {
+        alert('二巡目の生成に失敗しました。通信を確認してください。');
+        return;
+      }
+    }
+    var note = result.unassignedCount > 0
+      ? '（コート未設定の ' + result.unassignedCount + ' 名は作っていません）' : '';
+    Admin.toast('二巡目を生成しました（' + result.created + '名）' + note);
+    await Admin.reloadEvent();
   }
 
   // --- メニュー（二次導線） ---
