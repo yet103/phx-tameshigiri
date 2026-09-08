@@ -308,6 +308,41 @@ var Admin = (function() {
     });
   }
 
+  // 運営画面から他の画面へ戻る導線（下タブは運営画面内のタブなので、ページ間の移動はここに置く）
+  function openAdminMenu() {
+    var body = document.createElement('div');
+
+    var btnScoring = document.createElement('button');
+    btnScoring.type = 'button';
+    btnScoring.className = 'menu-item';
+    btnScoring.textContent = '📋 採点画面';
+    body.appendChild(btnScoring);
+
+    var btnTechniques = document.createElement('button');
+    btnTechniques.type = 'button';
+    btnTechniques.className = 'menu-item';
+    btnTechniques.textContent = '🗒 技術リスト編集';
+    body.appendChild(btnTechniques);
+
+    var btnRanking = document.createElement('button');
+    btnRanking.type = 'button';
+    btnRanking.className = 'menu-item';
+    btnRanking.textContent = '🏆 順位表示';
+    body.appendChild(btnRanking);
+
+    var btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'btn';
+    btnClose.textContent = '閉じる';
+
+    var sheet = openSheet('メニュー', body, [btnClose]);
+    btnClose.addEventListener('click', sheet.close);
+
+    btnScoring.addEventListener('click', function() { location.href = 'index.html'; });
+    btnTechniques.addEventListener('click', function() { location.href = 'techniques.html'; });
+    btnRanking.addEventListener('click', function() { location.href = 'ranking.html'; });
+  }
+
   // --- テーマ ---
 
   function applyTheme(theme) {
@@ -328,6 +363,7 @@ var Admin = (function() {
       Storage.saveTheme(next);
       applyTheme(next);
     });
+    document.getElementById('btnAdminMenu').addEventListener('click', openAdminMenu);
 
     var btns = document.querySelectorAll('.tabbar button');
     for (var i = 0; i < btns.length; i++) {

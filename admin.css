@@ -47,6 +47,7 @@ input[type="text"], input[type="date"] {
   flex: 1; font-weight: bold;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* テーマ切替と⋯メニューで共用するトップバーのアイコンボタン */
 .theme-btn {
   width: 44px; height: 44px; font-size: 20px;
   background: transparent; color: var(--accent-text);
