@@ -53,6 +53,7 @@ var AdminRound = (function() {
   function render(container, ctx) {
     containerEl = container;
     CTX = ctx;
+    pickerOpen = false;
     container.innerHTML = '';
     if (!ctx || !ctx.eventId) {
       var msg = document.createElement('p');
@@ -187,14 +188,71 @@ var AdminRound = (function() {
     );
   }
 
-  // --- 技の入力（Task 3 で中身を入れる） ---
+  // --- 技の入力 ---
 
-  function openPicker(p, row) {
-    // Task 3
+  async function ensureTechniques() {
+    if (techniques) return true;
+    var data = await Api.loadTechniques();
+    if (!data || !data.techniques) {
+      alert('技術リストを取得できませんでした。');
+      return false;
+    }
+    techniques = data.techniques;
+    return true;
   }
 
-  function onCopyFromRound1(p, src, row) {
-    // Task 3
+  async function openPicker(p, row) {
+    if (pickerOpen) return;   // チップと行の両方がタップを拾うので二重に開かない
+    if (!(await ensureTechniques())) return;
+    var ctx = CTX;
+    var eventId = ctx.eventId;
+    // 最新の選択は onChange で控える
+    var latest = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
+    pickerOpen = true;
+    TechPicker.open({
+      techniques: techniques,
+      initial: latest,
+      onChange: function(state) {
+        latest = state;
+        TechPicker.renderChips(row.querySelector('.round-chips'), state,
+          function() { openPicker(p, row); });
+      },
+      onClose: async function(state) {
+        pickerOpen = false;
+        latest = state || latest;
+        var arr = TechPicker.toArray(latest);
+        if (arr[0] === (p.tech1 || '') &&
+            arr[1] === (p.tech2 || '') &&
+            arr[2] === (p.tech3 || '')) {
+          return;   // 変わっていないなら送らない
+        }
+        if (ctx.isStale()) return;   // シートを開いたまま画面を離れていたら書かない
+        await saveTech(p, arr, row, eventId);
+      }
+    });
+  }
+
+  // 保存できたら true。失敗したら画面もサーバーに合わせて元に戻す。
+  async function saveTech(p, arr, row, eventId) {
+    var res = await Api.updatePlayerInfo(eventId, p.id,
+      { tech1: arr[0], tech2: arr[1], tech3: arr[2] });
+    if (!res || !res.ok) {
+      alert('技を保存できませんでした。通信を確認してもう一度お試しください。');
+      drawChips(p, row);
+      return false;
+    }
+    p.tech1 = arr[0];
+    p.tech2 = arr[1];
+    p.tech3 = arr[2];
+    drawChips(p, row);
+    updateCounter();
+    return true;
+  }
+
+  async function onCopyFromRound1(p, src, row) {
+    var ok = await saveTech(p, [src.tech1 || '', src.tech2 || '', src.tech3 || ''],
+      row, CTX.eventId);
+    if (ok) Admin.toast('一巡目の技をコピーしました');
   }
 
   // --- 二巡目の生成 ---
