@@ -346,6 +346,35 @@
     await Api.deleteEvent(unaEvent.id);
 
     assert('存在しない大会の二巡目生成は null', await Api.generateNextRound('nosuchevent', false), null);
+
+    // --- 順位データ ---
+    var rankEvent = await Api.saveEvent({ name: '順位テスト', date: '2026-03-01', venue: '道場', players: [] });
+    var rankCsv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
+                  '吉野,A-男子-1-1,真,,,40,,,1    \n' +
+                  '吉野,A-男子-2-1,真,,,34,,,1    \n' +
+                  '田中,A-男子-1-2,真,,,74,,,1    \n' +
+                  '佐藤,A-男子-1-3,真,,,20,,,1    \n' +
+                  '新人太郎,A-男子-1-4,真,,,10,○,,1    \n' +
+                  '花子,A-女子-1-1,真,,,30,,○,1    \n';
+    await Api.importCsv(rankEvent.id, rankCsv, 'replace');
+    var ranking = await Api.loadRanking(rankEvent.id);
+    assert('loadRanking は大会名を返す', ranking.event.name, '順位テスト');
+    assert('loadRanking は開催日と会場を返す',
+      [ranking.event.date, ranking.event.venue], ['2026-03-01', '道場']);
+    assert('一般男子は氏名で合算し同点は同順位（1,1,3）',
+      ranking.rankings.male,
+      [ { rank: 1, name: '吉野', score: 74 },
+        { rank: 1, name: '田中', score: 74 },
+        { rank: 3, name: '佐藤', score: 20 },
+        { rank: 4, name: '新人太郎', score: 10 } ]);
+    assert('一般女子', ranking.rankings.female, [{ rank: 1, name: '花子', score: 30 }]);
+    assert('新人は男子にも新人にも入る',
+      ranking.rankings.newFace, [{ rank: 1, name: '新人太郎', score: 10 }]);
+    assert('順位の項目は rank/name/score だけ',
+      Object.keys(ranking.rankings.male[0]), ['rank', 'name', 'score']);
+    assert('順位に result は含まれない', ranking.rankings.male[0].result, undefined);
+    assert('存在しない大会の順位は null', await Api.loadRanking('nosuchevent'), null);
+    await Api.deleteEvent(rankEvent.id);
   }
 
   (async function() {

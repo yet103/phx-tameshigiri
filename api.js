@@ -278,6 +278,21 @@ var Api = (function() {
     }
   }
 
+  // --- Ranking / Share ---
+  async function loadRanking(eventId) {
+    // GET /api/events/:eventId/ranking
+    // 戻り値: { event: { name, date, venue, updatedAt },
+    //          rankings: { male: [{ rank, name, score }], female: [...], newFace: [...] } }
+    //       | null（400/404/通信失敗）
+    try {
+      var res = await fetch('/api/events/' + eventId + '/ranking');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
   return {
     listEvents: listEvents,
     loadEvent: loadEvent,
@@ -294,6 +309,7 @@ var Api = (function() {
     saveTechniques: saveTechniques,
     resetTechniques: resetTechniques,
     loadHistory: loadHistory,
-    addHistory: addHistory
+    addHistory: addHistory,
+    loadRanking: loadRanking
   };
 })();

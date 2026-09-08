@@ -223,6 +223,54 @@ function writeJsonAtomic(filePath, data) {
   fs.renameSync(tmp, filePath); // 同一ファイルシステム上なのでアトミック
 }
 
+// 順位の集計。順位ロジックの唯一の実装。
+// 行ごとに isFemale で男女に振り分け、isNewFace なら新人にも入れる。
+// 氏名で合算する（一巡目＋二巡目）。得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
+// ○×の生データ（result）や order は返さない（共有リンクから無認証で読まれるため）。
+function computeRanking(event) {
+  const male = {};
+  const female = {};
+  const newFace = {};
+
+  const add = (dict, name, score) => { dict[name] = (dict[name] || 0) + score; };
+
+  ((event && event.players) || []).forEach(p => {
+    const name = (p && p.name) || '';
+    if (!name) return;
+    const score = typeof p.score === 'number' ? p.score : 0;
+    if (p.isFemale) add(female, name, score);
+    else add(male, name, score);
+    if (p.isNewFace) add(newFace, name, score);
+  });
+
+  const rank = dict => {
+    const entries = Object.keys(dict)
+      .map(name => ({ name: name, score: dict[name] }))
+      .sort((a, b) => b.score - a.score);
+    let current = 1;
+    let prev = null;
+    return entries.map((e, i) => {
+      if (prev !== null && e.score !== prev) current = i + 1;
+      prev = e.score;
+      return { rank: current, name: e.name, score: e.score };
+    });
+  };
+
+  return {
+    event: {
+      name: (event && event.name) || '',
+      date: (event && event.date) || '',
+      venue: (event && event.venue) || '',
+      updatedAt: (event && event.updatedAt) || ''
+    },
+    rankings: {
+      male: rank(male),
+      female: rank(female),
+      newFace: rank(newFace)
+    }
+  };
+}
+
 // ミドルウェア
 app.use(cors());
 // ペイロードサイズ制限を緩和
@@ -727,6 +775,22 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
       untrackedCount: untrackedCount,
       unassignedCount: unassignedCount
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/events/:id/ranking : 順位データ（運営画面・ranking.html 用）
+// 参加者向けは GET /api/links/:token/ranking（無認証）。どちらも computeRanking を共有する。
+app.get('/api/events/:id/ranking', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    res.json(computeRanking(event));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
