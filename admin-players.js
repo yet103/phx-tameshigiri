@@ -58,8 +58,15 @@
     h2.textContent = '選手 ' + ctx.players.length + '名';
     var spacer = document.createElement('div');
     spacer.className = 'spacer';
+    var btnMenu = document.createElement('button');
+    btnMenu.type = 'button';
+    btnMenu.className = 'icon-btn';
+    btnMenu.textContent = '⋯';
+    btnMenu.addEventListener('click', function() { openMenu(ctx); });
+
     head.appendChild(h2);
     head.appendChild(spacer);
+    head.appendChild(btnMenu);
     container.appendChild(head);
 
     var chips = document.createElement('div');
@@ -472,6 +479,75 @@
       Admin.toast('削除しました');
       Admin.reloadEvent();
     });
+  }
+
+  // 「⋯」メニュー。主導線は1人ずつの登録で、CSV は一括登録用の二次導線。
+  function openMenu(ctx) {
+    var body = document.createElement('div');
+
+    var btnCsv = document.createElement('button');
+    btnCsv.type = 'button';
+    btnCsv.className = 'menu-item';
+    btnCsv.textContent = '📄 CSVインポート';
+    body.appendChild(btnCsv);
+
+    var btnCancel = document.createElement('button');
+    btnCancel.type = 'button';
+    btnCancel.className = 'btn';
+    btnCancel.textContent = '閉じる';
+
+    var sheet = Admin.openSheet('メニュー', body, [btnCancel]);
+    btnCancel.addEventListener('click', sheet.close);
+
+    btnCsv.addEventListener('click', function() {
+      sheet.close();
+      pickCsv(ctx);
+    });
+  }
+
+  // admin.html には file input を置かない（DOM は計画3との契約）。その場で作って捨てる。
+  function pickCsv(ctx) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function(ev) { importCsvText(ctx, ev.target.result); };
+        reader.readAsText(file, 'UTF-8');
+      }
+      if (input.parentNode) input.parentNode.removeChild(input);
+    });
+    input.click();
+  }
+
+  async function importCsvText(ctx, text) {
+    var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
+    var mode = 'replace';
+    if (ctx.players.length > 0) {
+      mode = confirm('既存データをクリアして読み込みますか？\n（キャンセルで追記）') ? 'replace' : 'append';
+    }
+    var result = await Api.importCsv(eventId, text, mode);
+    if (result && result.blocked) {
+      var ok = confirm(
+        'この大会には採点済みの選手が少なくとも ' + result.scoredCount + ' 名います。\n' +
+        '他のコート端末による採点も含まれます。\n' +
+        '読み込みを続けると、これらの採点結果はすべて失われます。\n' +
+        '本当に続行しますか？'
+      );
+      if (!ok) return;
+      result = await Api.importCsv(eventId, text, mode, true);
+    }
+    if (!result || !result.success) {
+      alert('インポートに失敗しました。');
+      return;
+    }
+    if (Admin.currentEventId() !== eventId) return;   // 読み込み中に別の大会へ移った
+    Admin.toast(result.playerCount + '名を読み込みました');
+    Admin.reloadEvent();
   }
 
   Admin.registerTab('players', { render: render });
