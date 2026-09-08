@@ -81,6 +81,8 @@ var Api = (function() {
     // 戻り値: 追加された player オブジェクト | null（400/404/通信失敗）
     // order はサーバーが コート×性別×巡目 ごとに採番するので、送っても無視される。
     // round を省略すると 1（一巡目）。二巡目の行は generateNextRound が作る。
+    // round は数値（1〜9）。文字列を送ると 400 になる。
+    // isFemale / isNewFace は真偽値の true のときだけ立つ（'true' などの文字列は false 扱い）。
     try {
       var res = await fetch('/api/events/' + eventId + '/players', {
         method: 'POST',
@@ -98,7 +100,7 @@ var Api = (function() {
   async function deletePlayer(eventId, playerId, force) {
     // DELETE /api/events/:eventId/players/:playerId?force=1
     // 戻り値: true（削除成功）
-    //       | { blocked: true, player: { name, order, score } }（409: 採点済み）
+    //       | { blocked: true, player: { name, order, score } | null }（409: 採点済み）
     //       | false（404・400・通信失敗）
     // 削除後の再採番はしないので、番号には欠番が残る。
     try {

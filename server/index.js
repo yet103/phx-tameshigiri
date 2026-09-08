@@ -428,7 +428,7 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     const players = Array.isArray(event.players) ? event.players : [];
-    const idx = players.findIndex(p => p.id === req.params.playerId);
+    const idx = players.findIndex(p => p && p.id === req.params.playerId);
     if (idx === -1) {
       return res.status(404).json({ error: '選手が見つかりません' });
     }
@@ -440,7 +440,7 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
         player: {
           name: target.name || '',
           order: target.order || '',
-          score: target.score || 0
+          score: Number(target.score) || 0
         }
       });
     }

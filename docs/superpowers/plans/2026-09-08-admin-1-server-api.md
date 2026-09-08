@@ -168,7 +168,7 @@ Expected: FAIL。**`Result:` 行が表示されない**（`Courts.roundOf` が�
   // 巡目は order からいつでも導出できるので、選手データには持たせない。
   // サーバー側の同じ実装は server/index.js の roundOf。両方を test.html で固定している。
   function roundOf(player) {
-    var m = ((player && player.order) || '').match(/^(.+)-(男子|女子)-(\d+)-(\d+)$/);
+    var m = ((player && player.order) || '').match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
     return m ? parseInt(m[3], 10) : 1;
   }
 ```
@@ -205,7 +205,7 @@ Expected: FAIL。**`Result:` 行が表示されない**（`Courts.roundOf` が�
 // クライアント側の対応実装は courts.js（Courts.courtOf / Courts.roundOf）。
 // モジュールを共有できない（CommonJS と <script> の IIFE）ため同じ規則を2箇所に持ち、
 // 両方を test.html で固定している。
-const ORDER_PATTERN = /^(.+)-(男子|女子)-(\d+)-(\d+)$/;
+const ORDER_PATTERN = /^([^-]+)-(男子|女子)-(\d+)-(\d+)$/;
 
 // order を { court, gender, round, number } に分解する。解析できなければ null。
 function parseOrder(order) {
@@ -262,7 +262,7 @@ function buildOrder(court, isFemale, round, n) {
 
 Run: サーバーを停止（`netstat -ano | grep ':3457' | grep LISTENING` → `powershell -Command "Stop-Process -Id <PID> -Force"`）して再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 92 passed, 0 failed`
+Expected: `Result: 96 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -419,7 +419,7 @@ app.post('/api/events/:id/players', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 105 passed, 0 failed`
+Expected: `Result: 109 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -566,7 +566,7 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 121 passed, 0 failed`
+Expected: `Result: 124 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -797,7 +797,7 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 130 passed, 0 failed`（テスト15「並行PATCH12本が全件反映される」も緑のままであることを目視で確認する）
+Expected: `Result: 137 passed, 0 failed`（テスト15「並行PATCH12本が全件反映される」も緑のままであることを目視で確認する）
 
 - [ ] **Step 6: コミット**
 
@@ -1033,7 +1033,7 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 150 passed, 0 failed`
+Expected: `Result: 157 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -1208,7 +1208,7 @@ app.get('/api/events/:id/ranking', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 158 passed, 0 failed`
+Expected: `Result: 165 passed, 0 failed`
 
 - [ ] **Step 7: コミット**
 
@@ -1491,7 +1491,7 @@ app.get('/api/links/:token/ranking', (req, res) => {
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。
 
-Expected: `Result: 173 passed, 0 failed`
+Expected: `Result: 180 passed, 0 failed`
 
 また、リンクのディレクトリが作られ、テストの後始末で空になっていることを確認する。
 
@@ -1567,7 +1567,7 @@ Expected: どちらも**何も出力されない**（ヒット0件）。1件で�
 
 Run: サーバーを再起動し、`http://localhost:3457/test.html` を再読み込みする。`mcp__Claude_Browser__find` で `並行PATCH` も探して緑（`✓`）であることを確認する。
 
-Expected: `Result: 173 passed, 0 failed`、かつ `✓ 並行PATCH12本が全件反映される` が表示されている。
+Expected: `Result: 180 passed, 0 failed`、かつ `✓ 並行PATCH12本が全件反映される` が表示されている。
 
 - [ ] **Step 4: 一時ファイルとテスト残骸が無いことを確認する**
 
@@ -1616,16 +1616,16 @@ git commit -m "docs: 同期実行の不変条件に新しい書き込みハン�
 | 時点 | 件数 |
 |---|---|
 | 着手前 | 87 passed, 0 failed |
-| Task 1 完了 | 92 passed, 0 failed |
-| Task 2 完了 | 105 passed, 0 failed |
-| Task 3 完了 | 121 passed, 0 failed |
-| Task 4 完了 | 130 passed, 0 failed |
-| Task 5 完了 | 150 passed, 0 failed |
-| Task 6 完了 | 158 passed, 0 failed |
-| Task 7 完了 | **173 passed, 0 failed** |
-| Task 8 完了 | **173 passed, 0 failed**（テスト追加なし） |
+| Task 1 完了 | 96 passed, 0 failed |
+| Task 2 完了 | 109 passed, 0 failed |
+| Task 3 完了 | 124 passed, 0 failed |
+| Task 4 完了 | 137 passed, 0 failed |
+| Task 5 完了 | 157 passed, 0 failed |
+| Task 6 完了 | 165 passed, 0 failed |
+| Task 7 完了 | **180 passed, 0 failed** |
+| Task 8 完了 | **180 passed, 0 failed**（テスト追加なし） |
 
-**この計画の完了条件は `Result: 173 passed, 0 failed`。**
+**この計画の完了条件は `Result: 180 passed, 0 failed`。**
 
 ---
 

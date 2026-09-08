@@ -156,6 +156,13 @@
     assert('createPlayer は選手を大会に追加する',
       (await Api.loadEvent(addEvent.id)).players.length, 4);
 
+    var pMass = await Api.createPlayer(addEvent.id, {
+      name: '五郎', court: 'A', id: 'hacked', order: 'Z-女子-9-9', score: 999, result: '11111'
+    });
+    assert('createPlayer は body の id を無視する', pMass.id !== 'hacked', true);
+    assert('createPlayer は body の order を無視する', pMass.order, 'A-男子-1-3');
+    assert('createPlayer は body の score を無視する', pMass.score, 0);
+
     assert('name が空なら null', await Api.createPlayer(addEvent.id, { name: '', court: 'A' }), null);
     assert('コート名に - があれば null',
       await Api.createPlayer(addEvent.id, { name: '四郎', court: 'A-1' }), null);

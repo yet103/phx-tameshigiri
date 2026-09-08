@@ -9,7 +9,7 @@
 **Tech Stack:** 素の JavaScript（ES5 相当の IIFE、`var` と `function`、`async`/`await` は可）、ビルド工程・バンドラ・テストランナー無し。Node.js / Express 5 のサーバーは**この計画では変更しない**。テストは `test.html` をブラウザで開いて `Result: N passed, M failed` を読む。
 
 **設計書:** [docs/superpowers/specs/2026-09-08-mobile-admin-flow-design.md](../specs/2026-09-08-mobile-admin-flow-design.md)（「実装の分割」の**計画3**）
-**前提計画:** [2026-09-08-admin-1-server-api.md](2026-09-08-admin-1-server-api.md)、[2026-09-08-admin-2-admin-page.md](2026-09-08-admin-2-admin-page.md)（**両方が着地していること**。計画2完了時点のテスト件数は 187）
+**前提計画:** [2026-09-08-admin-1-server-api.md](2026-09-08-admin-1-server-api.md)、[2026-09-08-admin-2-admin-page.md](2026-09-08-admin-2-admin-page.md)（**両方が着地していること**。計画2完了時点のテスト件数は 195）
 
 ---
 
@@ -29,7 +29,7 @@ node server/index.js > "$TEMP/tmg_server.log" 2>&1 &
 
 1. ブラウザで `http://localhost:3457/test.html` を開く
 2. ページ末尾の `Result: N passed, M failed` を読む。**`M` が 0 であることが合格条件**
-3. 計画2 完了時点は **187 passed**。本計画で増えるのは Task 7 の 6 件だけで、最終的に **193 passed, 0 failed** になる
+3. 計画2 完了時点は **195 passed**。本計画で増えるのは Task 7 の 6 件だけで、最終的に **201 passed, 0 failed** になる
 
 **モジュールの書き方**
 
@@ -130,7 +130,7 @@ Browser ツール（`mcp__Claude_Browser__navigate` / `find` / `resize_window`�
 node server/index.js > "$TEMP/tmg_server.log" 2>&1 &
 ```
 
-Expected: `Result: 187 passed, 0 failed`
+Expected: `Result: 195 passed, 0 failed`
 
 - [ ] **Step 2: 検証用の捨て大会を作る**
 
@@ -1727,7 +1727,7 @@ Expected: ページ末尾に `Result:` が**出ない**（`Present.revealOrder i
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 193 passed, 0 failed`
+Expected: `Result: 201 passed, 0 failed`
 
 - [ ] **Step 3: 発表モードの描画と進行を実装する**
 
@@ -1947,7 +1947,7 @@ Expected: 例外が出ない（`read_console_messages` の `onlyErrors: true` �
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 193 passed, 0 failed`
+Expected: `Result: 201 passed, 0 failed`
 
 - [ ] **Step 9: コミット**
 
@@ -2409,7 +2409,7 @@ Expected: `true`（`onEventSelect` で取り直したので二巡目の行が見
 
 `http://localhost:3457/test.html` をリロードする。
 
-Expected: `Result: 193 passed, 0 failed`
+Expected: `Result: 201 passed, 0 failed`
 
 - [ ] **Step 6: コミット**
 
@@ -2543,11 +2543,11 @@ git commit -m "fix: 通し確認で見つかった不具合を直す" -m "Co-Aut
 
 | 時点 | 件数 |
 |---|---|
-| 着手前（計画2完了） | 187 passed, 0 failed |
-| Task 7 完了 | **193 passed, 0 failed** |
-| Task 10 完了 | **193 passed, 0 failed** |
+| 着手前（計画2完了） | 195 passed, 0 failed |
+| Task 7 完了 | **201 passed, 0 failed** |
+| Task 10 完了 | **201 passed, 0 failed** |
 
-**この計画の完了条件は `Result: 193 passed, 0 failed`。**
+**この計画の完了条件は `Result: 201 passed, 0 failed`。**
 
 ---
 
