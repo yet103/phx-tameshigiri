@@ -174,7 +174,16 @@ var AdminRound = (function() {
     }
     row.appendChild(copy);
 
-    row.addEventListener('click', function() { openPicker(p, row); });
+    // 行タップ（チップ以外の部分）は、空いている最初の枠を開く。
+    // 全部埋まっていたら①を開く（重複を許すので、選び直しの入口として①を使う）。
+    row.addEventListener('click', function() {
+      var arr = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
+      var slot = 0;
+      for (var i = 0; i < arr.length; i++) {
+        if (!arr[i]) { slot = i; break; }
+      }
+      openPicker(p, row, slot);
+    });
     return row;
   }
 
@@ -182,7 +191,7 @@ var AdminRound = (function() {
     TechPicker.renderChips(
       row.querySelector('.round-chips'),
       TechPicker.fromArray([p.tech1, p.tech2, p.tech3]),
-      function() { openPicker(p, row); }
+      function(slot) { openPicker(p, row, slot); }
     );
   }
 
@@ -199,7 +208,7 @@ var AdminRound = (function() {
     return true;
   }
 
-  async function openPicker(p, row) {
+  async function openPicker(p, row, slot) {
     // pickerOpen は dismiss で閉じられた後もフラグが残りうるので、実際にシートが
     // あるか、まだ TechPicker.open を呼んでいる最中（openingPicker）のときだけ弾く。
     // openingPicker は await ensureTechniques() の完了を待つ間に連打されても、
@@ -216,10 +225,11 @@ var AdminRound = (function() {
     TechPicker.open({
       techniques: techniques,
       initial: latest,
+      slot: slot,
       onChange: function(state) {
         latest = state;
         TechPicker.renderChips(row.querySelector('.round-chips'), state,
-          function() { openPicker(p, row); });
+          function(slot) { openPicker(p, row, slot); });
       },
       onClose: async function(state) {
         pickerOpen = false;

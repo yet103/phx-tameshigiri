@@ -186,6 +186,7 @@ main { padding: 8px 12px 16px; }
   border-bottom: 1px solid var(--border);
 }
 .tp-item.on { background: var(--bg-header); font-weight: bold; }
+.tp-clear { color: var(--text-muted); } /* 「この枠を空にする」は控えめな色に。行高さは .tp-item の 48px を継承する */
 .tp-no { flex: 0 0 auto; width: 20px; color: var(--accent); }
 .tp-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-pt { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); }

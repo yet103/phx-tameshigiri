@@ -267,7 +267,7 @@
     el.appendChild(fTech);
 
     function renderTechChips() {
-      TechPicker.renderChips(chips, techState, async function() {
+      TechPicker.renderChips(chips, techState, async function(index) {
         await ensureTechniques();
         if (!techCache) {
           alert('技術リストを取得できませんでした。技以外は保存できます。');
@@ -276,6 +276,7 @@
         TechPicker.open({
           techniques: techCache,
           initial: techState,
+          slot: index,
           onChange: function(next) {
             techState = next;
             renderTechChips();

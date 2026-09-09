@@ -651,22 +651,31 @@
     h2tp.textContent = 'techpicker.js';
     results.appendChild(h2tp);
 
-    // select: 未選択なら末尾に追加（最大3）、選択済みならタップで外して後ろを詰める
-    assert('select: 空の state に1つ追加', TechPicker.select([], '真'), ['真']);
-    assert('select: 2つ目は末尾に付く',
-      TechPicker.select(['真'], '水月'), ['真', '水月']);
-    assert('select: 3つ目まで入る',
-      TechPicker.select(['真', '水月'], '四方'), ['真', '水月', '四方']);
-    assert('select: 4つ目は無視される',
-      TechPicker.select(['真', '水月', '四方'], '夢想返し'), ['真', '水月', '四方']);
-    assert('select: 選択済みをもう一度選ぶと外れて後ろが詰まる',
-      TechPicker.select(['真', '水月', '四方'], '水月'), ['真', '四方']);
-    assert('select: 元の state を破壊しない', (function() {
-      var st = ['真', '水月'];
-      TechPicker.select(st, '四方');
+    // setSlot: 指定した枠だけを差し替える。'' はその枠を空にする。重複は許す。
+    assert('setSlot: 0番目の枠に設定', TechPicker.setSlot(['', '', ''], 0, '真'), ['真', '', '']);
+    assert('setSlot: 1番目の枠に設定', TechPicker.setSlot(['真', '', ''], 1, '水月'), ['真', '水月', '']);
+    assert('setSlot: 2番目の枠に設定', TechPicker.setSlot(['真', '水月', ''], 2, '四方'), ['真', '水月', '四方']);
+    assert('setSlot: 空文字を渡すとその枠を空にする',
+      TechPicker.setSlot(['真', '水月', '四方'], 1, ''), ['真', '', '四方']);
+    assert('setSlot: 同じ技を別の枠に入れてよい（重複を許す）',
+      TechPicker.setSlot(['真', '', ''], 2, '真'), ['真', '', '真']);
+    assert('setSlot: 範囲外の index(3) は何もしない',
+      TechPicker.setSlot(['真', '水月', '四方'], 3, '夢想返し'), ['真', '水月', '四方']);
+    assert('setSlot: 範囲外の index(-1) は何もしない',
+      TechPicker.setSlot(['真', '水月', '四方'], -1, '夢想返し'), ['真', '水月', '四方']);
+    assert('setSlot: 元の state を破壊しない', (function() {
+      var st = ['真', '水月', ''];
+      TechPicker.setSlot(st, 2, '四方');
       return st;
-    })(), ['真', '水月']);
-    assert('select: state が null でも落ちない', TechPicker.select(null, '真'), ['真']);
+    })(), ['真', '水月', '']);
+    assert('setSlot: state が null でも3要素配列になる', TechPicker.setSlot(null, 0, '真'), ['真', '', '']);
+
+    assert('fromArray: 穴はそのまま（詰めない）',
+      TechPicker.fromArray(['真', '', '四方']), ['真', '', '四方']);
+    assert('fromArray: 全部空ならそのまま', TechPicker.fromArray(['', '', '']), ['', '', '']);
+    assert('fromArray: null は空3枠', TechPicker.fromArray(null), ['', '', '']);
+    assert('fromArray: 4つ目以降は切り捨てる',
+      TechPicker.fromArray(['真', '水月', '四方', '夢想返し']), ['真', '水月', '四方']);
 
     assert('toArray: 未選択は空文字で3枠', TechPicker.toArray([]), ['', '', '']);
     assert('toArray: 2つなら3枠目が空文字',
@@ -674,44 +683,87 @@
     assert('toArray: 3つはそのまま',
       TechPicker.toArray(['真', '水月', '四方']), ['真', '水月', '四方']);
     assert('toArray: null は空3枠', TechPicker.toArray(null), ['', '', '']);
-    assert('fromArray: 空文字を落として詰める',
-      TechPicker.fromArray(['真', '', '四方']), ['真', '四方']);
-    assert('fromArray: 全部空なら空配列', TechPicker.fromArray(['', '', '']), []);
-    assert('fromArray: null は空配列', TechPicker.fromArray(null), []);
-    assert('toArray → fromArray → toArray で往復する',
-      TechPicker.toArray(TechPicker.fromArray(['真', '', '四方'])), ['真', '四方', '']);
-    assert('select: 空文字は無視する', TechPicker.select(['真'], ''), ['真']);
-    assert('fromArray: 配列以外は空配列', TechPicker.fromArray('abc'), []);
+
     assert('strikesLabel: null を飛ばして / でつなぐ',
       TechPicker.strikesLabel({ strikes: [17, 5, 7, 3] }), '17/5/7/3');
     assert('strikesLabel: 末尾の null は出さない',
       TechPicker.strikesLabel({ strikes: [1, null, null, null] }), '1');
     assert('strikesLabel: strikes が無ければ空', TechPicker.strikesLabel({}), '');
+
     assert('renderChips: 3枠を ①②③ で描く', (function() {
       var el = document.createElement('div');
-      TechPicker.renderChips(el, ['真'], null);
+      TechPicker.renderChips(el, ['真', '', ''], null);
       return Array.prototype.map.call(el.querySelectorAll('.chip'), function(c) {
         return c.textContent + (c.classList.contains('empty') ? '*' : '');
       });
     })(), ['① 真', '② ＋*', '③ ＋*']);
-    assert('renderChips: タップで dataset.name を渡す', (function() {
+    assert('renderChips: タップで (index, name) を渡す', (function() {
       var el = document.createElement('div');
       var got = [];
-      TechPicker.renderChips(el, ['真'], function(n) { got.push(n); });
+      TechPicker.renderChips(el, ['真', '', ''], function(index, name) { got.push([index, name]); });
       var chips = el.querySelectorAll('.chip');
       chips[0].click(); chips[1].click();
       return got;
-    })(), ['真', '']);
+    })(), [[0, '真'], [1, '']]);
+
+    assert('open: タイトルは「n つ目の技を選ぶ」（n は編集中の枠）', (function() {
+      TechPicker.open({ techniques: [], initial: ['', '', ''], slot: 0 });
+      var t0 = document.querySelector('.tp-head span').textContent;
+      TechPicker.dismiss();
+      TechPicker.open({ techniques: [], initial: ['', '', ''], slot: 2 });
+      var t2 = document.querySelector('.tp-head span').textContent;
+      TechPicker.dismiss();
+      return [t0, t2];
+    })(), ['1つ目の技を選ぶ', '3つ目の技を選ぶ']);
+    assert('open: 編集中の枠の技だけ .tp-item.on になり枠番号が付く（他の枠は見ない）', (function() {
+      TechPicker.open({
+        techniques: [{ name: '真' }, { name: '水月' }],
+        initial: ['真', '水月', ''],
+        slot: 1
+      });
+      var on = document.querySelector('.tp-item.on');
+      var got = [on.querySelector('.tp-name').textContent, on.querySelector('.tp-no').textContent];
+      TechPicker.dismiss();
+      return got;
+    })(), ['水月', '②']);
+    assert('open: 技をタップすると閉じて、その枠だけ変わった state が onClose に届く', (function() {
+      var got = null;
+      TechPicker.open({
+        techniques: [{ name: '真' }, { name: '水月' }],
+        initial: ['真', '', '四方'],
+        slot: 1,
+        onClose: function(st) { got = st; }
+      });
+      document.querySelector('.tp-item[data-name="水月"]').click();
+      return [got, document.querySelectorAll('.tp-overlay').length];
+    })(), [['真', '水月', '四方'], 0]);
+    assert('open: 「（この枠を空にする）」はその枠だけ空にする', (function() {
+      var got = null;
+      TechPicker.open({
+        techniques: [{ name: '真' }],
+        initial: ['真', '水月', '四方'],
+        slot: 0,
+        onClose: function(st) { got = st; }
+      });
+      document.querySelector('.tp-clear').click();
+      return [got, document.querySelectorAll('.tp-overlay').length];
+    })(), [['', '水月', '四方'], 0]);
     assert('open: 別のシートを開くと前のシートの onClose が最終 state で呼ばれる', (function() {
       var got = null;
-      TechPicker.open({ techniques: [{ name: '真' }], initial: ['水月'],
+      TechPicker.open({ techniques: [{ name: '真' }], initial: ['水月', '', ''], slot: 0,
         onClose: function(st) { got = st; } });
-      TechPicker.open({ techniques: [{ name: '真' }], initial: [] });
+      TechPicker.open({ techniques: [{ name: '真' }], initial: ['', '', ''], slot: 0 });
       var overlays = document.querySelectorAll('.tp-overlay').length;
       document.querySelector('.tp-close').click();
       return [got, overlays, document.querySelectorAll('.tp-overlay').length];
-    })(), [['水月'], 1, 0]);
-    assert('dismiss: onClose を呼ばずに閉じる', (function(){ var called=false; TechPicker.open({techniques:[{name:'真'}], initial:['真'], onClose:function(){ called=true; }}); TechPicker.dismiss(); return [called, document.querySelectorAll('.tp-overlay').length]; })(), [false, 0]);
+    })(), [['水月', '', ''], 1, 0]);
+    assert('dismiss: onClose を呼ばずに閉じる', (function(){
+      var called = false;
+      TechPicker.open({ techniques: [{ name: '真' }], initial: ['真', '', ''], slot: 0,
+        onClose: function(){ called = true; } });
+      TechPicker.dismiss();
+      return [called, document.querySelectorAll('.tp-overlay').length];
+    })(), [false, 0]);
     assert('openSheet: 2枚開いて closeAllSheets で全部閉じ、onClose は1回ずつ', (function() {
       var n = 0;
       var a = Admin.openSheet('A', document.createElement('div'), [], function() { n++; });

@@ -290,7 +290,7 @@ loadSharedRanking(token)                    // → { event, rankings } | null
 | コート | セグメント（既存コート＋「＋」で新コート名を入力） |
 | 性別 | セグメント（男子／女子） |
 | 新人 | トグル |
-| 技 | `TechPicker`：チップ①②③、タップでボトムシートが開き一覧から順にタップ。配点を横に表示。チップをタップするとシートが開く（外すのはシート内で同じ技をもう一度タップ。誤タップで消えないようにする） |
+| 技 | `TechPicker`：チップ①②③、タップした枠だけを編集するボトムシートが開く。一覧から技をタップするとその枠に入って閉じる。配点を横に表示。「（この枠を空にする）」で空にできる。同じ技を複数の枠に入れてもよい |
 
 「保存して閉じる」「保存して次を追加」。後者は名前と技だけ空にしてコート・性別・新人を保つ（受付を連続処理するため）。
 行タップで同じフォームが編集モードで開く。編集モードには「この選手を削除」（採点済みなら得点を出して再確認、`force`）。
@@ -340,12 +340,13 @@ CSV を読み込んで順位を出す機能は、サーバーに大会がある�
 
 ```javascript
 // techpicker.js
-TechPicker.select(state, name)    // 純粋: 未選択なら末尾に追加（最大3）、選択済みなら外す。新しい state を返す
-                                  // state は選択順の配列。途中を外すと後ろが詰まる（②を外せば③が②になる）
+// state は常に3要素配列。未選択の枠は ''。穴は詰めない。同じ技を複数の枠に入れてよい（重複を許す）
+TechPicker.setSlot(state, index, name)  // 純粋: index(0..2) の枠を name に差し替える。'' ならその枠を空にする
+                                        // index が 0..2 以外なら state をそのまま複製して返す。新しい state を返す
 TechPicker.toArray(state)         // 純粋: ['技1', '技2', '技3']（未選択は ''）
-TechPicker.fromArray(names)       // 純粋: ['技1','技2','技3'] → state
-TechPicker.open(options)          // シートを開く。{ techniques, initial, onChange, onClose }
-TechPicker.renderChips(el, state, onTap)  // チップ①②③を描く
+TechPicker.fromArray(names)       // 純粋: ['技1','技2','技3'] → state（穴は詰めない）
+TechPicker.open(options)          // シートを開く。常に1枠だけを編集する。{ techniques, initial, slot, onChange, onClose }
+TechPicker.renderChips(el, state, onTap)  // チップ①②③を描く。onTap(index, name)
 ```
 
 `techniques` は `Api.loadTechniques()` の結果（サーバーのカスタム技術リストを含む）。配点は `strikes` から `1/5/7/3` の形で表示する。

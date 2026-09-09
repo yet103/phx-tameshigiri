@@ -1,4 +1,4 @@
-// 技の選択（最大3・順序つき）と、その選択 UI。
+// 技の選択（常に3枠・枠ごとに選び直せる）と、その選択 UI。
 // 選択状態は純粋関数だけで扱い、DOM を触る関数（open / renderChips）と分けてある。
 // 将来「選手が自分のスマホで技を申告する」画面にそのまま流用するため。
 var TechPicker = (function() {
@@ -7,25 +7,9 @@ var TechPicker = (function() {
 
   // --- 純粋関数 ---
 
-  // 未選択なら末尾に追加（最大3。4つ目は無視する）。
-  // 選択済みの技を渡すとそれを外し、後ろを詰める（②を外せば③が②になる）。
-  // 常に新しい配列を返す。呼び出し元の state は壊さない。
-  function select(state, name) {
-    var list = (state || []).slice();
-    if (!name) return list;   // 空チップ（＋）のタップは選択ではない
-    var i = list.indexOf(name);
-    if (i >= 0) {
-      list.splice(i, 1);
-      return list;
-    }
-    if (list.length >= MAX) return list;
-    list.push(name);
-    return list;
-  }
-
-  // ['技1', '技2', '技3']。未選択の枠は ''。
+  // ['技1', '技2', '技3']。未選択の枠は ''。穴は詰めない（常に3要素）。
   function toArray(state) {
-    var list = state || [];
+    var list = Array.isArray(state) ? state : [];
     var out = [];
     for (var i = 0; i < MAX; i++) {
       out.push(list[i] || '');
@@ -33,14 +17,19 @@ var TechPicker = (function() {
     return out;
   }
 
-  // ['a', '', 'c'] → ['a', 'c']。空の枠を落として詰める。
+  // 選手の tech1..3 から state を作る。toArray と同じ形（穴は詰めない）。
   function fromArray(names) {
-    var src = Array.isArray(names) ? names : [];
-    var out = [];
-    src.forEach(function(n) {
-      if (n) out.push(n);
-    });
-    return out.slice(0, MAX);
+    return toArray(names);
+  }
+
+  // index 番目の枠を name に差し替える。name が '' ならその枠を空にする。
+  // index が 0..2 以外なら state をそのまま複製して返す（変更しない）。
+  // 常に新しい3要素配列を返す。呼び出し元の state は壊さない。同じ技を複数の枠に入れてよい。
+  function setSlot(state, index, name) {
+    var arr = toArray(state);
+    if (index !== 0 && index !== 1 && index !== 2) return arr;
+    arr[index] = name || '';
+    return arr;
   }
 
   // --- 表示ヘルパ ---
@@ -86,26 +75,31 @@ var TechPicker = (function() {
       chip.type = 'button';
       chip.className = arr[i] ? 'chip' : 'chip empty';
       chip.textContent = CIRCLED[i] + ' ' + (arr[i] || '＋');
+      chip.dataset.slot = i;
       chip.dataset.name = arr[i] || '';
-      chip.addEventListener('click', function() {
-        if (onTap) onTap(this.dataset.name);
+      chip.addEventListener('click', function(ev) {
+        // チップのタップは枠が決まっているので、行全体のタップ（別の枠が開く）に伝播させない
+        ev.stopPropagation();
+        if (onTap) onTap(Number(this.dataset.slot), this.dataset.name);
       });
       el.appendChild(chip);
     }
   }
 
-  // 下部シートを開く。
-  // options = { techniques, initial, onChange, onClose }
+  // 下部シートを開く。常に「1つの枠」を編集するモード（枠は options.slot）。
+  // options = { techniques, initial, slot, onChange, onClose }
   //   techniques : Api.loadTechniques() の techniques 配列
-  //   initial    : 選択済みの state（配列）
-  //   onChange   : 1タップごとに新しい state を受け取る
+  //   initial    : 選択済みの state（3要素配列。穴は ''）
+  //   slot       : 編集する枠（0..2）
+  //   onChange   : タップで新しい state を受け取る（選ぶ／空にする、どちらでも呼ぶ）
   //   onClose    : 閉じたときに最終的な state を受け取る
   function open(options) {
     // 開いたまま別の行のシートを開かれたとき、前のシートの選択を捨てない
     // （closeSheet だけだと前のシートの onClose が呼ばれず、選択が消える）。
     if (pendingDone) pendingDone();
     var opts = options || {};
-    var state = (opts.initial || []).slice();
+    var slot = opts.slot;
+    var state = toArray(opts.initial);
     var techs = opts.techniques || [];
 
     var overlay = document.createElement('div');
@@ -116,43 +110,45 @@ var TechPicker = (function() {
     var head = document.createElement('div');
     head.className = 'tp-head';
     var title = document.createElement('span');
+    title.textContent = (slot + 1) + 'つ目の技を選ぶ';
     var btnClose = document.createElement('button');
     btnClose.type = 'button';
     btnClose.className = 'tp-close';
-    btnClose.textContent = '完了';
+    btnClose.textContent = '閉じる';   // 選ぶと自分で閉じるので、これは「何も選ばずに閉じる」用
     head.appendChild(title);
     head.appendChild(btnClose);
 
     var list = document.createElement('div');
     list.className = 'tp-list';
 
-    // 選択順の番号と選択中の見た目を付け直す
-    function refresh() {
-      title.textContent = state.length < MAX
-        ? '技を選ぶ — ' + (state.length + 1) + 'つ目'
-        : '技を選ぶ — 3つ選択済み';
-      var rows = list.querySelectorAll('.tp-item');
-      for (var i = 0; i < rows.length; i++) {
-        var pos = state.indexOf(rows[i].dataset.name);
-        rows[i].className = pos >= 0 ? 'tp-item on' : 'tp-item';
-        rows[i].querySelector('.tp-no').textContent = pos >= 0 ? CIRCLED[pos] : '';
-      }
+    // この枠の選択を確定して閉じる。選ぶのも空にするのも1タップで終わる
+    // （多枠選択だった頃と違い、この枠以外の状態には触れない）。
+    function pick(name) {
+      state = setSlot(state, slot, name);
+      if (opts.onChange) opts.onChange(state.slice());
+      done();
     }
+
+    var clearItem = document.createElement('button');
+    clearItem.type = 'button';
+    clearItem.className = 'tp-item tp-clear';
+    clearItem.textContent = '（この枠を空にする）';
+    clearItem.addEventListener('click', function() { pick(''); });
+    list.appendChild(clearItem);
 
     techs.forEach(function(t) {
       var item = document.createElement('button');
       item.type = 'button';
-      item.className = 'tp-item';
+      // 重複を許すので、印を付けるのはこの枠に入っている技だけ（他の枠は見ない）
+      var isOn = state[slot] !== '' && state[slot] === t.name;
+      item.className = isOn ? 'tp-item on' : 'tp-item';
       item.dataset.name = t.name;
       // 枠だけ innerHTML で作り、値は textContent で入れる（技名はサーバー由来）
       item.innerHTML = '<span class="tp-no"></span><span class="tp-name"></span><span class="tp-pt"></span>';
+      item.querySelector('.tp-no').textContent = isOn ? CIRCLED[slot] : '';
       item.querySelector('.tp-name').textContent = t.name;
       item.querySelector('.tp-pt').textContent = strikesLabel(t);
-      item.addEventListener('click', function() {
-        state = select(state, this.dataset.name);
-        refresh();
-        if (opts.onChange) opts.onChange(state.slice());
-      });
+      item.addEventListener('click', function() { pick(this.dataset.name); });
       list.appendChild(item);
     });
 
@@ -161,7 +157,6 @@ var TechPicker = (function() {
     overlay.appendChild(sheet);
     document.body.appendChild(overlay);
     openSheet = overlay;
-    refresh();
 
     var finished = false;
     function done() {
@@ -179,7 +174,7 @@ var TechPicker = (function() {
   }
 
   return {
-    select: select,
+    setSlot: setSlot,
     toArray: toArray,
     fromArray: fromArray,
     strikesLabel: strikesLabel,
