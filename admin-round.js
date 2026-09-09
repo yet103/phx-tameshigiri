@@ -249,6 +249,22 @@ var AdminRound = (function() {
 
   // 保存できたら true。失敗したら画面もサーバーに合わせて元に戻す。
   async function saveTech(p, arr, row, eventId, ctx) {
+    // 採点済みの選手の技を変えると、result 文字列の長さは変わらないため
+    // 採点画面（Scoring.canDecode）はこれを検知できず、黙って新しい技の配点で
+    // 再解釈してしまう（admin-players.js の性別変更ガードと同じ理由）。
+    // openPicker の onClose と onCopyFromRound1 のどちらから来ても必ずここを通す。
+    if (Courts.isScored(p) &&
+        (arr[0] !== (p.tech1 || '') || arr[1] !== (p.tech2 || '') || arr[2] !== (p.tech3 || ''))) {
+      var ok = confirm(
+        'この選手は採点済みです（' + (p.score || 0) + '点）。\n' +
+        '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
+        'このまま保存しますか？'
+      );
+      if (!ok) {
+        drawChips(p, row);
+        return false;
+      }
+    }
     var res = await Api.updatePlayerInfo(eventId, p.id,
       { tech1: arr[0], tech2: arr[1], tech3: arr[2] });
     if (ctx.isStale()) return !!(res && res.ok);   // 画面を離れていたら DOM に触れない（alert もしない）
