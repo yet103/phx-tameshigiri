@@ -86,12 +86,31 @@ var Scoring = (function() {
     return str;
   }
 
+  // 未採点の result を1つの形に揃える。
+  // 一度も採点していない選手の result は未設定だが、グリッドを読み直すと
+  // 「全セル空白」の文字列になる。どちらも採点としては未採点なので同じ扱いにする。
+  // 「0 も 1 も含まなければ未採点」という判定は、サーバー側の isScored
+  // （server/index.js）と同じ規則にしてある。ここがずれると、
+  // クライアントが未採点と見なした選手をサーバーが採点済みと見なし、
+  // CSVインポートのガードが誤作動する。
+  function normalizeResult(result) {
+    var str = String(result || '');
+    return /[01]/.test(str) ? str : '';
+  }
+
+  // 2つの result が採点内容として同じかどうか。
+  // 保存前にこれで比べることで、内容が変わっていない選手への保存を防ぐ。
+  function isSameResult(a, b) {
+    return normalizeResult(a) === normalizeResult(b);
+  }
+
   return {
     setTechniques: setTechniques,
     findTechnique: findTechnique,
     calcStrikeScore: calcStrikeScore,
     calcTotalScore: calcTotalScore,
     decodeResult: decodeResult,
-    encodeResult: encodeResult
+    encodeResult: encodeResult,
+    isSameResult: isSameResult
   };
 })();

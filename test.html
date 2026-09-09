@@ -135,6 +135,21 @@
     var cleanAgain = await Api.importCsv(cleanEvent.id, cleanCsv, 'replace');
     assert('未採点のみの大会へのreplaceは拒否されない', cleanAgain.success, true);
     await Api.deleteEvent(cleanEvent.id);
+
+    // クライアントが「未採点」と見なす result を、サーバーの isScored も
+    // 未採点と見なすこと。ここが食い違うと、一度も採点していない選手のせいで
+    // CSV の replace が拒否されるようになる。
+    var blankEvent = await Api.saveEvent({ name: 'ガードテスト3', date: '2026-01-01', venue: '', players: [] });
+    var blankCsv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
+                   '空白保存,A-男子-1-1,真,,,0,,,     \n';
+    await Api.importCsv(blankEvent.id, blankCsv, 'replace');
+    var blankLoaded = await Api.loadEvent(blankEvent.id);
+    assert('全セル空白のresultはそのまま保存される', blankLoaded.players[0].result, '     ');
+    assert('全セル空白のresultをクライアントは未採点と見なす',
+      Scoring.isSameResult(blankLoaded.players[0].result, '     '), true);
+    var blankAgain = await Api.importCsv(blankEvent.id, blankCsv, 'replace');
+    assert('全セル空白だけの大会へのreplaceは拒否されない', blankAgain.success, true);
+    await Api.deleteEvent(blankEvent.id);
   }
 
   (async function() {
@@ -177,6 +192,26 @@
     assert('decodeResult techPoint[0]', decoded[0].techPoint, '○');
     assert('decodeResult values[1]', decoded[1].values, ['○','○','','']);
     assert('decodeResult techPoint[1]', decoded[1].techPoint, '');
+
+    // isSameResult: 保存済みの result と、グリッドを読み直した result が
+    // 「採点内容として同じか」を判定する。
+    // 未採点の選手は result が未設定だが、グリッドを読み直すと全セル空白の
+    // 文字列になる。これを「同じ」と見なせないと、選手を切り替えるだけで
+    // 空の採点が保存され、未採点との区別が付かなくなる。
+    assert('isSameResult: 未設定と全セル空白は同じ',
+      Scoring.isSameResult(undefined, '     '), true);
+    assert('isSameResult: 空文字と全セル空白は同じ',
+      Scoring.isSameResult('', '     '), true);
+    assert('isSameResult: 技数が違っても未採点同士は同じ',
+      Scoring.isSameResult('     ', '          '), true);
+    assert('isSameResult: 同じ採点内容は同じ',
+      Scoring.isSameResult('10  1', '10  1'), true);
+    assert('isSameResult: 採点を消したら別物',
+      Scoring.isSameResult('10  1', '     '), false);
+    assert('isSameResult: 初めて×を付けたら別物',
+      Scoring.isSameResult('     ', '0    '), false);
+    assert('isSameResult: 同じ記号でも位置が違えば別物',
+      Scoring.isSameResult('1    ', ' 1   '), false);
 
     // setTechniques のテスト
     var customTechs = [{ name: 'カスタム技', strikes: [100, 50, null, null] }];

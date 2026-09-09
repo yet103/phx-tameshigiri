@@ -544,6 +544,9 @@ var App = (function() {
   }
 
   // 現在の採点内容をキューに積む。通信は待たない（Outboxのワーカーが送る）。
+  // 内容が変わっていなければ何もしない。選手を切り替えるだけでも呼ばれるため、
+  // 無条件に積むと一度も採点していない選手にまで「全セル空白」の採点が保存され、
+  // 未採点と「全部×」の区別が付かなくなる（送信キューと大会ファイルも無駄に膨らむ）。
   function saveCurrentState() {
     if (currentIndex < 0 || !visiblePlayers[currentIndex] || !currentEvent) return;
     var rows = scoreTableBody.querySelectorAll('tr');
@@ -558,7 +561,12 @@ var App = (function() {
       rowDataArr.push({ values: values, techPoint: tpCell ? (tpCell.dataset.value || '') : '' });
     }
     var p = visiblePlayers[currentIndex];
-    p.result = Scoring.encodeResult(rowDataArr);
+    var encoded = Scoring.encodeResult(rowDataArr);
+    // p.result は「サーバー／キューに載っている内容」と常に一致している
+    // （グリッドはこれを元に描かれ、保存のたびにここを書き戻す）ので、
+    // これと突き合わせれば実際に変化があったかが分かる。
+    if (Scoring.isSameResult(p.result, encoded)) return;
+    p.result = encoded;
 
     Outbox.enqueue({
       eventId: currentEvent.id,
