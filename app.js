@@ -577,6 +577,9 @@ var App = (function() {
         action: 'score_update',
         playerName: p ? p.name : '',
         techName: tr ? tr.dataset.tech : '',
+        // 同じ技を複数の枠に入れられるので、techName だけでは行を特定できない。
+        // buildScoreRow が振った 0 始まりの行番号（tr.dataset.row）も残す。
+        techRow: tr ? parseInt(tr.dataset.row, 10) : null,
         strike: td.dataset.strike !== 'tp' ? parseInt(td.dataset.strike) : 'tp',
         value: next,
         detail: (td.dataset.strike === 'tp' ? '技術点' : ["初太刀","二の太刀","三の太刀","四の太刀"][parseInt(td.dataset.strike)]) + ' → ' + (next || '空白')

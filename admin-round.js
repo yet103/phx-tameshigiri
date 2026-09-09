@@ -7,8 +7,13 @@ var AdminRound = (function() {
   var currentCourt = '';   // '' なら全コート
   var lastEventId = null;  // 大会が変わったらコート絞り込みを戻すため
   var techniques = null;   // Api.loadTechniques() の結果のキャッシュ
-  var pickerOpen = false;  // チップと行の両方がタップを拾うので二重に開かない
-  var openingPicker = false;  // pickerOpen が立ってから TechPicker.open が呼ばれるまでの間の多重タップを防ぐ（await ensureTechniques 中の連打対策）
+  // チップと行の両方がタップを拾うので二重に開かないよう、実際にシートが
+  // 存在するか（.tp-overlay）と、まだ開いている最中か（openingPicker）だけで判定する。
+  // かつて pickerOpen という別フラグも持っていたが、openPicker が新しいシートの
+  // pickerOpen を立てた直後に TechPicker.open が前のシートの done()（onClose）を
+  // 同期的に呼び、そちらが pickerOpen を false に戻してしまい、二つのフラグが
+  // ずれることがあった。判定に使う条件をそのままフラグにする。
+  var openingPicker = false;  // TechPicker.open を呼ぶまでの間の多重タップを防ぐ（await ensureTechniques 中の連打対策）
   var counterEl = null;
   var listEl = null;
   var outsideClickBound = false;  // '⋯' メニューの外側タップ検知は document に1回だけ付ける
@@ -45,7 +50,6 @@ var AdminRound = (function() {
 
   function render(container, ctx) {
     CTX = ctx;
-    pickerOpen = false;
     container.innerHTML = '';
     if (!ctx || !ctx.eventId) {
       var msg = document.createElement('p');
@@ -209,17 +213,16 @@ var AdminRound = (function() {
   }
 
   async function openPicker(p, row, slot) {
-    // pickerOpen は dismiss で閉じられた後もフラグが残りうるので、実際にシートが
-    // あるか、まだ TechPicker.open を呼んでいる最中（openingPicker）のときだけ弾く。
-    // openingPicker は await ensureTechniques() の完了を待つ間に連打されても、
-    // シートがまだ DOM に無い（.tp-overlay 判定をすり抜ける）のを同期的にガードするため。
-    if (pickerOpen && (openingPicker || document.querySelector('.tp-overlay'))) return;
-    pickerOpen = true;
+    // 実際にシートがある（.tp-overlay）か、まだ TechPicker.open を呼んでいる
+    // 最中（openingPicker）のときだけ弾く。openingPicker は await ensureTechniques()
+    // の完了を待つ間に連打されても、シートがまだ DOM に無い（.tp-overlay 判定を
+    // すり抜ける）のを同期的にガードするため。
+    if (openingPicker || document.querySelector('.tp-overlay')) return;
     openingPicker = true;
     var ctx = CTX;
     var eventId = ctx.eventId;
-    if (!(await ensureTechniques())) { pickerOpen = false; openingPicker = false; return; }
-    if (ctx.isStale()) { pickerOpen = false; openingPicker = false; return; }  // 待っている間に画面を離れていた
+    if (!(await ensureTechniques())) { openingPicker = false; return; }
+    if (ctx.isStale()) { openingPicker = false; return; }  // 待っている間に画面を離れていた
     // 最新の選択は onChange で控える
     var latest = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
     TechPicker.open({
@@ -232,7 +235,6 @@ var AdminRound = (function() {
           function(slot) { openPicker(p, row, slot); });
       },
       onClose: async function(state) {
-        pickerOpen = false;
         latest = state || latest;
         var arr = TechPicker.toArray(latest);
         if (arr[0] === (p.tech1 || '') &&

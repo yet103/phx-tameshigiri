@@ -109,8 +109,12 @@
     main.textContent = (p.order || '') + '  ' + (p.name || '');
     var sub = document.createElement('span');
     sub.className = 'row-sub';
-    var techs = [p.tech1, p.tech2, p.tech3].filter(function(t) { return !!t; });
-    var subText = techs.length ? techs.join(' / ') : '技 未入力';
+    // 3枠とも表示する（filter で詰めると ['', '真', '真'] と ['真', '真', ''] が
+    // 同じ見た目になり、どの枠が空か運営が分からなくなる）。空き枠は「—」。
+    var slots = [p.tech1, p.tech2, p.tech3];
+    var subText = (slots[0] || slots[1] || slots[2])
+      ? [slots[0] || '—', slots[1] || '—', slots[2] || '—'].join(' / ')
+      : '技 未入力';
     if (p.isNewFace) subText += '　新人';
     sub.textContent = subText;
     body.appendChild(main);
@@ -259,7 +263,7 @@
     var fTech = document.createElement('div');
     fTech.className = 'field';
     var lTech = document.createElement('label');
-    lTech.textContent = '技（タップして一覧から順に選ぶ）';
+    lTech.textContent = '技（①②③ をタップしてそれぞれ選ぶ）';
     var chips = document.createElement('div');
     chips.className = 'chips';
     fTech.appendChild(lTech);

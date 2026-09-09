@@ -12,7 +12,9 @@ var TechPicker = (function() {
     var list = Array.isArray(state) ? state : [];
     var out = [];
     for (var i = 0; i < MAX; i++) {
-      out.push(list[i] || '');
+      // 呼び出し元の state に文字列でない要素が混ざっていても、この配列から
+      // 先の DOM 描画・PATCH 送信に非文字列が漏れないよう文字列化しておく。
+      out.push(String(list[i] || ''));
     }
     return out;
   }
@@ -98,7 +100,10 @@ var TechPicker = (function() {
     // （closeSheet だけだと前のシートの onClose が呼ばれず、選択が消える）。
     if (pendingDone) pendingDone();
     var opts = options || {};
-    var slot = opts.slot;
+    // slot が 0/1/2 以外（省略・null など）なら①にフォールバックする
+    // （admin-round.js の「行タップで空いている最初の枠、全部埋まっていたら①」と同じ規則）。
+    // これをしないとタイトルが「NaNつ目」になり、setSlot が範囲外として選択を捨て続ける。
+    var slot = (opts.slot === 0 || opts.slot === 1 || opts.slot === 2) ? opts.slot : 0;
     var state = toArray(opts.initial);
     var techs = opts.techniques || [];
 

@@ -669,6 +669,10 @@
       return st;
     })(), ['真', '水月', '']);
     assert('setSlot: state が null でも3要素配列になる', TechPicker.setSlot(null, 0, '真'), ['真', '', '']);
+    assert('setSlot: name が null ならその枠を空にする',
+      TechPicker.setSlot(['真', '水月', ''], 0, null), ['', '水月', '']);
+    assert('setSlot: name が undefined ならその枠を空にする',
+      TechPicker.setSlot(['真', '水月', ''], 0, undefined), ['', '水月', '']);
 
     assert('fromArray: 穴はそのまま（詰めない）',
       TechPicker.fromArray(['真', '', '四方']), ['真', '', '四方']);
@@ -683,6 +687,7 @@
     assert('toArray: 3つはそのまま',
       TechPicker.toArray(['真', '水月', '四方']), ['真', '水月', '四方']);
     assert('toArray: null は空3枠', TechPicker.toArray(null), ['', '', '']);
+    assert('toArray: 配列でなければ空3枠', TechPicker.toArray('abc'), ['', '', '']);
 
     assert('strikesLabel: null を飛ばして / でつなぐ',
       TechPicker.strikesLabel({ strikes: [17, 5, 7, 3] }), '17/5/7/3');
@@ -705,6 +710,18 @@
       chips[0].click(); chips[1].click();
       return got;
     })(), [[0, '真'], [1, '']]);
+    assert('renderChips: チップのクリックは親要素に伝播しない（stopPropagation）', (function() {
+      var parentClicks = 0;
+      var wrap = document.createElement('div');
+      wrap.addEventListener('click', function() { parentClicks++; });
+      var el = document.createElement('div');
+      wrap.appendChild(el);
+      document.body.appendChild(wrap);
+      TechPicker.renderChips(el, ['真', '', ''], null);
+      el.querySelector('.chip').click();
+      document.body.removeChild(wrap);
+      return parentClicks;
+    })(), 0);
 
     assert('open: タイトルは「n つ目の技を選ぶ」（n は編集中の枠）', (function() {
       TechPicker.open({ techniques: [], initial: ['', '', ''], slot: 0 });
@@ -715,6 +732,29 @@
       TechPicker.dismiss();
       return [t0, t2];
     })(), ['1つ目の技を選ぶ', '3つ目の技を選ぶ']);
+    assert('open: slot を省略すると①にフォールバックし、選んだ技は0番目の枠に入る', (function() {
+      var got = null;
+      TechPicker.open({
+        techniques: [{ name: '真' }],
+        initial: ['', '', ''],
+        onClose: function(st) { got = st; }
+      });
+      var title = document.querySelector('.tp-head span').textContent;
+      document.querySelector('.tp-item[data-name="真"]').click();
+      return [title, got];
+    })(), ['1つ目の技を選ぶ', ['真', '', '']]);
+    assert('open: onChange と onClose はそれぞれ1回だけ呼ばれる（1回タップ）', (function() {
+      var changeCount = 0, closeCount = 0;
+      TechPicker.open({
+        techniques: [{ name: '真' }],
+        initial: ['', '', ''],
+        slot: 0,
+        onChange: function() { changeCount++; },
+        onClose: function() { closeCount++; }
+      });
+      document.querySelector('.tp-item[data-name="真"]').click();
+      return [changeCount, closeCount];
+    })(), [1, 1]);
     assert('open: 編集中の枠の技だけ .tp-item.on になり枠番号が付く（他の枠は見ない）', (function() {
       TechPicker.open({
         techniques: [{ name: '真' }, { name: '水月' }],
