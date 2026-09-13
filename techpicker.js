@@ -46,6 +46,17 @@ var TechPicker = (function() {
     return parts.join('/');
   }
 
+  // 完成時の総得点（打てる太刀の配点の合計）。技シートの「総得点」列に出す。
+  // null（打てない太刀）と数値でない値は数えない。tech が無ければ 0。
+  function fullScore(tech) {
+    var s = (tech && tech.strikes) || [];
+    var sum = 0;
+    for (var i = 0; i < s.length; i++) {
+      if (typeof s[i] === 'number' && isFinite(s[i])) sum += s[i];
+    }
+    return sum;
+  }
+
   // 検索用の正規化。全角英数→半角（NFKC）、小文字化、前後の空白除去。
   function normalizeQuery(s) {
     var t = String(s || '');
@@ -155,7 +166,8 @@ var TechPicker = (function() {
     var header = document.createElement('div');
     header.className = 'tp-row tp-header';
     header.innerHTML = '<span class="tp-no"></span><span class="tp-name">技名</span>' +
-      STRIKE_HEADS.map(function(h) { return '<span class="tp-s">' + h + '</span>'; }).join('');
+      STRIKE_HEADS.map(function(h) { return '<span class="tp-s">' + h + '</span>'; }).join('') +
+      '<span class="tp-s tp-total">総得点</span>';
 
     var list = document.createElement('div');
     list.className = 'tp-list';
@@ -196,7 +208,8 @@ var TechPicker = (function() {
         item.dataset.name = t.name;
         // 枠だけ innerHTML で作り、値は textContent で入れる（技名はサーバー由来）
         item.innerHTML = '<span class="tp-no"></span><span class="tp-name"></span>' +
-          '<span class="tp-s"></span><span class="tp-s"></span><span class="tp-s"></span><span class="tp-s"></span>';
+          '<span class="tp-s"></span><span class="tp-s"></span><span class="tp-s"></span><span class="tp-s"></span>' +
+          '<span class="tp-s tp-total"></span>';
         item.querySelector('.tp-no').textContent = isOn ? CIRCLED[slot] : '';
         item.querySelector('.tp-name').textContent = t.name;
         var cells = item.querySelectorAll('.tp-s');
@@ -205,6 +218,7 @@ var TechPicker = (function() {
           var v = strikes[i];
           cells[i].textContent = (v === null || v === undefined) ? '—' : String(v);
         }
+        item.querySelector('.tp-total').textContent = String(fullScore(t));
         item.addEventListener('click', function() { pick(this.dataset.name); });
         list.appendChild(item);
       });
@@ -246,6 +260,7 @@ var TechPicker = (function() {
     toArray: toArray,
     fromArray: fromArray,
     strikesLabel: strikesLabel,
+    fullScore: fullScore,
     filter: filter,
     open: open,
     dismiss: dismiss,

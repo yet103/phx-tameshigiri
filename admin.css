@@ -190,8 +190,8 @@ main { padding: 8px 12px 16px; }
 /* 技名と太刀の配点を列でそろえる（ヘッダー行と各技の行で同じ列幅）。
    技名列は上限を付け、広い画面でも配点が技名のすぐ右に並ぶようにする（1fr だと右端まで離れる）。
    列の間は gap ではなく各セルの縦罫線（border-left）で区切る。
-   見出しは11pxにしているので52pxでも1行に収まる（4文字44px＋左右3px＋罫線1px）。 */
-.tp-row { display: grid; grid-template-columns: 20px minmax(0, 240px) repeat(4, 52px); align-items: stretch; gap: 0; }
+   右端に完成時の総得点（56px）。見出しは10pxにしているので48pxでも1行に収まる（4文字40px＋左右3px＋罫線1px）。 */
+.tp-row { display: grid; grid-template-columns: 20px minmax(0, 240px) repeat(4, 48px) 56px; align-items: stretch; gap: 0; }
 .tp-row > span { display: flex; align-items: center; min-width: 0; }
 .tp-header {
   padding: 6px 14px; color: var(--text-muted);
@@ -200,7 +200,7 @@ main { padding: 8px 12px 16px; }
      外に置くと classic スクロールバー環境で行側だけ幅が狭くなり列がずれるため。 */
   position: sticky; top: 0; z-index: 1;
 }
-.tp-header .tp-s { font-size: 11px; } /* 4文字の見出しが52px列に1行で収まるサイズ */
+.tp-header .tp-s { font-size: 10px; } /* 4文字の見出しが48px列（左右3px＋罫線1px）に1行で収まるサイズ */
 .tp-item {
   width: 100%; min-height: 48px; padding: 0 14px; text-align: left;
   border-radius: 0; background: transparent; color: var(--text);
@@ -217,6 +217,12 @@ main { padding: 8px 12px 16px; }
   font-variant-numeric: tabular-nums; border-left: 1px solid var(--border);
 }
 .tp-s:last-child { border-right: 1px solid var(--border); }
+.tp-total { font-weight: bold; color: var(--text); } /* 完成時の総得点。配点より濃く */
+.tp-item.on .tp-total { color: var(--accent); }
+/* 狭い画面では行の左右余白を詰めて技名列を確保する（375px で技名に 95px ほど残る） */
+@media (max-width: 420px) {
+  .tp-item, .tp-header { padding-left: 8px; padding-right: 8px; }
+}
 
 /* ===== トースト ===== */
 #toast {

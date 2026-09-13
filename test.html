@@ -918,6 +918,13 @@
       TechPicker.strikesLabel({ strikes: [17, 5, 7, 3] }), '17/5/7/3');
     assert('strikesLabel: 末尾の null は出さない',
       TechPicker.strikesLabel({ strikes: [1, null, null, null] }), '1');
+
+    // fullScore: 完成時の総得点（打てる太刀の配点の合計）
+    assert('fullScore: null の太刀を飛ばして合計', TechPicker.fullScore({ strikes: [11, 3, null, null] }), 14);
+    assert('fullScore: 4太刀すべて打てる技', TechPicker.fullScore({ strikes: [17, 5, 7, 3] }), 32);
+    assert('fullScore: strikes が無ければ 0', TechPicker.fullScore({}), 0);
+    assert('fullScore: tech が null なら 0', TechPicker.fullScore(null), 0);
+    assert('fullScore: 数値でない値は数えない', TechPicker.fullScore({ strikes: ['5', undefined, 2, NaN] }), 2);
     assert('strikesLabel: strikes が無ければ空', TechPicker.strikesLabel({}), '');
 
     var ftechs = [{ name: '四方', strikes: [17, 5, 7, 3] }, { name: '夢想返し', strikes: [13, 5, null, null] }, { name: 'Ｋｅｓａ', strikes: [1, null, null, null] }];
