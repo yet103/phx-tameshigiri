@@ -8,6 +8,8 @@ var App = (function() {
   var gridRestorable = true; // 表示中のグリッドが player.result から復元できたか
   var gridDirty = false;     // 復元できなかったグリッドを、実際に採点し直したか
   var noticeRow = null;      // 復元不能を知らせる行（DOM）。置き換え確定時に取り除く
+  var selectedRow = -1;      // 選択中の技の行（0始まり）。技が無ければ -1
+  var PLAYER_LIST_KEY = 'tmg_player_list_open';
   var timerSec = 300;     // タイマー残り秒数
   var timerRunning = false;
   var timerInterval = null;
@@ -19,13 +21,18 @@ var App = (function() {
   var scoreTableBody   = document.getElementById('scoreTableBody');
   var totalScoreDisplay= document.getElementById('totalScoreDisplay');
   var timerDisplay     = document.getElementById('timerDisplay');
-  var playerListPanel  = document.getElementById('playerListPanel');
+  var playerListSection = document.getElementById('playerListSection');
   var playerListBody   = document.getElementById('playerListBody');
   var courtSelect      = document.getElementById('courtSelect');
+  var totalAdjustInput = document.getElementById('totalAdjustInput');
+  var noteInput        = document.getElementById('noteInput');
+  var btnConfirm       = document.getElementById('btnConfirm');
+  var scoreTable       = document.getElementById('scoreTable');
 
   // --- 初期化 ---
   async function init() {
     applyTheme(Storage.loadTheme());
+    initPlayerListOpen();
     // 送信キューは何よりも先に起動する。
     // ここから下の API 呼び出しがどう転んでも、前回未送信の採点が
     // 復旧され、online イベントの購読も済んでいる状態にするため。
@@ -141,8 +148,10 @@ var App = (function() {
 
     document.getElementById('btnExport').addEventListener('click', onCsvExport);
     document.getElementById('btnDownloadHtml').addEventListener('click', onDownloadHtml);
-    document.getElementById('btnPlayerList').addEventListener('click', togglePlayerList);
-    document.getElementById('btnPlayerListClose').addEventListener('click', closePlayerList);
+    document.getElementById('btnPlayerListToggle').addEventListener('click', togglePlayerList);
+    btnConfirm.addEventListener('click', onConfirm);
+    totalAdjustInput.addEventListener('change', onTotalAdjustChange);
+    noteInput.addEventListener('change', onNoteChange);
 
     // 大会管理イベント
     document.getElementById('eventSelect').addEventListener('change', function() {
@@ -235,6 +244,7 @@ var App = (function() {
         : '（選手がいません）';
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
+      clearAdjustInputs();
     }
     refreshPlayerList();
   }
@@ -306,6 +316,7 @@ var App = (function() {
       playerNameLabel.textContent = '（大会を選択してください）';
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
+      clearAdjustInputs();
       Route.clear();
       refreshPlayerList();
       updateAdminLink('');
@@ -397,7 +408,11 @@ var App = (function() {
     scoreTableBody.innerHTML = '';
     gridDirty = false;
     noticeRow = null;
+    selectedRow = -1;
     var techNames = [player.tech1, player.tech2, player.tech3].filter(Boolean);
+    // 全体補正点・備考は技の有無に関わらず表示する（技が無いときは編集不可）
+    totalAdjustInput.value = Number(player.totalAdjust) ? String(Math.trunc(player.totalAdjust)) : '';
+    noteInput.value = player.note || '';
     if (techNames.length === 0) {
       // 技が未入力（進行タブでまだ入力されていない二巡目の選手など）。
       // 空のグリッドから合計0を計算して上書き保存すると既存の得点が消えるので、
@@ -411,12 +426,17 @@ var App = (function() {
       trEmpty.appendChild(tdEmpty);
       scoreTableBody.appendChild(trEmpty);
       setTotalDisplay(player.score || 0);
+      totalAdjustInput.disabled = true;
+      noteInput.disabled = true;
+      applyConfirmedStyle(!!player.confirmed);
       return;
     }
+    totalAdjustInput.disabled = false;
+    noteInput.disabled = false;
     // 何も記録されていない選手（得点0で○×も無い）は空のグリッドが正しい状態。
     // result が空白だけでも同じ
     gridRestorable = Scoring.canDecode(player.result, techNames.length) || !Courts.isScored(player);
-    var decoded = gridRestorable ? Scoring.decodeResult(player.result, techNames.length) : null;
+    var decoded = gridRestorable ? Scoring.decodeResult(player.result, techNames.length, player.adjust) : null;
 
     if (!decoded) {
       // result を技内訳へ分解できない（技の再割当てなどで長さが噛み合わなくなった
@@ -434,16 +454,20 @@ var App = (function() {
       noticeRow = trNotice;
     }
 
+    // 技が3つ未満のとき、adjust の添字は「技の枠」ではなく「表示行」に合わせる
+    // （tech1..3 を filter(Boolean) しているため）。保存時も同じ順で書く。
     for (var i = 0; i < techNames.length; i++) {
-      var rowData = decoded ? decoded[i] : { values: ['','','',''], techPoint: '' };
+      var rowData = decoded ? decoded[i] : { values: ['','','',''], adjust: 0 };
       var tr = buildScoreRow(techNames[i], player.isFemale, rowData, i);
       scoreTableBody.appendChild(tr);
     }
+    selectRow(0);
     if (decoded) {
       updateTotal();
     } else {
       setTotalDisplay(player.score || 0);
     }
+    applyConfirmedStyle(!!player.confirmed);
   }
 
   function buildScoreRow(techName, isFemale, rowData, rowIndex) {
@@ -454,11 +478,12 @@ var App = (function() {
     var tdName = document.createElement('td');
     tdName.className = 'tech-name';
     tdName.textContent = techName;
+    tdName.addEventListener('click', function() { selectRow(rowIndex); });
     tr.appendChild(tdName);
 
     var tech = Scoring.findTechnique(techName, isFemale);
 
-    // 初〜四の太刀
+    // 初〜四ノ太刀
     for (var s = 0; s < 4; s++) {
       var td = document.createElement('td');
       td.className = 'strike-cell';
@@ -474,14 +499,19 @@ var App = (function() {
       tr.appendChild(td);
     }
 
-    // 技術点
-    var tdTp = document.createElement('td');
-    tdTp.className = 'strike-cell';
-    tdTp.dataset.strike = 'tp';
-    tdTp.dataset.value = rowData.techPoint || '';
-    setCellDisplay(tdTp, rowData.techPoint || '');
-    tdTp.addEventListener('click', onStrikeClick);
-    tr.appendChild(tdTp);
+    // 補正点（任意の整数。0 は空欄で表示）
+    var tdAdj = document.createElement('td');
+    tdAdj.className = 'adjust-cell';
+    var inp = document.createElement('input');
+    inp.type = 'number';
+    inp.step = '1';
+    inp.inputMode = 'numeric';
+    inp.className = 'adjust-input';
+    inp.value = Number(rowData.adjust) ? String(Math.trunc(rowData.adjust)) : '';
+    inp.addEventListener('focus', function() { selectRow(rowIndex); });
+    inp.addEventListener('change', onAdjustChange);
+    tdAdj.appendChild(inp);
+    tr.appendChild(tdAdj);
 
     // 得点
     var tdScore = document.createElement('td');
@@ -493,10 +523,39 @@ var App = (function() {
   }
 
   function setCellDisplay(td, value) {
-    td.textContent = value;
-    td.classList.remove('success', 'fail');
-    if (value === '○') td.classList.add('success');
-    else if (value === '×') td.classList.add('fail');
+    td.classList.remove('success', 'fail', 'empty');
+    if (value === '○') { td.textContent = '成功'; td.classList.add('success'); }
+    else if (value === '×') { td.textContent = '失敗'; td.classList.add('fail'); }
+    else { td.textContent = '未'; td.classList.add('empty'); }
+  }
+
+  // --- 行の選択 ---
+  function selectRow(index) {
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
+    if (rows.length === 0) { selectedRow = -1; return; }
+    if (index < 0 || index >= rows.length) index = 0;
+    selectedRow = index;
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle('selected', i === index);
+    }
+  }
+
+  function selectedRowEl() {
+    if (selectedRow < 0) return null;
+    return scoreTableBody.querySelector('tr[data-tech][data-row="' + selectedRow + '"]');
+  }
+
+  // 行の補正点入力欄の値（空欄は 0）
+  function rowAdjust(tr) {
+    var inp = tr.querySelector('.adjust-input');
+    if (!inp) return 0;
+    var n = parseInt(inp.value, 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function totalAdjustValue() {
+    var n = parseInt(totalAdjustInput.value, 10);
+    return Number.isFinite(n) ? n : 0;
   }
 
   // --- タイマー ---
@@ -534,6 +593,103 @@ var App = (function() {
     totalScoreDisplay.textContent = '合計: ' + n + '点';
   }
 
+  // 確定済みの見た目（得点列・合計・下部一覧の得点を青）とボタンの状態
+  function applyConfirmedStyle(on) {
+    scoreTable.classList.toggle('confirmed', on);
+    totalScoreDisplay.classList.toggle('confirmed', on);
+    btnConfirm.classList.toggle('on', on);
+    btnConfirm.textContent = on ? '確定済み' : '確定';
+    updatePlayerListConfirmed(currentIndex, on);
+  }
+
+  // 選手が表示されていないとき（大会未選択・そのコートに選手がいない）の補正段
+  function clearAdjustInputs() {
+    totalAdjustInput.value = '';
+    noteInput.value = '';
+    totalAdjustInput.disabled = true;
+    noteInput.disabled = true;
+    applyConfirmedStyle(false);
+  }
+
+  // 得点に関わる編集をしたら確定を解除する（保存は呼び出し元の saveCurrentState が行う）
+  function unconfirmIfNeeded() {
+    var p = visiblePlayers[currentIndex];
+    if (!p || !p.confirmed) return;
+    p.confirmed = false;
+    applyConfirmedStyle(false);
+  }
+
+  function onConfirm() {
+    if (!currentEvent) { alert('大会が選択されていません。'); return; }
+    var p = visiblePlayers[currentIndex];
+    if (!p) return;
+    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) {
+      alert('技が未入力のため確定できません。');
+      return;
+    }
+    if (!gridRestorable && !gridDirty) {
+      alert('内訳を復元できない選手は、採点し直してから確定してください。');
+      return;
+    }
+    if (p.confirmed) return;
+    p.confirmed = true;
+    applyConfirmedStyle(true);
+    saveCurrentState();
+    Api.addHistory(currentEvent.id, {
+      action: 'confirm',
+      playerName: p.name || '',
+      detail: '確定（' + (p.score || 0) + '点）'
+    });
+  }
+
+  function onTotalAdjustChange() {
+    if (!currentEvent || scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) return;
+    if (!confirmReplaceIfNeeded()) { totalAdjustInput.value = ''; return; }
+    var n = totalAdjustValue();
+    totalAdjustInput.value = n ? String(n) : '';
+    unconfirmIfNeeded();
+    updateTotal();
+    saveCurrentState();
+    var p = visiblePlayers[currentIndex];
+    Api.addHistory(currentEvent.id, {
+      action: 'score_update',
+      playerName: p ? p.name : '',
+      detail: '全体補正点 → ' + n
+    });
+  }
+
+  function onNoteChange() {
+    if (!currentEvent || scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) return;
+    if (!gridRestorable && !gridDirty) return;   // 復元不能な内訳を空で上書きしない
+    var p = visiblePlayers[currentIndex];
+    if (!p) return;
+    p.note = noteInput.value.trim().slice(0, 200);
+    saveCurrentState();   // 備考は確定を解除しない
+  }
+
+  function onAdjustChange(e) {
+    var inp = e.currentTarget;
+    var tr = inp.closest('tr');
+    if (!currentEvent) { alert('大会が選択されていません。'); return; }
+    if (!confirmReplaceIfNeeded()) { inp.value = ''; return; }
+    var n = rowAdjust(tr);
+    inp.value = n ? String(n) : '';
+    var p = visiblePlayers[currentIndex];
+    unconfirmIfNeeded();
+    updateRowScore(tr, p ? p.isFemale : false);
+    updateTotal();
+    saveCurrentState();
+    Api.addHistory(currentEvent.id, {
+      action: 'score_update',
+      playerName: p ? p.name : '',
+      techName: tr.dataset.tech,
+      techRow: parseInt(tr.dataset.row, 10),
+      strike: 'adjust',
+      value: n,
+      detail: '補正点 → ' + n
+    });
+  }
+
   // 復元できないグリッドへ最初に触れたときだけ、既存の得点を置き換える旨を確認する。
   // OK なら gridDirty を立てて以降は毎回聞かない。キャンセルなら呼び出し元は何もしない。
   function confirmReplaceIfNeeded() {
@@ -552,6 +708,8 @@ var App = (function() {
   }
 
   // --- 採点インタラクション ---
+  var STRIKE_LABELS = ['初太刀', '二ノ太刀', '三ノ太刀', '四ノ太刀'];
+
   function onStrikeClick(e) {
     var td = e.currentTarget;
     if (td.classList.contains('disabled')) return;
@@ -560,51 +718,55 @@ var App = (function() {
     if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) return;
     if (!confirmReplaceIfNeeded()) return;
 
+    var tr = td.closest('tr');
+    selectRow(parseInt(tr.dataset.row, 10));
     var current = td.dataset.value || '';
     var next = current === '' ? '○' : current === '○' ? '×' : '';
     td.dataset.value = next;
     setCellDisplay(td, next);
-    
-    var tr = td.closest('tr');
+
     var p = visiblePlayers[currentIndex];
+    unconfirmIfNeeded();
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
-    
-    // 採点履歴を記録
-    if (currentEvent) {
-      Api.addHistory(currentEvent.id, {
-        action: 'score_update',
-        playerName: p ? p.name : '',
-        techName: tr ? tr.dataset.tech : '',
-        // 同じ技を複数の枠に入れられるので、techName だけでは行を特定できない。
-        // buildScoreRow が振った 0 始まりの行番号（tr.dataset.row）も残す。
-        techRow: tr ? parseInt(tr.dataset.row, 10) : null,
-        strike: td.dataset.strike !== 'tp' ? parseInt(td.dataset.strike) : 'tp',
-        value: next,
-        detail: (td.dataset.strike === 'tp' ? '技術点' : ["初太刀","二の太刀","三の太刀","四の太刀"][parseInt(td.dataset.strike)]) + ' → ' + (next || '空白')
-      });
-    }
+
+    Api.addHistory(currentEvent.id, {
+      action: 'score_update',
+      playerName: p ? p.name : '',
+      techName: tr.dataset.tech,
+      // 同じ技を複数の枠に入れられるので、techName だけでは行を特定できない。
+      // buildScoreRow が振った 0 始まりの行番号（tr.dataset.row）も残す。
+      techRow: parseInt(tr.dataset.row, 10),
+      strike: parseInt(td.dataset.strike, 10),
+      value: next,
+      detail: STRIKE_LABELS[parseInt(td.dataset.strike, 10)] + ' → ' +
+              (next === '○' ? '成功' : next === '×' ? '失敗' : '未')
+    });
   }
 
-  function updateRowScore(tr, isFemale) {
-    var techName = tr.dataset.tech;
+  function rowValues(tr) {
     var values = [];
     for (var s = 0; s < 4; s++) {
       var cell = tr.querySelector('[data-strike="' + s + '"]');
       values.push(cell && !cell.classList.contains('disabled') ? (cell.dataset.value || '') : '');
     }
-    var tpCell = tr.querySelector('[data-strike="tp"]');
-    var techPoint = tpCell ? (tpCell.dataset.value || '') : '';
+    return values;
+  }
 
-    var rowScore = 0;
-    for (var i = 0; i < 4; i++) {
-      rowScore += Scoring.calcStrikeScore(techName, i, values[i], isFemale);
-    }
-    if (techPoint === '○') rowScore += 3;
+  // 行に何も入っていない（太刀が全部「未」で補正も 0）か
+  function rowIsBlank(tr) {
+    var values = rowValues(tr);
+    for (var i = 0; i < 4; i++) if (values[i]) return false;
+    return rowAdjust(tr) === 0;
+  }
 
+  function updateRowScore(tr, isFemale) {
+    var rowScore = Scoring.calcRowScore(tr.dataset.tech, rowValues(tr), rowAdjust(tr), isFemale);
     var scoreCell = tr.querySelector('.score-col');
-    scoreCell.textContent = rowScore > 0 ? rowScore : '';
+    // 何も入っていない行は空欄。入力があれば 0 や負の数もそのまま見せる
+    scoreCell.textContent = rowIsBlank(tr) ? '' : String(rowScore);
+    scoreCell.dataset.score = String(rowScore);
   }
 
   function updateTotal() {
@@ -614,8 +776,9 @@ var App = (function() {
     var total = 0;
     for (var i = 0; i < rows.length; i++) {
       var sc = rows[i].querySelector('.score-col');
-      if (sc) total += parseFloat(sc.textContent) || 0;
+      if (sc) total += parseInt(sc.dataset.score, 10) || 0;
     }
+    total += totalAdjustValue();
     setTotalDisplay(total);
     if (visiblePlayers[currentIndex] !== undefined) {
       visiblePlayers[currentIndex].score = total;
@@ -631,73 +794,85 @@ var App = (function() {
     if (!gridRestorable && !gridDirty) return;
     var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var rowDataArr = [];
+    var adjust = [0, 0, 0];
     for (var i = 0; i < rows.length; i++) {
-      var values = [];
-      for (var s = 0; s < 4; s++) {
-        var cell = rows[i].querySelector('[data-strike="' + s + '"]');
-        values.push(cell && !cell.classList.contains('disabled') ? (cell.dataset.value || '') : '');
-      }
-      var tpCell = rows[i].querySelector('[data-strike="tp"]');
-      rowDataArr.push({ values: values, techPoint: tpCell ? (tpCell.dataset.value || '') : '' });
+      rowDataArr.push({ values: rowValues(rows[i]) });
+      if (i < 3) adjust[i] = rowAdjust(rows[i]);
     }
     var p = visiblePlayers[currentIndex];
     p.result = Scoring.encodeResult(rowDataArr);
+    p.adjust = adjust;
+    p.totalAdjust = totalAdjustValue();
+    p.note = noteInput.value.trim().slice(0, 200);
+    p.confirmed = !!p.confirmed;
 
     Outbox.enqueue({
       eventId: currentEvent.id,
       playerId: p.id,
       score: p.score,
-      result: p.result
+      result: p.result,
+      adjust: p.adjust,
+      totalAdjust: p.totalAdjust,
+      note: p.note,
+      confirmed: p.confirmed
     });
   }
 
+  // 「形成功」: 選択中の技の行の打てる太刀をすべて成功にする（失敗も成功に変える）
   function setAllSuccess() {
-    if (!currentEvent) { alert('大会が選択されていません。'); return; }
-    // 技が無い選手は採点できない
-    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) {
-      alert('技が未入力のため採点できません。運営画面の進行タブで技を入力してください。');
-      return;
-    }
-    if (!confirmReplaceIfNeeded()) return;
-    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
+    var tr = guardRowAction();
+    if (!tr) return;
     var p = visiblePlayers[currentIndex];
-    for (var i = 0; i < rows.length; i++) {
-      for (var s = 0; s < 4; s++) {
-        var cell = rows[i].querySelector('[data-strike="' + s + '"]');
-        if (cell && !cell.classList.contains('disabled')) {
-          cell.dataset.value = '○';
-          setCellDisplay(cell, '○');
-        }
+    for (var s = 0; s < 4; s++) {
+      var cell = tr.querySelector('[data-strike="' + s + '"]');
+      if (cell && !cell.classList.contains('disabled')) {
+        cell.dataset.value = '○';
+        setCellDisplay(cell, '○');
       }
-      updateRowScore(rows[i], p ? p.isFemale : false);
     }
+    unconfirmIfNeeded();
+    updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
+    Api.addHistory(currentEvent.id, {
+      action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
+      techRow: parseInt(tr.dataset.row, 10), strike: 'all', value: '○', detail: '形成功'
+    });
   }
 
+  // 「失敗」: 選択中の技の行の「未」だけを失敗にする（成功は触らない）
   function setAllFail() {
-    if (!currentEvent) { alert('大会が選択されていません。'); return; }
-    // 技が無い選手は採点できない
-    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) {
-      alert('技が未入力のため採点できません。運営画面の進行タブで技を入力してください。');
-      return;
-    }
-    if (!confirmReplaceIfNeeded()) return;
-    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
+    var tr = guardRowAction();
+    if (!tr) return;
     var p = visiblePlayers[currentIndex];
-    for (var i = 0; i < rows.length; i++) {
-      for (var s = 0; s < 4; s++) {
-        var cell = rows[i].querySelector('[data-strike="' + s + '"]');
-        // ○以外の空白セルのみ×にする
-        if (cell && !cell.classList.contains('disabled') && (cell.dataset.value || '') !== '○') {
-          cell.dataset.value = '×';
-          setCellDisplay(cell, '×');
-        }
+    for (var s = 0; s < 4; s++) {
+      var cell = tr.querySelector('[data-strike="' + s + '"]');
+      if (cell && !cell.classList.contains('disabled') && (cell.dataset.value || '') === '') {
+        cell.dataset.value = '×';
+        setCellDisplay(cell, '×');
       }
-      updateRowScore(rows[i], p ? p.isFemale : false);
     }
+    unconfirmIfNeeded();
+    updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
+    Api.addHistory(currentEvent.id, {
+      action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
+      techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×', detail: '未を失敗に'
+    });
+  }
+
+  // 形成功・失敗の共通ガード。対象の行（tr）を返す。操作できなければ null。
+  function guardRowAction() {
+    if (!currentEvent) { alert('大会が選択されていません。'); return null; }
+    if (scoreTableBody.querySelectorAll('tr[data-tech]').length === 0) {
+      alert('技が未入力のため採点できません。運営画面の進行タブで技を入力してください。');
+      return null;
+    }
+    var tr = selectedRowEl();
+    if (!tr) { alert('形（技名）をタップして選んでください。'); return null; }
+    if (!confirmReplaceIfNeeded()) return null;
+    return tr;
   }
 
   // --- CSV エクスポート ---
@@ -730,24 +905,35 @@ var App = (function() {
     Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
   }
 
-  // --- 選手一覧パネル ---
-  function togglePlayerList() {
-    if (playerListPanel.classList.contains('open')) {
-      closePlayerList();
-    } else {
-      openPlayerList();
+  // --- 選手一覧（ページ下部・開閉） ---
+  // 初期状態: 端末の記憶があればそれ、無ければ画面幅 768px 以上で開く
+  function initPlayerListOpen() {
+    var open = window.innerWidth >= 768;
+    try {
+      var saved = localStorage.getItem(PLAYER_LIST_KEY);
+      if (saved === '1') open = true;
+      else if (saved === '0') open = false;
+    } catch (e) {}
+    setPlayerListOpen(open, false);
+  }
+
+  function setPlayerListOpen(open, remember) {
+    playerListSection.classList.toggle('closed', !open);
+    var btn = document.getElementById('btnPlayerListToggle');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.querySelector('.player-list-arrow').textContent = open ? '▾' : '▸';
+    if (remember) {
+      try { localStorage.setItem(PLAYER_LIST_KEY, open ? '1' : '0'); } catch (e) {}
     }
+    if (open) renderPlayerList();
   }
 
-  function openPlayerList() {
-    renderPlayerList();
-    playerListPanel.classList.add('open');
-    document.getElementById('btnPlayerList').classList.add('active');
+  function isPlayerListOpen() {
+    return !playerListSection.classList.contains('closed');
   }
 
-  function closePlayerList() {
-    playerListPanel.classList.remove('open');
-    document.getElementById('btnPlayerList').classList.remove('active');
+  function togglePlayerList() {
+    setPlayerListOpen(!isPlayerListOpen(), true);
   }
 
   function renderPlayerList() {
@@ -768,7 +954,7 @@ var App = (function() {
       '<td>' + esc(p.tech1 || '') + '</td>' +
       '<td>' + esc(p.tech2 || '') + '</td>' +
       '<td>' + esc(p.tech3 || '') + '</td>' +
-      '<td>' + (p.score || 0) + '</td>';
+      '<td class="' + (p.confirmed ? 'confirmed' : '') + '">' + (p.score || 0) + '</td>';
     tr.addEventListener('click', function() {
       var idx = parseInt(this.dataset.index, 10);
       saveCurrentState();
@@ -779,12 +965,12 @@ var App = (function() {
 
   // 選手データ自体が入れ替わったとき用（開いていれば一覧を作り直す）
   function refreshPlayerList() {
-    if (!playerListPanel.classList.contains('open')) return;
+    if (!isPlayerListOpen()) return;
     renderPlayerList();
   }
 
   function updatePlayerList() {
-    if (!playerListPanel.classList.contains('open')) return;
+    if (!isPlayerListOpen()) return;
     var rows = playerListBody.querySelectorAll('tr');
     for (var i = 0; i < rows.length; i++) {
       var idx = parseInt(rows[i].dataset.index, 10);
@@ -796,11 +982,20 @@ var App = (function() {
   }
 
   function updatePlayerListScore(index, score) {
-    if (!playerListPanel.classList.contains('open')) return;
+    if (!isPlayerListOpen()) return;
     var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
     if (row) {
       var cells = row.querySelectorAll('td');
       cells[cells.length - 1].textContent = score;
+    }
+  }
+
+  function updatePlayerListConfirmed(index, on) {
+    if (!isPlayerListOpen()) return;
+    var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
+    if (row) {
+      var cells = row.querySelectorAll('td');
+      cells[cells.length - 1].classList.toggle('confirmed', on);
     }
   }
 
