@@ -32,11 +32,13 @@ input[type="file"] { display: none; }
   gap: 8px;
   flex-wrap: wrap;
 }
+/* コート端末は指で操作するので、押せるものはすべて 44px 以上にする */
 .player-nav .nav-btn {
   background: var(--accent);
   color: var(--accent-text);
   padding: 6px 16px;
   white-space: nowrap;
+  min-height: 44px;
 }
 .player-nav .player-info {
   flex: 1;
@@ -71,7 +73,7 @@ input[type="file"] { display: none; }
   text-align: center;
   margin-left: auto;
 }
-.timer-bar button { background: var(--bg-header); color: var(--text); }
+.timer-bar button { background: var(--bg-header); color: var(--text); min-height: 44px; }
 .timer-bar button:hover { opacity: 0.8; }
 
 /* ===== 採点テーブル ===== */
@@ -146,7 +148,7 @@ input[type="file"] { display: none; }
 .score-table tr.selected td.strike-cell.disabled { background: var(--cell-disabled); }
 .score-table td.adjust-cell { padding: 2px 4px; }
 .adjust-input {
-  width: 64px; height: 40px; text-align: center; font-size: 16px;
+  width: 64px; height: 44px; text-align: center; font-size: 16px;
   background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
 }
 .score-table.confirmed td.score-col { color: var(--score-confirmed); }
@@ -160,7 +162,7 @@ input[type="file"] { display: none; }
 .adjust-bar label { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .adjust-bar .note-label { flex: 1; min-width: 200px; }
 .adjust-bar #noteInput {
-  flex: 1; height: 40px; padding: 0 8px; font-size: 16px;
+  flex: 1; height: 44px; padding: 0 8px; font-size: 16px;
   background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
 }
 
@@ -178,6 +180,7 @@ input[type="file"] { display: none; }
   margin-top: 4px;
   flex-wrap: wrap;
 }
+.action-bar button { min-height: 44px; }
 .btn-success { background: var(--btn-success); color: #fff; }
 .btn-fail    { background: var(--btn-fail);    color: #fff; }
 .btn-neutral { background: var(--btn-neutral); color: #fff; }
@@ -198,7 +201,7 @@ input[type="file"] { display: none; }
   border-top: 2px solid var(--border);
   flex-wrap: wrap;
 }
-.toolbar button { background: var(--bg-header); color: var(--text); }
+.toolbar button { background: var(--bg-header); color: var(--text); min-height: 44px; }
 .toolbar button.active { background: var(--accent); color: var(--accent-text); }
 .toolbar .theme-btn { margin-left: auto; }
 

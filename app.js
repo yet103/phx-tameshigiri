@@ -1016,8 +1016,26 @@ var App = (function() {
       rows[i].classList.toggle('current-player', idx === currentIndex);
     }
     // 現在の選手行を表示領域内にスクロール
-    var currentRow = playerListBody.querySelector('tr.current-player');
-    if (currentRow) currentRow.scrollIntoView({ block: 'nearest' });
+    scrollPlayerListTo(playerListBody.querySelector('tr.current-player'));
+  }
+
+  // 一覧の枠（.player-list-body）の中だけをスクロールさせる。
+  // 一覧はページ下部のフローに置いたので、scrollIntoView を使うとページ全体が動き、
+  // スマホでは「次の選手」ボタンが画面の外へ逃げてしまう。
+  function scrollPlayerListTo(row) {
+    var box = document.getElementById('playerListBody-wrap');
+    if (!box || !row) return;
+    var boxRect = box.getBoundingClientRect();
+    var rowRect = row.getBoundingClientRect();
+    // 見出し行は position:sticky で枠の上端に居座るので、その分だけ下を使う
+    var head = box.querySelector('thead');
+    var headHeight = head ? head.getBoundingClientRect().height : 0;
+    var top = boxRect.top + headHeight;
+    if (rowRect.top < top) {
+      box.scrollTop -= top - rowRect.top;
+    } else if (rowRect.bottom > boxRect.bottom) {
+      box.scrollTop += rowRect.bottom - boxRect.bottom;
+    }
   }
 
   function updatePlayerListScore(index, score) {
