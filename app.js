@@ -17,6 +17,9 @@ var App = (function() {
   var timerSec = 300;     // タイマー残り秒数
   var timerRunning = false;
   var timerInterval = null;
+  // 雛形（サーバー全体の技リスト）の控え。大会未選択のときと、
+  // 大会の応答に techniques が無かったとき（旧サーバー）に使う。
+  var templateTechniques = null;
 
   // --- DOM参照 ---
   var courtLabel       = document.getElementById('courtLabel');
@@ -45,6 +48,7 @@ var App = (function() {
     // 技術データをAPIから取得してScoringに注入
     var techData = await Api.loadTechniques();
     if (techData && techData.techniques) {
+      templateTechniques = techData.techniques;
       Scoring.setTechniques(techData.techniques);
     } else {
       // 端末側の既定値で採点は続けられるが、サーバーのカスタム技術とは
@@ -304,10 +308,24 @@ var App = (function() {
   // 画面がサーバーの古い値へ巻き戻り、次の1タップがその古いDOMから
   // 再エンコードされて未送信分を破棄する。
   // 読み直す経路が複数あるため、ここに一本化して付け忘れを防ぐ。
+  // 選択中の大会の配点を採点に反映する。
+  // 配点は大会ごと（大会 JSON の techniques）。応答に techniques が無い旧サーバーに
+  // 当たったときは雛形のままにする（黙って 0 点にしない）。
+  function applyEventTechniques(event) {
+    if (event && Array.isArray(event.techniques) && event.techniques.length > 0) {
+      Scoring.setTechniques(event.techniques);
+    } else if (templateTechniques) {
+      Scoring.setTechniques(templateTechniques);
+    }
+  }
+
   function adoptEvent(event) {
     currentEvent = event;
     players = event.players || [];
     Outbox.applyPending(event.id, players);
+    // 大会を読み直す経路（onEventSelect / refreshFromServer）はここに集まる。
+    // 配点の入れ替えもここでやると付け忘れない。
+    applyEventTechniques(event);
   }
 
   // 運営画面リンクに選択中の大会を引き継がせる。採点画面と運営画面は
@@ -320,6 +338,16 @@ var App = (function() {
     link.href = eventId
       ? 'admin.html#players/' + encodeURIComponent(eventId)
       : 'admin.html';
+  }
+
+  // 上部リンクの「技術リスト編集」。選択中の大会があればその大会の技リストを開く
+  // （配点は大会ごとなので、ハッシュ無しで開くと雛形を編集してしまう）。
+  function updateTechniquesLink(eventId) {
+    var link = document.getElementById('linkTechniques');
+    if (!link) return;   // このリンクを持たないページから呼ばれても落ちないように
+    link.href = eventId
+      ? 'techniques.html#' + encodeURIComponent(eventId)
+      : 'techniques.html';
   }
 
   async function onEventSelect(eventId, court) {
@@ -343,6 +371,9 @@ var App = (function() {
       Route.clear();
       refreshPlayerList();
       updateAdminLink('');
+      updateTechniquesLink('');
+      // 大会を離れたら配点も雛形に戻す（次に選ぶ大会まで前の大会の配点を持ち越さない）。
+      if (templateTechniques) Scoring.setTechniques(templateTechniques);
       return;
     }
     var loaded = await Api.loadEvent(eventId);
@@ -361,6 +392,7 @@ var App = (function() {
     applyCourtFilter();
     Route.set(currentEvent.id, currentCourt);
     updateAdminLink(currentEvent.id);
+    updateTechniquesLink(currentEvent.id);
   }
 
   // 戻り値: 作成できたら true。呼び出し元はこれを見てモーダルを閉じるか決める
