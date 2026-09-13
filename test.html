@@ -828,6 +828,19 @@
       return [still, document.querySelectorAll('.sheet-overlay').length];
     })(), [1, 0]);
 
+    var h2a = document.createElement('h2');
+    h2a.textContent = 'admin.js';
+    results.appendChild(h2a);
+
+    assert('scoringHref: 大会とコート',
+      Admin.scoringHref('abc', 'A'), 'index.html#event/abc/A');
+    assert('scoringHref: コート無し',
+      Admin.scoringHref('abc', ''), 'index.html#event/abc');
+    assert('scoringHref: 大会IDが無ければハッシュ無し',
+      Admin.scoringHref('', 'A'), 'index.html');
+    assert('scoringHref: 未分類とスペースをエンコードする',
+      Admin.scoringHref('a b', '未分類'), 'index.html#event/a%20b/' + encodeURIComponent('未分類'));
+
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';
     results.appendChild(h2r);

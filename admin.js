@@ -308,6 +308,16 @@ var Admin = (function() {
     });
   }
 
+  // 採点画面のハッシュ（route.js の Route.build と同じ形。admin.html は route.js を読まない）。
+  // eventId が空なら大会選択前なのでハッシュ無しの 'index.html' を返す
+  // （採点画面側で tmg_last の控えから開かせるため）。
+  function scoringHref(eventId, court) {
+    if (!eventId) return 'index.html';
+    var hash = '#event/' + encodeURIComponent(eventId);
+    if (court) hash += '/' + encodeURIComponent(court);
+    return 'index.html' + hash;
+  }
+
   // 運営画面から他の画面へ戻る導線（下タブは運営画面内のタブなので、ページ間の移動はここに置く）
   // ボタンはシートが開いている間も DOM フォーカスを保持するため、Enter の
   // オートリピートなどで連続発火するとシートが二重に開いてしまう。再入を防ぐ。
@@ -344,16 +354,11 @@ var Admin = (function() {
     var sheet = openSheet('メニュー', body, [btnClose], function() { adminMenuOpen = false; });
     btnClose.addEventListener('click', sheet.close);
 
-    // route.js は admin.html では読み込んでいないので、ハッシュの形は
-    // ここで直接組み立てる（Route.build と同じ '#event/<id>' の形）。
     // 選択中の大会があれば採点画面にもそのまま引き継ぐ（tmg_last / tmg_admin_last が
     // 別々の控えキーのため、ハッシュ無しだと採点画面側の控えに戻ってしまう）。
     btnScoring.addEventListener('click', function() {
       sheet.close();
-      var eventId = currentEventId();
-      location.href = eventId
-        ? 'index.html#event/' + encodeURIComponent(eventId)
-        : 'index.html';
+      location.href = scoringHref(currentEventId(), '');
     });
     btnTechniques.addEventListener('click', function() {
       sheet.close();
@@ -409,6 +414,7 @@ var Admin = (function() {
     currentEventId: currentEventId,
     toast: toast,
     renderCourtChips: renderCourtChips,
+    scoringHref: scoringHref,
     openSheet: openSheet,
     // シートを全部閉じる。ハッシュ遷移時に applyRoute が呼ぶ。テストからも使う。
     closeAllSheets: closeAllSheets
