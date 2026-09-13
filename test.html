@@ -737,6 +737,19 @@
 
     assert('存在しない大会の技リストは null', await Api.loadEventTechniques('zzzzzzzznotexist'), null);
     await Api.deleteEvent(a2Event.id);
+
+    // --- 配信用ボードはその大会の技リストを返す ---
+    var a3Event = await Api.saveEvent({ name: 'ボード技テスト', date: '2026-09-14', venue: '', players: [] });
+    await Api.saveEventTechniques(a3Event.id, [{ name: 'ボード専用技', strikes: [5, 2, null, null] }]);
+    var a3Bulk = await Api.createPlayersBulk(a3Event.id, {
+      court: 'A', isFemale: false, isNewFace: false, names: ['ボード 甲']
+    });
+    await Api.putLive(a3Event.id, 'A', { playerId: a3Bulk.players[0].id });
+    var a3Token = (await Api.createShareLink(a3Event.id)).token;
+    var a3Live = (await Api.loadLive(a3Token)).data;
+    assert('loadLive はその大会の技リストを返す（雛形ではない）',
+      a3Live.techniques, [{ name: 'ボード専用技', strikes: [5, 2, null, null] }]);
+    await Api.deleteEvent(a3Event.id);
   }
 
   (async function() {

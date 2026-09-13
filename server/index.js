@@ -1428,7 +1428,9 @@ app.get('/api/links/:token/live', (req, res) => {
       eventName: event.name || '',
       now: new Date().toISOString(),
       courts: courts,
-      techniques: readTechniques().techniques
+      // 配点は大会ごと。雛形ではなくこの大会の有効な技リストを返す
+      // （board.html は返ってきた配点で得点の内訳を描く）。
+      techniques: effectiveTechniques(event)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
