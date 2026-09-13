@@ -346,6 +346,12 @@ var Admin = (function() {
     btnRanking.textContent = '🏆 順位表示';
     body.appendChild(btnRanking);
 
+    var btnHelp = document.createElement('button');
+    btnHelp.type = 'button';
+    btnHelp.className = 'menu-item';
+    btnHelp.textContent = '❓ ヘルプ';
+    body.appendChild(btnHelp);
+
     var btnClose = document.createElement('button');
     btnClose.type = 'button';
     btnClose.className = 'btn';
@@ -367,6 +373,10 @@ var Admin = (function() {
     btnRanking.addEventListener('click', function() {
       sheet.close();
       location.href = 'ranking.html';
+    });
+    btnHelp.addEventListener('click', function() {
+      sheet.close();
+      location.href = 'help.html';
     });
   }
 
