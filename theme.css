@@ -9,6 +9,16 @@
    - ダーク＝「黒金」: 全面を黒にして金を主役に（発表・共有など見せる画面の既定）
    帯（--band-*）と金・朱（--gold* / --vermilion）はテーマに依らず同じ値を使う。 */
 
+/* 見出し用の明朝（しっぽり明朝 B1 Bold、OFL）。fonts/README.md を参照。
+   swap: 読み込み前は端末の明朝で出し、届いたら差し替える（会場の回線が細くても見出しが消えない）。 */
+@font-face {
+  font-family: "Shippori Mincho B1";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/ShipporiMinchoB1-Bold.woff2") format("woff2");
+}
+
 :root {
   /* 帯（上部バー・選手名・表の見出しなど、ポスターの黒地に当たる部分） */
   --band-bg:      #0b0d14;
@@ -20,7 +30,7 @@
   --gold-light:   #e6c65a;
   --gold-deep:    #8a6d1c;   /* 生成りの上で読める濃い金 */
   --vermilion:    #b3261e;
-  --mincho:       "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+  --mincho:       "Shippori Mincho B1", "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
 
   /* ライトテーマ（既定）: 生成りの紙 */
   --bg:           #f7f2e6;
