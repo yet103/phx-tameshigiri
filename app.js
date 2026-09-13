@@ -208,6 +208,12 @@ var App = (function() {
   }
 
   // --- コート ---
+  // コート選択肢の表示名。未分類はそのまま、それ以外は「A コート」。
+  // 名簿未ロード時に URL のコート指定を残す分岐（refreshCourtList 末尾）でも同じ表記にする。
+  function courtOptionLabel(court) {
+    return court === Courts.UNASSIGNED ? Courts.UNASSIGNED : court + ' コート';
+  }
+
   // 現在の大会の選手からコート選択肢を作り直す
   function refreshCourtList() {
     var list = Courts.listFrom(players);
@@ -215,7 +221,7 @@ var App = (function() {
     for (var i = 0; i < list.length; i++) {
       var opt = document.createElement('option');
       opt.value = list[i];
-      opt.textContent = list[i] === Courts.UNASSIGNED ? Courts.UNASSIGNED : list[i] + ' コート';
+      opt.textContent = courtOptionLabel(list[i]);
       courtSelect.appendChild(opt);
     }
     // 名簿が入っている大会で、選択中のコートがそこに無ければ全コートへ戻す
@@ -228,7 +234,7 @@ var App = (function() {
     if (currentCourt && list.indexOf(currentCourt) === -1) {
       var pending = document.createElement('option');
       pending.value = currentCourt;
-      pending.textContent = currentCourt + ' コート';
+      pending.textContent = courtOptionLabel(currentCourt);
       courtSelect.appendChild(pending);
     }
     courtSelect.value = currentCourt;
