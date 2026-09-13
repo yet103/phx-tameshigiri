@@ -695,6 +695,16 @@
       TechPicker.strikesLabel({ strikes: [1, null, null, null] }), '1');
     assert('strikesLabel: strikes が無ければ空', TechPicker.strikesLabel({}), '');
 
+    var ftechs = [{ name: '四方', strikes: [17, 5, 7, 3] }, { name: '夢想返し', strikes: [13, 5, null, null] }, { name: 'Ｋｅｓａ', strikes: [1, null, null, null] }];
+    assert('filter: 空なら全件', TechPicker.filter(ftechs, '').length, 3);
+    assert('filter: 空白だけなら全件', TechPicker.filter(ftechs, '  ').length, 3);
+    assert('filter: 部分一致', TechPicker.filter(ftechs, '返し').map(function(t) { return t.name; }), ['夢想返し']);
+    assert('filter: 全角半角を同一視', TechPicker.filter(ftechs, 'kesa').map(function(t) { return t.name; }), ['Ｋｅｓａ']);
+    assert('filter: 大文字小文字を同一視', TechPicker.filter(ftechs, 'KESA').length, 1);
+    assert('filter: 該当なしは空', TechPicker.filter(ftechs, '存在しない'), []);
+    assert('filter: techs が null でも落ちない', TechPicker.filter(null, 'a'), []);
+    assert('filter: 元の配列を壊さない', (function() { var c = ftechs.slice(); TechPicker.filter(ftechs, '四'); return ftechs.length === c.length; })(), true);
+
     assert('renderChips: 3枠を ①②③ で描く', (function() {
       var el = document.createElement('div');
       TechPicker.renderChips(el, ['真', '', ''], null);

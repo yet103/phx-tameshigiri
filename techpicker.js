@@ -46,6 +46,23 @@ var TechPicker = (function() {
     return parts.join('/');
   }
 
+  // 検索用の正規化。全角英数→半角（NFKC）、小文字化、前後の空白除去。
+  function normalizeQuery(s) {
+    var t = String(s || '');
+    try { t = t.normalize('NFKC'); } catch (e) {}
+    return t.toLowerCase().trim();
+  }
+
+  // 技名の部分一致で絞り込む。query が空なら全件（複製）。
+  function filter(techs, query) {
+    var list = Array.isArray(techs) ? techs : [];
+    var q = normalizeQuery(query);
+    if (!q) return list.slice();
+    return list.filter(function(t) {
+      return normalizeQuery(t && t.name).indexOf(q) !== -1;
+    });
+  }
+
   // --- DOM ---
 
   // 開いているシート。多重に開かないよう1枚だけ持つ。
@@ -183,6 +200,7 @@ var TechPicker = (function() {
     toArray: toArray,
     fromArray: fromArray,
     strikesLabel: strikesLabel,
+    filter: filter,
     open: open,
     dismiss: dismiss,
     renderChips: renderChips
