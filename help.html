@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>試し斬り マニュアル</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="help.css">
+</head>
+<body data-theme="light">
+
+<header class="help-band">
+  <h1 class="help-title">マニュアル</h1>
+  <p class="help-subtitle">運営者・審判のための、大会当日の手引き</p>
+  <nav class="page-links">
+    <a href="index.html">採点</a>
+    <a href="admin.html">運営</a>
+    <a href="techniques.html">技術リスト編集</a>
+    <a href="ranking.html">順位表示</a>
+    <strong>マニュアル</strong>
+  </nav>
+</header>
+
+<main class="help-main">
+
+  <!-- ===== 目次 ===== -->
+  <nav class="help-toc" id="toc" aria-label="目次">
+    <h2>目次</h2>
+    <ol>
+      <li><a href="#flow"><span class="toc-num">0</span>全体の流れ</a></li>
+      <li><a href="#setup"><span class="toc-num">1</span>大会の作成</a></li>
+      <li><a href="#progress"><span class="toc-num">2</span>採点の進行</a></li>
+      <li><a href="#total"><span class="toc-num">3</span>得点の集計</a></li>
+      <li><a href="#publish"><span class="toc-num">4</span>サイト掲載（共有・発表）</a></li>
+      <li><a href="#trouble"><span class="toc-num">5</span>困ったとき</a></li>
+    </ol>
+  </nav>
+
+  <!-- ===== 0. 全体の流れ ===== -->
+  <section class="help-section" id="flow">
+    <h2>0. 全体の流れ</h2>
+
+    <p>大会は、大会を作るところから発表までを一本の流れで進めます。</p>
+    <p><span class="term">一巡目</span>＝全員が1回ずつ斬る回です。<span class="term">二巡目</span>＝同じ選手がもう1回斬る回です。得点は一巡目と二巡目を合わせた合計で競います。</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 360 650" role="img" aria-label="大会を作る、選手を登録、一巡目の採点、二巡目を生成して技を入力、二巡目の採点、結果の確認、発表・共有、という順に進む流れ図。端末の役割は、運営者のスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク。">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
+          </marker>
+        </defs>
+
+        <g transform="translate(10,6)">
+          <rect class="d-box" width="340" height="52" rx="8"/>
+          <text class="d-title" x="14" y="23">大会を作る</text>
+          <text class="d-sub" x="14" y="42">運営画面・大会タブ</text>
+        </g>
+        <line class="d-line" x1="180" y1="61" x2="180" y2="77" marker-end="url(#ah)"/>
+
+        <g transform="translate(10,80)">
+          <rect class="d-box" width="340" height="52" rx="8"/>
+          <text class="d-title" x="14" y="23">選手を登録</text>
+          <text class="d-sub" x="14" y="42">運営画面・選手タブ</text>
+        </g>
+        <line class="d-line" x1="180" y1="135" x2="180" y2="151" marker-end="url(#ah)"/>
+
+        <g transform="translate(10,154)">
+          <rect class="d-box" width="340" height="52" rx="8"/>
+          <text class="d-title" x="14" y="23">一巡目の採点</text>
+          <text class="d-sub" x="14" y="42">採点画面（コートの端末）</text>
+        </g>
+        <line class="d-line" x1="180" y1="209" x2="180" y2="225" marker-end="url(#ah)"/>
+
+        <g transform="translate(10,228)">
+          <rect class="d-box" width="340" height="52" rx="8"/>
+          <text class="d-title" x="14" y="23">二巡目を生成・技を入力</text>
+          <text class="d-sub" x="14" y="42">運営画面・進行タブ</text>
+        </g>
+        <line class="d-line" x1="180" y1="283" x2="180" y2="299" marker-end="url(#ah)"/>
+
+        <g transform="translate(10,302)">
+          <rect class="d-box" width="340" height="52" rx="8"/>
+          <text class="d-title" x="14" y="23">二巡目の採点</text>
+          <text class="d-sub" x="14" y="42">採点画面（コートの端末）</text>
+        </g>
+        <line class="d-line" x1="180" y1="357" x2="180" y2="373" marker-end="url(#ah)"/>
+
+        <g transform="translate(10,376)">
+          <rect class="d-box" width="340" height="52" rx="8"/>
+          <text class="d-title" x="14" y="23">結果の確認</text>
+          <text class="d-sub" x="14" y="42">運営画面・結果タブ</text>
+        </g>
+        <line class="d-line" x1="180" y1="431" x2="180" y2="447" marker-end="url(#ah)"/>
+
+        <g transform="translate(10,450)">
+          <rect class="d-box-key" width="340" height="52" rx="8"/>
+          <text class="d-title-key" x="14" y="23">発表・共有</text>
+          <text class="d-sub-key" x="14" y="42">発表モード・共有リンク</text>
+        </g>
+
+        <line class="d-line" x1="10" y1="524" x2="350" y2="524"/>
+        <text class="d-title" x="10" y="546">端末の役割</text>
+
+        <text class="d-legend" x="10"  y="576" font-weight="bold">運営者のスマホ</text>
+        <text class="d-sub"    x="10"  y="595">運営画面</text>
+        <text class="d-legend" x="190" y="576" font-weight="bold">コートのタブレット</text>
+        <text class="d-sub"    x="190" y="595">採点画面（A・B）</text>
+        <text class="d-legend" x="10"  y="624" font-weight="bold">会場の大画面</text>
+        <text class="d-sub"    x="10"  y="643">発表モード</text>
+        <text class="d-legend" x="190" y="624" font-weight="bold">参加者のスマホ</text>
+        <text class="d-sub"    x="190" y="643">共有リンク</text>
+      </svg>
+    </div>
+
+    <p>大会のデータはサーバーに1つだけあります。運営者のスマホも、各コートのタブレットも、同じ大会を読み書きします。</p>
+    <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
+  </section>
+
+  <!-- ===== 1. 大会の作成 ===== -->
+  <section class="help-section" id="setup">
+    <h2>1. 大会の作成</h2>
+
+    <h3>大会を作る</h3>
+    <p>運営画面（<code>admin.html</code>）を開きます。</p>
+    <ol>
+      <li>下のタブで <span class="ui">大会</span> を選ぶ。</li>
+      <li>右上の <span class="ui">＋ 新規大会</span> を押す。</li>
+      <li>シートで <span class="ui">大会名</span>・<span class="ui">日付</span>・<span class="ui">会場</span> を入れる。</li>
+      <li><span class="ui">作成</span> を押す。一覧に大会が増えます。</li>
+    </ol>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_events.png" loading="lazy" alt="運営画面の大会タブ。大会の一覧が並び、右上に「＋ 新規大会」ボタンがある。">
+      <figcaption>大会タブ。1件ごとに日付と人数が出ます。右の <span class="ui">✕</span> はその大会の削除です。</figcaption>
+    </figure>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_new_event.png" loading="lazy" alt="「新規大会」のシート。大会名・日付・会場の入力欄と、緑色の「作成」ボタン。">
+      <figcaption><span class="ui">＋ 新規大会</span> のシート。会場は空のままでもかまいません。</figcaption>
+    </figure>
+
+    <h3>選手を登録する</h3>
+    <p>下のタブで <span class="ui">選手</span> を選びます。登録のしかたは3通りあります。</p>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_players.png" loading="lazy" alt="選手タブ。コートの絞り込みチップ、選手のカード、右下の赤い「＋」ボタン。">
+      <figcaption>選手タブ。左の丸い数字は巡目です。名前の下に技が並び、右が得点です。右下の赤い <span class="ui">＋</span> が1人ずつの追加、右上の <span class="ui">⋯</span> がまとめての登録です。</figcaption>
+    </figure>
+
+    <h3>（a）1人ずつ登録する</h3>
+    <p>右下の赤い <span class="ui">＋</span> を押すと <span class="ui">選手を追加</span> のシートが開きます。</p>
+    <ul>
+      <li><span class="ui">名前</span> を入れる。</li>
+      <li><span class="ui">コート</span> を選ぶ（<span class="ui">A</span> <span class="ui">B</span>、<span class="ui">＋</span> で増やせます）。</li>
+      <li><span class="ui">性別</span> を選ぶ（<span class="ui">男子</span> <span class="ui">女子</span>）。</li>
+      <li>新人なら <span class="ui">新人</span> にチェックを入れる。</li>
+      <li>技を <span class="ui">①</span> <span class="ui">②</span> <span class="ui">③</span> の枠ごとにタップして選ぶ。</li>
+      <li><span class="ui">保存して次を追加</span> で続けて登録、<span class="ui">保存して閉じる</span> で終わります。</li>
+    </ul>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_player_form.png" loading="lazy" alt="「選手を追加」のシート。名前、コート、性別、新人、技①②③の枠、保存ボタン。">
+      <figcaption>1人ずつの追加シート。技の枠は「①②③ をタップしてそれぞれ選ぶ」と書いてあるとおり、枠ごとに選び直せます。</figcaption>
+    </figure>
+
+    <h3>（b）複数人をまとめて登録する</h3>
+    <p>右上の <span class="ui">⋯</span> →  <span class="ui">👥 複数人をまとめて登録</span> を押します。</p>
+    <ul>
+      <li><span class="ui">コート</span>・<span class="ui">性別</span>・<span class="ui">新人</span> はその場の全員に共通で付きます。</li>
+      <li><span class="ui">名前（1行に1人）</span> の欄に名簿を貼り付けます。下に人数が出ます。</li>
+      <li><span class="ui">登録</span> を押すと、その人数がまとめて入ります。</li>
+    </ul>
+    <div class="note">技はこの方法では入りません。あとから選手タブで1人ずつ入れてください。コートや性別が違う人は、条件ごとに分けて登録します。</div>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_players_menu.png" loading="lazy" alt="選手タブの「⋯」メニュー。「複数人をまとめて登録」と「CSVインポート」の2項目。">
+      <figcaption>選手タブの <span class="ui">⋯</span> メニュー。</figcaption>
+    </figure>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_bulk.png" loading="lazy" alt="「複数人をまとめて登録」のシート。コート・性別・新人の選択と、名前を1行に1人ずつ貼り付ける欄。">
+      <figcaption>一括登録シート。名前を貼り付けると、欄の下に人数（この例では「4 人」）が出ます。</figcaption>
+    </figure>
+
+    <h3>（c）CSV で読み込む</h3>
+    <p>右上の <span class="ui">⋯</span> → <span class="ui">📄 CSVインポート</span> を押し、ファイルを選びます。</p>
+    <p>いちばん簡単な形は次の7列です。1行目は見出し行で、2列目が「コート」であれば、この形として読みます。</p>
+    <div class="formula">名前 , コート , 性別 , 技① , 技② , 技③ , 新人</div>
+    <ul>
+      <li>性別は <span class="ui">女</span> <span class="ui">女子</span> <span class="ui">○</span> <span class="ui">F</span> のいずれかで女子、ほかは男子になります。</li>
+      <li>新人は <span class="ui">○</span> <span class="ui">1</span> <span class="ui">はい</span> <span class="ui">新人</span> のいずれかで新人になります。</li>
+      <li>順番はサーバーが自動で採番します。CSV に書く必要はありません。</li>
+      <li>コート名に <span class="ui">-</span> は使えません。<span class="ui">未分類</span> も使えません。</li>
+    </ul>
+    <p>採点画面の <span class="ui">CSVエクスポート</span> が出す従来の形（<span class="ui">選手名</span> <span class="ui">順番</span> … の15列）もそのまま読み込めます。この形では順番は CSV の値をそのまま使います。</p>
+    <div class="note">すでに選手がいる大会に読み込むと、<span class="term">クリアして読み込む</span>か<span class="term">追記する</span>かを聞かれます。採点済みの選手がいるときは、失われる人数を示して、もう一度確認します。他のコートの採点も消えるので、当日はできるだけ追記を選んでください。</div>
+
+    <h3>技の選び方</h3>
+    <p>技の枠（<span class="ui">①</span> <span class="ui">②</span> <span class="ui">③</span>）をタップすると、技を選ぶシートが開きます。</p>
+    <ul>
+      <li>上の欄に技名を打つと絞り込めます（<span class="ui">技名で絞り込み</span>）。</li>
+      <li>見出し行は <span class="ui">技名</span> <span class="ui">初太刀</span> <span class="ui">二ノ太刀</span> <span class="ui">三ノ太刀</span> <span class="ui">四ノ太刀</span> で、右側の数字がその太刀の配点です。</li>
+      <li><span class="ui">—</span> はその太刀を打たないという意味です。採点画面でも灰色になり、押せません。</li>
+      <li>いちばん上の <span class="ui">（この枠を空にする）</span> を選ぶと、その枠を空にできます。技は3つに満たなくてもかまいません。</li>
+    </ul>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_tech_sheet.png" loading="lazy" alt="技を選ぶシート。上に絞り込みの入力欄、見出し行、技名と各太刀の配点の一覧。">
+      <figcaption>技を選ぶシート。見出しは <span class="ui">1つ目の技を選ぶ</span> のように、どの枠を選んでいるかを示します。</figcaption>
+    </figure>
+
+    <h3>順番の付きかた</h3>
+    <p>順番は <span class="ui">コート-性別-巡目-番号</span> の形で自動で付きます。たとえば <span class="ui">A-男子-1-1</span> は「A コートの男子、一巡目の1番」です。</p>
+    <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
+  </section>
+
+  <!-- ===== 2. 採点の進行 ===== -->
+  <section class="help-section" id="progress">
+    <h2>2. 採点の進行</h2>
+
+    <h3>端末の役割（A・B の2コートの例）</h3>
+    <p>運営者は1台のスマホで運営画面を、各コートは1台ずつのタブレットで採点画面を開きます。</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 360 280" role="img" aria-label="運営者のスマホ、Aコートのタブレット、Bコートのタブレットが、どれも同じサーバーの大会データを読み書きし、サーバーから会場の大画面（発表モード）と参加者のスマホ（共有リンク）へ順位が届く図。">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
+          </marker>
+        </defs>
+
+        <g transform="translate(10,6)">
+          <rect class="d-box" width="108" height="70" rx="8"/>
+          <text class="d-legend" x="54" y="24" text-anchor="middle" font-weight="bold">運営者の</text>
+          <text class="d-legend" x="54" y="43" text-anchor="middle" font-weight="bold">スマホ</text>
+          <text class="d-sub"    x="54" y="62" text-anchor="middle">運営画面</text>
+        </g>
+        <g transform="translate(126,6)">
+          <rect class="d-box" width="108" height="70" rx="8"/>
+          <text class="d-legend" x="54" y="24" text-anchor="middle" font-weight="bold">A コートの</text>
+          <text class="d-legend" x="54" y="43" text-anchor="middle" font-weight="bold">タブレット</text>
+          <text class="d-sub"    x="54" y="62" text-anchor="middle">採点画面 A</text>
+        </g>
+        <g transform="translate(242,6)">
+          <rect class="d-box" width="108" height="70" rx="8"/>
+          <text class="d-legend" x="54" y="24" text-anchor="middle" font-weight="bold">B コートの</text>
+          <text class="d-legend" x="54" y="43" text-anchor="middle" font-weight="bold">タブレット</text>
+          <text class="d-sub"    x="54" y="62" text-anchor="middle">採点画面 B</text>
+        </g>
+
+        <line class="d-line" x1="64"  y1="79" x2="64"  y2="103" marker-start="url(#ah2)" marker-end="url(#ah2)"/>
+        <line class="d-line" x1="180" y1="79" x2="180" y2="103" marker-start="url(#ah2)" marker-end="url(#ah2)"/>
+        <line class="d-line" x1="296" y1="79" x2="296" y2="103" marker-start="url(#ah2)" marker-end="url(#ah2)"/>
+
+        <g transform="translate(10,106)">
+          <rect class="d-box-key" width="340" height="62" rx="8"/>
+          <text class="d-title-key" x="170" y="28" text-anchor="middle">サーバー（同じ大会データ）</text>
+          <text class="d-sub-key"   x="170" y="50" text-anchor="middle">どの端末も同じ大会を読み書きする</text>
+        </g>
+
+        <line class="d-line" x1="92"  y1="171" x2="92"  y2="195" marker-end="url(#ah2)"/>
+        <line class="d-line" x1="268" y1="171" x2="268" y2="195" marker-end="url(#ah2)"/>
+
+        <g transform="translate(10,198)">
+          <rect class="d-box" width="164" height="70" rx="8"/>
+          <text class="d-legend" x="82" y="24" text-anchor="middle" font-weight="bold">会場の大画面</text>
+          <text class="d-sub"    x="82" y="43" text-anchor="middle">発表モード</text>
+          <text class="d-sub"    x="82" y="62" text-anchor="middle">掲示／発表</text>
+        </g>
+        <g transform="translate(186,198)">
+          <rect class="d-box" width="164" height="70" rx="8"/>
+          <text class="d-legend" x="82" y="24" text-anchor="middle" font-weight="bold">参加者のスマホ</text>
+          <text class="d-sub"    x="82" y="43" text-anchor="middle">共有リンク</text>
+          <text class="d-sub"    x="82" y="62" text-anchor="middle">見るだけ</text>
+        </g>
+      </svg>
+    </div>
+
+    <h3>コートの端末で採点画面を開く</h3>
+    <p>運営画面の <span class="ui">進行</span> タブで、そのコートのチップ（<span class="ui">A コート</span> や <span class="ui">B コート</span>）を押してから <span class="ui">採点画面へ</span> を押します。絞り込み中のコートのまま採点画面が開きます。</p>
+    <p>開いた採点画面の URL には大会とコートが入っています。その URL をコートの端末でブックマークしておくと、翌年以降も同じ手順で開けます。</p>
+
+    <h3>採点画面の見方</h3>
+
+    <figure>
+      <img src="help/img/scoring_tablet.png" loading="lazy" alt="タブレットで開いた採点画面。上から、大会とコートの選択バー、選手名の帯、タイマー、採点表、全体補正点と備考、形成功・失敗・確定のボタンと合計、下部の選手一覧。">
+      <figcaption>
+        <span class="cap-head">採点画面（タブレット。確定済みの選手）</span>
+        <ul>
+          <li>①上のバー — 大会とコートを選びます。右の <span class="ui">● 保存済み</span> がサーバーへの保存の様子です。</li>
+          <li>②選手の帯 — コートのバッジ・順番・名前。<span class="ui">◀ 前の選手</span> <span class="ui">次の選手 ▶</span> で移ります。</li>
+          <li>③タイマー — <span class="ui">▶ 開始</span> <span class="ui">■ 停止</span> <span class="ui">↺ リセット</span>。5分から0へ向かって数えます。</li>
+          <li>④採点表 — 技名をタップするとその行が選ばれます（黒く反転します）。太刀のセルは押すたびに <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と変わります。灰色のセルは、その技で打たない太刀です。</li>
+          <li>⑤<span class="ui">形成功</span> <span class="ui">失敗</span> — どちらも選択中の行にだけ効きます。<span class="ui">形成功</span> は打つ太刀を全部「成功」に、<span class="ui">失敗</span> は「未」のセルだけを「失敗」にします（すでに成功のセルは変えません）。</li>
+          <li>⑥補正点 — 表の <span class="ui">補正点</span> 欄はその技だけに、表の下の <span class="ui">全体補正点</span> は選手全体に効きます。マイナスも入れられます。<span class="ui">備考</span> は得点に影響しません（200文字まで）。</li>
+          <li>⑦<span class="ui">確定</span> — 押すと <span class="ui">確定済み</span> になり、得点と合計が青くなります。得点に関わる編集をすると、自動で確定が外れます。</li>
+          <li>⑧選手一覧 — 行をタップするとその選手に切り替わります。見出しの <span class="ui">▾ 選手一覧</span> で開閉できます。</li>
+        </ul>
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="help/img/scoring_tablet_unconfirmed.png" loading="lazy" alt="未確定の選手の採点画面。ボタンは「確定」のままで、得点と合計が金色。">
+      <figcaption>まだ確定していない選手。ボタンは <span class="ui">確定</span> のままで、得点と合計は<span class="term">金色</span>です。確定すると <span class="ui">確定済み</span> になり、<span class="term">青</span>に変わります。</figcaption>
+    </figure>
+
+    <figure class="shot-mobile">
+      <img src="help/img/scoring_mobile.png" loading="lazy" alt="スマホ幅の採点画面。同じ内容が縦に積まれて並ぶ。">
+      <figcaption>スマホ幅でも同じ採点画面が使えます。項目が縦に積まれるだけで、操作は同じです。</figcaption>
+    </figure>
+
+    <h3>二巡目に進む</h3>
+    <p>一巡目が終わったら、運営画面の <span class="ui">進行</span> タブで二巡目を作ります。</p>
+    <ol>
+      <li>上に <span class="ui">一巡目 採点済み 8 / 8</span> のように進み具合が出ます。全員終わっているか確かめます。</li>
+      <li><span class="ui">二巡目を生成</span> を押す。確認のあと、全コート分の二巡目の行ができます。</li>
+      <li>行ごとに <span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> をタップして技を入れます。赤い枠はまだ空という意味です。</li>
+      <li>一巡目と同じ技でよければ <span class="ui">一巡目と同じ技をコピー</span> を押すだけで済みます。</li>
+    </ol>
+    <p>技が入ると、各コートの採点画面の選手一覧に二巡目の選手が並びます。</p>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_round.png" loading="lazy" alt="運営画面の進行タブ。一巡目の採点済み数、「二巡目を生成」「採点画面へ」、コート絞り込み、二巡目の選手と技の枠。">
+      <figcaption>進行タブ。<span class="ui">二巡目 8名　技 未入力 8</span> の行で、技がまだの人数が分かります。右上の <span class="ui">一巡目 30</span> はその選手の一巡目の得点です。</figcaption>
+    </figure>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_round_court_b.png" loading="lazy" alt="進行タブでBコートに絞り込んだ状態。Bコートの選手だけが並び、技が入った枠は黒くなっている。">
+      <figcaption><span class="ui">B コート</span> のチップで絞り込んだところ。技が入った枠は黒くなり、技名が出ます。この状態で <span class="ui">採点画面へ</span> を押すと、B コートの採点画面が開きます。</figcaption>
+    </figure>
+
+    <h3>通信が切れても続けられます</h3>
+    <p>採点はいったん端末に貯めてからサーバーへ送ります。電波が弱くても、採点そのものは止まりません。</p>
+    <ul>
+      <li><span class="ui">● 保存済み</span> — サーバーまで届いています。</li>
+      <li><span class="ui">⚠ 未保存 3 件・再送中</span> — まだ届いていない採点があり、送り直しています。そのまま採点を続けてかまいません。</li>
+      <li>最初の失敗から30秒たっても残っていると、上に <span class="ui">⚠ サーバーに保存できていません</span> のバナーと <span class="ui">今すぐ再試行</span> ボタンが出ます。通信を確かめてから押してください。</li>
+    </ul>
+    <div class="note">未保存が残っている間は、その端末を閉じたりページを離れたりしないでください。離れようとすると確認が出ます。</div>
+
+    <h3>ほかの端末が書いた内容の取り込み</h3>
+    <p>選手を切り替えたときと、ほかのアプリから採点画面に戻ってきたときに、サーバーから読み直します。運営画面や別のコートが付けた確定・備考・得点は、このときに画面へ入ります。</p>
+    <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
+  </section>
+
+  <!-- ===== 3. 得点の集計 ===== -->
+  <section class="help-section" id="total">
+    <h2>3. 得点の集計</h2>
+
+    <h3>得点の式</h3>
+    <div class="formula">
+      技ごとの得点 ＝ 成功した太刀の配点の合計 ＋ その技の補正点<br>
+      選手の合計 ＝ 技ごとの得点の合計 ＋ 全体補正点
+    </div>
+    <ul>
+      <li>「失敗」と「未」は0点です。打たない太刀（灰色のセル）も0点です。</li>
+      <li>補正点は整数です。マイナスも入れられます。</li>
+      <li>備考は得点に入りません。</li>
+    </ul>
+
+    <h3>技の配点を変える</h3>
+    <p>配点は <span class="ui">技術リスト編集</span>（<code>techniques.html</code>）で変えられます。技名ごとに <span class="ui">初太刀</span> から <span class="ui">四ノ太刀</span> までの点を入れ、<span class="ui">保存</span> を押します。</p>
+    <div class="note">配点を変えても、すでに採点した選手の得点は変わりません。変えたときは、その技を使った選手を採点画面で開き直して採点し直してください。大会が始まってからの変更は避けるのが安全です。</div>
+
+    <h3>部門と順位</h3>
+    <ul>
+      <li>部門は <span class="ui">一般男子</span>・<span class="ui">一般女子</span>・<span class="ui">新人</span> の3つです。</li>
+      <li>新人にチェックが付いた選手は、<span class="term">新人の部にも、男子または女子の部にも</span>入ります。どちらか一方ではありません。</li>
+      <li>順位は同じ名前の選手の得点を足し合わせて付きます。つまり<span class="term">一巡目と二巡目の合計</span>で並びます。</li>
+      <li>同点は同順位です。同点が2人いたら、次の人は3位になります。</li>
+    </ul>
+
+    <h3>確認する場所</h3>
+    <ul>
+      <li><span class="term">運営画面の結果タブ</span> — <span class="ui">最新に更新</span> を押すと、サーバーの最新の順位を読み直します。</li>
+      <li><span class="term">順位表示ページ</span>（<code>ranking.html</code>） — 大会を選んで <span class="ui">大会データを読み込む</span>。<span class="ui">HTMLダウンロード</span> で1枚の成績表として保存できます。</li>
+      <li><span class="term">採点画面</span> — <span class="ui">CSVエクスポート</span> で全選手の内訳を、<span class="ui">HTML保存</span> で成績表を保存できます。</li>
+    </ul>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_results.png" loading="lazy" alt="運営画面の結果タブ。「最新に更新」「発表モードで開く」「共有リンクをコピー」のボタンと、一般男子・新人・一般女子の順位。">
+      <figcaption>結果タブ。部門は <span class="ui">一般男子</span> → <span class="ui">新人</span> → <span class="ui">一般女子</span> の順に出ます。新人の選手は両方に出ています。</figcaption>
+    </figure>
+
+    <figure class="shot-mobile">
+      <img src="help/img/ranking_page.png" loading="lazy" alt="順位表示ページ。大会を選ぶ欄と、「大会データを読み込む」「HTMLダウンロード」のボタン。">
+      <figcaption>順位表示ページ。大会を選んでから <span class="ui">大会データを読み込む</span> を押してください。押す前は「大会を選択すると順位が表示されます。」と出ます。</figcaption>
+    </figure>
+    <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
+  </section>
+
+  <!-- ===== 4. サイト掲載（共有・発表） ===== -->
+  <section class="help-section" id="publish">
+    <h2>4. サイト掲載（共有・発表）</h2>
+
+    <p>順位の見せ方は2通りあります。どちらも運営画面の <span class="ui">結果</span> タブから始めます。</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 360 215" role="img" aria-label="運営画面の結果タブから、共有リンクをコピーすると参加者のスマホへ、発表モードで開くと会場の大画面へ、という流れ図。">
+        <defs>
+          <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
+          </marker>
+        </defs>
+
+        <g transform="translate(10,6)">
+          <rect class="d-box-key" width="340" height="58" rx="8"/>
+          <text class="d-title-key" x="170" y="26" text-anchor="middle">結果タブ（運営画面）</text>
+          <text class="d-sub-key"   x="170" y="47" text-anchor="middle">最新に更新 で順位を作る</text>
+        </g>
+
+        <path class="d-line" d="M 180 67 L 180 86 L 92 86 L 92 110" marker-end="url(#ah4)"/>
+        <path class="d-line" d="M 180 67 L 180 86 L 268 86 L 268 110" marker-end="url(#ah4)"/>
+
+        <g transform="translate(10,113)">
+          <rect class="d-box" width="164" height="92" rx="8"/>
+          <text class="d-legend" x="82" y="24" text-anchor="middle" font-weight="bold">共有リンクをコピー</text>
+          <text class="d-title"  x="82" y="52" text-anchor="middle">参加者のスマホ</text>
+          <text class="d-sub"    x="82" y="76" text-anchor="middle">share.html</text>
+        </g>
+        <g transform="translate(186,113)">
+          <rect class="d-box" width="164" height="92" rx="8"/>
+          <text class="d-legend" x="82" y="24" text-anchor="middle" font-weight="bold">発表モードで開く</text>
+          <text class="d-title"  x="82" y="52" text-anchor="middle">会場の大画面</text>
+          <text class="d-sub"    x="82" y="76" text-anchor="middle">present.html</text>
+        </g>
+      </svg>
+    </div>
+
+    <h3>参加者に配る（共有リンク）</h3>
+    <ol>
+      <li>結果タブで <span class="ui">共有リンクをコピー</span> を押す。</li>
+      <li><span class="ui">リンクをコピーしました</span> と出たら、その URL を配ります（コピーできない環境では、URL がそのまま表示されます）。</li>
+    </ol>
+    <ul>
+      <li>URL は <code>share.html#（トークン）</code> の形です。大会ごとに1本で、何度押しても同じ URL が返ります。</li>
+      <li>受け取った人は、ログインなしで順位だけを見られます。採点や書き換えはできません。</li>
+      <li>採点が進んだあとでも、同じ URL を開き直せば最新の順位が出ます。配り直す必要はありません。</li>
+    </ul>
+
+    <figure class="shot-mobile">
+      <img src="help/img/share_mobile.png" loading="lazy" alt="参加者向けの共有ページ。黒地に金で大会名・日付・会場と、部門ごとの順位。">
+      <figcaption>参加者が見る共有ページ。大会名・日付・会場と、何時時点の順位かが出ます。</figcaption>
+    </figure>
+
+    <h3>会場の大画面で見せる（発表モード）</h3>
+    <p>結果タブで <span class="ui">発表モードで開く</span> を押すと、新しいタブで発表モードが開きます。会場のプロジェクターやテレビにつないだ端末で押してください。</p>
+    <p>上に <span class="ui">掲示</span> <span class="ui">発表</span> <span class="ui">更新</span> <span class="ui">全画面</span> のボタンがあります。</p>
+
+    <h3>掲示</h3>
+    <ul>
+      <li>部門ごとの順位をそのまま映します。上位3人は大きく出ます。</li>
+      <li>画面をタップするか <span class="ui">→</span> キーで次の部門、<span class="ui">←</span> キーで前の部門に移ります。</li>
+      <li>60秒ごとに順位を自動で取り直します。採点中に出しておけば、そのまま更新されます。</li>
+    </ul>
+
+    <figure>
+      <img src="help/img/present_board.png" loading="lazy" alt="発表モードの「掲示」。黒地に金で「一般男子 の部 1 / 3」と順位一覧。下に「タップ／→ で次の部門　←で前」。">
+      <figcaption>掲示モード。見出しの <span class="ui">1 / 3</span> は3部門のうち1つ目という意味です。</figcaption>
+    </figure>
+
+    <h3>発表</h3>
+    <ul>
+      <li><span class="ui">発表</span> を押すと、まず <span class="ui">部門を選んでください</span> が出ます。部門のボタンを押します。</li>
+      <li>タップするたびに、下位から1人ずつ順位が開きます。最後が1位です。</li>
+      <li>全員開き終わると、次の部門に進めます。</li>
+    </ul>
+
+    <figure>
+      <img src="help/img/present_reveal.png" loading="lazy" alt="発表モードの「発表」。「部門を選んでください」と、一般男子・新人・一般女子のボタン。">
+      <figcaption>発表モードの入口。部門を選んでから、下位より順に開いていきます。</figcaption>
+    </figure>
+
+    <div class="note">発表の直前には <span class="ui">更新</span> を押して、最新の順位になっているか確かめてください。<span class="ui">全画面</span> でメニューを消せます。</div>
+    <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
+  </section>
+
+  <!-- ===== 5. 困ったとき ===== -->
+  <section class="help-section" id="trouble">
+    <h2>5. 困ったとき</h2>
+
+    <h3>「技が未入力です。運営画面の進行タブで技を入力してください。」と出る</h3>
+    <p>その選手にまだ技が入っていません。運営画面の <span class="ui">進行</span> タブでその選手の <span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> をタップして技を入れてください。<span class="ui">一巡目と同じ技をコピー</span> でもかまいません。</p>
+
+    <h3>「内訳を復元できません（技の数が変わっています）。」と出る</h3>
+    <p>採点したあとで技の数が変わった選手です。前の内訳はもう表に戻せません。その場で採点し直してください。採点し直すと、表示されている今の得点は置き換わります。</p>
+    <p>採点し直すまでは、その選手のデータは書き換えられません。選手を切り替えても得点は消えないので、あわてなくて大丈夫です。</p>
+
+    <h3>「⚠ 未保存 n 件・再送中」が消えない</h3>
+    <p>サーバーに届いていない採点が残っています。</p>
+    <ol>
+      <li>端末の通信（Wi-Fi・電波）を確かめる。</li>
+      <li>端末を閉じずにそのまま待つ。つながれば自動で送られます。</li>
+      <li>バナーの <span class="ui">今すぐ再試行</span> を押す。</li>
+    </ol>
+    <div class="note">未保存が残っている端末を閉じると、その採点は失われます。0件（<span class="ui">● 保存済み</span>）になってから閉じてください。</div>
+
+    <h3>技が見つからない</h3>
+    <p>技を選ぶシートの絞り込みに出てこないときは、<span class="ui">技術リスト編集</span> にその技があるか確かめてください。無ければ行を足して <span class="ui">保存</span> します。</p>
+    <p>技名は完全に一致したものを探します。前後に空白が入っていると別の技として扱われ、配点が0になります。</p>
+
+    <h3>二巡目を生成できない</h3>
+    <p>一巡目の選手が登録されているか、通信がつながっているかを確かめてください。コートが付いていない選手がいると確認が出ます。選手タブでコートを設定してから、もう一度 <span class="ui">二巡目を生成</span> を押します。</p>
+
+    <h3>このマニュアルの開き方</h3>
+    <ul>
+      <li>採点画面・技術リスト編集・順位表示 — いちばん上のリンクの右端 <span class="ui">ヘルプ</span>。</li>
+      <li>運営画面 — 右上の <span class="ui">⋯</span> → <span class="ui">❓ ヘルプ</span>。</li>
+    </ul>
+
+    <figure class="shot-mobile">
+      <img src="help/img/admin_menu.png" loading="lazy" alt="運営画面の右上「⋯」メニュー。採点画面・技術リスト編集・順位表示の項目。">
+      <figcaption>運営画面の <span class="ui">⋯</span> メニュー。<span class="ui">❓ ヘルプ</span> は <span class="ui">🏆 順位表示</span> の下に並びます（この画像はヘルプを足す前のものです）。</figcaption>
+    </figure>
+    <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
+  </section>
+
+</main>
+
+</body>
+</html>

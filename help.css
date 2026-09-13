@@ -1,0 +1,248 @@
+/* マニュアル（help.html）専用のスタイル。375px 幅を基準に組む。
+   style.css は読み込まない（採点画面のレイアウトを持ち込まないため）。
+   色は theme.css の変数だけを使う。
+   図（インライン SVG）は viewBox ＋ width:100% で縮み、文字は 14px 以上を保つ。 */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ===== 上部の帯（黒金） ===== */
+.help-band {
+  background: var(--band-bg);
+  color: var(--band-text);
+  border-bottom: 2px solid var(--gold);
+  padding: 10px 12px 0;
+}
+.help-title {
+  font-family: var(--mincho);
+  font-size: 24px;
+  line-height: 1.3;
+  letter-spacing: .08em;
+  color: var(--gold-light);
+}
+.help-subtitle {
+  font-size: 13px;
+  color: var(--band-muted);
+  margin-top: 2px;
+}
+/* 他ページと同じ並びのページリンク（タップ目標 44px） */
+.page-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.page-links a, .page-links strong {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.page-links a { color: var(--gold-light); text-decoration: none; }
+.page-links a:hover { text-decoration: underline; }
+.page-links strong { color: var(--band-text); }
+
+/* ===== 本文 ===== */
+.help-main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px 12px 64px;
+}
+
+/* ===== 目次 ===== */
+.help-toc {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 24px;
+}
+.help-toc h2 {
+  font-family: var(--mincho);
+  font-size: 17px;
+  color: var(--gold-deep);
+  margin-bottom: 4px;
+}
+.help-toc ol { list-style: none; }
+.help-toc li { border-top: 1px solid var(--bg-secondary); }
+.help-toc li:first-child { border-top: none; }
+.help-toc a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text);
+  text-decoration: none;
+}
+.help-toc a:hover { text-decoration: underline; }
+.help-toc .toc-num {
+  flex: none;
+  width: 2.2em;
+  font-weight: bold;
+  color: var(--gold-deep);
+}
+
+/* ===== 章 ===== */
+.help-section {
+  margin-bottom: 32px;
+  scroll-margin-top: 8px;
+}
+.help-section > h2 {
+  font-family: var(--mincho);
+  font-size: 21px;
+  line-height: 1.4;
+  color: var(--text);
+  border-bottom: 2px solid var(--gold);
+  padding-bottom: 4px;
+  margin-bottom: 12px;
+}
+.help-section h3 {
+  font-family: var(--mincho);
+  font-size: 17px;
+  color: var(--gold-deep);
+  margin: 20px 0 6px;
+}
+.help-section p { margin-bottom: 8px; }
+/* ファイル名（admin.html など）を本文の中で示す */
+code {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 14px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+.help-section ul, .help-section ol {
+  margin: 0 0 12px 1.4em;
+}
+.help-section li { margin-bottom: 4px; }
+
+/* 画面の文言（ボタン名・見出し）はこの体裁で示す */
+.ui {
+  display: inline-block;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+/* 用語の言い換え */
+.term { font-weight: bold; }
+.note {
+  background: var(--card-bg);
+  border-left: 4px solid var(--warn);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 12px;
+  margin: 12px 0;
+}
+.formula {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+  font-size: 15px;
+  overflow-x: auto;
+}
+
+/* ===== 画像 ===== */
+figure {
+  margin: 14px 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+/* スマホ画面のスクリーンショットは実寸に近い幅で止める（タブレット・大画面は全幅）。
+   width と max-width を併用すること。max-width だけだと 375px が figure の
+   内寸より広くなり、スマホ幅でページごと横にはみ出す。 */
+figure.shot-mobile img { width: 375px; max-width: 100%; }
+figcaption {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  line-height: 1.7;
+}
+figcaption ul {
+  margin: 4px 0 0 1.2em;
+}
+figcaption .cap-head {
+  color: var(--text);
+  font-weight: bold;
+}
+
+/* ===== 図（インライン SVG） ===== */
+.diagram {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 14px 0;
+}
+.diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 480px;
+  margin: 0 auto;
+}
+/* 図の文字サイズは viewBox の単位。375px のスマホでは図が 333px まで縮む
+   （＝約 0.93 倍）ので、実際に 14px を割らないよう 16 単位を下限にする。 */
+.diagram .d-box { fill: var(--bg-secondary); stroke: var(--border); stroke-width: 1; }
+.diagram .d-box-key { fill: var(--band-bg); stroke: var(--gold); stroke-width: 2; }
+.diagram .d-title { fill: var(--text); font-family: var(--mincho); font-size: 18px; font-weight: bold; }
+.diagram .d-title-key { fill: var(--gold-light); font-family: var(--mincho); font-size: 18px; font-weight: bold; }
+.diagram .d-sub { fill: var(--text-muted); font-size: 16px; }
+.diagram .d-sub-key { fill: var(--band-muted); font-size: 16px; }
+.diagram .d-line { stroke: var(--gold-deep); stroke-width: 2; fill: none; }
+.diagram .d-arrow { fill: var(--gold-deep); }
+.diagram .d-legend { fill: var(--text); font-size: 16px; }
+
+/* ===== 章のいちばん上へ戻る ===== */
+.back-to-toc {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--gold-deep);
+  text-decoration: none;
+}
+.back-to-toc:hover { text-decoration: underline; }
+
+/* ===== 印刷 ===== */
+@media print {
+  body { font-size: 11pt; line-height: 1.6; }
+  .help-band { padding: 0 0 6px; border-bottom: 1pt solid #000; }
+  .help-title { font-size: 20pt; }
+  /* 帯の中の文字は紙では黒で出す（背景は印刷されない前提） */
+  .help-title, .help-subtitle, .page-links a, .page-links strong { color: #000; }
+  /* 画面間リンクは紙では意味がないので落とす */
+  .page-links, .back-to-toc { display: none; }
+  .help-main { max-width: none; padding: 0; }
+  .help-toc { border: 1pt solid #999; padding: 8pt 10pt; margin-bottom: 16pt; }
+  .help-toc a { color: #000; text-decoration: underline; min-height: 0; display: block; }
+  .help-toc .toc-num { display: inline-block; }
+  .help-toc li { padding: 2pt 0; }
+  .help-section { margin-bottom: 18pt; page-break-inside: auto; }
+  .help-section > h2 { page-break-after: avoid; border-bottom: 1pt solid #666; }
+  .help-section h3 { page-break-after: avoid; }
+  figure, .diagram, .note, .formula { page-break-inside: avoid; border: 1pt solid #999; }
+  figure img { max-width: 100%; }
+  figure.shot-mobile img { max-width: 70mm; }
+  .ui { border: 1pt solid #999; }
+}
