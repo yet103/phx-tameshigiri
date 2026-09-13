@@ -17,8 +17,7 @@ var Board = (function() {
   var pollTimer = null;
   var tickTimer = null;
   var failCount = 0;
-  var invalid = false;
-  var live = null;        // 直近に描いたコートの状態 { updatedAt, timer, player }
+  var live = null;       // 直近に描いたコートの状態 { updatedAt, timer, player }
   // サーバーとこの端末の時計のずれ（サーバー - 端末）。
   // タイマーは「サーバーの現在時刻 - updatedAt」で進めるので、
   // 端末の時計が狂っていても配信の残り時間がずれないようにする。
@@ -150,6 +149,19 @@ var Board = (function() {
     });
   }
 
+  // 選手全体の補正点。0（や数値でない）ときは行ごと出さない。
+  // これを出さないと、行の得点を足した値と合計（保存済みの score）が食い違って見える。
+  function renderTotalAdjust(totalAdjust) {
+    var n = Math.trunc(Number(totalAdjust));
+    if (!Number.isFinite(n) || n === 0) {
+      el.totalAdjustRow.classList.add('is-hidden');
+      el.totalAdjust.textContent = '';
+      return;
+    }
+    el.totalAdjustRow.classList.remove('is-hidden');
+    el.totalAdjust.textContent = n > 0 ? '+' + n : String(n);
+  }
+
   // 順番（A-男子-1-3）を「男子 1巡目 3番」にする。読めない形はそのまま出す。
   function orderLabel(order) {
     var m = String(order || '').match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
@@ -183,6 +195,7 @@ var Board = (function() {
     el.name.textContent = p.name || '';
 
     renderRows(p);
+    renderTotalAdjust(p.totalAdjust);
     renderTimer();
 
     var confirmed = p.confirmed === true;
@@ -200,7 +213,6 @@ var Board = (function() {
 
   function showInvalid() {
     // 400/404 はトークンが無効と確定しているので、叩き続けない。
-    invalid = true;
     stopPolling();
     renderIdle('');
     el.name.textContent = 'このリンクは無効です';
@@ -232,7 +244,6 @@ var Board = (function() {
   }
 
   function start() {
-    invalid = false;
     failCount = 0;
     live = null;
     setNotice('');
@@ -265,6 +276,8 @@ var Board = (function() {
       name: document.getElementById('boardName'),
       timer: document.getElementById('boardTimer'),
       body: document.getElementById('boardBody'),
+      totalAdjustRow: document.getElementById('boardTotalAdjustRow'),
+      totalAdjust: document.getElementById('boardTotalAdjust'),
       total: document.getElementById('boardTotal'),
       confirmed: document.getElementById('boardConfirmed'),
       notice: document.getElementById('boardNotice')

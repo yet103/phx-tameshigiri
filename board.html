@@ -41,6 +41,13 @@
           </tr>
         </thead>
         <tbody id="boardBody"></tbody>
+        <!-- 全体補正。0 のときは行ごと隠す（合計＝行の得点の和＋ここ、が画面で追えるように） -->
+        <tfoot>
+          <tr class="is-hidden" id="boardTotalAdjustRow">
+            <td class="label" colspan="6">全体補正</td>
+            <td class="num score" id="boardTotalAdjust"></td>
+          </tr>
+        </tfoot>
       </table>
     </div>
 

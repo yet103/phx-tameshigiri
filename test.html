@@ -577,6 +577,14 @@
       [liveOther.id, 280, true]);
     await Api.putLive(liveEvent.id, 'A', { playerId: livePlayer.id, timer: { sec: 300, running: false } });
 
+    // ライブ状態は大会の updatedAt を動かさない。動かすと共有ページ（share.js）が
+    // updatedAt の変化を見て、選手を切り替えるたびに順位を描き直してしまう。
+    var beforePut = (await Api.loadEvent(liveEvent.id)).updatedAt;
+    await Api.putLive(liveEvent.id, 'A', { playerId: liveOther.id, timer: { sec: 123, running: false } });
+    assert('putLive: 大会の updatedAt は動かさない',
+      (await Api.loadEvent(liveEvent.id)).updatedAt, beforePut);
+    await Api.putLive(liveEvent.id, 'A', { playerId: livePlayer.id, timer: { sec: 300, running: false } });
+
     var liveToken = (await Api.createShareLink(liveEvent.id)).token;
     var liveRes = await Api.loadLive(liveToken);
     var live = liveRes.data;
@@ -601,6 +609,18 @@
     var liveNone = (await Api.loadLive(liveToken)).data;
     assert('loadLive: 選手未設定なら player は null', liveNone.courts.A.player, null);
     assert('loadLive: 選手未設定でもコートは残る', Object.keys(liveNone.courts), ['A']);
+
+    // コート名はそのまま live のキーになるので、'__proto__' でも
+    // プロトタイプを汚さず、素直に自分のキーとして出入りすること。
+    var liveProtoPut = await Api.putLive(liveEvent.id, '__proto__', { playerId: livePlayer.id, timer: { sec: 60, running: false } });
+    assert('putLive: __proto__ というコート名でも保存できる',
+      liveProtoPut.live && liveProtoPut.live.timer.sec, 60);
+    var liveProto = (await Api.loadLive(liveToken)).data;
+    assert('loadLive: __proto__ のコートはプロトタイプを汚さずに自分のキーで返る',
+      [({}).timer,
+       Object.prototype.hasOwnProperty.call(liveProto.courts, '__proto__'),
+       liveProto.courts['__proto__'].timer.sec],
+      [undefined, true, 60]);
 
     var live404 = await Api.loadLive('zzzzzzzz');
     assert('loadLive: 存在しないトークンは status 404', [live404.ok, live404.status], [false, 404]);

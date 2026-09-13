@@ -382,6 +382,10 @@ app.post('/api/events', (req, res) => {
         // 壊れた既存ファイルは上書きを止めない
       }
     }
+    // live（配信用ボードのコートごとの状態）は shareToken と違って引き継がない。
+    // 名簿を入れ直した大会の live には、もう居ない選手の playerId が残りうる。
+    // 落としても配信用ボードが数秒「待機中」になるだけで、コート端末の次の
+    // publishLive がすぐ入れ直す（トークンのように配布済みで失うと困る値ではない）。
 
     writeJsonAtomic(eventPath, event);
     res.json({ success: true, id: event.id });

@@ -19,10 +19,12 @@ body {
    帯・表・合計はそれぞれ自前の下地を持たせてあるので、透過にしても文字は読める。 */
 body.is-transparent { background: transparent; }
 
+/* 上寄せ。余った縦幅は空けたままにする（?bg=transparent で映像を隠さないため）。 */
 .board-root {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 0.5rem;
   padding: 0.6rem;
 }
@@ -82,9 +84,10 @@ body.is-transparent { background: transparent; }
 .board-timer.is-zero { background: var(--band-bg-2); color: var(--band-muted); }
 
 /* ===== 採点表 ===== */
+/* 行数ぶんの高さだけ使う。残りの縦幅まで枠を広げると、透過にしても
+   画面の大半が不透明のままになり、映像に重ねる意味が無くなる。 */
 .board-table-wrap {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
   overflow: hidden;
   background: var(--card-bg);
   border: 2px solid var(--gold);
@@ -124,6 +127,14 @@ body.is-transparent { background: transparent; }
 .board-table td.na { background: var(--cell-disabled); color: var(--text-muted); }
 .board-table td.score { font-weight: bold; color: var(--score-color); }
 .board-table.confirmed td.score { color: var(--score-confirmed); }
+/* 全体補正の行（0 のときは JS が is-hidden で隠す） */
+.board-table tfoot td { background: var(--bg-secondary); }
+.board-table td.label {
+  font-family: var(--mincho);
+  font-weight: bold;
+  text-align: right;
+  font-size: 1.3rem;
+}
 
 /* ===== 合計 ===== */
 .board-foot {

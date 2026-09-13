@@ -325,6 +325,9 @@ var App = (function() {
   async function onEventSelect(eventId, court) {
     var seq = ++loadSeq;
     if (!eventId) {
+      // 大会を離れることを配信用ボードへ伝える（ボードは「待機中」に戻る）。
+      // currentEvent / currentCourt を消す前に送る。消した後では宛先が分からない。
+      publishLive(true);
       currentEvent = null;
       players = [];
       visiblePlayers = [];
@@ -642,12 +645,18 @@ var App = (function() {
   // 送るのは選手が変わったときとタイマーを操作したときだけで、1秒ごとの減算では送らない
   // （board 側が updatedAt からの経過を引いて進める）。
   // 通信は待たず、失敗は握りつぶす。配信が遅れても採点は止めない（alert も出さない）。
-  function publishLive() {
+  // clear を真にすると、選手がまだ選ばれていても「誰も映さない」を送る
+  // （大会から離れるとき。表示中の選手を残すとボードが映し続けてしまう）。
+  function publishLive(clear) {
     if (!currentEvent) return;
-    var p = visiblePlayers[currentIndex] || null;
-    // 全コート表示（currentCourt が空）のときは今の選手から導く。
+    var shown = visiblePlayers[currentIndex] || null;
+    var p = clear ? null : shown;
+    // 宛先は今映しているコート。全コート表示（currentCourt が空）のときは今の選手から導く。
+    // 宛先の判定に p ではなく shown を使うのは、大会から離れるとき（clear）にも
+    // 「さっきまで映していた選手のコート」へ届ける必要があるため
+    // （大会の選択を外すと currentCourt が先に空になる）。
     // コートが決まらない選手は送らない（サーバーの isValidCourt が弾く値になる）。
-    var court = currentCourt || (p ? Courts.courtOf(p) : '');
+    var court = currentCourt || (shown ? Courts.courtOf(shown) : '');
     if (!court || court === Courts.UNASSIGNED) return;
     Api.putLive(currentEvent.id, court, {
       playerId: p ? p.id : null,
