@@ -309,3 +309,25 @@ main { padding: 8px 12px 16px; }
 .fab { background: var(--vermilion); }
 .sheet, .tp-sheet { border-top-color: var(--gold); }
 .round-counter.done { border: 1px solid var(--gold); }
+
+/* ===== PC・タブレット（768px 以上） =====
+   画面下端のタブは視界に入らないので、上部バーの直下に移す（スマホは親指で届く下タブのまま）。
+   本文とシートは中央 960px に絞り、選手の行が横に伸びて得点が名前から離れないようにする。
+   上書き専用の節なので末尾に置く。 */
+@media (min-width: 768px) {
+  body { padding: 100px 0 24px; }   /* 上部バー 52px ＋ タブ 48px */
+  .tabbar {
+    top: 52px; bottom: auto; justify-content: center;
+    border-top: none; border-bottom: 1px solid var(--gold);
+  }
+  .tabbar button {
+    flex: 0 1 200px; min-height: 48px; font-size: 15px;
+    border-top: none; border-bottom: 3px solid transparent;
+  }
+  .tabbar button.on { border-bottom-color: var(--gold); }
+  main { max-width: 960px; margin: 0 auto; }
+  .sheet-overlay, .tp-overlay { justify-content: center; }
+  .sheet, .tp-sheet { max-width: 960px; }
+  .fab { bottom: 24px; }
+  #toast { bottom: 92px; }
+}
