@@ -257,3 +257,5 @@ figcaption .cap-head {
   figure.shot-mobile img { max-width: 70mm; }
   .ui { border: 1pt solid #999; }
 }
+/* 注意枠（.note）の中では .msg の左線を消す（枠の縦線と二重にならないように） */
+.note .msg { border-left: none; }
