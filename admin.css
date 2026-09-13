@@ -188,8 +188,11 @@ main { padding: 8px 12px 16px; }
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
 }
 /* 技名と太刀の配点を列でそろえる（ヘッダー行と各技の行で同じ列幅）。
-   見出しは11pxにしているので48pxでも1行に収まる（56pxだと320〜375px幅で技名列が削られる）。 */
-.tp-row { display: grid; grid-template-columns: 20px 1fr repeat(4, 48px); align-items: center; gap: 4px; }
+   技名列は上限を付け、広い画面でも配点が技名のすぐ右に並ぶようにする（1fr だと右端まで離れる）。
+   列の間は gap ではなく各セルの縦罫線（border-left）で区切る。
+   見出しは11pxにしているので52pxでも1行に収まる（4文字44px＋左右3px＋罫線1px）。 */
+.tp-row { display: grid; grid-template-columns: 20px minmax(0, 240px) repeat(4, 52px); align-items: stretch; gap: 0; }
+.tp-row > span { display: flex; align-items: center; min-width: 0; }
 .tp-header {
   padding: 6px 14px; color: var(--text-muted);
   border-bottom: 1px solid var(--border); background: var(--bg-secondary);
@@ -197,7 +200,7 @@ main { padding: 8px 12px 16px; }
      外に置くと classic スクロールバー環境で行側だけ幅が狭くなり列がずれるため。 */
   position: sticky; top: 0; z-index: 1;
 }
-.tp-header .tp-s { font-size: 11px; } /* 4文字の見出しが48px列に1行で収まるサイズ */
+.tp-header .tp-s { font-size: 11px; } /* 4文字の見出しが52px列に1行で収まるサイズ */
 .tp-item {
   width: 100%; min-height: 48px; padding: 0 14px; text-align: left;
   border-radius: 0; background: transparent; color: var(--text);
@@ -207,8 +210,13 @@ main { padding: 8px 12px 16px; }
 .tp-clear { color: var(--text-muted); display: block; } /* 「この枠を空にする」は控えめな色に。グリッド列は使わない */
 .tp-none { padding: 14px; color: var(--text-muted); }
 .tp-no { width: 20px; color: var(--accent); }
-.tp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tp-s { text-align: right; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.tp-row > .tp-name { display: block; align-self: center; } /* flex にすると省略記号（…）が効かないのでブロックのまま */
+.tp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 6px; }
+.tp-s {
+  justify-content: flex-end; padding: 0 3px; font-size: 13px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; border-left: 1px solid var(--border);
+}
+.tp-s:last-child { border-right: 1px solid var(--border); }
 
 /* ===== トースト ===== */
 #toast {
