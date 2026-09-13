@@ -148,13 +148,17 @@ function escapeCSV(field) {
   return str;
 }
 
-// 採点済みかどうかの判定
+// 採点済みかどうかの判定。クライアント側の同じ実装は courts.js の Courts.isScored。
 // result は 1=○, 0=×, 空白=未入力 でエンコードされているため、
 // 0 か 1 を含んでいれば何らかの採点が入っている。
+// 補正点（技ごと・全体）が 0 以外のときも採点済みとみなす
+// （負の補正で score が 0 以下になっても拾えるように、score > 0 だけに頼らない）。
 function isScored(player) {
   if (!player) return false;
   if (typeof player.score === 'number' && player.score > 0) return true;
-  return /[01]/.test(player.result || '');
+  if (/[01]/.test(player.result || '')) return true;
+  if (Array.isArray(player.adjust) && player.adjust.some(n => Number(n))) return true;
+  return !!Number(player.totalAdjust);
 }
 
 // ── order（コート-性別-巡目-番号）の解析と組み立て ──
@@ -568,8 +572,16 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     ['isNewFace', 'isFemale'].forEach(key => {
       if (typeof body[key] === 'boolean') player[key] = body[key];
     });
-    // 負数・NaN・Infinity は無視する
-    if (Number.isFinite(body.score) && body.score >= 0) player.score = body.score;
+    // 補正点（技ごと・全体）・備考・確定。型が合わないものは黙って無視する（他の項目と同じ）。
+    if (Array.isArray(body.adjust) && body.adjust.length === 3 &&
+        body.adjust.every(n => Number.isInteger(n))) {
+      player.adjust = body.adjust.slice();
+    }
+    if (Number.isInteger(body.totalAdjust)) player.totalAdjust = body.totalAdjust;
+    if (typeof body.note === 'string') player.note = body.note.trim().slice(0, 200);
+    if (typeof body.confirmed === 'boolean') player.confirmed = body.confirmed;
+    // 補正点で負の合計になりうるので負数も受理する。NaN・Infinity は無視する
+    if (Number.isFinite(body.score)) player.score = body.score;
 
     // court / round / isFemale が来たときだけ order を組み立て直す。
     // ただし (コート, 性別, 巡目) が実際に変わったときだけにする。
@@ -783,10 +795,12 @@ app.get('/api/events/:id/export', (req, res) => {
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     
-    const header = ['選手名', '順番', '技 1', '技 2', '技 3', '得点', '新人', '女子', '結果'];
+    const header = ['選手名', '順番', '技 1', '技 2', '技 3', '得点', '新人', '女子', '結果',
+                    '補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定'];
     const rows = [header];
-    
+
     for (const p of (event.players || [])) {
+      const adj = Array.isArray(p.adjust) ? p.adjust : [0, 0, 0];
       rows.push([
         p.name || '',
         p.order || '',
@@ -796,7 +810,13 @@ app.get('/api/events/:id/export', (req, res) => {
         p.score != null ? p.score : 0,
         p.isNewFace ? '○' : '',
         p.isFemale ? '○' : '',
-        p.result || ''
+        p.result || '',
+        Number(adj[0]) || 0,
+        Number(adj[1]) || 0,
+        Number(adj[2]) || 0,
+        Number(p.totalAdjust) || 0,
+        p.note || '',
+        p.confirmed === true ? '○' : ''
       ]);
     }
     

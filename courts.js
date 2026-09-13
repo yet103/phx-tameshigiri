@@ -43,10 +43,18 @@ var Courts = (function() {
 
   // 採点済みの判定。server/index.js の isScored と同じ規則。
   // サーバー側は API テスト、クライアント側は下の test.html で固定する。
+  // 太刀の ○× のほか、補正点（技ごと・全体）が 0 以外なら採点済みとみなす
+  // （負の補正で score が 0 以下になっても拾えるように、score > 0 だけに頼らない）。
   function isScored(player) {
     if (!player) return false;
     if (typeof player.score === 'number' && player.score > 0) return true;
-    return /[01]/.test(player.result || '');
+    if (/[01]/.test(player.result || '')) return true;
+    if (Array.isArray(player.adjust)) {
+      for (var i = 0; i < player.adjust.length; i++) {
+        if (Number(player.adjust[i])) return true;
+      }
+    }
+    return !!Number(player.totalAdjust);
   }
 
   // 行の並び順。order 文字列をそのまま比較すると 1-10 が 1-2 より前に来るので、

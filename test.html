@@ -93,6 +93,38 @@
     assert('bulk: 大会に4名入っている', bulkLoaded.players.length, 4);
     await Api.importCsv(testEventId, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n', 'replace');   // 後続のテストのため空に戻す
 
+    // PATCH: 補正点・備考・確定・負の得点
+    // 採点済みの選手を残すと後続の replace インポートが採点済みガードに引っかかるので、専用の大会で行う
+    var padEvent = await Api.saveEvent({ name: '補正点テスト', date: '2026-09-13', venue: '', players: [] });
+    await Api.importCsv(padEvent.id, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n補正 太郎,A-男子-1-9,四方,,,0,,,', 'replace');
+    var padLoaded = await Api.loadEvent(padEvent.id);
+    var padP = padLoaded.players.filter(function(p) { return p.name === '補正 太郎'; })[0];
+    var padRes = await Api.updatePlayerInfo(padEvent.id, padP.id, {
+      adjust: [1, -2, 0], totalAdjust: -3, note: '  審判メモ  ', confirmed: true, score: -4
+    });
+    assert('PATCH adjust を保存', padRes.player.adjust, [1, -2, 0]);
+    assert('PATCH totalAdjust を保存', padRes.player.totalAdjust, -3);
+    assert('PATCH note は trim', padRes.player.note, '審判メモ');
+    assert('PATCH confirmed を保存', padRes.player.confirmed, true);
+    assert('PATCH 負の score を受理', padRes.player.score, -4);
+    var badRes = await Api.updatePlayerInfo(padEvent.id, padP.id, {
+      adjust: [1, 2], totalAdjust: 1.5, note: 12, confirmed: 'yes', score: NaN
+    });
+    assert('PATCH 長さ3でない adjust は無視', badRes.player.adjust, [1, -2, 0]);
+    assert('PATCH 整数でない totalAdjust は無視', badRes.player.totalAdjust, -3);
+    assert('PATCH 文字列でない note は無視', badRes.player.note, '審判メモ');
+    assert('PATCH 真偽値でない confirmed は無視', badRes.player.confirmed, true);
+    var csvOut = await Api.exportCsv(padEvent.id);
+    var csvHead = csvOut.replace(/^\uFEFF/, '').split('\r\n')[0];
+    assert('export は15列', csvHead.split(',').length, 15);
+    assert('export のヘッダー末尾', csvHead.split(',').slice(9), ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定']);
+    var csvRow = csvOut.replace(/^\uFEFF/, '').split('\r\n').filter(function(l) { return l.indexOf('補正 太郎') === 0; })[0];
+    assert('export に補正点・確定が出る', csvRow.split(',').slice(9), ['1', '-2', '0', '-3', '審判メモ', '○']);
+    var longNote = new Array(202).join('あ');   // 201文字
+    var longRes = await Api.updatePlayerInfo(padEvent.id, padP.id, { note: longNote });
+    assert('PATCH note は200文字で切る', longRes.player.note.length, 200);
+    await Api.deleteEvent(padEvent.id);
+
     // CSVインポートテスト
     var csv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n山田 太郎,A-男子-1-1,破図味,夢想返し,響き返し,55,,,';
     var importResult = await Api.importCsv(testEventId, csv, 'replace');
@@ -323,8 +355,9 @@
     assert('round を変えると巡目が組み立て直される', roundRes.player.order, 'B-女子-2-1');
     assert('不正なコート名は status 400',
       (await Api.updatePlayerInfo(edEvent.id, edP.id, { court: 'A-1' })).status, 400);
-    assert('負の得点は無視される',
-      (await Api.updatePlayerInfo(edEvent.id, edP.id, { score: -5 })).player.score, 0);
+    // 補正点でマイナスになりうるので負の得点も受理する
+    assert('負の得点は受理される',
+      (await Api.updatePlayerInfo(edEvent.id, edP.id, { score: -5 })).player.score, -5);
 
     assert('存在しない選手は status 404',
       (await Api.updatePlayerInfo(edEvent.id, 'nosuchplayer', { name: 'x' })).status, 404);
@@ -581,19 +614,30 @@
     results.appendChild(h2s);
 
     // encodeResult / decodeResult テスト
+    // 1技=5文字（初/二/三/四ノ太刀 + 5文字目）。5文字目は互換のため残すが、新しい保存では常に空白。
     var encRows = [
-      { techName: '破図味(男)', values: ['○','×','',''], techPoint: '○' },
-      { techName: '夢想返し',   values: ['○','○','',''], techPoint: '' }
+      { techName: '破図味(男)', values: ['○','×','',''], adjust: 3 },
+      { techName: '夢想返し',   values: ['○','○','',''], adjust: 0 }
     ];
     var encoded = Scoring.encodeResult(encRows);
-    // 1技=5文字（初/二/三/四の太刀 + 技術点）
-    // 破図味(男): ○×空空 + 技術点○ → "10  1" / 夢想返し: ○○空空 + 技術点空 → "11   "
-    assert('encodeResult 2行', encoded, '10  111   ');
-    var decoded = Scoring.decodeResult(encoded, 2);
+    assert('encodeResult 5文字目は空白（補正点は result に入れない）', encoded, '10   11   ');
+    var decoded = Scoring.decodeResult(encoded, 2, [3, 0, 0]);
     assert('decodeResult values[0]', decoded[0].values, ['○','×','','']);
-    assert('decodeResult techPoint[0]', decoded[0].techPoint, '○');
+    assert('decodeResult adjust[0] は adjust 配列から', decoded[0].adjust, 3);
     assert('decodeResult values[1]', decoded[1].values, ['○','○','','']);
-    assert('decodeResult techPoint[1]', decoded[1].techPoint, '');
+    assert('decodeResult adjust[1]', decoded[1].adjust, 0);
+    // 旧データ（adjust 配列を持たない選手）は 5 文字目の '1' を補正点 3 と読み替える
+    var legacy = Scoring.decodeResult('10  111   ', 2, undefined);
+    assert('decodeResult 旧データ: 技術点○ → 補正点3', legacy[0].adjust, 3);
+    assert('decodeResult 旧データ: 技術点空 → 0', legacy[1].adjust, 0);
+    var legacyX = Scoring.decodeResult('10  0', 1, null);
+    assert('decodeResult 旧データ: 技術点× → 0', legacyX[0].adjust, 0);
+    // adjust があるときは 5 文字目を見ない
+    var mixed = Scoring.decodeResult('10  1', 1, [0, 0, 0]);
+    assert('decodeResult adjust があれば 5 文字目は無視', mixed[0].adjust, 0);
+    // adjust の要素が数値でなくても落ちない
+    assert('decodeResult adjust に文字列が混ざっても 0', Scoring.decodeResult('     ', 1, ['x', 1, 2])[0].adjust, 0);
+    assert('decodeResult adjust は整数に丸める', Scoring.decodeResult('     ', 1, [2.7, 0, 0])[0].adjust, 2);
 
     // setTechniques のテスト
     var customTechs = [{ name: 'カスタム技', strikes: [100, 50, null, null] }];
@@ -607,7 +651,7 @@
     assert('calcStrikeScore 存在しない技', Scoring.calcStrikeScore('存在しない技', 0, '○', false), 0);
 
     // calcTotalScore isFemale=true
-    var femaleRows = [{ techName: '水月', values: ['○','○','',''], techPoint: '' }];
+    var femaleRows = [{ techName: '水月', values: ['○','○','',''], adjust: 0 }];
     // 水月(女): 17+13=30
     assert('calcTotalScore isFemale=true 水月', Scoring.calcTotalScore(femaleRows, true), 30);
 
@@ -634,13 +678,21 @@
     // calcStrikeScore: null列（ReadOnly）は常に0
     assert('calcStrikeScore 立位袈裟 三の太刀（null）○', Scoring.calcStrikeScore('立位袈裟', 2, '○', false), 0);
 
-    // calcTotalScore: 全行合計
+    // calcTotalScore: 全行合計 + 行ごとの補正点 + 全体補正点
     var rows = [
-      { techName: '破図味(男)', values: ['○','○','○','○'], techPoint: '' },
-      { techName: '夢想返し',   values: ['○','○','',''],   techPoint: '○' }
+      { techName: '破図味(男)', values: ['○','○','○','○'], adjust: 0 },
+      { techName: '夢想返し',   values: ['○','○','',''],   adjust: 3 }
     ];
-    // 破図味(男): 20+4+4+2 = 30、夢想返し: 13+5 = 18 + 技術点3 = 21 → 合計51
-    assert('calcTotalScore', Scoring.calcTotalScore(rows, false), 51);
+    // 破図味(男): 20+4+4+2 = 30、夢想返し: 13+5 = 18 + 補正3 = 21 → 合計51
+    assert('calcTotalScore', Scoring.calcTotalScore(rows, false, 0), 51);
+    assert('calcTotalScore 全体補正点を足す', Scoring.calcTotalScore(rows, false, -5), 46);
+    assert('calcTotalScore 全体補正点 省略は 0', Scoring.calcTotalScore(rows, false), 51);
+    assert('calcTotalScore 負の補正で負になる', Scoring.calcTotalScore([{ techName: '夢想返し', values: ['','','',''], adjust: -4 }], false, -1), -5);
+    assert('calcRowScore 太刀 + 補正', Scoring.calcRowScore('夢想返し', ['○','○','',''], 3, false), 21);
+    assert('calcRowScore 補正が文字列でも 0 扱い', Scoring.calcRowScore('夢想返し', ['○','','',''], 'x', false), 13);
+    assert('normalizeAdjust 配列でなければ [0,0,0]', Scoring.normalizeAdjust(undefined), [0, 0, 0]);
+    assert('normalizeAdjust 足りない要素は 0', Scoring.normalizeAdjust([1]), [1, 0, 0]);
+    assert('normalizeAdjust 余分な要素は捨てる', Scoring.normalizeAdjust([1, 2, 3, 4]), [1, 2, 3]);
 
     // canDecode: result は技ごとに5文字。技の数が変わると復元できない
     assert('canDecode 空のresult → false', Scoring.canDecode('', 3), false);
@@ -656,6 +708,11 @@
     results.appendChild(h2st);
 
     assert('storage.js loadTheme default is light', Storage.loadTheme() === 'light' || Storage.loadTheme() === 'dark', true);
+
+    var html15 = Storage.buildPlayersHtml([{ name: 'A', order: 'A-男子-1-1', tech1: '四方', tech2: '', tech3: '', score: 10, isNewFace: false, isFemale: false, result: '1    ', adjust: [1, 0, 0], totalAdjust: -2, note: '備考<b>', confirmed: true }]);
+    assert('buildPlayersHtml は15列の見出し', (html15.match(/<th>/g) || []).length, 15);
+    assert('buildPlayersHtml 備考をエスケープ', html15.indexOf('備考&lt;b&gt;') !== -1, true);
+    assert('buildPlayersHtml 確定は○', html15.indexOf('<td>○</td></tr>') !== -1, true);
 
     var h2c = document.createElement('h2');
     h2c.textContent = 'courts.js';
@@ -700,6 +757,10 @@
     assert('isScored: result に 0 があれば採点済み（全部×）', Courts.isScored({ score: 0, result: '0    ' }), true);
     assert('isScored: 空なら未採点', Courts.isScored({ score: 0, result: '' }), false);
     assert('isScored: null でも落ちない', Courts.isScored(null), false);
+    assert('isScored: 補正点が入っていれば採点済み', Courts.isScored({ score: 0, result: '', adjust: [0, -2, 0] }), true);
+    assert('isScored: 全体補正点が入っていれば採点済み', Courts.isScored({ score: 0, result: '', totalAdjust: 1 }), true);
+    assert('isScored: 補正点が全部 0 なら未採点', Courts.isScored({ score: 0, result: '', adjust: [0, 0, 0], totalAdjust: 0 }), false);
+    assert('isScored: 負の合計でも result があれば採点済み', Courts.isScored({ score: -3, result: '0    ' }), true);
 
     assert('compareOrder: 番号は数値順（1-2 が 1-10 より前）',
       Courts.compareOrder({ order: 'A-男子-1-2' }, { order: 'A-男子-1-10' }) < 0, true);
@@ -1055,6 +1116,25 @@
     assert('coalesce: 大会が違えば別エントリ',
       Outbox.coalesce([e1], eOther).length, 2);
 
+    var q1 = Outbox.coalesce([], { eventId: 'e', playerId: 'p', score: 1, result: 'r', adjust: [1, 0, 0], totalAdjust: 2, note: 'n', confirmed: true });
+    assert('coalesce は補正点・備考・確定を保つ', [q1[0].adjust, q1[0].totalAdjust, q1[0].note, q1[0].confirmed], [[1, 0, 0], 2, 'n', true]);
+
+    // 備考だけのエントリ（score / result を持たない）が未送信の採点を潰さないこと
+    var noteOnly = Outbox.coalesce([], { eventId: 'e', playerId: 'p', note: 'メモ' });
+    assert('coalesce: 備考だけのエントリは score/result を作らない',
+      ['score' in noteOnly[0], 'result' in noteOnly[0]], [false, false]);
+    var mergedQ = Outbox.coalesce(
+      [{ eventId: 'e', playerId: 'p', score: 7, result: 'R', adjust: [1, 0, 0], queuedAt: 't1' }],
+      { eventId: 'e', playerId: 'p', note: 'あとから備考', queuedAt: 't2' });
+    assert('coalesce: 後勝ちでマージし、前のエントリの採点を残す',
+      [mergedQ[0].score, mergedQ[0].result, mergedQ[0].adjust, mergedQ[0].note, mergedQ[0].queuedAt],
+      [7, 'R', [1, 0, 0], 'あとから備考', 't2']);
+    assert('coalesce: マージしても元のエントリを壊さない', (function() {
+      var q = [{ eventId: 'e', playerId: 'p', score: 7, result: 'R' }];
+      Outbox.coalesce(q, { eventId: 'e', playerId: 'p', note: 'x' });
+      return ['note' in q[0], q[0].score];
+    })(), [false, 7]);
+
     // 注意: このページは index.html と localStorage を共有する。
     // 以下のテストは tmg_outbox を一時的に書き換えるため、
     // 採点中の端末でこのページを開かないこと。
@@ -1083,6 +1163,19 @@
     assert('捨てたエントリを呼び出し元に伝える', droppedSeen.length, 1);
     assert('捨てた後キューが空になる', Outbox.pendingCount(), 0);
 
+    // 備考だけのエントリは score / result を PATCH に載せない
+    // （載せると undefined になり、サーバー側で採点が巻き戻る）
+    var bodies = [];
+    Api.updatePlayer = async function(eventId, playerId, body) { bodies.push(body); return { ok: true }; };
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'pn', note: 'メモだけ', queuedAt: 't7' }
+    ]));
+    Outbox.init(function() {}, function() {});
+    await new Promise(function(r) { setTimeout(r, 500); });
+    assert('drain: 備考だけのエントリは score/result を送らない',
+      [bodies.length, 'score' in (bodies[0] || {}), 'result' in (bodies[0] || {}), (bodies[0] || {}).note],
+      [1, false, false, 'メモだけ']);
+
     // 未送信の採点はサーバーの古い値より優先される
     Api.updatePlayer = async function() { return { ok: false, status: 0 }; };
     localStorage.setItem('tmg_outbox', JSON.stringify([
@@ -1101,6 +1194,34 @@
     assert('キューに無い選手はそのまま',
       [fromServer[1].score, fromServer[1].result], [9, 'Y']);
     assert('別の大会には適用しない', Outbox.applyPending('other', fromServer), 0);
+
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'p1', score: 55, result: 'X', adjust: [1, 2, 3], totalAdjust: -1, note: 'メモ', confirmed: true, queuedAt: 't4' },
+      { eventId: 'ev1', playerId: 'p2', score: 5, result: 'Y', queuedAt: 't5' }   // 旧形式（新項目なし）
+    ]));
+    Outbox.init(function() {}, function() {});
+    await new Promise(function(r) { setTimeout(r, 400); });
+    var fromServer2 = [
+      { id: 'p1', score: 0, result: '', adjust: [0, 0, 0], totalAdjust: 0, note: '', confirmed: false },
+      { id: 'p2', score: 0, result: '', adjust: [9, 9, 9], totalAdjust: 9, note: '既存', confirmed: true }
+    ];
+    Outbox.applyPending('ev1', fromServer2);
+    assert('applyPending は補正点・備考・確定も上書きする',
+      [fromServer2[0].adjust, fromServer2[0].totalAdjust, fromServer2[0].note, fromServer2[0].confirmed],
+      [[1, 2, 3], -1, 'メモ', true]);
+    assert('applyPending 旧形式のエントリは新項目に触らない',
+      [fromServer2[1].adjust, fromServer2[1].totalAdjust, fromServer2[1].note, fromServer2[1].confirmed],
+      [[9, 9, 9], 9, '既存', true]);
+
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'p3', note: '備考だけ', queuedAt: 't6' }
+    ]));
+    Outbox.init(function() {}, function() {});
+    await new Promise(function(r) { setTimeout(r, 400); });
+    var fromServer3 = [{ id: 'p3', score: 42, result: 'Z', note: '' }];
+    Outbox.applyPending('ev1', fromServer3);
+    assert('applyPending 備考だけのエントリは得点と結果に触らない',
+      [fromServer3[0].score, fromServer3[0].result, fromServer3[0].note], [42, 'Z', '備考だけ']);
 
     // 後始末: 本物のキューの内容とメモリ上の状態を元に戻す
     Api.updatePlayer = origUpdate;

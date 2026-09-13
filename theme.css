@@ -2,7 +2,7 @@
    全ページ共通。style.css / admin.css より先に読み込むこと。
    style.css はこの変数を62箇所で参照しているため、読み忘れると表示が崩れる。
    新規ページ（admin.html など）は theme.css と自分の CSS だけを読み、
-   style.css は読まない（body{min-width:768px} を持ち込まないため）。 */
+   style.css は読まない（採点画面向けのレイアウトを持ち込まないため）。 */
 
 /* ライトテーマ（デフォルト） */
 :root {
@@ -27,6 +27,8 @@
   --score-color:  #d35400;
   --warn:         #b7791f;
   --banner-text:  #ffffff;
+  --row-selected: #fff3cd;      /* 選択中の技の行 */
+  --score-confirmed: #1a56db;   /* 確定済みの得点 */
 }
 
 /* ダークテーマ */
@@ -52,4 +54,6 @@
   --score-color:  #f1c40f;
   --warn:         #f6ad55;
   --banner-text:  #ffffff;
+  --row-selected: #4a3f1a;
+  --score-confirmed: #60a5fa;
 }
