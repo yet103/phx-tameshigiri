@@ -629,6 +629,11 @@
 
     assert('storage.js loadTheme default is light', Storage.loadTheme() === 'light' || Storage.loadTheme() === 'dark', true);
 
+    var html15 = Storage.buildPlayersHtml([{ name: 'A', order: 'A-男子-1-1', tech1: '四方', tech2: '', tech3: '', score: 10, isNewFace: false, isFemale: false, result: '1    ', adjust: [1, 0, 0], totalAdjust: -2, note: '備考<b>', confirmed: true }]);
+    assert('buildPlayersHtml は15列の見出し', (html15.match(/<th>/g) || []).length, 15);
+    assert('buildPlayersHtml 備考をエスケープ', html15.indexOf('備考&lt;b&gt;') !== -1, true);
+    assert('buildPlayersHtml 確定は○', html15.indexOf('<td>○</td></tr>') !== -1, true);
+
     var h2c = document.createElement('h2');
     h2c.textContent = 'courts.js';
     results.appendChild(h2c);
@@ -936,6 +941,9 @@
     assert('coalesce: 大会が違えば別エントリ',
       Outbox.coalesce([e1], eOther).length, 2);
 
+    var q1 = Outbox.coalesce([], { eventId: 'e', playerId: 'p', score: 1, result: 'r', adjust: [1, 0, 0], totalAdjust: 2, note: 'n', confirmed: true });
+    assert('coalesce は補正点・備考・確定を保つ', [q1[0].adjust, q1[0].totalAdjust, q1[0].note, q1[0].confirmed], [[1, 0, 0], 2, 'n', true]);
+
     // 注意: このページは index.html と localStorage を共有する。
     // 以下のテストは tmg_outbox を一時的に書き換えるため、
     // 採点中の端末でこのページを開かないこと。
@@ -982,6 +990,24 @@
     assert('キューに無い選手はそのまま',
       [fromServer[1].score, fromServer[1].result], [9, 'Y']);
     assert('別の大会には適用しない', Outbox.applyPending('other', fromServer), 0);
+
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'p1', score: 55, result: 'X', adjust: [1, 2, 3], totalAdjust: -1, note: 'メモ', confirmed: true, queuedAt: 't4' },
+      { eventId: 'ev1', playerId: 'p2', score: 5, result: 'Y', queuedAt: 't5' }   // 旧形式（新項目なし）
+    ]));
+    Outbox.init(function() {}, function() {});
+    await new Promise(function(r) { setTimeout(r, 400); });
+    var fromServer2 = [
+      { id: 'p1', score: 0, result: '', adjust: [0, 0, 0], totalAdjust: 0, note: '', confirmed: false },
+      { id: 'p2', score: 0, result: '', adjust: [9, 9, 9], totalAdjust: 9, note: '既存', confirmed: true }
+    ];
+    Outbox.applyPending('ev1', fromServer2);
+    assert('applyPending は補正点・備考・確定も上書きする',
+      [fromServer2[0].adjust, fromServer2[0].totalAdjust, fromServer2[0].note, fromServer2[0].confirmed],
+      [[1, 2, 3], -1, 'メモ', true]);
+    assert('applyPending 旧形式のエントリは新項目に触らない',
+      [fromServer2[1].adjust, fromServer2[1].totalAdjust, fromServer2[1].note, fromServer2[1].confirmed],
+      [[9, 9, 9], 9, '既存', true]);
 
     // 後始末: 本物のキューの内容とメモリ上の状態を元に戻す
     Api.updatePlayer = origUpdate;

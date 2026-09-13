@@ -73,6 +73,11 @@ var Outbox = (function() {
         if (playerList[j].id === e.playerId) {
           playerList[j].score = e.score;
           playerList[j].result = e.result;
+          // 新項目は、エントリが持っているときだけ上書きする（旧形式のエントリには無い）
+          if ('adjust' in e) playerList[j].adjust = e.adjust;
+          if ('totalAdjust' in e) playerList[j].totalAdjust = e.totalAdjust;
+          if ('note' in e) playerList[j].note = e.note;
+          if ('confirmed' in e) playerList[j].confirmed = e.confirmed;
           n++;
           break;
         }
@@ -134,10 +139,12 @@ var Outbox = (function() {
         var entry = queue[0];
         var res = null;
         try {
-          res = await Api.updatePlayer(entry.eventId, entry.playerId, {
-            score: entry.score,
-            result: entry.result
-          });
+          var body = { score: entry.score, result: entry.result };
+          if ('adjust' in entry) body.adjust = entry.adjust;
+          if ('totalAdjust' in entry) body.totalAdjust = entry.totalAdjust;
+          if ('note' in entry) body.note = entry.note;
+          if ('confirmed' in entry) body.confirmed = entry.confirmed;
+          res = await Api.updatePlayer(entry.eventId, entry.playerId, body);
         } catch (e) {
           res = null;
         }
@@ -197,6 +204,10 @@ var Outbox = (function() {
       result: entry.result,
       queuedAt: new Date().toISOString()
     };
+    if ('adjust' in entry) queued.adjust = entry.adjust;
+    if ('totalAdjust' in entry) queued.totalAdjust = entry.totalAdjust;
+    if ('note' in entry) queued.note = entry.note;
+    if ('confirmed' in entry) queued.confirmed = entry.confirmed;
     queue = coalesce(queue, queued);
     save();
     startTicking();
