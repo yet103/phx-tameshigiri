@@ -685,6 +685,58 @@
     assert('保存し直しても大会の技リストは残る', a1Again.techniques, a1Tmpl.techniques);
     assert('保存し直しても名前は更新される', a1Again.name, '技マスタテスト改');
     await Api.deleteEvent(a1Event.id);
+
+    // --- 大会の技リストの取得・保存・雛形に戻す ---
+    var a2Event = await Api.saveEvent({ name: '技リスト編集テスト', date: '2026-09-14', venue: '', players: [] });
+    var a2Got = await Api.loadEventTechniques(a2Event.id);
+    assert('loadEventTechniques は source を返す', a2Got.source, 'event');
+    assert('loadEventTechniques は技リストを返す', Array.isArray(a2Got.techniques), true);
+
+    var a2Techs = [
+      { name: '立位袈裟', strikes: [1, null, null, null] },
+      { name: '四方', strikes: [17, 5, 7, 3] }
+    ];
+    var a2Put = await Api.saveEventTechniques(a2Event.id, a2Techs);
+    assert('saveEventTechniques は保存した技リストを返す', a2Put.techniques, a2Techs);
+    assert('保存した技リストが大会に入る', (await Api.loadEvent(a2Event.id)).techniques, a2Techs);
+
+    var a2Empty = await Api.saveEventTechniques(a2Event.id, [{ name: '  ', strikes: [1, null, null, null] }]);
+    assert('技名が空なら行番号つきで断る', a2Empty.error, '1 行目の技名が空です');
+    var a2Len = await Api.saveEventTechniques(a2Event.id, [{ name: '真', strikes: [1, 2, 3] }]);
+    assert('strikes が4つでなければ断る', a2Len.error, '1 行目の配点は4つ必要です');
+    var a2Dup = await Api.saveEventTechniques(a2Event.id, [
+      { name: '真', strikes: [1, null, null, null] },
+      { name: '真', strikes: [2, null, null, null] }
+    ]);
+    assert('技名の重複は断る', a2Dup.error, '2 行目の技名「真」が重複しています');
+    var a2Range = await Api.saveEventTechniques(a2Event.id, [{ name: '真', strikes: [100, null, null, null] }]);
+    assert('0〜99 の外の配点は断る', a2Range.error, '1 行目の初太刀の配点が不正です（0〜99の整数か空）');
+    var a2Many = [];
+    for (var a2i = 0; a2i < 201; a2i++) a2Many.push({ name: '技' + a2i, strikes: [1, null, null, null] });
+    var a2Over = await Api.saveEventTechniques(a2Event.id, a2Many);
+    assert('201件は断る', a2Over.error, '技は1〜200件で指定してください');
+    assert('検証に落ちた保存は大会を書き換えない', (await Api.loadEvent(a2Event.id)).techniques, a2Techs);
+
+    // 雛形を変えても、自前の技リストを持つ大会は動かない
+    var a2TmplBefore = await Api.loadTechniques();
+    await Api.saveTechniques([{ name: '雛形だけの技', strikes: [7, null, null, null] }]);
+    assert('雛形を変えても大会の技リストは変わらない',
+      (await Api.loadEvent(a2Event.id)).techniques, a2Techs);
+    // 雛形を元に戻す。もともと custom.json が無かった環境では消して戻す
+    // （残すと次回の実行で「デフォルト一致」の2件がスキップされ、テスト件数が変わる）。
+    if (a2TmplBefore.isCustom) await Api.saveTechniques(a2TmplBefore.techniques);
+    else await Api.resetTechniques();
+    assert('雛形は元に戻っている', (await Api.loadTechniques()).techniques, a2TmplBefore.techniques);
+
+    var a2Reset = await Api.resetEventTechniques(a2Event.id);
+    assert('resetEventTechniques は成功する', a2Reset, true);
+    assert('雛形に戻すと雛形の複製が入る',
+      (await Api.loadEvent(a2Event.id)).techniques, a2TmplBefore.techniques);
+    assert('雛形に戻しても大会は自前の技リストを持つ扱い',
+      (await Api.loadEvent(a2Event.id)).techniquesSource, 'event');
+
+    assert('存在しない大会の技リストは null', await Api.loadEventTechniques('zzzzzzzznotexist'), null);
+    await Api.deleteEvent(a2Event.id);
   }
 
   (async function() {

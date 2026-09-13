@@ -339,6 +339,7 @@ app.use(express.json({ limit: '50mb' }));
 //   PUT    /api/events/:id/live/:court
 //   POST   /api/links               （大会ファイルに shareToken を書き込む）
 //   POST   /api/techniques / DELETE /api/techniques
+//   PUT    /api/events/:id/techniques / DELETE /api/events/:id/techniques
 // ── Event API ──
 
 // GET /api/events : 大会一覧
@@ -880,6 +881,95 @@ app.get('/api/events/:id/export', (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="event_${req.params.id}.csv"`);
     res.send(bom + csvContent);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Event Techniques API ──
+// 大会ごとの技マスタ。雛形（GET/POST/DELETE /api/techniques）とは別物で、
+// 大会 JSON の techniques に持つ。読み出しは必ず effectiveTechniques を通す。
+
+const STRIKE_LABELS = ['初太刀', '二ノ太刀', '三ノ太刀', '四ノ太刀'];
+
+// 技リストの検証。PUT /api/events/:id/techniques と POST /api/events/import で共用する。
+// 戻り値: エラー文字列（日本語。行番号は1始まり） or null（妥当）
+// 技名は trim して比較する。'胸尽くし(男)' と '胸尽くし(女)' は別名として扱う（そのまま別の文字列）。
+function validateTechniques(list) {
+  if (!Array.isArray(list)) return '技リストが配列ではありません';
+  if (list.length < 1 || list.length > 200) return '技は1〜200件で指定してください';
+  const seen = Object.create(null);   // 技名が '__proto__' でも壊れないように
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i];
+    const n = i + 1;
+    if (!t || typeof t !== 'object' || Array.isArray(t)) return n + ' 行目の形式が不正です';
+    const name = typeof t.name === 'string' ? t.name.trim() : '';
+    if (!name) return n + ' 行目の技名が空です';
+    if (name.length > 50) return n + ' 行目の技名が長すぎます（50文字まで）';
+    if (seen[name]) return n + ' 行目の技名「' + name + '」が重複しています';
+    seen[name] = true;
+    if (!Array.isArray(t.strikes) || t.strikes.length !== 4) return n + ' 行目の配点は4つ必要です';
+    for (let s = 0; s < 4; s++) {
+      const v = t.strikes[s];
+      if (v === null) continue;
+      if (!Number.isInteger(v) || v < 0 || v > 99) {
+        return n + ' 行目の' + STRIKE_LABELS[s] + 'の配点が不正です（0〜99の整数か空）';
+      }
+    }
+  }
+  return null;
+}
+
+// GET /api/events/:id/techniques : その大会の有効な技リスト
+app.get('/api/events/:id/techniques', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    res.json({ source: techniquesSourceOf(event), techniques: effectiveTechniques(event) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/events/:id/techniques : その大会の技リストを置き換える
+app.put('/api/events/:id/techniques', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const body = req.body || {};
+    const invalid = validateTechniques(body.techniques);
+    if (invalid) return res.status(400).json({ error: invalid });
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    event.techniques = cloneTechniques(body.techniques);
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true, techniques: event.techniques });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/events/:id/techniques : 雛形の複製で置き換える（「雛形に戻す」）
+// 雛形との連動状態には戻さない。戻すと、あとで雛形を変えたときに採点中の大会の配点が動く。
+app.delete('/api/events/:id/techniques', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    event.techniques = cloneTechniques(readTechniques().techniques);
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true, techniques: event.techniques });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
