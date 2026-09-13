@@ -148,13 +148,17 @@ function escapeCSV(field) {
   return str;
 }
 
-// 採点済みかどうかの判定
+// 採点済みかどうかの判定。クライアント側の同じ実装は courts.js の Courts.isScored。
 // result は 1=○, 0=×, 空白=未入力 でエンコードされているため、
 // 0 か 1 を含んでいれば何らかの採点が入っている。
+// 補正点（技ごと・全体）が 0 以外のときも採点済みとみなす
+// （負の補正で score が 0 以下になっても拾えるように、score > 0 だけに頼らない）。
 function isScored(player) {
   if (!player) return false;
   if (typeof player.score === 'number' && player.score > 0) return true;
-  return /[01]/.test(player.result || '');
+  if (/[01]/.test(player.result || '')) return true;
+  if (Array.isArray(player.adjust) && player.adjust.some(n => Number(n))) return true;
+  return !!Number(player.totalAdjust);
 }
 
 // ── order（コート-性別-巡目-番号）の解析と組み立て ──

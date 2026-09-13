@@ -639,6 +639,10 @@
     assert('isScored: result に 0 があれば採点済み（全部×）', Courts.isScored({ score: 0, result: '0    ' }), true);
     assert('isScored: 空なら未採点', Courts.isScored({ score: 0, result: '' }), false);
     assert('isScored: null でも落ちない', Courts.isScored(null), false);
+    assert('isScored: 補正点が入っていれば採点済み', Courts.isScored({ score: 0, result: '', adjust: [0, -2, 0] }), true);
+    assert('isScored: 全体補正点が入っていれば採点済み', Courts.isScored({ score: 0, result: '', totalAdjust: 1 }), true);
+    assert('isScored: 補正点が全部 0 なら未採点', Courts.isScored({ score: 0, result: '', adjust: [0, 0, 0], totalAdjust: 0 }), false);
+    assert('isScored: 負の合計でも result があれば採点済み', Courts.isScored({ score: -3, result: '0    ' }), true);
 
     assert('compareOrder: 番号は数値順（1-2 が 1-10 より前）',
       Courts.compareOrder({ order: 'A-男子-1-2' }, { order: 'A-男子-1-10' }) < 0, true);
