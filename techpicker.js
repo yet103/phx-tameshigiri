@@ -170,6 +170,9 @@ var TechPicker = (function() {
 
     function renderList(query) {
       list.innerHTML = '';
+      // ヘッダー行は .tp-list の中（先頭）に置く。スクロールする要素の中に無いと
+      // classic スクロールバー環境で行側だけ幅が狭くなり列がずれるため（position: sticky で追従させる）。
+      list.appendChild(header);
       var clearItem = document.createElement('button');
       clearItem.type = 'button';
       clearItem.className = 'tp-item tp-clear';
@@ -207,11 +210,14 @@ var TechPicker = (function() {
       });
     }
     renderList('');
-    searchInput.addEventListener('input', function() { renderList(searchInput.value); });
+    searchInput.addEventListener('input', function(ev) {
+      // IME 変換中は確定前の文字で絞り込まない（変換終了時に確定値で最後の input が発火する）
+      if (ev.isComposing) return;
+      renderList(searchInput.value);
+    });
 
     sheet.appendChild(head);
     sheet.appendChild(search);
-    sheet.appendChild(header);
     sheet.appendChild(list);
     overlay.appendChild(sheet);
     document.body.appendChild(overlay);

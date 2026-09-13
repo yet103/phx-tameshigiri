@@ -696,14 +696,14 @@
     assert('strikesLabel: strikes が無ければ空', TechPicker.strikesLabel({}), '');
 
     var ftechs = [{ name: '四方', strikes: [17, 5, 7, 3] }, { name: '夢想返し', strikes: [13, 5, null, null] }, { name: 'Ｋｅｓａ', strikes: [1, null, null, null] }];
-    assert('filter: 空なら全件', TechPicker.filter(ftechs, '').length, 3);
-    assert('filter: 空白だけなら全件', TechPicker.filter(ftechs, '  ').length, 3);
-    assert('filter: 部分一致', TechPicker.filter(ftechs, '返し').map(function(t) { return t.name; }), ['夢想返し']);
-    assert('filter: 全角半角を同一視', TechPicker.filter(ftechs, 'kesa').map(function(t) { return t.name; }), ['Ｋｅｓａ']);
-    assert('filter: 大文字小文字を同一視', TechPicker.filter(ftechs, 'KESA').length, 1);
-    assert('filter: 該当なしは空', TechPicker.filter(ftechs, '存在しない'), []);
-    assert('filter: techs が null でも落ちない', TechPicker.filter(null, 'a'), []);
-    assert('filter: 元の配列を壊さない', (function() { var c = ftechs.slice(); TechPicker.filter(ftechs, '四'); return ftechs.length === c.length; })(), true);
+    assert('TechPicker.filter: 空なら全件', TechPicker.filter(ftechs, '').length, 3);
+    assert('TechPicker.filter: 空白だけなら全件', TechPicker.filter(ftechs, '  ').length, 3);
+    assert('TechPicker.filter: 部分一致', TechPicker.filter(ftechs, '返し').map(function(t) { return t.name; }), ['夢想返し']);
+    assert('TechPicker.filter: 全角半角を同一視', TechPicker.filter(ftechs, 'kesa').map(function(t) { return t.name; }), ['Ｋｅｓａ']);
+    assert('TechPicker.filter: 大文字小文字を同一視', TechPicker.filter(ftechs, 'KESA').length, 1);
+    assert('TechPicker.filter: 該当なしは空', TechPicker.filter(ftechs, '存在しない'), []);
+    assert('TechPicker.filter: techs が null でも落ちない', TechPicker.filter(null, 'a'), []);
+    assert('TechPicker.filter: 元の配列を壊さない（複製を返す）', TechPicker.filter(ftechs, '') !== ftechs, true);
 
     assert('renderChips: 3枠を ①②③ で描く', (function() {
       var el = document.createElement('div');
@@ -807,6 +807,37 @@
       document.querySelector('.tp-close').click();
       return [got, overlays, document.querySelectorAll('.tp-overlay').length];
     })(), [['水月', '', ''], 1, 0]);
+    assert('open: ヘッダー行(.tp-header)は .tp-list の中にある', (function() {
+      TechPicker.open({ techniques: [{ name: '真' }], initial: ['', '', ''], slot: 0 });
+      var header = document.querySelector('.tp-header');
+      var list = document.querySelector('.tp-list');
+      var inside = !!(header && list && list.contains(header));
+      TechPicker.dismiss();
+      return inside;
+    })(), true);
+    assert('open: 検索欄に入力すると一覧が絞り込まれる（先頭は「空にする」のまま）', (function() {
+      TechPicker.open({
+        techniques: [{ name: '真' }, { name: '夢想返し' }],
+        initial: ['', '', ''],
+        slot: 0
+      });
+      var input = document.querySelector('.tp-search input');
+      input.value = '返し';
+      input.dispatchEvent(new Event('input'));
+      var names = Array.prototype.map.call(document.querySelectorAll('.tp-item[data-name]'), function(el) { return el.dataset.name; });
+      var secondChildIsClear = document.querySelector('.tp-list').children[1].classList.contains('tp-clear');
+      TechPicker.dismiss();
+      return [names, secondChildIsClear];
+    })(), [['夢想返し'], true]);
+    assert('open: 該当なしの語では .tp-none が出る', (function() {
+      TechPicker.open({ techniques: [{ name: '真' }], initial: ['', '', ''], slot: 0 });
+      var input = document.querySelector('.tp-search input');
+      input.value = '存在しない技名';
+      input.dispatchEvent(new Event('input'));
+      var hasNone = !!document.querySelector('.tp-none');
+      TechPicker.dismiss();
+      return hasNone;
+    })(), true);
     assert('dismiss: onClose を呼ばずに閉じる', (function(){
       var called = false;
       TechPicker.open({ techniques: [{ name: '真' }], initial: ['真', '', ''], slot: 0,
