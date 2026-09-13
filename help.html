@@ -12,12 +12,12 @@
 <header class="help-band">
   <h1 class="help-title">マニュアル</h1>
   <p class="help-subtitle">運営者・審判のための、大会当日の手引き</p>
-  <nav class="page-links">
+  <nav class="page-links" aria-label="画面の切り替え">
     <a href="index.html">採点</a>
     <a href="admin.html">運営</a>
     <a href="techniques.html">技術リスト編集</a>
     <a href="ranking.html">順位表示</a>
-    <strong>マニュアル</strong>
+    <strong>ヘルプ</strong>
   </nav>
 </header>
 
@@ -121,6 +121,10 @@
   <section class="help-section" id="setup">
     <h2>1. 大会の作成</h2>
 
+    <h3>大会前の準備</h3>
+    <p>前日までに <span class="ui">技術リスト編集</span>（<code>techniques.html</code>）を開いて、技名と配点が今年のものになっているか確かめてください。</p>
+    <div class="note">大会が始まってから配点を変えると、すでに採点した選手の得点は変わらないまま、新しい配点との食い違いが残ります。配点の確認は必ず大会の前に済ませてください。</div>
+
     <h3>大会を作る</h3>
     <p>運営画面（<code>admin.html</code>）を開きます。</p>
     <ol>
@@ -165,11 +169,11 @@
     </figure>
 
     <h3>（b）複数人をまとめて登録する</h3>
-    <p>右上の <span class="ui">⋯</span> →  <span class="ui">👥 複数人をまとめて登録</span> を押します。</p>
+    <p>右上の <span class="ui">⋯</span> → <span class="ui">👥 複数人をまとめて登録</span> を押します。</p>
     <ul>
       <li><span class="ui">コート</span>・<span class="ui">性別</span>・<span class="ui">新人</span> はその場の全員に共通で付きます。</li>
       <li><span class="ui">名前（1行に1人）</span> の欄に名簿を貼り付けます。下に人数が出ます。</li>
-      <li><span class="ui">登録</span> を押すと、その人数がまとめて入ります。</li>
+      <li><span class="ui">登録</span> を押すと <span class="msg">A コート 男子 4 人を登録します。よろしいですか？</span> と確認が出ます。<span class="ui">OK</span> でまとめて入ります。</li>
     </ul>
     <div class="note">技はこの方法では入りません。あとから選手タブで1人ずつ入れてください。コートや性別が違う人は、条件ごとに分けて登録します。</div>
 
@@ -188,13 +192,20 @@
     <p>いちばん簡単な形は次の7列です。1行目は見出し行で、2列目が「コート」であれば、この形として読みます。</p>
     <div class="formula">名前 , コート , 性別 , 技① , 技② , 技③ , 新人</div>
     <ul>
-      <li>性別は <span class="ui">女</span> <span class="ui">女子</span> <span class="ui">○</span> <span class="ui">F</span> のいずれかで女子、ほかは男子になります。</li>
+      <li>性別は <span class="ui">女</span> <span class="ui">女子</span> <span class="ui">○</span> <span class="ui">F</span> <span class="ui">f</span> のいずれかで女子、ほかは男子になります。</li>
       <li>新人は <span class="ui">○</span> <span class="ui">1</span> <span class="ui">はい</span> <span class="ui">新人</span> のいずれかで新人になります。</li>
       <li>順番はサーバーが自動で採番します。CSV に書く必要はありません。</li>
-      <li>コート名に <span class="ui">-</span> は使えません。<span class="ui">未分類</span> も使えません。</li>
+      <li>コート名は32文字までです。<span class="ui">-</span> は使えません。<span class="ui">未分類</span> も使えません。</li>
     </ul>
     <p>採点画面の <span class="ui">CSVエクスポート</span> が出す従来の形（<span class="ui">選手名</span> <span class="ui">順番</span> … の15列）もそのまま読み込めます。この形では順番は CSV の値をそのまま使います。</p>
-    <div class="note">すでに選手がいる大会に読み込むと、<span class="term">クリアして読み込む</span>か<span class="term">追記する</span>かを聞かれます。採点済みの選手がいるときは、失われる人数を示して、もう一度確認します。他のコートの採点も消えるので、当日はできるだけ追記を選んでください。</div>
+
+    <p>すでに選手がいる大会に読み込むと、確認が順に出ます。</p>
+    <ul>
+      <li><span class="msg">既存データをクリアして読み込みますか？（キャンセルで追記）</span> — <span class="ui">OK</span> でクリア、<span class="ui">キャンセル</span> で追記になります。</li>
+      <li><span class="term">クリア</span>を選び、採点済みの選手がいるときは、失われる人数を示してもう一度確認します。他のコートの採点も一緒に消えます。</li>
+      <li><span class="term">追記</span>を選ぶと <span class="msg">同じ順番の選手がいると重複します。追記しますか？</span> と別の確認が出ます。</li>
+    </ul>
+    <div class="note">当日はできるだけ追記を選んでください。クリアして入れ直すと選手の ID が変わるため、その前に採点していたコートの端末で「保存できなかった採点が n 件あります」が出ることがあります（§5 を見てください）。</div>
 
     <h3>技の選び方</h3>
     <p>技の枠（<span class="ui">①</span> <span class="ui">②</span> <span class="ui">③</span>）をタップすると、技を選ぶシートが開きます。</p>
@@ -202,16 +213,27 @@
       <li>上の欄に技名を打つと絞り込めます（<span class="ui">技名で絞り込み</span>）。</li>
       <li>見出し行は <span class="ui">技名</span> <span class="ui">初太刀</span> <span class="ui">二ノ太刀</span> <span class="ui">三ノ太刀</span> <span class="ui">四ノ太刀</span> で、右側の数字がその太刀の配点です。</li>
       <li><span class="ui">—</span> はその太刀を打たないという意味です。採点画面でも灰色になり、押せません。</li>
-      <li>いちばん上の <span class="ui">（この枠を空にする）</span> を選ぶと、その枠を空にできます。技は3つに満たなくてもかまいません。</li>
+      <li>いちばん上の <span class="ui">（この枠を空にする）</span> を選ぶと、その枠を空にできます。</li>
     </ul>
+    <p>技は一巡目・二巡目とも3つ入れるのが基本です。事情があれば2つでも採点はできます。</p>
+    <div class="note"><span class="term">男女で配点が違う技があります。</span><span class="ui">胸尽くし</span>・<span class="ui">水月</span>・<span class="ui">破図味</span> には <span class="ui">(男)</span> と <span class="ui">(女)</span> が付いた2つの行があり、別の技として扱われます。選手の性別と同じほうを選んでください。違うほうを選んでもエラーは出ず、選んだ行の配点でそのまま計算されます。</div>
 
     <figure class="shot-mobile">
       <img src="help/img/admin_tech_sheet.png" loading="lazy" alt="技を選ぶシート。上に絞り込みの入力欄、見出し行、技名と各太刀の配点の一覧。">
       <figcaption>技を選ぶシート。見出しは <span class="ui">1つ目の技を選ぶ</span> のように、どの枠を選んでいるかを示します。</figcaption>
     </figure>
 
+    <h3>選手を直す・消す</h3>
+    <p>選手タブの行をタップすると <span class="ui">選手を編集</span> のシートが開きます。名前・コート・性別・新人・技を直して <span class="ui">保存</span> を押します。</p>
+    <ul>
+      <li>採点済みの選手の性別や技を変えると <span class="msg">この選手は採点済みです（n点）。得点が変わる可能性があります。採点画面でこの選手を開き直してください。</span> と確認が出ます。得点はサーバーでは計算し直されないので、採点画面で開き直してください。</li>
+      <li>同じシートの <span class="ui">この選手を削除</span> で消せます。一巡目の選手を消すときは <span class="msg">二巡目の行は残ります。</span> と断りが出ます。</li>
+      <li>採点済みの選手を消すときは <span class="msg">削除すると採点結果は戻せません。</span> ともう一度確認が出ます。</li>
+    </ul>
+
     <h3>順番の付きかた</h3>
     <p>順番は <span class="ui">コート-性別-巡目-番号</span> の形で自動で付きます。たとえば <span class="ui">A-男子-1-1</span> は「A コートの男子、一巡目の1番」です。</p>
+    <p>二巡目の並び順は一巡目と変わります。§2 の「二巡目に進む」を見てください。</p>
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
   </section>
 
@@ -279,23 +301,25 @@
 
     <h3>コートの端末で採点画面を開く</h3>
     <p>運営画面の <span class="ui">進行</span> タブで、そのコートのチップ（<span class="ui">A コート</span> や <span class="ui">B コート</span>）を押してから <span class="ui">採点画面へ</span> を押します。絞り込み中のコートのまま採点画面が開きます。</p>
-    <p>開いた採点画面の URL には大会とコートが入っています。その URL をコートの端末でブックマークしておくと、翌年以降も同じ手順で開けます。</p>
+    <p>開いた採点画面の URL には大会とコートが入っています（<code>#event/大会ID/コート</code>）。この URL のおかげで、当日はタブを閉じたり端末を再起動したりしても、同じ大会・同じコートに戻れます。</p>
+    <div class="note">URL は大会ごとに違います。次の大会では URL も変わるので、運営画面の <span class="ui">採点画面へ</span> から開き直してください。</div>
 
     <h3>採点画面の見方</h3>
 
     <figure>
-      <img src="help/img/scoring_tablet.png" loading="lazy" alt="タブレットで開いた採点画面。上から、大会とコートの選択バー、選手名の帯、タイマー、採点表、全体補正点と備考、形成功・失敗・確定のボタンと合計、下部の選手一覧。">
+      <img src="help/img/scoring_tablet.png" loading="lazy" alt="タブレットで開いた採点画面。上から、大会とコートの選択バー、選手名の帯、タイマー、採点表、全体補正点と備考、形成功・失敗・確定のボタンと合計、ツールバー、下部の選手一覧。">
       <figcaption>
-        <span class="cap-head">採点画面（タブレット。確定済みの選手）</span>
+        <span class="cap-head">採点画面（タブレット。確定済みの選手）— 画面の上から順に</span>
         <ul>
-          <li>①上のバー — 大会とコートを選びます。右の <span class="ui">● 保存済み</span> がサーバーへの保存の様子です。</li>
+          <li>①大会バー — 大会とコートを選びます。右の <span class="ui">● 保存済み</span> がサーバーへの保存の様子です。同じバーの <span class="ui">大会削除</span> は確認1回で消えるので、押し間違えに注意してください。</li>
           <li>②選手の帯 — コートのバッジ・順番・名前。<span class="ui">◀ 前の選手</span> <span class="ui">次の選手 ▶</span> で移ります。</li>
-          <li>③タイマー — <span class="ui">▶ 開始</span> <span class="ui">■ 停止</span> <span class="ui">↺ リセット</span>。5分から0へ向かって数えます。</li>
-          <li>④採点表 — 技名をタップするとその行が選ばれます（黒く反転します）。太刀のセルは押すたびに <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と変わります。灰色のセルは、その技で打たない太刀です。</li>
-          <li>⑤<span class="ui">形成功</span> <span class="ui">失敗</span> — どちらも選択中の行にだけ効きます。<span class="ui">形成功</span> は打つ太刀を全部「成功」に、<span class="ui">失敗</span> は「未」のセルだけを「失敗」にします（すでに成功のセルは変えません）。</li>
-          <li>⑥補正点 — 表の <span class="ui">補正点</span> 欄はその技だけに、表の下の <span class="ui">全体補正点</span> は選手全体に効きます。マイナスも入れられます。<span class="ui">備考</span> は得点に影響しません（200文字まで）。</li>
-          <li>⑦<span class="ui">確定</span> — 押すと <span class="ui">確定済み</span> になり、得点と合計が青くなります。得点に関わる編集をすると、自動で確定が外れます。</li>
-          <li>⑧選手一覧 — 行をタップするとその選手に切り替わります。見出しの <span class="ui">▾ 選手一覧</span> で開閉できます。</li>
+          <li>③タイマー — <span class="ui">▶ 開始</span> <span class="ui">■ 停止</span> <span class="ui">↺ リセット</span>。5分から0へ向かって数えます。選手を切り替えると自動で <span class="ui">05:00</span> に戻ります。</li>
+          <li>④採点表 — 技名をタップするとその行が選ばれます（黒く反転します）。太刀のセルは押すたびに <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と変わります。灰色のセルは、その技で打たない太刀です。<span class="term">行がまるごと灰色で得点の欄も空のときは、その技名が技術リストに無い状態です</span>（配点を引けず0点のままになります）。§5 の「技が見つからない」を見てください。</li>
+          <li>⑤<span class="ui">補正点</span>・<span class="ui">得点</span> の列 — <span class="ui">補正点</span> はその技だけに効きます。マイナスも入れられます。<span class="ui">得点</span> はその行の合計で、こちらは自動です。</li>
+          <li>⑥<span class="ui">全体補正点</span>・<span class="ui">備考</span> — <span class="ui">全体補正点</span> は選手全体に効きます。<span class="ui">備考</span> は得点に影響しません（200文字まで）。</li>
+          <li>⑦<span class="ui">形成功</span> <span class="ui">失敗</span> <span class="ui">確定</span> と <span class="ui">合計</span> — <span class="ui">形成功</span> <span class="ui">失敗</span> はどちらも選択中の行にだけ効きます。<span class="ui">形成功</span> は打つ太刀を全部「成功」に、<span class="ui">失敗</span> は「未」のセルだけを「失敗」にします（すでに成功のセルは変えません）。<span class="ui">確定</span> を押すと <span class="ui">確定済み</span> になり、得点と合計が青くなります。得点に関わる編集をすると、自動で確定が外れます。</li>
+          <li>⑧ツールバー — <span class="ui">CSVエクスポート</span> で全選手の内訳を、<span class="ui">HTML保存</span> で成績表を保存できます。<span class="ui">🌙 ダーク</span> で暗い配色に切り替わります。</li>
+          <li>⑨選手一覧 — 行をタップするとその選手に切り替わります。見出しの <span class="ui">▾ 選手一覧</span> で開閉できます。</li>
         </ul>
       </figcaption>
     </figure>
@@ -315,10 +339,15 @@
     <ol>
       <li>上に <span class="ui">一巡目 採点済み 8 / 8</span> のように進み具合が出ます。全員終わっているか確かめます。</li>
       <li><span class="ui">二巡目を生成</span> を押す。確認のあと、全コート分の二巡目の行ができます。</li>
-      <li>行ごとに <span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> をタップして技を入れます。赤い枠はまだ空という意味です。</li>
+      <li>行ごとに <span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> をタップして技を入れます。赤い枠はまだ空という意味です。3つ入れるのが基本です。</li>
       <li>一巡目と同じ技でよければ <span class="ui">一巡目と同じ技をコピー</span> を押すだけで済みます。</li>
     </ol>
     <p>技が入ると、各コートの採点画面の選手一覧に二巡目の選手が並びます。</p>
+
+    <h3>二巡目の並び順</h3>
+    <p>二巡目の出番は、<span class="term">一巡目の得点が低い人から</span>の順になります。同じコートでは女子が先です。一巡目とは出番の順が変わるので、番号を読み上げるときは気をつけてください。</p>
+    <div class="note">未採点が残ったまま <span class="ui">二巡目を生成</span> を押すと <span class="msg">未採点が n 名います。このまま生成すると、あとから入る一巡目の得点は二巡目の並び順に反映されません。</span> と確認が出ます。並び順を正しくするため、全員の採点が終わってから押してください。</div>
+    <p>コートが決まっていない選手の二巡目は作れません。生成のあとのトーストに <span class="msg">（コート未設定の n 名は作っていません）</span> と出ます。選手タブでコートを設定してから、もう一度生成してください。</p>
 
     <figure class="shot-mobile">
       <img src="help/img/admin_round.png" loading="lazy" alt="運営画面の進行タブ。一巡目の採点済み数、「二巡目を生成」「採点画面へ」、コート絞り込み、二巡目の選手と技の枠。">
@@ -334,10 +363,12 @@
     <p>採点はいったん端末に貯めてからサーバーへ送ります。電波が弱くても、採点そのものは止まりません。</p>
     <ul>
       <li><span class="ui">● 保存済み</span> — サーバーまで届いています。</li>
+      <li><span class="ui">◌ 保存中…</span> — いま送っているところです。</li>
       <li><span class="ui">⚠ 未保存 3 件・再送中</span> — まだ届いていない採点があり、送り直しています。そのまま採点を続けてかまいません。</li>
       <li>最初の失敗から30秒たっても残っていると、上に <span class="ui">⚠ サーバーに保存できていません</span> のバナーと <span class="ui">今すぐ再試行</span> ボタンが出ます。通信を確かめてから押してください。</li>
     </ul>
-    <div class="note">未保存が残っている間は、その端末を閉じたりページを離れたりしないでください。離れようとすると確認が出ます。</div>
+    <p>貯めた分は端末の中（ブラウザの保存領域）にも控えます。電池切れやアプリの再起動で消えることはありません。次にその端末で採点画面を開くと <span class="msg">前回未送信の採点 n 件を送信します。</span> と出て、自動で送り直します。</p>
+    <div class="note">控えはその端末のそのブラウザにしかありません。別の端末や別のブラウザからは送れませんし、ブラウザのサイトデータを消すと失われます。できるだけ <span class="ui">● 保存済み</span> になってから閉じてください。未保存のままページを離れようとすると確認が出ます。</div>
 
     <h3>ほかの端末が書いた内容の取り込み</h3>
     <p>選手を切り替えたときと、ほかのアプリから採点画面に戻ってきたときに、サーバーから読み直します。運営画面や別のコートが付けた確定・備考・得点は、このときに画面へ入ります。</p>
@@ -361,7 +392,7 @@
 
     <h3>技の配点を変える</h3>
     <p>配点は <span class="ui">技術リスト編集</span>（<code>techniques.html</code>）で変えられます。技名ごとに <span class="ui">初太刀</span> から <span class="ui">四ノ太刀</span> までの点を入れ、<span class="ui">保存</span> を押します。</p>
-    <div class="note">配点を変えても、すでに採点した選手の得点は変わりません。変えたときは、その技を使った選手を採点画面で開き直して採点し直してください。大会が始まってからの変更は避けるのが安全です。</div>
+    <div class="note">配点を変えても、すでに採点した選手の得点は変わりません。変えたときは、その技を使った選手を採点画面で開き直して採点し直してください。大会が始まってからの変更は避けてください。</div>
 
     <h3>部門と順位</h3>
     <ul>
@@ -370,11 +401,13 @@
       <li>順位は同じ名前の選手の得点を足し合わせて付きます。つまり<span class="term">一巡目と二巡目の合計</span>で並びます。</li>
       <li>同点は同順位です。同点が2人いたら、次の人は3位になります。</li>
     </ul>
+    <div class="note">合算は<span class="term">氏名だけ</span>で行います。同姓同名の別人がいると、1人として足されてしまいます。名簿の段階で区別できる名前にしておいてください。</div>
 
     <h3>確認する場所</h3>
     <ul>
       <li><span class="term">運営画面の結果タブ</span> — <span class="ui">最新に更新</span> を押すと、サーバーの最新の順位を読み直します。</li>
       <li><span class="term">順位表示ページ</span>（<code>ranking.html</code>） — 大会を選んで <span class="ui">大会データを読み込む</span>。<span class="ui">HTMLダウンロード</span> で1枚の成績表として保存できます。</li>
+      <li><span class="term">運営画面の進行タブ</span> — 右上の <span class="ui">⋯</span> → <span class="ui">CSVエクスポート</span> で全選手の内訳を保存できます。</li>
       <li><span class="term">採点画面</span> — <span class="ui">CSVエクスポート</span> で全選手の内訳を、<span class="ui">HTML保存</span> で成績表を保存できます。</li>
     </ul>
 
@@ -431,12 +464,12 @@
     <h3>参加者に配る（共有リンク）</h3>
     <ol>
       <li>結果タブで <span class="ui">共有リンクをコピー</span> を押す。</li>
-      <li><span class="ui">リンクをコピーしました</span> と出たら、その URL を配ります（コピーできない環境では、URL がそのまま表示されます）。</li>
+      <li><span class="msg">リンクをコピーしました</span> と出たら、その URL を配ります（コピーできない環境では、URL がそのまま表示されます）。</li>
     </ol>
     <ul>
       <li>URL は <code>share.html#（トークン）</code> の形です。大会ごとに1本で、何度押しても同じ URL が返ります。</li>
       <li>受け取った人は、ログインなしで順位だけを見られます。採点や書き換えはできません。</li>
-      <li>採点が進んだあとでも、同じ URL を開き直せば最新の順位が出ます。配り直す必要はありません。</li>
+      <li>ページを開いたままにしておくと、60秒ごとに自動で最新の順位に変わります。配り直す必要はありません。</li>
     </ul>
 
     <figure class="shot-mobile">
@@ -484,8 +517,9 @@
     <p>その選手にまだ技が入っていません。運営画面の <span class="ui">進行</span> タブでその選手の <span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> をタップして技を入れてください。<span class="ui">一巡目と同じ技をコピー</span> でもかまいません。</p>
 
     <h3>「内訳を復元できません（技の数が変わっています）。」と出る</h3>
-    <p>採点したあとで技の数が変わった選手です。前の内訳はもう表に戻せません。その場で採点し直してください。採点し直すと、表示されている今の得点は置き換わります。</p>
-    <p>採点し直すまでは、その選手のデータは書き換えられません。選手を切り替えても得点は消えないので、あわてなくて大丈夫です。</p>
+    <p>採点したあとで技の数が変わった選手です。前の内訳はもう表に戻せません。その場で採点し直してください。</p>
+    <p>表に触ると <span class="msg">記録済みの n点 を、いま入力する内容で置き換えます。よろしいですか？</span> と確認が出ます。<span class="ui">OK</span> を押してから採点し直してください。</p>
+    <p>採点し直すまでは、その選手のデータは書き換えられません。選手を切り替えても得点は消えないので、あわてなくて大丈夫です。<span class="ui">備考</span> だけは、復元できない選手でもそのまま保存できます。</p>
 
     <h3>「⚠ 未保存 n 件・再送中」が消えない</h3>
     <p>サーバーに届いていない採点が残っています。</p>
@@ -494,10 +528,20 @@
       <li>端末を閉じずにそのまま待つ。つながれば自動で送られます。</li>
       <li>バナーの <span class="ui">今すぐ再試行</span> を押す。</li>
     </ol>
-    <div class="note">未保存が残っている端末を閉じると、その採点は失われます。0件（<span class="ui">● 保存済み</span>）になってから閉じてください。</div>
+    <p>閉じてしまっても、同じ端末の同じブラウザで採点画面を開き直せば <span class="msg">前回未送信の採点 n 件を送信します。</span> と出て送り直せます。ただし別の端末からは送れないので、できるだけ <span class="ui">● 保存済み</span> になってから閉じてください。</p>
+
+    <h3>「保存できなかった採点が n 件あります」と出る</h3>
+    <p>送ろうとした選手が、サーバーの名簿からいなくなっています。名簿を <span class="term">クリアして読み込む</span> で入れ直した直後に起きます。入れ直すと選手の ID が変わるため、その前に採点していた分は送り先を失います。</p>
+    <p>ダイアログに選手 ID と点数が並びます。該当する選手を採点画面で開き、採点を確認して入力し直してください。</p>
 
     <h3>技が見つからない</h3>
-    <p>技を選ぶシートの絞り込みに出てこないときは、<span class="ui">技術リスト編集</span> にその技があるか確かめてください。無ければ行を足して <span class="ui">保存</span> します。</p>
+    <p>技を選ぶシートの絞り込みに出てこない、あるいは採点表の行がまるごと灰色になるときは、その技名が <span class="ui">技術リスト編集</span> にあるか確かめてください。</p>
+    <div class="note">技術リスト編集では<span class="term">行を足せません</span>。できるのは、すでにある行の技名と配点を書き換えて <span class="ui">保存</span> するか、<span class="ui">デフォルトに戻す</span> かのどちらかです。</div>
+    <p>対処は2つあります。</p>
+    <ol>
+      <li>使っていない行の技名と配点を書き換えて <span class="ui">保存</span> する。</li>
+      <li>選手の技を、リストにある名前に直す。運営画面の選手タブで選手をタップ → <span class="ui">選手を編集</span> のシートで技の枠から選び直します。</li>
+    </ol>
     <p>技名は完全に一致したものを探します。前後に空白が入っていると別の技として扱われ、配点が0になります。</p>
 
     <h3>二巡目を生成できない</h3>
@@ -510,8 +554,8 @@
     </ul>
 
     <figure class="shot-mobile">
-      <img src="help/img/admin_menu.png" loading="lazy" alt="運営画面の右上「⋯」メニュー。採点画面・技術リスト編集・順位表示の項目。">
-      <figcaption>運営画面の <span class="ui">⋯</span> メニュー。<span class="ui">❓ ヘルプ</span> は <span class="ui">🏆 順位表示</span> の下に並びます（この画像はヘルプを足す前のものです）。</figcaption>
+      <img src="help/img/admin_menu.png" loading="lazy" alt="運営画面の右上「⋯」メニュー。採点画面・技術リスト編集・順位表示・ヘルプの項目。">
+      <figcaption>運営画面の <span class="ui">⋯</span> メニュー。<span class="ui">❓ ヘルプ</span> は <span class="ui">🏆 順位表示</span> の下にあります。</figcaption>
     </figure>
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
   </section>

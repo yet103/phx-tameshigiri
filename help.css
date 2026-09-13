@@ -123,7 +123,8 @@ code {
 }
 .help-section li { margin-bottom: 4px; }
 
-/* 画面の文言（ボタン名・見出し）はこの体裁で示す */
+/* 画面の文言（ボタン名・見出し・状態表示）はこの体裁で示す。
+   短いので折り返さない。 */
 .ui {
   display: inline-block;
   background: var(--bg-secondary);
@@ -132,6 +133,16 @@ code {
   padding: 0 5px;
   font-size: 14px;
   white-space: nowrap;
+}
+/* 確認ダイアログ・トーストの文。.ui と違い1文まるごとなので必ず折り返す
+   （nowrap のままだとスマホ幅でページごと横にはみ出す）。
+   box-decoration-break は既定の slice のままにすること。clone にすると
+   折り返した各行が枠で囲まれ、1つの文が別々の文言に見えてしまう。 */
+.msg {
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--gold-deep);
+  padding: 0 5px;
+  font-size: 14px;
 }
 /* 用語の言い換え */
 .term { font-weight: bold; }
