@@ -97,6 +97,28 @@ var Api = (function() {
     }
   }
 
+  async function createPlayersBulk(eventId, data) {
+    // POST /api/events/:eventId/players/bulk
+    // Body: { court, isFemale, isNewFace, names: ['名前', ...] }
+    // 戻り値: { created, players } | { error } (400/404: 失敗理由を画面に出すため) | null（通信失敗）
+    // 1回の書き込みで コート×性別×一巡目 の続き番号を順に付ける。技は空で作る。
+    try {
+      var res = await fetch('/api/events/' + eventId + '/players/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) {
+        var errJson = await res.json();
+        return { error: errJson.error };
+      }
+      var json = await res.json();
+      return { created: json.created || 0, players: json.players || [] };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function updatePlayerInfo(eventId, playerId, data) {
     // PATCH /api/events/:eventId/players/:playerId（運営画面の編集専用）
     // Body: { name, tech1, tech2, tech3, isNewFace, isFemale, score, result, court, round }
@@ -142,7 +164,8 @@ var Api = (function() {
     // POST /api/events/:eventId/import
     // Body: { csvText, mode: 'replace' | 'append', force }
     // 戻り値: { success: true, playerCount } |
-    //         { blocked: true, scoredCount } (409: 採点済みデータあり) | null
+    //         { blocked: true, scoredCount } (409: 採点済みデータあり) |
+    //         { success: false, error } (その他の4xx: 失敗理由を画面に出すため) | null（通信失敗）
     try {
       var res = await fetch('/api/events/' + eventId + '/import', {
         method: 'POST',
@@ -153,7 +176,10 @@ var Api = (function() {
         var conflict = await res.json();
         return { blocked: true, scoredCount: conflict.scoredCount || 0 };
       }
-      if (!res.ok) return null;
+      if (!res.ok) {
+        var errJson = await res.json();
+        return { success: false, error: errJson.error };
+      }
       return await res.json();
     } catch (e) {
       return null;
@@ -352,6 +378,7 @@ var Api = (function() {
     deleteEvent: deleteEvent,
     updatePlayer: updatePlayer,
     createPlayer: createPlayer,
+    createPlayersBulk: createPlayersBulk,
     updatePlayerInfo: updatePlayerInfo,
     deletePlayer: deletePlayer,
     importCsv: importCsv,

@@ -474,6 +474,67 @@ app.post('/api/events/:id/players', (req, res) => {
   }
 });
 
+// POST /api/events/:id/players/bulk : 同じコート・性別・新人区分の選手をまとめて追加（一巡目、技は空）
+// 名前は1件ずつ trim して空を除く。コート・性別・巡目は全員共通なので nextOrderNumber は
+// 最初に1回だけ求め、あとは連番で増やす（毎回 concat して数え直すと件数の二乗のコストになる）。
+app.post('/api/events/:id/players/bulk', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const body = req.body || {};
+    const court = typeof body.court === 'string' ? body.court.trim() : '';
+    if (!isValidCourt(court)) {
+      return res.status(400).json({ error: '不正なコート名です' });
+    }
+    if (!Array.isArray(body.names)) {
+      return res.status(400).json({ error: '名前の配列が必要です' });
+    }
+    if (body.names.length > 500) {
+      return res.status(400).json({ error: '一度に登録できるのは500名までです' });
+    }
+    const names = body.names
+      .map(n => (typeof n === 'string' ? n.trim() : ''))
+      .filter(n => n !== '');
+    if (names.length === 0) {
+      return res.status(400).json({ error: '登録する名前がありません' });
+    }
+
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (!Array.isArray(event.players)) event.players = [];
+
+    const isFemale = body.isFemale === true;
+    const isNewFace = body.isNewFace === true;
+    const gender = isFemale ? '女子' : '男子';
+    let n = nextOrderNumber(event.players, court, gender, 1);
+    const created = names.map(name => {
+      const player = {
+        id: generateId(),
+        name: name,
+        order: buildOrder(court, isFemale, 1, n),
+        tech1: '',
+        tech2: '',
+        tech3: '',
+        score: 0,
+        isNewFace: isNewFace,
+        isFemale: isFemale,
+        result: ''
+      };
+      n++;
+      return player;
+    });
+
+    event.players = event.players.concat(created);
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.status(201).json({ success: true, created: created.length, players: created });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/events/:id/players/:playerId : 選手の部分更新（採点と運営編集の共用）
 // 受理するフィールドは allowlist に限る。単純マージだと id / order / 未知のキーまで
 // クライアントが書き込めてしまう。
@@ -628,35 +689,74 @@ app.post('/api/events/:id/import', (req, res) => {
       return res.status(400).json({ error: '空のデータです' });
     }
     
-    // 1行目はヘッダーなのでスキップ
+    // 先頭行で形式を判別する（設計書 T5「サーバー」の表）
+    //   2列目が「コート」 → 簡易7列（名前,コート,性別,技①,技②,技③,新人）。順番はサーバーが採番
+    //   それ以外          → 従来9列／拡張15列（補正点1..3,全体補正,備考,確定）。順番は CSV の値
+    const header = lines[0].map(c => String(c || '').trim());
+    const isSimple = header[1] === 'コート';
     const dataLines = lines.slice(1);
-    
-    const importedPlayers = dataLines.map(row => {
-      // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果
-      const name = row[0] || '';
-      const order = row[1] || '';
-      const tech1 = row[2] || '';
-      const tech2 = row[3] || '';
-      const tech3 = row[4] || '';
-      const scoreRaw = row[5];
-      const score = parseFloat(scoreRaw) || 0;
-      const isNewFace = row[6] === '○';
-      const isFemale = row[7] === '○';
-      const result = row[8] || '';
-      
-      return {
-        id: generateId(),
-        name,
-        order,
-        tech1,
-        tech2,
-        tech3,
-        score,
-        isNewFace,
-        isFemale,
-        result
-      };
-    }).filter(p => p.name !== ''); // 空行等を除外
+    const toInt = v => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : 0; };
+    const truthy = v => ['○', '1', 'はい', '新人'].indexOf(String(v || '').trim()) !== -1;
+    const femaleMark = v => ['女', '女子', '○', 'F', 'f'].indexOf(String(v || '').trim()) !== -1;
+
+    let importedPlayers;
+    if (isSimple) {
+      // 採番の土台: replace なら空、append なら既存の選手
+      const base = mode === 'replace' ? [] : (event.players || []);
+      importedPlayers = [];
+      for (let i = 0; i < dataLines.length; i++) {
+        const row = dataLines[i];
+        const name = String(row[0] || '').trim();
+        if (!name) continue;
+        const court = String(row[1] || '').trim();
+        if (!isValidCourt(court)) {
+          return res.status(400).json({ error: (i + 2) + ' 行目のコート名が不正です' });
+        }
+        const isFemale = femaleMark(row[2]);
+        const gender = isFemale ? '女子' : '男子';
+        const n = nextOrderNumber(base.concat(importedPlayers), court, gender, 1);
+        importedPlayers.push({
+          id: generateId(),
+          name,
+          order: buildOrder(court, isFemale, 1, n),
+          // 末尾に空白が残ると Scoring.findTechnique の完全一致に掛からず配点が
+          // 全部0になる（手入力・コピペ由来の空白を落とす）。
+          tech1: String(row[3] || '').trim(),
+          tech2: String(row[4] || '').trim(),
+          tech3: String(row[5] || '').trim(),
+          score: 0,
+          isNewFace: truthy(row[6]),
+          isFemale,
+          result: ''
+        });
+      }
+    } else {
+      // 拡張15列かどうかは先頭行（ヘッダー）の列数で一度だけ決める（設計書 T5 の表）。
+      // 行ごとに判定すると、行によって列数が違う崩れたCSVで挙動が揺れる。
+      const isExtended = header.length >= 10;
+      importedPlayers = dataLines.map(row => {
+        // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定]
+        const p = {
+          id: generateId(),
+          name: row[0] || '',
+          order: row[1] || '',
+          tech1: row[2] || '',
+          tech2: row[3] || '',
+          tech3: row[4] || '',
+          score: parseFloat(row[5]) || 0,
+          isNewFace: row[6] === '○',
+          isFemale: row[7] === '○',
+          result: row[8] || ''
+        };
+        if (isExtended) {
+          p.adjust = [toInt(row[9]), toInt(row[10]), toInt(row[11])];
+          p.totalAdjust = toInt(row[12]);
+          p.note = String(row[13] || '').trim().slice(0, 200);
+          p.confirmed = String(row[14] || '').trim() === '○';
+        }
+        return p;
+      }).filter(p => p.name !== ''); // 空行等を除外
+    }
     
     if (mode === 'replace') {
       event.players = importedPlayers;

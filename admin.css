@@ -25,7 +25,7 @@ button {
   color: var(--text);
 }
 
-input[type="text"], input[type="date"] {
+input[type="text"], input[type="date"], textarea {
   font-family: inherit;
   font-size: 16px;        /* 16px 未満だと iOS がフォーカス時にページを拡大する */
   width: 100%;
@@ -35,6 +35,7 @@ input[type="text"], input[type="date"] {
   border-radius: 6px;
   background: var(--bg);
   color: var(--text);
+  resize: vertical;
 }
 
 /* ===== 上部バー ===== */
@@ -154,6 +155,7 @@ main { padding: 8px 12px 16px; }
 .seg button.on { background: var(--accent); color: var(--accent-text); font-weight: bold; }
 .toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .toggle input { width: 22px; height: 22px; }
+.bulk-count { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
 /* 技チップ */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }

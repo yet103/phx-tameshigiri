@@ -68,6 +68,31 @@
     assert('loadEvent name', loaded.name, 'テスト大会');
     assert('loadEvent players空', loaded.players.length, 0);
 
+    // 一括登録
+    var bulk = await Api.createPlayersBulk(testEventId, {
+      court: 'B', isFemale: true, isNewFace: true, names: ['佐藤 花', '', '  ', '鈴木 梅 ', '高橋 桜']
+    });
+    assert('bulk: 空行を除いた人数を作る', bulk.created, 3);
+    assert('bulk: 順番はコート×性別で連番', bulk.players.map(function(p) { return p.order; }), ['B-女子-1-1', 'B-女子-1-2', 'B-女子-1-3']);
+    assert('bulk: 名前は trim', bulk.players[1].name, '鈴木 梅');
+    assert('bulk: 性別・新人が付く', [bulk.players[0].isFemale, bulk.players[0].isNewFace], [true, true]);
+    assert('bulk: 技は空', [bulk.players[0].tech1, bulk.players[0].tech2, bulk.players[0].tech3], ['', '', '']);
+    var bulk2 = await Api.createPlayersBulk(testEventId, { court: 'B', isFemale: true, isNewFace: false, names: ['田中 藤'] });
+    assert('bulk: 既存の続きから採番', bulk2.players[0].order, 'B-女子-1-4');
+    var bulkEmptyNames = await Api.createPlayersBulk(testEventId, { court: 'B', isFemale: false, names: ['', ' '] });
+    assert('bulk: 名前が全部空なら理由を返す', bulkEmptyNames && bulkEmptyNames.error, '登録する名前がありません');
+    var bulkBadCourt = await Api.createPlayersBulk(testEventId, { court: 'A-1', isFemale: false, names: ['x'] });
+    assert('bulk: 不正なコートは理由を返す', bulkBadCourt && bulkBadCourt.error, '不正なコート名です');
+    var bulkNotArray = await Api.createPlayersBulk(testEventId, { court: 'B', isFemale: false, names: 'x' });
+    assert('bulk: names が配列でなければ理由を返す', bulkNotArray && bulkNotArray.error, '名前の配列が必要です');
+    var manyNames = [];
+    for (var mi = 0; mi < 501; mi++) manyNames.push('大量' + mi);
+    var bulkTooMany = await Api.createPlayersBulk(testEventId, { court: 'B', isFemale: false, names: manyNames });
+    assert('bulk: 501件は理由を返す', bulkTooMany && bulkTooMany.error, '一度に登録できるのは500名までです');
+    var bulkLoaded = await Api.loadEvent(testEventId);
+    assert('bulk: 大会に4名入っている', bulkLoaded.players.length, 4);
+    await Api.importCsv(testEventId, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n', 'replace');   // 後続のテストのため空に戻す
+
     // CSVインポートテスト
     var csv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n山田 太郎,A-男子-1-1,破図味,夢想返し,響き返し,55,,,';
     var importResult = await Api.importCsv(testEventId, csv, 'replace');
@@ -78,6 +103,61 @@
     var reloaded = await Api.loadEvent(testEventId);
     assert('import後 player名', reloaded.players[0].name, '山田 太郎');
     assert('import後 tech1', reloaded.players[0].tech1, '破図味');
+
+    // 簡易列の CSV（順番はサーバーが採番）
+    var simpleCsv = '名前,コート,性別,技①,技②,技③,新人\n' +
+      '簡易 一郎,A,男,四方,,,\n' +
+      '簡易 二子,A,女子,水月,陽中陰,夢想返し,○\n' +
+      '簡易 三郎,A,男子,,,,1\n' +
+      ',A,男,,,,\n' +
+      '簡易 四子,B,○,,,,';
+    // 直前の「CSVインポートテスト」で score=55 の選手が入っており isScored 判定に
+    // 引っかかるため、この置換は force で通す（検証したいのは形式判別であって
+    // 採点済みガードではないため）。
+    var simpleRes = await Api.importCsv(testEventId, simpleCsv, 'replace', true);
+    assert('簡易CSV: 空の名前を飛ばす', simpleRes.playerCount, 4);
+    var simpleLoaded = await Api.loadEvent(testEventId);
+    var sp = simpleLoaded.players;
+    assert('簡易CSV: 順番はコート×性別で採番', sp.map(function(p) { return p.order; }), ['A-男子-1-1', 'A-女子-1-1', 'A-男子-1-2', 'B-女子-1-1']);
+    assert('簡易CSV: 技', [sp[1].tech1, sp[1].tech2, sp[1].tech3], ['水月', '陽中陰', '夢想返し']);
+    assert('簡易CSV: 新人（○）', sp[1].isNewFace, true);
+    assert('簡易CSV: 新人（1）', sp[2].isNewFace, true);
+    assert('簡易CSV: 新人なし', sp[0].isNewFace, false);
+    assert('簡易CSV: 性別 ○ は女子', sp[3].isFemale, true);
+    await Api.importCsv(testEventId, '名前,コート,性別\n追記 五郎,A,男', 'append');
+    var appended2 = await Api.loadEvent(testEventId);
+    assert('簡易CSV: 追記は既存の続きから採番', appended2.players[4].order, 'A-男子-1-3');
+    var badCourtRes = await Api.importCsv(testEventId, '名前,コート,性別\n誰か,A-1,男', 'append');
+    assert('簡易CSV: 不正なコートは理由を返す', badCourtRes && badCourtRes.error, '2 行目のコート名が不正です');
+
+    // 途中の行のコートが不正なら何も書き込まない（部分書き込みの回帰テスト）
+    var beforePartial = await Api.loadEvent(testEventId);
+    var partialCsv = '名前,コート,性別\n' +
+      '部分 一郎,A,男\n' +
+      '部分 二郎,A-1,男\n' +
+      '部分 三郎,A,男';
+    var partialRes = await Api.importCsv(testEventId, partialCsv, 'append');
+    assert('簡易CSV: 途中のコート不正でも理由を返す', !!(partialRes && partialRes.error), true);
+    var afterPartial = await Api.loadEvent(testEventId);
+    assert('簡易CSV: 途中のコート不正なら選手は増えない', afterPartial.players.length, beforePartial.players.length);
+
+    // 技名の前後の空白は落とす（末尾空白があると Scoring.findTechnique の完全一致に掛からず0点になる）
+    var spacedCsv = '名前,コート,性別,技①,技②,技③,新人\n' +
+      '空白 太郎,A,男, 四方 ,,,';
+    await Api.importCsv(testEventId, spacedCsv, 'replace');
+    var spacedLoaded = await Api.loadEvent(testEventId);
+    assert('簡易CSV: 技名の前後の空白を落とす', spacedLoaded.players[0].tech1, '四方');
+
+    // 拡張15列（エクスポートの往復）
+    var fullCsv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果,補正点1,補正点2,補正点3,全体補正,備考,確定\n' +
+      '拡張 太郎,C-男子-1-1,四方,,,10,,,1    ,2,0,0,-1,メモ,○';
+    await Api.importCsv(testEventId, fullCsv, 'replace');
+    var fullLoaded = await Api.loadEvent(testEventId);
+    assert('拡張CSV: 補正点', fullLoaded.players[0].adjust, [2, 0, 0]);
+    assert('拡張CSV: 全体補正・備考・確定', [fullLoaded.players[0].totalAdjust, fullLoaded.players[0].note, fullLoaded.players[0].confirmed], [-1, 'メモ', true]);
+    // 直前で score=10 の選手を作っており isScored 判定に引っかかるため、この reset も
+    // force で通す（force を付けないと 409 で拒否され、実際には空に戻っていなかった）。
+    await Api.importCsv(testEventId, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n', 'replace', true);   // 後続のテストのため空に戻す
 
     // 大会削除テスト
     await Api.deleteEvent(testEventId);

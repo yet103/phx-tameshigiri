@@ -134,13 +134,9 @@
     return row;
   }
 
-  // --- フォーム部品（追加・編集で共用） ---
-  // 戻り値: { el, read, reset }
-  //   el    : シートの body に入れる DOM
-  //   read(): { name, court, isFemale, isNewFace, tech1, tech2, tech3 } | null
-  //           （不正なら alert を出して null）
-  //   reset(): 名前と技だけ空にする（コート・性別は保つ。受付を連続処理するため）
-  function buildPlayerForm(ctx, player) {
+  // コート・性別・新人の入力部品（1人ずつの追加・編集フォームと一括登録シートで共用）
+  // 戻り値: { el, court(), isFemale(), isNewFace() }
+  function buildCommonFields(ctx, player) {
     var el = document.createElement('div');
 
     // 既存のコート一覧（未分類はサーバーが受け付けないので候補に出さない）
@@ -154,21 +150,6 @@
     if (court && courts.indexOf(court) === -1) courts.push(court);
 
     var isFemale = player ? !!player.isFemale : false;
-    var techState = player
-      ? TechPicker.fromArray([player.tech1, player.tech2, player.tech3])
-      : [];
-
-    // 名前
-    var fName = document.createElement('div');
-    fName.className = 'field';
-    var lName = document.createElement('label');
-    lName.textContent = '名前';
-    var inName = document.createElement('input');
-    inName.type = 'text';
-    inName.value = player ? (player.name || '') : '';
-    fName.appendChild(lName);
-    fName.appendChild(inName);
-    el.appendChild(fName);
 
     // コート（セグメント＋「＋」で新しいコート名）
     var fCourt = document.createElement('div');
@@ -259,6 +240,42 @@
     fNew.appendChild(toggle);
     el.appendChild(fNew);
 
+    return {
+      el: el,
+      court: function() { return court; },
+      isFemale: function() { return isFemale; },
+      isNewFace: function() { return chkNew.checked; }
+    };
+  }
+
+  // --- フォーム部品（追加・編集で共用） ---
+  // 戻り値: { el, read, reset }
+  //   el    : シートの body に入れる DOM
+  //   read(): { name, court, isFemale, isNewFace, tech1, tech2, tech3 } | null
+  //           （不正なら alert を出して null）
+  //   reset(): 名前と技だけ空にする（コート・性別は保つ。受付を連続処理するため）
+  function buildPlayerForm(ctx, player) {
+    var el = document.createElement('div');
+
+    var techState = player
+      ? TechPicker.fromArray([player.tech1, player.tech2, player.tech3])
+      : [];
+
+    // 名前
+    var fName = document.createElement('div');
+    fName.className = 'field';
+    var lName = document.createElement('label');
+    lName.textContent = '名前';
+    var inName = document.createElement('input');
+    inName.type = 'text';
+    inName.value = player ? (player.name || '') : '';
+    fName.appendChild(lName);
+    fName.appendChild(inName);
+    el.appendChild(fName);
+
+    var common = buildCommonFields(ctx, player);
+    el.appendChild(common.el);
+
     // 技
     var fTech = document.createElement('div');
     fTech.className = 'field';
@@ -297,13 +314,14 @@
     function read() {
       var name = inName.value.trim();
       if (!name) { alert('名前を入力してください。'); return null; }
+      var court = common.court();
       if (!court) { alert('コートを選んでください。「＋」で新しいコートを作れます。'); return null; }
       var t = TechPicker.toArray(techState);
       return {
         name: name,
         court: court,
-        isFemale: isFemale,
-        isNewFace: chkNew.checked,
+        isFemale: common.isFemale(),
+        isNewFace: common.isNewFace(),
         tech1: t[0],
         tech2: t[1],
         tech3: t[2]
@@ -370,6 +388,92 @@
     btnSaveNext.addEventListener('click', async function() {
       if (!(await save())) return;
       form.reset();   // コート・性別・新人は保つ
+    });
+  }
+
+  // 一括登録(1行1人の名前を貼り付ける)。コート・性別・新人は共通。技は後で入れる。
+  function openBulkSheet(ctx) {
+    var body = document.createElement('div');
+    var common = buildCommonFields(ctx, null);
+    body.appendChild(common.el);
+
+    var fNames = document.createElement('div');
+    fNames.className = 'field';
+    var lNames = document.createElement('label');
+    lNames.textContent = '名前（1行に1人）';
+    var ta = document.createElement('textarea');
+    ta.rows = 8;
+    ta.placeholder = '山田 太郎\n佐藤 花子\n…';
+    var count = document.createElement('div');
+    count.className = 'bulk-count';
+    fNames.appendChild(lNames);
+    fNames.appendChild(ta);
+    fNames.appendChild(count);
+    body.appendChild(fNames);
+
+    function names() {
+      return ta.value.split(/\r?\n/).map(function(s) { return s.trim(); }).filter(Boolean);
+    }
+    function updateCount() {
+      count.textContent = names().length + ' 人';
+    }
+    ta.addEventListener('input', updateCount);
+    updateCount();
+
+    var btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'btn';
+    btnClose.textContent = '閉じる';
+    var btnSave = document.createElement('button');
+    btnSave.type = 'button';
+    btnSave.className = 'btn primary';
+    btnSave.textContent = '登録';
+
+    var added = 0;
+    var sheet = Admin.openSheet('複数人をまとめて登録', body, [btnClose, btnSave], function() {
+      if (added > 0) Admin.reloadEvent();
+    });
+    btnClose.addEventListener('click', sheet.close);
+
+    btnSave.addEventListener('click', async function() {
+      var list = names();
+      if (list.length === 0) { alert('名前を1人以上入力してください。'); return; }
+      var court = common.court();
+      if (!court) { alert('コートを選んでください。「＋」で新しいコートを作れます。'); return; }
+      var sexLabel = common.isFemale() ? '女子' : '男子';
+      if (!confirm(court + ' コート ' + sexLabel + ' ' + list.length + ' 人を登録します。よろしいですか？')) return;
+      var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
+      // 確認ダイアログの後・API 呼び出しの前で、大会が切り替わっていないか再確認する
+      // （importCsvText と同じ規約。古い ctx の大会に書き込んでしまわないため）。
+      if (Admin.currentEventId() !== eventId) {
+        alert('大会が切り替わったため、登録を中止しました。');
+        return;
+      }
+      btnSave.disabled = true;
+      btnClose.disabled = true;
+      sheet.lock(true);
+      var res = await Api.createPlayersBulk(eventId, {
+        court: court, isFemale: common.isFemale(), isNewFace: common.isNewFace(), names: list
+      });
+      if (Admin.currentEventId() !== eventId) return;   // 大会が切り替わっていたら画面に触らない
+      sheet.lock(false);
+      btnSave.disabled = false;
+      btnClose.disabled = false;
+      if (!res || res.error) {
+        // 失敗してもシートは閉じない（入力を残す）
+        alert('登録できませんでした。\n' + ((res && res.error) || '入力内容と通信を確認してください。'));
+        return;
+      }
+      added += res.created;
+      Admin.toast(res.created + ' 人を登録しました');
+      // 履歴記録（CSV インポートと同様。一括登録も辿れるようにする）
+      Api.addHistory(eventId, {
+        action: 'bulk_add',
+        detail: res.created + '名の選手を一括登録'
+      });
+      sheet.close();   // onClose も一覧を反映するが、別大会へ行って戻った経路では
+                        // 既に閉じたシートの close が no-op になるため、ここでも直接反映する。
+      Admin.reloadEvent();
     });
   }
 
@@ -487,6 +591,12 @@
   function openMenu(ctx) {
     var body = document.createElement('div');
 
+    var btnBulk = document.createElement('button');
+    btnBulk.type = 'button';
+    btnBulk.className = 'menu-item';
+    btnBulk.textContent = '👥 複数人をまとめて登録';
+    body.appendChild(btnBulk);
+
     var btnCsv = document.createElement('button');
     btnCsv.type = 'button';
     btnCsv.className = 'menu-item';
@@ -504,6 +614,11 @@
     btnCsv.addEventListener('click', function() {
       sheet.close();
       pickCsv(ctx);
+    });
+
+    btnBulk.addEventListener('click', function() {
+      sheet.close();
+      openBulkSheet(ctx);
     });
   }
 
@@ -586,7 +701,7 @@
       result = await Api.importCsv(eventId, text, mode, true);
     }
     if (!result || !result.success) {
-      alert('インポートに失敗しました。');
+      alert('インポートに失敗しました。' + (result && result.error ? '\n' + result.error : ''));
       return;
     }
     Admin.toast(result.playerCount + '名を読み込みました');
