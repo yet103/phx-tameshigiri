@@ -117,7 +117,8 @@ var App = (function() {
       localStorage.setItem('tmg_discarded', JSON.stringify(keep.concat(entries)));
     } catch (e) {}
     var detail = entries.map(function(e) {
-      return '  選手ID ' + e.playerId + ' / ' + e.score + '点';
+      // 備考だけのエントリ（score を持たない）が捨てられることもある
+      return '  選手ID ' + e.playerId + ' / ' + ('score' in e ? e.score + '点' : '備考');
     }).join('\n');
     alert('保存できなかった採点が ' + entries.length + ' 件あります。\n' +
           '対象の選手がサーバー上に見つかりませんでした。\n' +
