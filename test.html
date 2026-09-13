@@ -68,6 +68,24 @@
     assert('loadEvent name', loaded.name, 'テスト大会');
     assert('loadEvent players空', loaded.players.length, 0);
 
+    // 一括登録
+    var bulk = await Api.createPlayersBulk(testEventId, {
+      court: 'B', isFemale: true, isNewFace: true, names: ['佐藤 花', '', '  ', '鈴木 梅 ', '高橋 桜']
+    });
+    assert('bulk: 空行を除いた人数を作る', bulk.created, 3);
+    assert('bulk: 順番はコート×性別で連番', bulk.players.map(function(p) { return p.order; }), ['B-女子-1-1', 'B-女子-1-2', 'B-女子-1-3']);
+    assert('bulk: 名前は trim', bulk.players[1].name, '鈴木 梅');
+    assert('bulk: 性別・新人が付く', [bulk.players[0].isFemale, bulk.players[0].isNewFace], [true, true]);
+    assert('bulk: 技は空', [bulk.players[0].tech1, bulk.players[0].tech2, bulk.players[0].tech3], ['', '', '']);
+    var bulk2 = await Api.createPlayersBulk(testEventId, { court: 'B', isFemale: true, isNewFace: false, names: ['田中 藤'] });
+    assert('bulk: 既存の続きから採番', bulk2.players[0].order, 'B-女子-1-4');
+    assert('bulk: 名前が全部空なら null', await Api.createPlayersBulk(testEventId, { court: 'B', isFemale: false, names: ['', ' '] }), null);
+    assert('bulk: 不正なコートは null', await Api.createPlayersBulk(testEventId, { court: 'A-1', isFemale: false, names: ['x'] }), null);
+    assert('bulk: names が配列でなければ null', await Api.createPlayersBulk(testEventId, { court: 'B', isFemale: false, names: 'x' }), null);
+    var bulkLoaded = await Api.loadEvent(testEventId);
+    assert('bulk: 大会に4名入っている', bulkLoaded.players.length, 4);
+    await Api.importCsv(testEventId, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n', 'replace');   // 後続のテストのため空に戻す
+
     // CSVインポートテスト
     var csv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n山田 太郎,A-男子-1-1,破図味,夢想返し,響き返し,55,,,';
     var importResult = await Api.importCsv(testEventId, csv, 'replace');

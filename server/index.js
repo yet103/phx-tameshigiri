@@ -474,6 +474,65 @@ app.post('/api/events/:id/players', (req, res) => {
   }
 });
 
+// POST /api/events/:id/players/bulk : 同じコート・性別・新人区分の選手をまとめて追加（一巡目、技は空）
+// 名前は1件ずつ trim して空を除く。採番は nextOrderNumber を累積しながら順に行い、1回で書き込む。
+app.post('/api/events/:id/players/bulk', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const body = req.body || {};
+    const court = typeof body.court === 'string' ? body.court.trim() : '';
+    if (!isValidCourt(court)) {
+      return res.status(400).json({ error: '不正なコート名です' });
+    }
+    if (!Array.isArray(body.names)) {
+      return res.status(400).json({ error: '名前の配列が必要です' });
+    }
+    const names = body.names
+      .map(n => (typeof n === 'string' ? n.trim() : ''))
+      .filter(n => n !== '');
+    if (names.length === 0) {
+      return res.status(400).json({ error: '登録する名前がありません' });
+    }
+    if (names.length > 500) {
+      return res.status(400).json({ error: '一度に登録できるのは500名までです' });
+    }
+
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (!Array.isArray(event.players)) event.players = [];
+
+    const isFemale = body.isFemale === true;
+    const isNewFace = body.isNewFace === true;
+    const gender = isFemale ? '女子' : '男子';
+    const created = [];
+    names.forEach(name => {
+      const n = nextOrderNumber(event.players.concat(created), court, gender, 1);
+      created.push({
+        id: generateId(),
+        name: name,
+        order: buildOrder(court, isFemale, 1, n),
+        tech1: '',
+        tech2: '',
+        tech3: '',
+        score: 0,
+        isNewFace: isNewFace,
+        isFemale: isFemale,
+        result: ''
+      });
+    });
+
+    event.players = event.players.concat(created);
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.status(201).json({ success: true, created: created.length, players: created });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/events/:id/players/:playerId : 選手の部分更新（採点と運営編集の共用）
 // 受理するフィールドは allowlist に限る。単純マージだと id / order / 未知のキーまで
 // クライアントが書き込めてしまう。
