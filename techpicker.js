@@ -140,6 +140,23 @@ var TechPicker = (function() {
     head.appendChild(title);
     head.appendChild(btnClose);
 
+    var STRIKE_HEADS = ['初太刀', '二ノ太刀', '三ノ太刀', '四ノ太刀'];
+
+    // 検索欄（自動フォーカスはしない。スマホでキーボードが開いてしまうため）
+    var search = document.createElement('div');
+    search.className = 'tp-search';
+    var searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.placeholder = '技名で絞り込み';
+    searchInput.setAttribute('aria-label', '技名で絞り込み');
+    search.appendChild(searchInput);
+
+    // ヘッダー行（技名と太刀の配点の列名）
+    var header = document.createElement('div');
+    header.className = 'tp-row tp-header';
+    header.innerHTML = '<span class="tp-no"></span><span class="tp-name">技名</span>' +
+      STRIKE_HEADS.map(function(h) { return '<span class="tp-s">' + h + '</span>'; }).join('');
+
     var list = document.createElement('div');
     list.className = 'tp-list';
 
@@ -151,30 +168,50 @@ var TechPicker = (function() {
       done();
     }
 
-    var clearItem = document.createElement('button');
-    clearItem.type = 'button';
-    clearItem.className = 'tp-item tp-clear';
-    clearItem.textContent = '（この枠を空にする）';
-    clearItem.addEventListener('click', function() { pick(''); });
-    list.appendChild(clearItem);
+    function renderList(query) {
+      list.innerHTML = '';
+      var clearItem = document.createElement('button');
+      clearItem.type = 'button';
+      clearItem.className = 'tp-item tp-clear';
+      clearItem.textContent = '（この枠を空にする）';
+      clearItem.addEventListener('click', function() { pick(''); });
+      list.appendChild(clearItem);
 
-    techs.forEach(function(t) {
-      var item = document.createElement('button');
-      item.type = 'button';
-      // 重複を許すので、印を付けるのはこの枠に入っている技だけ（他の枠は見ない）
-      var isOn = state[slot] !== '' && state[slot] === t.name;
-      item.className = isOn ? 'tp-item on' : 'tp-item';
-      item.dataset.name = t.name;
-      // 枠だけ innerHTML で作り、値は textContent で入れる（技名はサーバー由来）
-      item.innerHTML = '<span class="tp-no"></span><span class="tp-name"></span><span class="tp-pt"></span>';
-      item.querySelector('.tp-no').textContent = isOn ? CIRCLED[slot] : '';
-      item.querySelector('.tp-name').textContent = t.name;
-      item.querySelector('.tp-pt').textContent = strikesLabel(t);
-      item.addEventListener('click', function() { pick(this.dataset.name); });
-      list.appendChild(item);
-    });
+      var shown = filter(techs, query);
+      if (shown.length === 0) {
+        var none = document.createElement('div');
+        none.className = 'tp-none';
+        none.textContent = '該当する技がありません';
+        list.appendChild(none);
+      }
+      shown.forEach(function(t) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        // 重複を許すので、印を付けるのはこの枠に入っている技だけ（他の枠は見ない）
+        var isOn = state[slot] !== '' && state[slot] === t.name;
+        item.className = isOn ? 'tp-item tp-row on' : 'tp-item tp-row';
+        item.dataset.name = t.name;
+        // 枠だけ innerHTML で作り、値は textContent で入れる（技名はサーバー由来）
+        item.innerHTML = '<span class="tp-no"></span><span class="tp-name"></span>' +
+          '<span class="tp-s"></span><span class="tp-s"></span><span class="tp-s"></span><span class="tp-s"></span>';
+        item.querySelector('.tp-no').textContent = isOn ? CIRCLED[slot] : '';
+        item.querySelector('.tp-name').textContent = t.name;
+        var cells = item.querySelectorAll('.tp-s');
+        var strikes = (t && t.strikes) || [];
+        for (var i = 0; i < 4; i++) {
+          var v = strikes[i];
+          cells[i].textContent = (v === null || v === undefined) ? '—' : String(v);
+        }
+        item.addEventListener('click', function() { pick(this.dataset.name); });
+        list.appendChild(item);
+      });
+    }
+    renderList('');
+    searchInput.addEventListener('input', function() { renderList(searchInput.value); });
 
     sheet.appendChild(head);
+    sheet.appendChild(search);
+    sheet.appendChild(header);
     sheet.appendChild(list);
     overlay.appendChild(sheet);
     document.body.appendChild(overlay);
