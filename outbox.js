@@ -18,12 +18,14 @@ var Outbox = (function() {
   var discardHandler = null;
   var dropped = [];          // 恒久的に送れず捨てたエントリ
 
-  // 同一の大会・選手のエントリを最新で置き換える。元の配列は変更しない。
+  // 同一の大会・選手のエントリを後勝ちでマージする。元の配列とエントリは変更しない。
+  // 単純に置き換えないのは、備考だけのエントリ（score / result を持たない）が
+  // まだ送れていない採点を落としてしまうため。新しいエントリが持つ項目だけを上書きする。
   function coalesce(q, entry) {
     var next = (q || []).slice();
     for (var i = 0; i < next.length; i++) {
       if (next[i].eventId === entry.eventId && next[i].playerId === entry.playerId) {
-        next[i] = entry;
+        next[i] = Object.assign({}, next[i], entry);
         return next;
       }
     }
@@ -71,9 +73,11 @@ var Outbox = (function() {
       if (e.eventId !== eventId) continue;
       for (var j = 0; j < (playerList || []).length; j++) {
         if (playerList[j].id === e.playerId) {
-          playerList[j].score = e.score;
-          playerList[j].result = e.result;
-          // 新項目は、エントリが持っているときだけ上書きする（旧形式のエントリには無い）
+          // エントリが持っている項目だけを上書きする。
+          // 備考だけのエントリは score / result を持たないので、そこは触らない
+          // （旧形式のエントリには adjust 以下の4項目が無い）。
+          if ('score' in e) playerList[j].score = e.score;
+          if ('result' in e) playerList[j].result = e.result;
           if ('adjust' in e) playerList[j].adjust = e.adjust;
           if ('totalAdjust' in e) playerList[j].totalAdjust = e.totalAdjust;
           if ('note' in e) playerList[j].note = e.note;
@@ -139,7 +143,11 @@ var Outbox = (function() {
         var entry = queue[0];
         var res = null;
         try {
-          var body = { score: entry.score, result: entry.result };
+          // エントリが持っている項目だけを送る。備考だけのエントリで
+          // score / result を undefined のまま送らないため。
+          var body = {};
+          if ('score' in entry) body.score = entry.score;
+          if ('result' in entry) body.result = entry.result;
           if ('adjust' in entry) body.adjust = entry.adjust;
           if ('totalAdjust' in entry) body.totalAdjust = entry.totalAdjust;
           if ('note' in entry) body.note = entry.note;
@@ -197,13 +205,15 @@ var Outbox = (function() {
     // 呼び出し元がオブジェクトを使い回しても参照の一意性が壊れないよう、
     // ここで必ず新しいオブジェクトにする。
     // drain() の queue[0] === entry 判定がこの一意性を前提にしている。
+    // 積むのは呼び出し元が渡した項目だけ。備考だけを直したいときは
+    // { eventId, playerId, note } のように採点を含めずに呼べる。
     var queued = {
       eventId: entry.eventId,
       playerId: entry.playerId,
-      score: entry.score,
-      result: entry.result,
       queuedAt: new Date().toISOString()
     };
+    if ('score' in entry) queued.score = entry.score;
+    if ('result' in entry) queued.result = entry.result;
     if ('adjust' in entry) queued.adjust = entry.adjust;
     if ('totalAdjust' in entry) queued.totalAdjust = entry.totalAdjust;
     if ('note' in entry) queued.note = entry.note;

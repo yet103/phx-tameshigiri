@@ -79,6 +79,9 @@ var Scoring = (function() {
   // 5文字目は旧「技術点」（1=○ → 補正点3）で、adjust 配列を持たない旧データの読み替えにだけ使う。
   // adjust が配列なら、その値を各行の補正点にし、5文字目は見ない。
   // 注意: 技名(techName)はエンコード文字列に含まれない。呼び出し元が player.tech1〜tech3 から別途供給すること。
+  // 注意: adjust の添字は「技の枠(tech1..3)」ではなく「空の枠を詰めた表示行」の順
+  // （result と同じ並び）。技が2つの選手にあとから tech3 を足すと添字がずれるため、
+  // 枠を埋めたら補正点は付け直すこと。
   function decodeResult(result, techCount, adjust) {
     var hasAdjust = Array.isArray(adjust);
     var adj = normalizeAdjust(adjust);

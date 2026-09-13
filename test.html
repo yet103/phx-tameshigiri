@@ -944,6 +944,22 @@
     var q1 = Outbox.coalesce([], { eventId: 'e', playerId: 'p', score: 1, result: 'r', adjust: [1, 0, 0], totalAdjust: 2, note: 'n', confirmed: true });
     assert('coalesce は補正点・備考・確定を保つ', [q1[0].adjust, q1[0].totalAdjust, q1[0].note, q1[0].confirmed], [[1, 0, 0], 2, 'n', true]);
 
+    // 備考だけのエントリ（score / result を持たない）が未送信の採点を潰さないこと
+    var noteOnly = Outbox.coalesce([], { eventId: 'e', playerId: 'p', note: 'メモ' });
+    assert('coalesce: 備考だけのエントリは score/result を作らない',
+      ['score' in noteOnly[0], 'result' in noteOnly[0]], [false, false]);
+    var mergedQ = Outbox.coalesce(
+      [{ eventId: 'e', playerId: 'p', score: 7, result: 'R', adjust: [1, 0, 0], queuedAt: 't1' }],
+      { eventId: 'e', playerId: 'p', note: 'あとから備考', queuedAt: 't2' });
+    assert('coalesce: 後勝ちでマージし、前のエントリの採点を残す',
+      [mergedQ[0].score, mergedQ[0].result, mergedQ[0].adjust, mergedQ[0].note, mergedQ[0].queuedAt],
+      [7, 'R', [1, 0, 0], 'あとから備考', 't2']);
+    assert('coalesce: マージしても元のエントリを壊さない', (function() {
+      var q = [{ eventId: 'e', playerId: 'p', score: 7, result: 'R' }];
+      Outbox.coalesce(q, { eventId: 'e', playerId: 'p', note: 'x' });
+      return ['note' in q[0], q[0].score];
+    })(), [false, 7]);
+
     // 注意: このページは index.html と localStorage を共有する。
     // 以下のテストは tmg_outbox を一時的に書き換えるため、
     // 採点中の端末でこのページを開かないこと。
@@ -971,6 +987,19 @@
     assert('404のエントリを捨てて後続を送る', sent, ['gone', 'alive']);
     assert('捨てたエントリを呼び出し元に伝える', droppedSeen.length, 1);
     assert('捨てた後キューが空になる', Outbox.pendingCount(), 0);
+
+    // 備考だけのエントリは score / result を PATCH に載せない
+    // （載せると undefined になり、サーバー側で採点が巻き戻る）
+    var bodies = [];
+    Api.updatePlayer = async function(eventId, playerId, body) { bodies.push(body); return { ok: true }; };
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'pn', note: 'メモだけ', queuedAt: 't7' }
+    ]));
+    Outbox.init(function() {}, function() {});
+    await new Promise(function(r) { setTimeout(r, 500); });
+    assert('drain: 備考だけのエントリは score/result を送らない',
+      [bodies.length, 'score' in (bodies[0] || {}), 'result' in (bodies[0] || {}), (bodies[0] || {}).note],
+      [1, false, false, 'メモだけ']);
 
     // 未送信の採点はサーバーの古い値より優先される
     Api.updatePlayer = async function() { return { ok: false, status: 0 }; };
@@ -1008,6 +1037,16 @@
     assert('applyPending 旧形式のエントリは新項目に触らない',
       [fromServer2[1].adjust, fromServer2[1].totalAdjust, fromServer2[1].note, fromServer2[1].confirmed],
       [[9, 9, 9], 9, '既存', true]);
+
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'p3', note: '備考だけ', queuedAt: 't6' }
+    ]));
+    Outbox.init(function() {}, function() {});
+    await new Promise(function(r) { setTimeout(r, 400); });
+    var fromServer3 = [{ id: 'p3', score: 42, result: 'Z', note: '' }];
+    Outbox.applyPending('ev1', fromServer3);
+    assert('applyPending 備考だけのエントリは得点と結果に触らない',
+      [fromServer3[0].score, fromServer3[0].result, fromServer3[0].note], [42, 'Z', '備考だけ']);
 
     // 後始末: 本物のキューの内容とメモリ上の状態を元に戻す
     Api.updatePlayer = origUpdate;
