@@ -501,19 +501,30 @@
     results.appendChild(h2s);
 
     // encodeResult / decodeResult テスト
+    // 1技=5文字（初/二/三/四ノ太刀 + 5文字目）。5文字目は互換のため残すが、新しい保存では常に空白。
     var encRows = [
-      { techName: '破図味(男)', values: ['○','×','',''], techPoint: '○' },
-      { techName: '夢想返し',   values: ['○','○','',''], techPoint: '' }
+      { techName: '破図味(男)', values: ['○','×','',''], adjust: 3 },
+      { techName: '夢想返し',   values: ['○','○','',''], adjust: 0 }
     ];
     var encoded = Scoring.encodeResult(encRows);
-    // 1技=5文字（初/二/三/四の太刀 + 技術点）
-    // 破図味(男): ○×空空 + 技術点○ → "10  1" / 夢想返し: ○○空空 + 技術点空 → "11   "
-    assert('encodeResult 2行', encoded, '10  111   ');
-    var decoded = Scoring.decodeResult(encoded, 2);
+    assert('encodeResult 5文字目は空白（補正点は result に入れない）', encoded, '10   11   ');
+    var decoded = Scoring.decodeResult(encoded, 2, [3, 0, 0]);
     assert('decodeResult values[0]', decoded[0].values, ['○','×','','']);
-    assert('decodeResult techPoint[0]', decoded[0].techPoint, '○');
+    assert('decodeResult adjust[0] は adjust 配列から', decoded[0].adjust, 3);
     assert('decodeResult values[1]', decoded[1].values, ['○','○','','']);
-    assert('decodeResult techPoint[1]', decoded[1].techPoint, '');
+    assert('decodeResult adjust[1]', decoded[1].adjust, 0);
+    // 旧データ（adjust 配列を持たない選手）は 5 文字目の '1' を補正点 3 と読み替える
+    var legacy = Scoring.decodeResult('10  111   ', 2, undefined);
+    assert('decodeResult 旧データ: 技術点○ → 補正点3', legacy[0].adjust, 3);
+    assert('decodeResult 旧データ: 技術点空 → 0', legacy[1].adjust, 0);
+    var legacyX = Scoring.decodeResult('10  0', 1, null);
+    assert('decodeResult 旧データ: 技術点× → 0', legacyX[0].adjust, 0);
+    // adjust があるときは 5 文字目を見ない
+    var mixed = Scoring.decodeResult('10  1', 1, [0, 0, 0]);
+    assert('decodeResult adjust があれば 5 文字目は無視', mixed[0].adjust, 0);
+    // adjust の要素が数値でなくても落ちない
+    assert('decodeResult adjust に文字列が混ざっても 0', Scoring.decodeResult('     ', 1, ['x', 1, 2])[0].adjust, 0);
+    assert('decodeResult adjust は整数に丸める', Scoring.decodeResult('     ', 1, [2.7, 0, 0])[0].adjust, 2);
 
     // setTechniques のテスト
     var customTechs = [{ name: 'カスタム技', strikes: [100, 50, null, null] }];
@@ -527,7 +538,7 @@
     assert('calcStrikeScore 存在しない技', Scoring.calcStrikeScore('存在しない技', 0, '○', false), 0);
 
     // calcTotalScore isFemale=true
-    var femaleRows = [{ techName: '水月', values: ['○','○','',''], techPoint: '' }];
+    var femaleRows = [{ techName: '水月', values: ['○','○','',''], adjust: 0 }];
     // 水月(女): 17+13=30
     assert('calcTotalScore isFemale=true 水月', Scoring.calcTotalScore(femaleRows, true), 30);
 
@@ -554,13 +565,21 @@
     // calcStrikeScore: null列（ReadOnly）は常に0
     assert('calcStrikeScore 立位袈裟 三の太刀（null）○', Scoring.calcStrikeScore('立位袈裟', 2, '○', false), 0);
 
-    // calcTotalScore: 全行合計
+    // calcTotalScore: 全行合計 + 行ごとの補正点 + 全体補正点
     var rows = [
-      { techName: '破図味(男)', values: ['○','○','○','○'], techPoint: '' },
-      { techName: '夢想返し',   values: ['○','○','',''],   techPoint: '○' }
+      { techName: '破図味(男)', values: ['○','○','○','○'], adjust: 0 },
+      { techName: '夢想返し',   values: ['○','○','',''],   adjust: 3 }
     ];
-    // 破図味(男): 20+4+4+2 = 30、夢想返し: 13+5 = 18 + 技術点3 = 21 → 合計51
-    assert('calcTotalScore', Scoring.calcTotalScore(rows, false), 51);
+    // 破図味(男): 20+4+4+2 = 30、夢想返し: 13+5 = 18 + 補正3 = 21 → 合計51
+    assert('calcTotalScore', Scoring.calcTotalScore(rows, false, 0), 51);
+    assert('calcTotalScore 全体補正点を足す', Scoring.calcTotalScore(rows, false, -5), 46);
+    assert('calcTotalScore 全体補正点 省略は 0', Scoring.calcTotalScore(rows, false), 51);
+    assert('calcTotalScore 負の補正で負になる', Scoring.calcTotalScore([{ techName: '夢想返し', values: ['','','',''], adjust: -4 }], false, -1), -5);
+    assert('calcRowScore 太刀 + 補正', Scoring.calcRowScore('夢想返し', ['○','○','',''], 3, false), 21);
+    assert('calcRowScore 補正が文字列でも 0 扱い', Scoring.calcRowScore('夢想返し', ['○','','',''], 'x', false), 13);
+    assert('normalizeAdjust 配列でなければ [0,0,0]', Scoring.normalizeAdjust(undefined), [0, 0, 0]);
+    assert('normalizeAdjust 足りない要素は 0', Scoring.normalizeAdjust([1]), [1, 0, 0]);
+    assert('normalizeAdjust 余分な要素は捨てる', Scoring.normalizeAdjust([1, 2, 3, 4]), [1, 2, 3]);
 
     // canDecode: result は技ごとに5文字。技の数が変わると復元できない
     assert('canDecode 空のresult → false', Scoring.canDecode('', 3), false);

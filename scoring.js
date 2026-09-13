@@ -39,26 +39,49 @@ var Scoring = (function() {
     return 0;
   }
 
-  // 全行の合計得点を計算
-  // rows: [{ techName, values: [v0,v1,v2,v3], techPoint: '○'|'×'|'' }, ...]
-  function calcTotalScore(rows, isFemale) {
+  // 補正点の配列を [n, n, n]（整数）に正規化する。配列でなければ [0, 0, 0]。
+  function normalizeAdjust(adjust) {
+    var out = [0, 0, 0];
+    if (!Array.isArray(adjust)) return out;
+    for (var i = 0; i < 3; i++) {
+      var n = Number(adjust[i]);
+      out[i] = Number.isFinite(n) ? Math.trunc(n) : 0;
+    }
+    return out;
+  }
+
+  function toInt(n) {
+    var v = Number(n);
+    return Number.isFinite(v) ? Math.trunc(v) : 0;
+  }
+
+  // 1行（1技）の得点 = 太刀の配点合計 + その技の補正点
+  function calcRowScore(techName, values, adjust, isFemale) {
+    var s = 0;
+    for (var i = 0; i < 4; i++) {
+      s += calcStrikeScore(techName, i, (values || [])[i], isFemale);
+    }
+    return s + toInt(adjust);
+  }
+
+  // 全行の合計得点 = Σ 行の得点 + 全体補正点
+  // rows: [{ techName, values: [v0,v1,v2,v3], adjust: 整数 }, ...]
+  function calcTotalScore(rows, isFemale, totalAdjust) {
     var total = 0;
     for (var i = 0; i < rows.length; i++) {
-      var row = rows[i];
-      for (var s = 0; s < 4; s++) {
-        total += calcStrikeScore(row.techName, s, row.values[s], isFemale);
-      }
-      // 技術点: ○=3点固定、それ以外=0点
-      if (row.techPoint === '○') total += 3;
+      total += calcRowScore(rows[i].techName, rows[i].values, rows[i].adjust, isFemale);
     }
-    return total;
+    return total + toInt(totalAdjust);
   }
 
   // resultエンコード文字列から行データに変換
-  // result例: "1 10 " = 技1行(初○,二空,三×,四空,技術点空) 計5文字×技数
-  // 注意: 技術名(techName)はエンコード文字列に含まれない。
-  // 呼び出し元が player.tech1〜tech3 から別途供給すること。
-  function decodeResult(result, techCount) {
+  // result は技ごとに5文字: 初〜四ノ太刀（1=○, 0=×, 空白=未）＋5文字目。
+  // 5文字目は旧「技術点」（1=○ → 補正点3）で、adjust 配列を持たない旧データの読み替えにだけ使う。
+  // adjust が配列なら、その値を各行の補正点にし、5文字目は見ない。
+  // 注意: 技名(techName)はエンコード文字列に含まれない。呼び出し元が player.tech1〜tech3 から別途供給すること。
+  function decodeResult(result, techCount, adjust) {
+    var hasAdjust = Array.isArray(adjust);
+    var adj = normalizeAdjust(adjust);
     var rows = [];
     for (var i = 0; i < techCount; i++) {
       var offset = i * 5;
@@ -68,7 +91,7 @@ var Scoring = (function() {
         values.push(ch === '1' ? '○' : ch === '0' ? '×' : '');
       }
       var tpCh = result.charAt(offset + 4);
-      rows.push({ values: values, techPoint: tpCh === '1' ? '○' : tpCh === '0' ? '×' : '' });
+      rows.push({ values: values, adjust: hasAdjust ? adj[i] : (tpCh === '1' ? 3 : 0) });
     }
     return rows;
   }
@@ -80,7 +103,7 @@ var Scoring = (function() {
     return !!result && result.length === techCount * 5 && /^[01 ]*$/.test(result);
   }
 
-  // 行データからresultエンコード文字列を生成
+  // 行データからresultエンコード文字列を生成。5文字目は常に空白（補正点は adjust に持つ）。
   function encodeResult(rows) {
     var str = '';
     for (var i = 0; i < rows.length; i++) {
@@ -88,7 +111,7 @@ var Scoring = (function() {
       for (var s = 0; s < 4; s++) {
         str += row.values[s] === '○' ? '1' : row.values[s] === '×' ? '0' : ' ';
       }
-      str += row.techPoint === '○' ? '1' : row.techPoint === '×' ? '0' : ' ';
+      str += ' ';
     }
     return str;
   }
@@ -97,7 +120,9 @@ var Scoring = (function() {
     setTechniques: setTechniques,
     findTechnique: findTechnique,
     calcStrikeScore: calcStrikeScore,
+    calcRowScore: calcRowScore,
     calcTotalScore: calcTotalScore,
+    normalizeAdjust: normalizeAdjust,
     decodeResult: decodeResult,
     encodeResult: encodeResult,
     canDecode: canDecode
