@@ -23,6 +23,7 @@
 <script src="techpicker.js"></script>
 <script src="admin.js"></script>
 <script src="present.js"></script>
+<script src="board.js"></script>
 <script>
   var results = document.getElementById('results');
   var passed = 0, failed = 0;
@@ -1309,6 +1310,51 @@
     assert('revealOrder: 同順位もまとめず1人ずつ', Present.revealOrder(revRows).length, revRows.length);
     assert('revealOrder: 最後に開くのは1位の行',
       revRows[Present.revealOrder(revRows)[revRows.length - 1]].rank, 1);
+
+    // board.js テスト（配信用ボードの純粋関数。DOM には触らない）
+    var h2b = document.createElement('h2');
+    h2b.textContent = 'board.js';
+    results.appendChild(h2b);
+
+    var tBase = '2026-10-11T01:00:00.000Z';
+    assert('remaining: 止まっていれば sec のまま',
+      Board.remaining({ sec: 300, running: false }, tBase, '2026-10-11T01:02:00.000Z'), 300);
+    assert('remaining: 動いていれば経過を引く',
+      Board.remaining({ sec: 300, running: true }, tBase, '2026-10-11T01:00:42.000Z'), 258);
+    assert('remaining: 0 で止まる（マイナスにしない）',
+      Board.remaining({ sec: 10, running: true }, tBase, '2026-10-11T01:05:00.000Z'), 0);
+    assert('remaining: 端末の時計が進んでいても経過は0以上',
+      Board.remaining({ sec: 300, running: true }, tBase, '2026-10-11T00:59:00.000Z'), 300);
+    assert('remaining: 時刻が読めなければ sec のまま',
+      Board.remaining({ sec: 120, running: true }, '', 'x'), 120);
+    assert('remaining: タイマーが無ければ 0', Board.remaining(null, tBase, tBase), 0);
+
+    var boardPlayer = {
+      tech1: '真', tech2: '', tech3: '連',
+      result: '11   10   ', adjust: [3, 1, 0], isFemale: false
+    };
+    assert('rowsFor: 空の枠を詰めて技名を並べる',
+      Board.rowsFor(boardPlayer).map(function(r) { return r.techName; }), ['真', '連']);
+    assert('rowsFor: 太刀の値を result から読む',
+      Board.rowsFor(boardPlayer).map(function(r) { return r.values; }),
+      [['○', '○', '', ''], ['○', '×', '', '']]);
+    assert('rowsFor: 補正点は詰めた行の添字で添える',
+      Board.rowsFor(boardPlayer).map(function(r) { return r.adjust; }), [3, 1]);
+    assert('rowsFor: adjust が無ければ5文字目を補正点3として読む（旧データ）',
+      Board.rowsFor({ tech1: '真', result: '11  1' }).map(function(r) { return r.adjust; }), [3]);
+    assert('rowsFor: 技が無ければ空', Board.rowsFor({ result: '' }), []);
+    assert('rowsFor: 選手が null でも落ちない', Board.rowsFor(null), []);
+    assert('rowsFor: result が短くても未として読む',
+      Board.rowsFor({ tech1: '真', result: '' })[0].values, ['', '', '', '']);
+
+    assert('parseHash: トークンとコートに分ける',
+      Board.parseHash('#O7KVvuj-/A'), { token: 'O7KVvuj-', court: 'A' });
+    assert('parseHash: コート省略なら空',
+      Board.parseHash('#O7KVvuj-'), { token: 'O7KVvuj-', court: '' });
+    assert('parseHash: ハッシュが空なら両方とも空',
+      Board.parseHash(''), { token: '', court: '' });
+    assert('parseHash: URL エンコードされたコート名を戻す',
+      Board.parseHash('#abc/' + encodeURIComponent('東')), { token: 'abc', court: '東' });
 
     await runApiTests();
 

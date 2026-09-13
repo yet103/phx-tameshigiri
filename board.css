@@ -1,0 +1,175 @@
+/* 配信用ボード（OBS のブラウザソース）。
+   常に黒金なので body に data-theme="dark" を固定し、theme.css の変数を使う。
+   1920×1080 と 960×540 のどちらでも同じ見え方になるよう、文字の大きさは
+   ルートの font-size（vw 連動）だけを基準にして rem で決める。
+   1920px 幅 → 1rem ≒ 22px（選手名 3rem ≒ 66px）、960px 幅 → 1rem ≒ 11px。 */
+html { font-size: clamp(9px, 1.14vw, 22px); }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 映像に重ねる用（board.html?bg=transparent）。
+   帯・表・合計はそれぞれ自前の下地を持たせてあるので、透過にしても文字は読める。 */
+body.is-transparent { background: transparent; }
+
+.board-root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem;
+}
+
+/* ===== 帯（コート・選手名・タイマー） ===== */
+.board-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--band-bg);
+  border: 2px solid var(--gold);
+  border-radius: 0.4rem;
+}
+.board-who { min-width: 0; flex: 1; }
+.board-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--band-muted);
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+.board-court {
+  display: inline-block;
+  padding: 0.1rem 0.7rem;
+  border-radius: 0.25rem;
+  font-weight: bold;
+  font-size: 1.3rem;
+  color: #1b1405;
+  background: linear-gradient(180deg, var(--gold-light), var(--gold));
+}
+.board-court:empty { display: none; }
+.board-event { color: var(--band-muted); }
+.board-order { color: var(--band-text); }
+.board-name {
+  font-family: var(--mincho);
+  font-weight: bold;
+  font-size: 3rem;
+  line-height: 1.15;
+  letter-spacing: .04em;
+  color: var(--band-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.board-timer {
+  font-size: 3.4rem;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0.2rem 1rem;
+  border-radius: 0.3rem;
+  color: var(--timer-text);
+  background: var(--timer-bg);
+}
+.board-timer.is-zero { background: var(--band-bg-2); color: var(--band-muted); }
+
+/* ===== 採点表 ===== */
+.board-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 2px solid var(--gold);
+  border-radius: 0.4rem;
+}
+.board-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.board-table th, .board-table td {
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.4rem;
+  text-align: center;
+  font-size: 1.7rem;
+  line-height: 1.2;
+}
+.board-table th {
+  font-family: var(--mincho);
+  font-size: 1.2rem;
+  background: var(--band-bg);
+  color: var(--gold-light);
+}
+.board-table .c-tech { width: 26%; text-align: left; }
+.board-table .c-adjust { width: 10%; }
+.board-table .c-score { width: 12%; }
+.board-table td.tech {
+  font-family: var(--mincho);
+  font-weight: bold;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.board-table td.tech .no { color: var(--gold-light); margin-right: 0.4rem; }
+.board-table td.num { font-variant-numeric: tabular-nums; }
+/* 太刀のセル。採点画面（style.css）と同じ変数を使う */
+.board-table td.none { color: var(--text-muted); }
+.board-table td.success { background: var(--cell-success); color: var(--cell-success-text); font-weight: bold; }
+.board-table td.fail { background: var(--cell-fail); color: var(--cell-fail-text); font-weight: bold; }
+.board-table td.na { background: var(--cell-disabled); color: var(--text-muted); }
+.board-table td.score { font-weight: bold; color: var(--score-color); }
+.board-table.confirmed td.score { color: var(--score-confirmed); }
+
+/* ===== 合計 ===== */
+.board-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 0.3rem 0.9rem;
+  background: var(--band-bg);
+  border: 2px solid var(--gold);
+  border-radius: 0.4rem;
+}
+.board-badge {
+  font-size: 1.4rem;
+  font-weight: bold;
+  padding: 0.15rem 0.8rem;
+  border-radius: 0.25rem;
+  color: var(--timer-text);
+  background: var(--score-confirmed);
+}
+.board-total {
+  font-family: var(--mincho);
+  font-size: 3rem;
+  font-weight: bold;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold-light);
+}
+.board-total.confirmed { color: var(--score-confirmed); }
+
+/* 待機中（このコートのライブ状態が無い）のときは表と合計を隠す */
+.board-root.is-idle .board-table-wrap,
+.board-root.is-idle .board-foot,
+.board-root.is-idle .board-timer { display: none; }
+
+.is-hidden { display: none !important; }
+
+/* 右下の小さな注意書き（更新できません／このリンクは無効です） */
+.board-notice {
+  position: fixed;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  font-size: 1rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.25rem;
+  color: var(--band-bg);
+  background: var(--warn);
+}
+.board-notice:empty { display: none; }

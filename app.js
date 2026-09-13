@@ -262,6 +262,9 @@ var App = (function() {
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
       clearAdjustInputs();
+      // このコートに映すものが無いことを配信用ボードへ伝える（ボードは「待機中」に戻る）。
+      // 選手がいる場合は selectPlayer 経由の resetTimer が送る。
+      publishLive();
     }
     refreshPlayerList();
   }
@@ -403,6 +406,8 @@ var App = (function() {
     var p = visiblePlayers[index];
     updatePlayerLabels(p);
     renderScoreGrid(p);
+    // resetTimer が「新しい選手＋初期値のタイマー」を配信用ボードへ送る（publishLive）。
+    // ここで別に送ると同じ内容の書き込みが二重になるので送らない。
     if (changed) resetTimer();
     updatePlayerList();
     // 別の選手を開いたら、他端末（運営画面や別コートの端末）の書き込みを取りに行く。
@@ -631,6 +636,29 @@ var App = (function() {
     return Number.isFinite(n) ? n : 0;
   }
 
+  // --- 配信用ボードへのライブ状態の送信 ---
+  // 「今どの選手を開いているか」「タイマーの状態」をサーバーへ置く。board.html（OBS の
+  // ブラウザソース）が共有トークン越しに2秒ごとに読む。
+  // 送るのは選手が変わったときとタイマーを操作したときだけで、1秒ごとの減算では送らない
+  // （board 側が updatedAt からの経過を引いて進める）。
+  // 通信は待たず、失敗は握りつぶす。配信が遅れても採点は止めない（alert も出さない）。
+  function publishLive() {
+    if (!currentEvent) return;
+    var p = visiblePlayers[currentIndex] || null;
+    // 全コート表示（currentCourt が空）のときは今の選手から導く。
+    // コートが決まらない選手は送らない（サーバーの isValidCourt が弾く値になる）。
+    var court = currentCourt || (p ? Courts.courtOf(p) : '');
+    if (!court || court === Courts.UNASSIGNED) return;
+    Api.putLive(currentEvent.id, court, {
+      playerId: p ? p.id : null,
+      timer: { sec: timerSec, running: timerRunning }
+    }).then(function(result) {
+      if (!result || result.error) {
+        console.warn('ライブ状態を送れませんでした', result && result.error);
+      }
+    });
+  }
+
   // --- タイマー ---
   function startTimer() {
     if (timerRunning) return;
@@ -646,18 +674,27 @@ var App = (function() {
         timerDisplay.textContent = '00:00';
       }
     }, 1000);
+    publishLive();
   }
 
-  function stopTimer() {
+  // 計時だけを止める。ライブ状態の送信は呼び出し元がまとめて行う
+  // （resetTimer が「止める」と「5分に戻す」で二重に送らないように分けてある）。
+  function haltTimer() {
     timerRunning = false;
     clearInterval(timerInterval);
     timerInterval = null;
   }
 
+  function stopTimer() {
+    haltTimer();
+    publishLive();
+  }
+
   function resetTimer() {
-    stopTimer();
+    haltTimer();
     timerSec = 300;
     timerDisplay.textContent = '05:00';
+    publishLive();
   }
 
   function pad(n) { return n < 10 ? '0' + n : String(n); }
