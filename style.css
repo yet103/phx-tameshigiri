@@ -40,16 +40,37 @@ input[type="file"] { display: none; }
   white-space: nowrap;
   min-height: 44px;
 }
+/* 誰を採点しているかを離れた位置からも読めるように、コートはバッジ、名前は大きく太く。 */
 .player-nav .player-info {
   flex: 1;
-  text-align: center;
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+  text-align: left;
   font-weight: bold;
 }
 .player-nav .court-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-right: 8px;
+  flex: 0 0 auto;
+  font-size: 30px;
+  line-height: 1.1;
+  padding: 4px 14px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.player-nav .court-label:empty { display: none; }   /* 大会未選択・コート不明のときはバッジを出さない */
+.player-nav .player-text { display: flex; flex-direction: column; min-width: 0; }
+.player-nav .order-label { font-size: 13px; font-weight: normal; color: var(--text-muted); }
+.player-nav #playerNameLabel { font-size: 32px; line-height: 1.15; overflow-wrap: anywhere; }
+/* スマホ幅: 名前の帯をボタンの上に一段で置き、前後ボタンは横いっぱいに広げる */
+@media (max-width: 767px) {
+  .player-nav { row-gap: 8px; }
+  .player-nav .player-info { order: -1; flex: 0 0 100%; justify-content: flex-start; }
+  .player-nav .court-label { font-size: 24px; padding: 4px 10px; }
+  .player-nav #playerNameLabel { font-size: 28px; }
+  .player-nav .nav-btn { flex: 1; }
 }
 
 /* ===== タイマーバー ===== */
@@ -98,11 +119,17 @@ input[type="file"] { display: none; }
   height: 44px;
 }
 .score-table td.tech-name {
-  padding: 4px 10px;
+  padding: 4px 12px;
   text-align: left;
   white-space: nowrap;
   background: var(--bg-secondary);
+  font-weight: bold;
+  font-size: 20px;
 }
+/* 形の番号（①②③）。行番号は buildScoreRow が振る data-row（表示行順） */
+.score-table td.tech-name::before { content: '① '; color: var(--accent); font-size: 16px; }
+.score-table tr[data-row="1"] td.tech-name::before { content: '② '; }
+.score-table tr[data-row="2"] td.tech-name::before { content: '③ '; }
 .score-table td.strike-cell {
   cursor: pointer;
   font-size: 18px;
@@ -143,6 +170,9 @@ input[type="file"] { display: none; }
 .score-table td.tech-name { cursor: pointer; }
 .score-table td.strike-cell.empty { color: var(--text-muted); font-weight: normal; font-size: 14px; }
 .score-table tr.selected td { background: var(--row-selected); }
+/* 選択中の形は技名セルをアクセント色で塗り、どの形を採点しているかを一目で分かるようにする */
+.score-table tr.selected td.tech-name { background: var(--accent); color: var(--accent-text); }
+.score-table tr.selected td.tech-name::before { color: var(--accent-text); }
 .score-table tr.selected td.strike-cell.success { background: var(--cell-success); }
 .score-table tr.selected td.strike-cell.fail { background: var(--cell-fail); }
 .score-table tr.selected td.strike-cell.disabled { background: var(--cell-disabled); }
