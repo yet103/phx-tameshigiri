@@ -43,3 +43,9 @@ body {
   border: 2px solid var(--score-color); background: transparent; color: var(--text); cursor: pointer;
 }
 .present-error { font-size: 24px; color: var(--text-muted); padding: 48px 8px; }
+
+/* ===== 大会トーン（ポスター準拠） ===== */
+.present-bar { background: var(--band-bg); border-bottom: 1px solid var(--gold); }
+.present-title { font-family: var(--mincho); letter-spacing: .06em; color: var(--gold-light); border-bottom: 1px solid var(--gold); padding-bottom: 6px; }
+.present-list li.top { font-family: var(--mincho); }
+.present-rank { color: var(--gold-light); }

@@ -27,17 +27,10 @@ var Share = (function() {
   var elStatus = null;
   var elBody = null;
 
+  // 参加者に見せるページなので、端末の設定に関わらずポスターと同じ黒金（dark）で固定する。
+  // 採点・運営の端末が控えている tmg_theme も見ない（別の人の端末で開くページのため）。
   function applyTheme() {
-    var t = null;
-    try { t = localStorage.getItem('tmg_theme'); } catch (e) { t = null; }
-    if (!t) {
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        t = 'dark';
-      } else {
-        t = 'light';
-      }
-    }
-    document.body.setAttribute('data-theme', t);
+    document.body.setAttribute('data-theme', 'dark');
   }
 
   function hhmm(date) {

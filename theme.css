@@ -1,59 +1,78 @@
 /* ===== テーマ変数 =====
    全ページ共通。style.css / admin.css より先に読み込むこと。
-   style.css はこの変数を62箇所で参照しているため、読み忘れると表示が崩れる。
+   style.css はこの変数を多数参照しているため、読み忘れると表示が崩れる。
    新規ページ（admin.html など）は theme.css と自分の CSS だけを読み、
-   style.css は読まない（採点画面向けのレイアウトを持ち込まないため）。 */
+   style.css は読まない（採点画面専用のレイアウトを持ち込まないため）。
 
-/* ライトテーマ（デフォルト） */
+   配色は大会ポスター（黒地に金の見出し、朱の差し色、生成りの情報パネル）に合わせる。
+   - ライト＝「黒金の帯＋生成りの紙」: 見出しの帯は黒金、作業面は生成り（屋外でも読める）
+   - ダーク＝「黒金」: 全面を黒にして金を主役に（発表・共有など見せる画面の既定）
+   帯（--band-*）と金・朱（--gold* / --vermilion）はテーマに依らず同じ値を使う。 */
+
 :root {
-  --bg:           #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-header:    #e8e8f0;
-  --border:       #cccccc;
-  --text:         #222222;
-  --text-muted:   #666666;
-  --accent:       #2c5282;
-  --accent-text:  #ffffff;
-  --cell-success: #d4edda;
-  --cell-success-text: #155724;
-  --cell-fail:    #f8d7da;
-  --cell-fail-text:    #721c24;
-  --cell-disabled:#cccccc;
-  --timer-bg:     #c0392b;
+  /* 帯（上部バー・選手名・表の見出しなど、ポスターの黒地に当たる部分） */
+  --band-bg:      #0b0d14;
+  --band-bg-2:    #1b1f30;   /* 帯の中のボタン・入力欄 */
+  --band-text:    #f3ead2;
+  --band-muted:   #b8a97c;
+  --band-ok:      #8fe6a5;   /* 帯の上の「保存済み」 */
+  --gold:         #c9a227;
+  --gold-light:   #e6c65a;
+  --gold-deep:    #8a6d1c;   /* 生成りの上で読める濃い金 */
+  --vermilion:    #b3261e;
+  --mincho:       "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+
+  /* ライトテーマ（既定）: 生成りの紙 */
+  --bg:           #f7f2e6;
+  --bg-secondary: #efe7d2;
+  --bg-header:    #e6dbbd;
+  --card-bg:      #fffdf7;
+  --border:       #c9b978;
+  --text:         #1b1b1b;
+  --text-muted:   #6d6250;
+  --accent:       #1b1b1b;   /* 墨 */
+  --accent-text:  #f3ead2;
+  --cell-success: #dcebd6;
+  --cell-success-text: #1f5a2a;
+  --cell-fail:    #f3d5cf;
+  --cell-fail-text:    #8a1c14;
+  --cell-disabled:#d9d2bf;
+  --timer-bg:     #b3261e;
   --timer-text:   #ffffff;
-  --btn-success:  #27ae60;
-  --btn-fail:     #c0392b;
-  --btn-neutral:  #3498db;
-  --score-color:  #d35400;
-  --warn:         #b7791f;
+  --btn-success:  #2e7d4a;
+  --btn-fail:     #b3261e;
+  --btn-neutral:  #8a6d1c;
+  --score-color:  #8a6d1c;
+  --warn:         #a9711b;
   --banner-text:  #ffffff;
-  --row-selected: #fff3cd;      /* 選択中の技の行 */
-  --score-confirmed: #1a56db;   /* 確定済みの得点 */
+  --row-selected: #f3e5b5;   /* 選択中の技の行 */
+  --score-confirmed: #1f4fa3; /* 確定済みの得点 */
 }
 
-/* ダークテーマ */
+/* ダークテーマ: 黒金 */
 [data-theme="dark"] {
-  --bg:           #1a1a2e;
-  --bg-secondary: #16213e;
-  --bg-header:    #2a2a4e;
-  --border:       #444466;
-  --text:         #e0e0ff;
-  --text-muted:   #9999bb;
-  --accent:       #4a90d9;
-  --accent-text:  #ffffff;
-  --cell-success: #1a5c2a;
-  --cell-success-text: #4ade80;
-  --cell-fail:    #5c1a1a;
-  --cell-fail-text:    #ff8888;
-  --cell-disabled:#333355;
-  --timer-bg:     #c0392b;
+  --bg:           #0b0d14;
+  --bg-secondary: #151827;
+  --bg-header:    #1b1f30;
+  --card-bg:      #151827;
+  --border:       #5a4a1c;
+  --text:         #f3ead2;
+  --text-muted:   #b8a97c;
+  --accent:       #c9a227;   /* 金 */
+  --accent-text:  #0b0d14;
+  --cell-success: #1f4d2a;
+  --cell-success-text: #8fe6a5;
+  --cell-fail:    #5a1a1a;
+  --cell-fail-text:    #ff9a9a;
+  --cell-disabled:#262a3a;
+  --timer-bg:     #b3261e;
   --timer-text:   #ffffff;
-  --btn-success:  #27ae60;
-  --btn-fail:     #c0392b;
-  --btn-neutral:  #2980b9;
-  --score-color:  #f1c40f;
-  --warn:         #f6ad55;
+  --btn-success:  #2e8b57;
+  --btn-fail:     #b3261e;
+  --btn-neutral:  #c9a227;
+  --score-color:  #e6c65a;
+  --warn:         #f0b64a;
   --banner-text:  #ffffff;
-  --row-selected: #4a3f1a;
-  --score-confirmed: #60a5fa;
+  --row-selected: #3b3216;
+  --score-confirmed: #7fb7ff;
 }

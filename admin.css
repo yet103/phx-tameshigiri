@@ -278,3 +278,18 @@ main { padding: 8px 12px 16px; }
 .results-name { flex: 1; }
 .results-score { font-weight: bold; }
 .results-empty { color: var(--text-muted); padding: 8px 4px; }
+
+/* ===== 大会トーン（ポスター準拠） =====
+   上下の固定バーは黒地に金（テーマに依らない）。カードは紙色（--card-bg）。
+   上書き専用の節なので、上の各節より後ろに置くこと。 */
+.topbar { background: var(--band-bg); color: var(--gold-light); border-bottom: 2px solid var(--gold); }
+.topbar .theme-btn { color: var(--gold-light); }
+#topTitle { font-family: var(--mincho); letter-spacing: .04em; }
+.tabbar { background: var(--band-bg); border-top: 1px solid var(--gold); }
+.tabbar button { color: var(--band-muted); }
+.tabbar button.on { color: var(--gold-light); border-top-color: var(--gold); }
+.section-head h2 { font-family: var(--mincho); }
+.row, .round-row { background: var(--card-bg); }
+.fab { background: var(--vermilion); }
+.sheet, .tp-sheet { border-top-color: var(--gold); }
+.round-counter.done { border: 1px solid var(--gold); }

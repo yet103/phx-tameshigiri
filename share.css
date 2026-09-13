@@ -1,4 +1,5 @@
-/* 参加者向けの順位ページ。theme.css の変数を使う（style.css は読まない＝768px の制約が及ばない） */
+/* 参加者向けの順位ページ。theme.css の変数を使う（style.css は読まない）。
+   配色はポスターと同じ黒金で固定（share.js の applyTheme が data-theme="dark" にする）。 */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
@@ -26,3 +27,8 @@ body {
 .share-score { font-weight: bold; }
 .share-empty { color: var(--text-muted); padding: 8px 4px; }
 .share-error { padding: 48px 8px; text-align: center; color: var(--text-muted); font-size: 16px; }
+
+/* ===== 大会トーン（ポスター準拠） ===== */
+.share-head h1 { font-family: var(--mincho); letter-spacing: .04em; color: var(--gold-light); font-size: 20px; }
+.share-section h2 { color: var(--gold-light); border-bottom-color: var(--gold); font-family: var(--mincho); }
+.share-rank { color: var(--gold-light); }

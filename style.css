@@ -368,3 +368,38 @@ input[type="file"] { display: none; }
   border-radius: 4px;
 }
 .save-banner button:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* ===== 大会トーン（ポスター準拠） =====
+   見出しの帯（ページリンク・大会バー・選手名・タイマー・ツールバー・表の見出し）は
+   テーマに依らず黒地に金。作業面の色は theme.css の変数に任せる。
+   ここは上書き専用の節なので、上の各節より後ろに置くこと。 */
+.page-links, .event-bar, .player-nav, .timer-bar, .toolbar {
+  background: var(--band-bg);
+  color: var(--band-text);
+  border-color: var(--gold);
+}
+.page-links { border-bottom: 1px solid var(--gold); }
+.page-links a { color: var(--gold-light); }
+.page-links strong { color: var(--band-text); }
+.event-bar select, .event-bar button, .timer-bar button, .toolbar button {
+  background: var(--band-bg-2);
+  color: var(--band-text);
+  border: 1px solid var(--gold-deep);
+}
+.save-status { color: var(--band-ok); }
+.save-status.sending { color: var(--band-muted); }
+.save-status.retrying { color: var(--gold-light); }
+.player-nav { border-bottom: 2px solid var(--gold); }
+.player-nav .nav-btn { background: var(--band-bg-2); color: var(--gold-light); border: 1px solid var(--gold); }
+.player-nav .court-label { background: linear-gradient(180deg, var(--gold-light), var(--gold-deep)); color: var(--band-bg); }
+.player-nav .order-label { color: var(--band-muted); }
+.player-nav #playerNameLabel { font-family: var(--mincho); letter-spacing: .04em; }
+.timer-display { box-shadow: 0 0 0 2px var(--gold) inset; }
+.score-table th { background: var(--band-bg); color: var(--gold-light); border-color: var(--gold); font-family: var(--mincho); }
+.score-table td.tech-name { font-family: var(--mincho); }
+.score-table td.tech-name::before { color: var(--gold-deep); }
+.score-table tr.selected td.tech-name::before { color: inherit; }
+.action-bar { border-top: 2px solid var(--gold); }
+.player-list-toggle { background: var(--band-bg); color: var(--gold-light); }
+.player-list-section { border-top-color: var(--gold); }
+.ranking-section h3 { font-family: var(--mincho); }
