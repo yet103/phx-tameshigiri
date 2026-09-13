@@ -6,7 +6,7 @@ var AdminRound = (function() {
   var CTX = null;          // { eventId, event, players, isStale }
   var currentCourt = '';   // '' なら全コート
   var lastEventId = null;  // 大会が変わったらコート絞り込みを戻すため
-  var techniques = null;   // Api.loadTechniques() の結果のキャッシュ
+  var techniques = null;   // ctx.techniques（その大会の有効な技リスト）。render のたびに入れ替える
   // チップと行の両方がタップを拾うので二重に開かないよう、実際にシートが
   // 存在するか（.tp-overlay）と、まだ開いている最中か（openingPicker）だけで判定する。
   // かつて pickerOpen という別フラグも持っていたが、openPicker が新しいシートの
@@ -50,6 +50,8 @@ var AdminRound = (function() {
 
   function render(container, ctx) {
     CTX = ctx;
+    // 配点は大会ごと。雛形（Api.loadTechniques）は取りに行かない。
+    techniques = (Array.isArray(ctx.techniques) && ctx.techniques.length > 0) ? ctx.techniques : null;
     container.innerHTML = '';
     if (!ctx || !ctx.eventId) {
       var msg = document.createElement('p');
@@ -209,15 +211,11 @@ var AdminRound = (function() {
 
   // --- 技の入力 ---
 
-  async function ensureTechniques() {
+  // 技リストは render で ctx.techniques から入る。取れていなければ大会を開き直してもらう。
+  function ensureTechniques() {
     if (techniques) return true;
-    var data = await Api.loadTechniques();
-    if (!data || !data.techniques) {
-      alert('技術リストを取得できませんでした。');
-      return false;
-    }
-    techniques = data.techniques;
-    return true;
+    alert('技術リストを取得できませんでした。大会を開き直してください。');
+    return false;
   }
 
   async function openPicker(p, row, slot) {
@@ -229,7 +227,7 @@ var AdminRound = (function() {
     openingPicker = true;
     var ctx = CTX;
     var eventId = ctx.eventId;
-    if (!(await ensureTechniques())) { openingPicker = false; return; }
+    if (!ensureTechniques()) { openingPicker = false; return; }
     if (ctx.isStale()) { openingPicker = false; return; }  // 待っている間に画面を離れていた
     // 最新の選択は onChange で控える
     var latest = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);

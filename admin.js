@@ -28,7 +28,9 @@ var Admin = (function() {
   // --- タブ登録 ---
 
   // def = { render: function(container, ctx) }  render は async でもよい
-  // ctx = { eventId, event, players, isStale }（events タブでは event / players は null）
+  // ctx = { eventId, event, players, techniques, isStale }
+  //   （events タブでは event / players / techniques は null）
+  // ctx.techniques — その大会の有効な技リスト（配点は大会ごと。雛形を取りに行かない）
   // ctx.isStale() — await の直後に見て true なら描画をやめる
   // （タブや大会を切り替えられた後の古い応答を画面に反映しないため）
   function registerTab(name, def) {
@@ -125,7 +127,7 @@ var Admin = (function() {
     var seq = ++renderSeq;
     if (currentTab === 'events') {
       setTitle('試し斬り 運営');
-      renderTab(seq, { eventId: null, event: null, players: null });
+      renderTab(seq, { eventId: null, event: null, players: null, techniques: null });
       return;
     }
 
@@ -144,7 +146,10 @@ var Admin = (function() {
     }
     saveLast();
     setTitle(ev.name || '試し斬り 運営');
-    renderTab(seq, { eventId: selectedEventId, event: ev, players: ev.players || [] });
+    renderTab(seq, {
+      eventId: selectedEventId, event: ev, players: ev.players || [],
+      techniques: Array.isArray(ev.techniques) ? ev.techniques : null
+    });
   }
 
   // 現在の大会を読み直して、いま開いているタブを描き直す
@@ -158,7 +163,10 @@ var Admin = (function() {
       return;
     }
     setTitle(ev.name || '試し斬り 運営');
-    renderTab(seq, { eventId: selectedEventId, event: ev, players: ev.players || [] });
+    renderTab(seq, {
+      eventId: selectedEventId, event: ev, players: ev.players || [],
+      techniques: Array.isArray(ev.techniques) ? ev.techniques : null
+    });
   }
 
   async function renderTab(seq, ctx) {
@@ -368,7 +376,10 @@ var Admin = (function() {
     });
     btnTechniques.addEventListener('click', function() {
       sheet.close();
-      location.href = 'techniques.html';
+      // 配点は大会ごと。選択中の大会があればその大会の技リストを開く
+      // （大会未選択なら雛形＝新規大会の初期値を開く）。
+      var id = currentEventId();
+      location.href = id ? 'techniques.html#' + encodeURIComponent(id) : 'techniques.html';
     });
     btnRanking.addEventListener('click', function() {
       sheet.close();
