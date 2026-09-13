@@ -288,10 +288,10 @@ git commit -m "fix: 補正点だけが入った選手も採点済みとみなす
     var longRes = await Api.updatePlayerInfo(testEventId, padP.id, { note: longNote });
     assert('PATCH note は200文字で切る', longRes.player.note.length, 200);
     var csvOut = await Api.exportCsv(testEventId);
-    var csvHead = csvOut.replace(/^﻿/, '').split('\r\n')[0];
+    var csvHead = csvOut.replace(/^FEFF/, '').split('\r\n')[0];
     assert('export は15列', csvHead.split(',').length, 15);
     assert('export のヘッダー末尾', csvHead.split(',').slice(9), ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定']);
-    var csvRow = csvOut.replace(/^﻿/, '').split('\r\n').filter(function(l) { return l.indexOf('補正 太郎') === 0; })[0];
+    var csvRow = csvOut.replace(/^FEFF/, '').split('\r\n').filter(function(l) { return l.indexOf('補正 太郎') === 0; })[0];
     assert('export に補正点・確定が出る', csvRow.split(',').slice(9), ['1', '-2', '0', '-3', '審判メモ', '○']);
 ```
 
