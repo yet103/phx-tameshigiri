@@ -717,9 +717,11 @@ app.post('/api/events/:id/import', (req, res) => {
           id: generateId(),
           name,
           order: buildOrder(court, isFemale, 1, n),
-          tech1: row[3] || '',
-          tech2: row[4] || '',
-          tech3: row[5] || '',
+          // 末尾に空白が残ると Scoring.findTechnique の完全一致に掛からず配点が
+          // 全部0になる（手入力・コピペ由来の空白を落とす）。
+          tech1: String(row[3] || '').trim(),
+          tech2: String(row[4] || '').trim(),
+          tech3: String(row[5] || '').trim(),
           score: 0,
           isNewFace: truthy(row[6]),
           isFemale,

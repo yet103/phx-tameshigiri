@@ -444,6 +444,12 @@
       var sexLabel = common.isFemale() ? '女子' : '男子';
       if (!confirm(court + ' コート ' + sexLabel + ' ' + list.length + ' 人を登録します。よろしいですか？')) return;
       var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
+      // 確認ダイアログの後・API 呼び出しの前で、大会が切り替わっていないか再確認する
+      // （importCsvText と同じ規約。古い ctx の大会に書き込んでしまわないため）。
+      if (Admin.currentEventId() !== eventId) {
+        alert('大会が切り替わったため、登録を中止しました。');
+        return;
+      }
       btnSave.disabled = true;
       btnClose.disabled = true;
       sheet.lock(true);
@@ -454,9 +460,9 @@
       sheet.lock(false);
       btnSave.disabled = false;
       btnClose.disabled = false;
-      if (!res) {
+      if (!res || res.error) {
         // 失敗してもシートは閉じない（入力を残す）
-        alert('登録できませんでした。\n入力内容と通信を確認してください。');
+        alert('登録できませんでした。\n' + ((res && res.error) || '入力内容と通信を確認してください。'));
         return;
       }
       added += res.created;
@@ -689,7 +695,7 @@
       result = await Api.importCsv(eventId, text, mode, true);
     }
     if (!result || !result.success) {
-      alert('インポートに失敗しました。');
+      alert('インポートに失敗しました。' + (result && result.error ? '\n' + result.error : ''));
       return;
     }
     Admin.toast(result.playerCount + '名を読み込みました');
