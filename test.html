@@ -669,6 +669,22 @@
     var bypass3 = await fetch('/%73erver/index.js');
     assert('静的配信ガードは %73erver/index.js も塞ぐ', bypass3.status, 404);
     await Api.deleteEvent(rank2Event.id);
+
+    // --- 大会ごとの技マスタ（トラックA） ---
+    // 雛形（custom.json / 既定値）を複製して新規大会に持たせる。
+    var a1Tmpl = await Api.loadTechniques();
+    var a1Event = await Api.saveEvent({ name: '技マスタテスト', date: '2026-09-14', venue: '', players: [] });
+    var a1Loaded = await Api.loadEvent(a1Event.id);
+    assert('新規大会は雛形を複製した技リストを持つ', a1Loaded.techniques, a1Tmpl.techniques);
+    assert('GET /api/events/:id は techniquesSource を返す', a1Loaded.techniquesSource, 'event');
+    assert('GET /api/events/:id の techniques は配列', Array.isArray(a1Loaded.techniques), true);
+
+    // 既存 ID への上書き保存で techniques を送らなければ、大会の技リストを引き継ぐ
+    await Api.saveEvent({ id: a1Event.id, name: '技マスタテスト改', date: '2026-09-14', venue: '', players: [] });
+    var a1Again = await Api.loadEvent(a1Event.id);
+    assert('保存し直しても大会の技リストは残る', a1Again.techniques, a1Tmpl.techniques);
+    assert('保存し直しても名前は更新される', a1Again.name, '技マスタテスト改');
+    await Api.deleteEvent(a1Event.id);
   }
 
   (async function() {

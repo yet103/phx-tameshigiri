@@ -78,6 +78,34 @@ const DEFAULT_TECHNIQUES = [
   { name: "四方",        strikes: [17, 5,    7,    3   ] }
 ];
 
+// 技リストの複製と正規化。
+// 雛形（DEFAULT_TECHNIQUES / custom.json）をそのまま大会 JSON に入れると、
+// あとで雛形を変えたときに採点中の大会の配点まで動いたように見える。必ず複製して渡す。
+// 同時に { name, strikes } 以外のキーを落とす（保存する形はこの2つだけ）。
+function cloneTechniques(list) {
+  return (Array.isArray(list) ? list : []).map(function(t) {
+    return {
+      name: (t && typeof t.name === 'string') ? t.name.trim() : '',
+      strikes: [0, 1, 2, 3].map(function(i) {
+        const v = (t && Array.isArray(t.strikes)) ? t.strikes[i] : null;
+        return Number.isInteger(v) ? v : null;
+      })
+    };
+  });
+}
+
+// その大会の採点に使う技リスト（有効な技リスト）。
+// event.techniques が配列ならそれ、無ければ雛形の複製。技リストを読むハンドラは必ずこれを使う。
+function effectiveTechniques(event) {
+  if (event && Array.isArray(event.techniques)) return event.techniques;
+  return cloneTechniques(readTechniques().techniques);
+}
+
+// その大会が自前の技リストを持っているか。GET の techniquesSource に使う。
+function techniquesSourceOf(event) {
+  return (event && Array.isArray(event.techniques)) ? 'event' : 'template';
+}
+
 // CSVパース関数（RFC 4180対応）
 function parseCSV(text) {
   const lines = [];
@@ -346,6 +374,10 @@ app.get('/api/events/:id', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    // 有効な技リストは応答にだけ足す（ファイルには書かない）。
+    // techniques を持たない大会（この機能より前に作られた大会）は雛形で動き続ける。
+    data.techniquesSource = techniquesSourceOf(data);
+    data.techniques = effectiveTechniques(data);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -386,6 +418,23 @@ app.post('/api/events', (req, res) => {
     // 名簿を入れ直した大会の live には、もう居ない選手の playerId が残りうる。
     // 落としても配信用ボードが数秒「待機中」になるだけで、コート端末の次の
     // publishLive がすぐ入れ直す（トークンのように配布済みで失うと困る値ではない）。
+
+    // 技リスト（大会ごとの配点）。body に techniques が無いときは
+    //   既存ファイルがある → その大会の techniques を引き継ぐ（shareToken と同じ扱い）
+    //   既存ファイルが無い → 雛形（custom.json / 既定値）を複製して持たせる
+    // 複製なので、あとで雛形を変えてもこの大会の配点は動かない。
+    if (!Array.isArray(event.techniques)) {
+      let inherited = null;
+      if (fs.existsSync(eventPath)) {
+        try {
+          const prevForTech = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+          if (Array.isArray(prevForTech.techniques)) inherited = prevForTech.techniques;
+        } catch (e) {
+          // 壊れた既存ファイルは上書きを止めない
+        }
+      }
+      event.techniques = inherited || cloneTechniques(readTechniques().techniques);
+    }
 
     writeJsonAtomic(eventPath, event);
     res.json({ success: true, id: event.id });
