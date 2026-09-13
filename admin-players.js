@@ -134,13 +134,9 @@
     return row;
   }
 
-  // --- フォーム部品（追加・編集で共用） ---
-  // 戻り値: { el, read, reset }
-  //   el    : シートの body に入れる DOM
-  //   read(): { name, court, isFemale, isNewFace, tech1, tech2, tech3 } | null
-  //           （不正なら alert を出して null）
-  //   reset(): 名前と技だけ空にする（コート・性別は保つ。受付を連続処理するため）
-  function buildPlayerForm(ctx, player) {
+  // コート・性別・新人の入力部品（1人ずつの追加・編集フォームと一括登録シートで共用）
+  // 戻り値: { el, court(), isFemale(), isNewFace() }
+  function buildCommonFields(ctx, player) {
     var el = document.createElement('div');
 
     // 既存のコート一覧（未分類はサーバーが受け付けないので候補に出さない）
@@ -154,21 +150,6 @@
     if (court && courts.indexOf(court) === -1) courts.push(court);
 
     var isFemale = player ? !!player.isFemale : false;
-    var techState = player
-      ? TechPicker.fromArray([player.tech1, player.tech2, player.tech3])
-      : [];
-
-    // 名前
-    var fName = document.createElement('div');
-    fName.className = 'field';
-    var lName = document.createElement('label');
-    lName.textContent = '名前';
-    var inName = document.createElement('input');
-    inName.type = 'text';
-    inName.value = player ? (player.name || '') : '';
-    fName.appendChild(lName);
-    fName.appendChild(inName);
-    el.appendChild(fName);
 
     // コート（セグメント＋「＋」で新しいコート名）
     var fCourt = document.createElement('div');
@@ -259,6 +240,42 @@
     fNew.appendChild(toggle);
     el.appendChild(fNew);
 
+    return {
+      el: el,
+      court: function() { return court; },
+      isFemale: function() { return isFemale; },
+      isNewFace: function() { return chkNew.checked; }
+    };
+  }
+
+  // --- フォーム部品（追加・編集で共用） ---
+  // 戻り値: { el, read, reset }
+  //   el    : シートの body に入れる DOM
+  //   read(): { name, court, isFemale, isNewFace, tech1, tech2, tech3 } | null
+  //           （不正なら alert を出して null）
+  //   reset(): 名前と技だけ空にする（コート・性別は保つ。受付を連続処理するため）
+  function buildPlayerForm(ctx, player) {
+    var el = document.createElement('div');
+
+    var techState = player
+      ? TechPicker.fromArray([player.tech1, player.tech2, player.tech3])
+      : [];
+
+    // 名前
+    var fName = document.createElement('div');
+    fName.className = 'field';
+    var lName = document.createElement('label');
+    lName.textContent = '名前';
+    var inName = document.createElement('input');
+    inName.type = 'text';
+    inName.value = player ? (player.name || '') : '';
+    fName.appendChild(lName);
+    fName.appendChild(inName);
+    el.appendChild(fName);
+
+    var common = buildCommonFields(ctx, player);
+    el.appendChild(common.el);
+
     // 技
     var fTech = document.createElement('div');
     fTech.className = 'field';
@@ -297,13 +314,14 @@
     function read() {
       var name = inName.value.trim();
       if (!name) { alert('名前を入力してください。'); return null; }
+      var court = common.court();
       if (!court) { alert('コートを選んでください。「＋」で新しいコートを作れます。'); return null; }
       var t = TechPicker.toArray(techState);
       return {
         name: name,
         court: court,
-        isFemale: isFemale,
-        isNewFace: chkNew.checked,
+        isFemale: common.isFemale(),
+        isNewFace: common.isNewFace(),
         tech1: t[0],
         tech2: t[1],
         tech3: t[2]
