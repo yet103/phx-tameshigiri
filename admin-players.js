@@ -402,7 +402,6 @@
     var lNames = document.createElement('label');
     lNames.textContent = '名前（1行に1人）';
     var ta = document.createElement('textarea');
-    ta.className = 'bulk-names';
     ta.rows = 8;
     ta.placeholder = '山田 太郎\n佐藤 花子\n…';
     var count = document.createElement('div');
@@ -467,7 +466,14 @@
       }
       added += res.created;
       Admin.toast(res.created + ' 人を登録しました');
-      sheet.close();   // onClose が一覧を反映する
+      // 履歴記録（CSV インポートと同様。一括登録も辿れるようにする）
+      Api.addHistory(eventId, {
+        action: 'bulk_add',
+        detail: res.created + '名の選手を一括登録'
+      });
+      sheet.close();   // onClose も一覧を反映するが、別大会へ行って戻った経路では
+                        // 既に閉じたシートの close が no-op になるため、ここでも直接反映する。
+      Admin.reloadEvent();
     });
   }
 

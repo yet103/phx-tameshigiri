@@ -475,7 +475,8 @@ app.post('/api/events/:id/players', (req, res) => {
 });
 
 // POST /api/events/:id/players/bulk : 同じコート・性別・新人区分の選手をまとめて追加（一巡目、技は空）
-// 名前は1件ずつ trim して空を除く。採番は nextOrderNumber を累積しながら順に行い、1回で書き込む。
+// 名前は1件ずつ trim して空を除く。コート・性別・巡目は全員共通なので nextOrderNumber は
+// 最初に1回だけ求め、あとは連番で増やす（毎回 concat して数え直すと件数の二乗のコストになる）。
 app.post('/api/events/:id/players/bulk', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -487,14 +488,14 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
     if (!Array.isArray(body.names)) {
       return res.status(400).json({ error: '名前の配列が必要です' });
     }
+    if (body.names.length > 500) {
+      return res.status(400).json({ error: '一度に登録できるのは500名までです' });
+    }
     const names = body.names
       .map(n => (typeof n === 'string' ? n.trim() : ''))
       .filter(n => n !== '');
     if (names.length === 0) {
       return res.status(400).json({ error: '登録する名前がありません' });
-    }
-    if (names.length > 500) {
-      return res.status(400).json({ error: '一度に登録できるのは500名までです' });
     }
 
     const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
@@ -507,10 +508,9 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
     const isFemale = body.isFemale === true;
     const isNewFace = body.isNewFace === true;
     const gender = isFemale ? '女子' : '男子';
-    const created = [];
-    names.forEach(name => {
-      const n = nextOrderNumber(event.players.concat(created), court, gender, 1);
-      created.push({
+    let n = nextOrderNumber(event.players, court, gender, 1);
+    const created = names.map(name => {
+      const player = {
         id: generateId(),
         name: name,
         order: buildOrder(court, isFemale, 1, n),
@@ -521,7 +521,9 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
         isNewFace: isNewFace,
         isFemale: isFemale,
         result: ''
-      });
+      };
+      n++;
+      return player;
     });
 
     event.players = event.players.concat(created);
@@ -729,6 +731,9 @@ app.post('/api/events/:id/import', (req, res) => {
         });
       }
     } else {
+      // 拡張15列かどうかは先頭行（ヘッダー）の列数で一度だけ決める（設計書 T5 の表）。
+      // 行ごとに判定すると、行によって列数が違う崩れたCSVで挙動が揺れる。
+      const isExtended = header.length >= 10;
       importedPlayers = dataLines.map(row => {
         // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定]
         const p = {
@@ -743,7 +748,7 @@ app.post('/api/events/:id/import', (req, res) => {
           isFemale: row[7] === '○',
           result: row[8] || ''
         };
-        if (row.length >= 10) {
+        if (isExtended) {
           p.adjust = [toInt(row[9]), toInt(row[10]), toInt(row[11])];
           p.totalAdjust = toInt(row[12]);
           p.note = String(row[13] || '').trim().slice(0, 200);
