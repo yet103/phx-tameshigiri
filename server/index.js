@@ -308,6 +308,7 @@ app.use(express.json({ limit: '50mb' }));
 //   POST   /api/events/:id/rounds/2/generate
 //   POST   /api/events/:id/import
 //   POST   /api/events/:id/history
+//   PUT    /api/events/:id/live/:court
 //   POST   /api/links               （大会ファイルに shareToken を書き込む）
 //   POST   /api/techniques / DELETE /api/techniques
 // ── Event API ──
@@ -960,18 +961,93 @@ app.get('/api/events/:id/ranking', (req, res) => {
   }
 });
 
+// ── Live API（配信用ボード） ──
+// コートの端末が「今どの選手を開いているか」「タイマーの状態」を置く場所。
+// 大会 JSON の live（コートごと）に持ち、board.html が GET /api/links/:token/live で読む。
+
+// live のコート名はコート名そのものをキーにするので、'__proto__' のような名前でも
+// プロトタイプを汚さないように defineProperty で書き、読みは hasOwnProperty で見る
+// （computeRanking が氏名の辞書に Object.create(null) を使っているのと同じ理由）。
+function setOwn(obj, key, value) {
+  Object.defineProperty(obj, key, { value: value, enumerable: true, writable: true, configurable: true });
+}
+
+function getOwn(obj, key) {
+  return (obj && Object.prototype.hasOwnProperty.call(obj, key)) ? obj[key] : undefined;
+}
+
+const DEFAULT_LIVE_TIMER = { sec: 300, running: false };
+
+// PUT /api/events/:id/live/:court : そのコートのライブ状態を置き換える
+// 認証は他の採点 API と同じ扱い（現状は無し）。
+// timer を省略したときは既存の値を据え置く（選手だけ切り替えた場合など）。
+// event.updatedAt は動かさない。共有ページ（share.js）は updatedAt の変化で
+// 順位を描き直すので、選手を切り替えるたびに動かすと無駄な再描画を呼ぶ。
+app.put('/api/events/:id/live/:court', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const court = req.params.court;
+    if (!isValidCourt(court)) {
+      return res.status(400).json({ error: '不正なコート名です' });
+    }
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    const body = req.body || {};
+
+    let playerId = null;
+    if (body.playerId !== null && body.playerId !== undefined) {
+      if (!isValidId(body.playerId)) {
+        return res.status(400).json({ error: '不正な選手IDです' });
+      }
+      const found = (event.players || []).some(p => p && p.id === body.playerId);
+      if (!found) {
+        return res.status(400).json({ error: '選手が見つかりません' });
+      }
+      playerId = body.playerId;
+    }
+
+    if (!event.live || typeof event.live !== 'object') event.live = {};
+    const prev = getOwn(event.live, court) || {};
+    let timer = prev.timer || DEFAULT_LIVE_TIMER;
+    if (body.timer !== undefined) {
+      const t = body.timer;
+      if (!t || typeof t !== 'object' || !Number.isInteger(t.sec) || t.sec < 0 || t.sec > 5999) {
+        return res.status(400).json({ error: '不正なタイマーです' });
+      }
+      timer = { sec: t.sec, running: t.running === true };
+    }
+
+    const entry = {
+      playerId: playerId,
+      timer: { sec: timer.sec, running: timer.running === true },
+      updatedAt: new Date().toISOString()
+    };
+    setOwn(event.live, court, entry);
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true, live: entry });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Techniques API ──
+
+// 技術一覧の読み出し。GET /api/techniques と GET /api/links/:token/live が共有する。
+function readTechniques() {
+  const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
+  if (fs.existsSync(customPath)) {
+    return { isCustom: true, techniques: JSON.parse(fs.readFileSync(customPath, 'utf-8')) };
+  }
+  return { isCustom: false, techniques: DEFAULT_TECHNIQUES };
+}
 
 // GET /api/techniques : 技術一覧取得
 app.get('/api/techniques', (req, res) => {
   try {
-    const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
-    if (fs.existsSync(customPath)) {
-      const customData = JSON.parse(fs.readFileSync(customPath, 'utf-8'));
-      res.json({ isCustom: true, techniques: customData });
-    } else {
-      res.json({ isCustom: false, techniques: DEFAULT_TECHNIQUES });
-    }
+    res.json(readTechniques());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1050,7 +1126,9 @@ app.post('/api/events/:id/history', (req, res) => {
 });
 
 // ── Share Link API ──
-// GET 系は参加者が無認証で開く（share.html / present.html）。認証を足す際も保護しないこと。
+// GET 系は参加者が無認証で開く（share.html / present.html / board.html）。
+// 認証を足す際も保護しないこと（board.html は OBS のブラウザソースが開くので、
+// ログインを挟むと配信に何も映らなくなる）。
 // トークンは必ず isValidId で検証してから path.join する
 // （検証せずに join するとパストラバーサルでデータ全体が読める）。
 
@@ -1144,6 +1222,71 @@ app.get('/api/links/:token/ranking', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     res.json(computeRanking(JSON.parse(fs.readFileSync(eventPath, 'utf-8'))));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/links/:token/live : 共有リンク越しのライブ状態（無認証。board.html が2秒ごとに読む）
+// 返すのは「そのコートで今開いている選手1人分」だけ。名簿全体の result / order は返さない
+// （GET /api/links/:token が targetId を伏せているのと同じ方針）。
+// ライブ状態が無いコートはキーごと含めない（board 側は「待機中」を出す）。
+app.get('/api/links/:token/live', (req, res) => {
+  try {
+    if (!isValidId(req.params.token)) {
+      return res.status(400).json({ error: '不正なトークンです' });
+    }
+    const linkPath = path.join(LINKS_DIR, `${req.params.token}.json`);
+    if (!fs.existsSync(linkPath)) {
+      return res.status(404).json({ error: 'リンクが見つかりません' });
+    }
+    const link = JSON.parse(fs.readFileSync(linkPath, 'utf-8'));
+    if (link.targetType !== 'event' || !isValidId(link.targetId)) {
+      return res.status(404).json({ error: 'リンクが見つかりません' });
+    }
+    const eventPath = path.join(EVENTS_DIR, `${link.targetId}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    const live = (event.live && typeof event.live === 'object') ? event.live : {};
+    const players = Array.isArray(event.players) ? event.players : [];
+
+    const courts = {};
+    Object.keys(live).forEach(court => {
+      const entry = live[court];
+      if (!entry || typeof entry !== 'object') return;
+      const p = entry.playerId ? players.filter(q => q && q.id === entry.playerId)[0] : null;
+      setOwn(courts, court, {
+        updatedAt: entry.updatedAt || '',
+        timer: {
+          sec: Number.isInteger(entry.timer && entry.timer.sec) ? entry.timer.sec : DEFAULT_LIVE_TIMER.sec,
+          running: !!(entry.timer && entry.timer.running)
+        },
+        // adjust は配列のときだけそのまま返す。無い選手（旧データ）は null にして、
+        // board 側の Scoring.decodeResult に「5文字目を補正点として読む」旧解釈をさせる。
+        player: p ? {
+          name: p.name || '',
+          order: p.order || '',
+          isFemale: p.isFemale === true,
+          tech1: p.tech1 || '',
+          tech2: p.tech2 || '',
+          tech3: p.tech3 || '',
+          result: p.result || '',
+          adjust: Array.isArray(p.adjust) ? p.adjust : null,
+          totalAdjust: Number.isFinite(p.totalAdjust) ? p.totalAdjust : 0,
+          score: typeof p.score === 'number' ? p.score : 0,
+          confirmed: p.confirmed === true
+        } : null
+      });
+    });
+
+    res.json({
+      eventName: event.name || '',
+      now: new Date().toISOString(),
+      courts: courts,
+      techniques: readTechniques().techniques
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

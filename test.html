@@ -545,6 +545,69 @@
     assert('大会を削除するとリンクも消える', await Api.loadShareLink(link1.token), null);
     assert('大会を削除すると共有の順位も消える', await Api.loadSharedRanking(link1.token), null);
 
+    // --- ライブ状態（配信用ボード） ---
+    var liveEvent = await Api.saveEvent({ name: 'ライブテスト', date: '2026-03-04', venue: '', players: [] });
+    var liveBulk = await Api.createPlayersBulk(liveEvent.id, {
+      court: 'A', isFemale: false, isNewFace: false, names: ['配信 甲', '配信 乙']
+    });
+    var livePlayer = liveBulk.players[0];
+    var liveOther = liveBulk.players[1];
+    await Api.updatePlayerInfo(liveEvent.id, livePlayer.id, {
+      tech1: '真', tech2: '連', result: '11   10   ',
+      adjust: [3, 1, 0], totalAdjust: 2, score: 28, confirmed: true
+    });
+    await Api.updatePlayerInfo(liveEvent.id, liveOther.id, { tech1: '真', result: '10   ', score: 11 });
+
+    var liveBadCourt = await Api.putLive(liveEvent.id, 'A-1', { playerId: livePlayer.id });
+    assert('putLive: 不正なコートは理由を返す', liveBadCourt && liveBadCourt.error, '不正なコート名です');
+    var liveBadPlayer = await Api.putLive(liveEvent.id, 'A', { playerId: 'zzzzzzzz' });
+    assert('putLive: 大会にいない選手は理由を返す', liveBadPlayer && liveBadPlayer.error, '選手が見つかりません');
+    var liveBadTimer = await Api.putLive(liveEvent.id, 'A', { playerId: livePlayer.id, timer: { sec: 1.5, running: true } });
+    assert('putLive: 整数でない秒数は理由を返す', liveBadTimer && liveBadTimer.error, '不正なタイマーです');
+
+    var livePut1 = await Api.putLive(liveEvent.id, 'A', { playerId: livePlayer.id, timer: { sec: 280, running: true } });
+    assert('putLive: 今の選手とタイマーを返す',
+      [livePut1.live.playerId, livePut1.live.timer.sec, livePut1.live.timer.running],
+      [livePlayer.id, 280, true]);
+    assert('putLive: 受信時刻が付く', typeof livePut1.live.updatedAt, 'string');
+    var livePut2 = await Api.putLive(liveEvent.id, 'A', { playerId: liveOther.id });
+    assert('putLive: timer を省略すると据え置く',
+      [livePut2.live.playerId, livePut2.live.timer.sec, livePut2.live.timer.running],
+      [liveOther.id, 280, true]);
+    await Api.putLive(liveEvent.id, 'A', { playerId: livePlayer.id, timer: { sec: 300, running: false } });
+
+    var liveToken = (await Api.createShareLink(liveEvent.id)).token;
+    var liveRes = await Api.loadLive(liveToken);
+    var live = liveRes.data;
+    assert('loadLive: 大会名を返す', live.eventName, 'ライブテスト');
+    assert('loadLive: サーバーの現在時刻を返す', typeof live.now, 'string');
+    assert('loadLive: ライブ状態のあるコートだけを返す', Object.keys(live.courts), ['A']);
+    assert('loadLive: 今の選手を返す',
+      [live.courts.A.player.name, live.courts.A.player.order, live.courts.A.player.result],
+      ['配信 甲', 'A-男子-1-1', '11   10   ']);
+    assert('loadLive: 補正点・全体補正・得点・確定を返す',
+      [live.courts.A.player.adjust, live.courts.A.player.totalAdjust,
+       live.courts.A.player.score, live.courts.A.player.confirmed],
+      [[3, 1, 0], 2, 28, true]);
+    assert('loadLive: タイマーを返す', live.courts.A.timer, { sec: 300, running: false });
+    assert('loadLive: 技の配点を返す',
+      [Array.isArray(live.techniques), live.techniques.length > 0, live.techniques[0].strikes.length],
+      [true, true, 4]);
+    assert('loadLive: 今の選手以外は含まない（名簿の生データを漏らさない）',
+      JSON.stringify(live).indexOf('配信 乙'), -1);
+
+    await Api.putLive(liveEvent.id, 'A', { playerId: null });
+    var liveNone = (await Api.loadLive(liveToken)).data;
+    assert('loadLive: 選手未設定なら player は null', liveNone.courts.A.player, null);
+    assert('loadLive: 選手未設定でもコートは残る', Object.keys(liveNone.courts), ['A']);
+
+    var live404 = await Api.loadLive('zzzzzzzz');
+    assert('loadLive: 存在しないトークンは status 404', [live404.ok, live404.status], [false, 404]);
+    var live400 = await Api.loadLive('../x');
+    assert('loadLive: 不正なトークンは status 400', [live400.ok, live400.status], [false, 400]);
+
+    await Api.deleteEvent(liveEvent.id);
+
     // --- 順位の細部と静的配信のガード ---
     var rank2Event = await Api.saveEvent({ name: '順位テスト', date: '2026-03-01', venue: '', players: [
       { id: 'r1', name: '田中 ', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 7, isNewFace: false, isFemale: false, result: '1    ' },

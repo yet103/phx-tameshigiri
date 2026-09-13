@@ -304,6 +304,47 @@ var Api = (function() {
     }
   }
 
+  // --- Live（配信用ボード） ---
+  async function putLive(eventId, court, data) {
+    // PUT /api/events/:eventId/live/:court
+    // Body: { playerId: 選手ID | null, timer: { sec: 整数(0..5999), running: 真偽値 } }
+    //       timer を省略するとサーバー側の値を据え置く。
+    // 戻り値: { live: { playerId, timer, updatedAt } } | { error }（400/404） | null（通信失敗）
+    // 採点画面はこの結果を待たない（配信が遅れても採点は続く）。
+    try {
+      var res = await fetch('/api/events/' + eventId + '/live/' + encodeURIComponent(court), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) {
+        var errJson = await res.json();
+        return { error: errJson.error };
+      }
+      var json = await res.json();
+      return { live: json.live || null };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function loadLive(token) {
+    // GET /api/links/:token/live（無認証）
+    // 戻り値: { ok: true, data: { eventName, now, courts, techniques } }
+    //       | { ok: false, status }
+    //   status 400/404 → トークンが無効（board は「このリンクは無効です」を出して取得をやめる）
+    //   status 0       → 通信失敗（board は前回の表示を保って取得を続ける）
+    // courts はライブ状態のあるコートだけを持つ。各コートは
+    // { updatedAt, timer: { sec, running }, player: {...} | null }。
+    try {
+      var res = await fetch('/api/links/' + encodeURIComponent(token) + '/live');
+      if (!res.ok) return { ok: false, status: res.status };
+      return { ok: true, data: await res.json() };
+    } catch (e) {
+      return { ok: false, status: 0 };
+    }
+  }
+
   // --- Ranking / Share ---
   async function loadRanking(eventId) {
     // GET /api/events/:eventId/ranking
@@ -389,6 +430,8 @@ var Api = (function() {
     resetTechniques: resetTechniques,
     loadHistory: loadHistory,
     addHistory: addHistory,
+    putLive: putLive,
+    loadLive: loadLive,
     loadRanking: loadRanking,
     createShareLink: createShareLink,
     loadShareLink: loadShareLink,
