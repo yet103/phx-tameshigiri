@@ -46,6 +46,13 @@ var AdminRound = (function() {
     return null;
   }
 
+  // 採点画面のハッシュ（route.js の Route.build と同じ形。admin.html は route.js を読まない）
+  function scoringHref(eventId, court) {
+    var hash = '#event/' + encodeURIComponent(eventId || '');
+    if (court) hash += '/' + encodeURIComponent(court);
+    return 'index.html' + hash;
+  }
+
   // --- 描画 ---
 
   function render(container, ctx) {
@@ -83,6 +90,13 @@ var AdminRound = (function() {
     genBtn.textContent = '二巡目を生成';
     genBtn.addEventListener('click', onGenerate);
     head.appendChild(genBtn);
+    // 採点画面へ（絞り込み中のコートを引き継ぐ。採点画面の Route と同じ形 #event/<大会ID>/<コート>）
+    var openBtn = document.createElement('a');
+    openBtn.className = 'round-open';
+    openBtn.id = 'btnOpenScoring';
+    openBtn.textContent = '採点画面へ';
+    openBtn.href = scoringHref(ctx.eventId, currentCourt);
+    head.appendChild(openBtn);
     head.appendChild(buildMenu());
     container.appendChild(head);
 
@@ -94,6 +108,7 @@ var AdminRound = (function() {
     function onCourtChange(court) {
       currentCourt = court;
       Admin.renderCourtChips(chipsWrap, players, currentCourt, onCourtChange);
+      openBtn.href = scoringHref(ctx.eventId, currentCourt);
       renderList();
     }
     Admin.renderCourtChips(chipsWrap, players, currentCourt, onCourtChange);
@@ -364,6 +379,7 @@ var AdminRound = (function() {
 
   return {
     render: render,
-    isTechIncomplete: isTechIncomplete
+    isTechIncomplete: isTechIncomplete,
+    scoringHref: scoringHref
   };
 })();
