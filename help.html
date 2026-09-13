@@ -44,7 +44,7 @@
     <p><span class="term">一巡目</span>＝全員が1回ずつ斬る回です。<span class="term">二巡目</span>＝同じ選手がもう1回斬る回です。得点は一巡目と二巡目を合わせた合計で競います。</p>
 
     <div class="diagram">
-      <svg viewBox="0 0 360 650" role="img" aria-label="大会を作る、選手を登録、一巡目の採点、二巡目を生成して技を入力、二巡目の採点、結果の確認、発表・共有、という順に進む流れ図。端末の役割は、運営者のスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク。">
+      <svg viewBox="0 0 360 698" role="img" aria-label="大会を作る、選手を登録、一巡目の採点、二巡目を生成して技を入力、二巡目の採点、結果の確認、発表・共有、という順に進む流れ図。端末の役割は、運営者のスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク、配信PC（OBS）が配信用ボード。">
         <defs>
           <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
@@ -110,6 +110,8 @@
         <text class="d-sub"    x="10"  y="643">発表モード</text>
         <text class="d-legend" x="190" y="624" font-weight="bold">参加者のスマホ</text>
         <text class="d-sub"    x="190" y="643">共有リンク</text>
+        <text class="d-legend" x="10"  y="672" font-weight="bold">配信 PC（OBS）</text>
+        <text class="d-sub"    x="10"  y="691">配信用ボード</text>
       </svg>
     </div>
 
@@ -245,7 +247,7 @@
     <p>運営者は1台のスマホで運営画面を、各コートは1台ずつのタブレットで採点画面を開きます。</p>
 
     <div class="diagram">
-      <svg viewBox="0 0 360 280" role="img" aria-label="運営者のスマホ、Aコートのタブレット、Bコートのタブレットが、どれも同じサーバーの大会データを読み書きし、サーバーから会場の大画面（発表モード）と参加者のスマホ（共有リンク）へ順位が届く図。">
+      <svg viewBox="0 0 360 280" role="img" aria-label="運営者のスマホ、Aコートのタブレット、Bコートのタブレットが、どれも同じサーバーの大会データを読み書きし、サーバーから会場の大画面（発表モード）、参加者のスマホ（共有リンク）、配信PC（OBS の配信用ボード）へ順位や採点の様子が届く図。">
         <defs>
           <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
@@ -281,20 +283,27 @@
           <text class="d-sub-key"   x="170" y="50" text-anchor="middle">どの端末も同じ大会を読み書きする</text>
         </g>
 
-        <line class="d-line" x1="92"  y1="171" x2="92"  y2="195" marker-end="url(#ah2)"/>
-        <line class="d-line" x1="268" y1="171" x2="268" y2="195" marker-end="url(#ah2)"/>
+        <line class="d-line" x1="64"  y1="171" x2="64"  y2="195" marker-end="url(#ah2)"/>
+        <line class="d-line" x1="180" y1="171" x2="180" y2="195" marker-end="url(#ah2)"/>
+        <line class="d-line" x1="296" y1="171" x2="296" y2="195" marker-end="url(#ah2)"/>
 
         <g transform="translate(10,198)">
-          <rect class="d-box" width="164" height="70" rx="8"/>
-          <text class="d-legend" x="82" y="24" text-anchor="middle" font-weight="bold">会場の大画面</text>
-          <text class="d-sub"    x="82" y="43" text-anchor="middle">発表モード</text>
-          <text class="d-sub"    x="82" y="62" text-anchor="middle">掲示／発表</text>
+          <rect class="d-box" width="108" height="70" rx="8"/>
+          <text class="d-legend" x="54" y="24" text-anchor="middle" font-weight="bold">会場の</text>
+          <text class="d-legend" x="54" y="43" text-anchor="middle" font-weight="bold">大画面</text>
+          <text class="d-sub"    x="54" y="62" text-anchor="middle">発表モード</text>
         </g>
-        <g transform="translate(186,198)">
-          <rect class="d-box" width="164" height="70" rx="8"/>
-          <text class="d-legend" x="82" y="24" text-anchor="middle" font-weight="bold">参加者のスマホ</text>
-          <text class="d-sub"    x="82" y="43" text-anchor="middle">共有リンク</text>
-          <text class="d-sub"    x="82" y="62" text-anchor="middle">見るだけ</text>
+        <g transform="translate(126,198)">
+          <rect class="d-box" width="108" height="70" rx="8"/>
+          <text class="d-legend" x="54" y="24" text-anchor="middle" font-weight="bold">参加者の</text>
+          <text class="d-legend" x="54" y="43" text-anchor="middle" font-weight="bold">スマホ</text>
+          <text class="d-sub"    x="54" y="62" text-anchor="middle">共有リンク</text>
+        </g>
+        <g transform="translate(242,198)">
+          <rect class="d-box" width="108" height="70" rx="8"/>
+          <text class="d-legend" x="54" y="24" text-anchor="middle" font-weight="bold">配信 PC</text>
+          <text class="d-legend" x="54" y="43" text-anchor="middle" font-weight="bold">（OBS）</text>
+          <text class="d-sub"    x="54" y="62" text-anchor="middle">配信用ボード</text>
         </g>
       </svg>
     </div>
@@ -507,6 +516,28 @@
     </figure>
 
     <div class="note">発表の直前には <span class="ui">更新</span> を押して、最新の順位になっているか確かめてください。<span class="ui">全画面</span> でメニューを消せます。</div>
+
+    <h3>YouTube 配信（OBS）に映す</h3>
+    <p>コートで今どの選手を採点しているかを、配信の画面にそのまま映せます。A コート・B コートで1つずつ、<span class="term">配信用ボード</span>というページを OBS の <span class="ui">ブラウザソース</span> として並べます。見るだけのページなので、配信 PC から採点が書き換わることはありません。</p>
+
+    <ol>
+      <li>結果タブで <span class="ui">共有リンクをコピー</span> を押し、URL を取ります（<code>share.html#（トークン）</code>）。</li>
+      <li>その URL の <code>share.html</code> を <code>board.html</code> に書き換え、末尾に <code>/A</code> を足します。これが A コートのアドレスです（例: <code>board.html#O7KVvuj-/A</code>）。B コートは末尾を <code>/B</code> にします。コート名は運営画面で付けたものをそのまま書きます。</li>
+      <li>OBS で <span class="ui">ソース</span> の <span class="ui">＋</span> から <span class="ui">ブラウザ</span> を選び、<span class="ui">URL</span> にそのアドレスを入れます。<span class="ui">幅</span> 960・<span class="ui">高さ</span> 540（大きく映すなら 1920・1080）にします。</li>
+      <li>A と B の2つを作って画面に並べます。</li>
+    </ol>
+
+    <ul>
+      <li>映像の上に重ねるときは、アドレスの <code>board.html</code> のすぐ後ろに <code>?bg=transparent</code> を付けます（<code>board.html?bg=transparent#（トークン）/A</code> の順。<code>#</code> より後ろに付けても効きません）。背景が透けて、帯と表だけが乗ります。</li>
+      <li>コートの端末で選手を切り替えたり、タイマーを動かしたりすると、2〜3秒で配信側も追随します。配信 PC で操作することはありません。</li>
+      <li>配信に映すコートの端末では、採点画面のコートを必ずそのコートに選んでください（<span class="ui">全コート</span> のまま別のコートの選手へ移ると、前のコートのボードが前の選手を映したままになります）。</li>
+      <li>共有リンクを作り直した（トークンが変わった）ときは、OBS のブラウザソースの URL も直して <span class="ui">現在のページを再読み込み</span> してください。古いトークンのままだと <span class="msg">このリンクは無効です</span> と出ます。</li>
+      <li>そのコートでまだ誰も開いていないときは <span class="msg">待機中</span> と出ます。採点画面でその大会とコートを選べば映り始めます。</li>
+      <li>採点が <span class="ui">確定</span> 済みの選手は、得点と合計が青くなり <span class="ui">確定</span> の札が付きます。</li>
+      <li>通信が途切れても直前の表示は消えません。右下に小さく <span class="msg">更新できません</span> と出るだけで、つながれば自動で戻ります。</li>
+    </ul>
+
+    <div class="note">配信用ボードのアドレスは共有リンクと同じトークンを使います。配信に映すだけなら誰にも配る必要はありません（URL を知られると順位も見られます）。</div>
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
   </section>
 

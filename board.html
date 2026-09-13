@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>配信用ボード</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="board.css">
+</head>
+<!-- OBS のブラウザソースで開く閲覧専用ページ。操作するものは置かない。
+     URL は board.html#<トークン>/<コート>（例 board.html#O7KVvuj-/A）。
+     ?bg=transparent で背景を透過にして映像に重ねられる。 -->
+<body data-theme="dark">
+
+  <!-- 応答が届くまでは待機中の見た目（表と合計を出さない）で始める -->
+  <div class="board-root is-idle" id="boardRoot">
+    <header class="board-head">
+      <div class="board-who">
+        <div class="board-line">
+          <span class="board-court" id="boardCourt"></span>
+          <span class="board-event" id="boardEvent"></span>
+          <span class="board-order" id="boardOrder"></span>
+        </div>
+        <div class="board-name" id="boardName">読み込み中…</div>
+      </div>
+      <div class="board-timer" id="boardTimer">--:--</div>
+    </header>
+
+    <div class="board-table-wrap" id="boardTableWrap">
+      <table class="board-table">
+        <thead>
+          <tr>
+            <th class="c-tech">技</th>
+            <th>初太刀</th>
+            <th>二ノ太刀</th>
+            <th>三ノ太刀</th>
+            <th>四ノ太刀</th>
+            <th class="c-adjust">補正</th>
+            <th class="c-score">得点</th>
+          </tr>
+        </thead>
+        <tbody id="boardBody"></tbody>
+        <!-- 全体補正。0 のときは行ごと隠す（合計＝行の得点の和＋ここ、が画面で追えるように） -->
+        <tfoot>
+          <tr class="is-hidden" id="boardTotalAdjustRow">
+            <td class="label" colspan="6">全体補正</td>
+            <td class="num score" id="boardTotalAdjust"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <footer class="board-foot" id="boardFoot">
+      <span class="board-badge is-hidden" id="boardConfirmed">確定</span>
+      <span class="board-total" id="boardTotal">合計 0 点</span>
+    </footer>
+
+    <div class="board-notice" id="boardNotice"></div>
+  </div>
+
+  <script src="scoring.js"></script>
+  <script src="api.js"></script>
+  <script src="board.js"></script>
+</body>
+</html>
