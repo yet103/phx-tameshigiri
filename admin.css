@@ -179,17 +179,33 @@ main { padding: 8px 12px 16px; }
 .tp-head span { flex: 1; }
 .tp-close { min-width: 64px; min-height: 44px; }
 .tp-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; } /* シートの端で背後のページがスクロールしないように */
+.tp-search { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.tp-search input[type="search"] {
+  font-family: inherit; font-size: 16px; width: 100%; min-height: 44px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
+}
+/* 技名と太刀の配点を列でそろえる（ヘッダー行と各技の行で同じ列幅）。
+   見出しは11pxにしているので48pxでも1行に収まる（56pxだと320〜375px幅で技名列が削られる）。 */
+.tp-row { display: grid; grid-template-columns: 20px 1fr repeat(4, 48px); align-items: center; gap: 4px; }
+.tp-header {
+  padding: 6px 14px; color: var(--text-muted);
+  border-bottom: 1px solid var(--border); background: var(--bg-secondary);
+  /* .tp-list（スクロール領域）の中の先頭に置いて追従させる。
+     外に置くと classic スクロールバー環境で行側だけ幅が狭くなり列がずれるため。 */
+  position: sticky; top: 0; z-index: 1;
+}
+.tp-header .tp-s { font-size: 11px; } /* 4文字の見出しが48px列に1行で収まるサイズ */
 .tp-item {
-  display: flex; align-items: center; gap: 8px;
   width: 100%; min-height: 48px; padding: 0 14px; text-align: left;
   border-radius: 0; background: transparent; color: var(--text);
   border-bottom: 1px solid var(--border);
 }
 .tp-item.on { background: var(--bg-header); font-weight: bold; }
-.tp-clear { color: var(--text-muted); } /* 「この枠を空にする」は控えめな色に。行高さは .tp-item の 48px を継承する */
-.tp-no { flex: 0 0 auto; width: 20px; color: var(--accent); }
-.tp-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tp-pt { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); }
+.tp-clear { color: var(--text-muted); display: block; } /* 「この枠を空にする」は控えめな色に。グリッド列は使わない */
+.tp-none { padding: 14px; color: var(--text-muted); }
+.tp-no { width: 20px; color: var(--accent); }
+.tp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-s { text-align: right; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 /* ===== トースト ===== */
 #toast {
