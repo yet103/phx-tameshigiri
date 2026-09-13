@@ -153,8 +153,9 @@ main { padding: 8px 12px 16px; }
   border: 1px solid var(--accent); background: var(--bg); color: var(--accent);
 }
 .seg button.on { background: var(--accent); color: var(--accent-text); font-weight: bold; }
-.toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; }
-.toggle input { width: 22px; height: 22px; }
+/* .field > label（見出し用の小さな文字・block）より優先させる。チェックと文字を横に並べる */
+.toggle, .field > label.toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 15px; color: var(--text); margin: 0; }
+.toggle input { width: 22px; height: 22px; margin: 0; flex: 0 0 auto; }
 .bulk-count { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
 /* 技チップ */
@@ -221,7 +222,8 @@ main { padding: 8px 12px 16px; }
 
 /* ===== 進行タブ（admin-round.js） ===== */
 .round-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; }
-.round-stat { flex: 1; font-size: 14px; }
+/* 件数は1行目に置き、ボタン類は2行目に折り返す（狭い幅で「一巡目 採点済み 2 / 6」が3行に割れないように） */
+.round-stat { flex: 1 1 100%; font-size: 14px; white-space: nowrap; }
 .round-gen {
   background: var(--accent); color: var(--accent-text);
   border: none; border-radius: 6px; padding: 10px 14px; min-height: 44px; font-size: 14px;

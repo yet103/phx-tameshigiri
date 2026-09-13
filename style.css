@@ -403,3 +403,17 @@ input[type="file"] { display: none; }
 .player-list-toggle { background: var(--band-bg); color: var(--gold-light); }
 .player-list-section { border-top-color: var(--gold); }
 .ranking-section h3 { font-family: var(--mincho); }
+
+/* ===== スマホ幅の採点表 =====
+   一般規則（.score-table-wrap / td.tech-name）より後ろに置かないと同じ詳細度で負けるため、末尾に置く。 */
+@media (max-width: 767px) {
+  /* 採点表は横スクロールになるので、技名の列を左に固定して「どの形か」を見失わないようにする */
+  .score-table th:first-child, .score-table td.tech-name {
+    position: sticky; left: 0; z-index: 2;
+    box-shadow: 2px 0 0 var(--border);
+  }
+  .score-table td.tech-name { font-size: 18px; padding: 4px 8px; }
+  .score-table td.strike-cell { min-width: 56px; }
+  /* 固定した技名の左にスクロール中の列が覗かないよう、余白は表の外側ではなく無くす */
+  .score-table-wrap { padding: 0; }
+}

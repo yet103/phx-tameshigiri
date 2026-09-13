@@ -139,6 +139,7 @@ T4・T3 は独立。T7 は最後にまとめて行う。
 - `style.css` の `body{min-width:768px}` を外す。
 - `.score-table-wrap` は横スクロール可（既存）。`.player-nav` / `.timer-bar` / `.action-bar` / `.toolbar` / `.event-bar` は `flex-wrap: wrap` にして折り返す。
 - タップ目標は 44px 以上を守る（太刀セルの高さは 44px のまま）。
+- 768px 未満では採点表の技名の列を左に固定し（`position: sticky`）、横スクロールしても「どの形か」を見失わないようにする。表の外側の余白は無くす（固定した列の左に隣の列が覗かないため）。
 
 ---
 
