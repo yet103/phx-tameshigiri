@@ -215,6 +215,9 @@ var TechPicker = (function() {
       if (ev.isComposing) return;
       renderList(searchInput.value);
     });
+    // WebKit（iOS/macOS Safari）は input(isComposing:true) → compositionend の順で、
+    // その後 isComposing:false の input が発火しないため、compositionend でも絞り込む。
+    searchInput.addEventListener('compositionend', function() { renderList(searchInput.value); });
 
     sheet.appendChild(head);
     sheet.appendChild(search);

@@ -838,6 +838,47 @@
       TechPicker.dismiss();
       return hasNone;
     })(), true);
+    assert('open: IME変換中(isComposing:true)の input では絞り込まれない', (function() {
+      TechPicker.open({
+        techniques: [{ name: '真' }, { name: '夢想返し' }],
+        initial: ['', '', ''],
+        slot: 0
+      });
+      var input = document.querySelector('.tp-search input');
+      input.value = '返し';
+      input.dispatchEvent(new InputEvent('input', { isComposing: true }));
+      var names = Array.prototype.map.call(document.querySelectorAll('.tp-item[data-name]'), function(el) { return el.dataset.name; });
+      TechPicker.dismiss();
+      return names.length;
+    })(), 2);
+    assert('open: 続く input(isComposing:false) で確定した文字に絞り込まれる', (function() {
+      TechPicker.open({
+        techniques: [{ name: '真' }, { name: '夢想返し' }],
+        initial: ['', '', ''],
+        slot: 0
+      });
+      var input = document.querySelector('.tp-search input');
+      input.value = '返し';
+      input.dispatchEvent(new InputEvent('input', { isComposing: true }));
+      input.dispatchEvent(new InputEvent('input', { isComposing: false }));
+      var names = Array.prototype.map.call(document.querySelectorAll('.tp-item[data-name]'), function(el) { return el.dataset.name; });
+      TechPicker.dismiss();
+      return names;
+    })(), ['夢想返し']);
+    assert('open: WebKit想定（isComposing:falseのinputが来ず compositionend だけ）でも絞り込まれる', (function() {
+      TechPicker.open({
+        techniques: [{ name: '真' }, { name: '夢想返し' }],
+        initial: ['', '', ''],
+        slot: 0
+      });
+      var input = document.querySelector('.tp-search input');
+      input.value = '返し';
+      input.dispatchEvent(new InputEvent('input', { isComposing: true }));
+      input.dispatchEvent(new Event('compositionend'));
+      var names = Array.prototype.map.call(document.querySelectorAll('.tp-item[data-name]'), function(el) { return el.dataset.name; });
+      TechPicker.dismiss();
+      return names;
+    })(), ['夢想返し']);
     assert('dismiss: onClose を呼ばずに閉じる', (function(){
       var called = false;
       TechPicker.open({ techniques: [{ name: '真' }], initial: ['真', '', ''], slot: 0,
