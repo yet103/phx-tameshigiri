@@ -31,6 +31,7 @@ var App = (function() {
   var totalAdjustInput = document.getElementById('totalAdjustInput');
   var noteInput        = document.getElementById('noteInput');
   var btnConfirm       = document.getElementById('btnConfirm');
+  var adjustBar        = document.querySelector('.adjust-bar');
   var scoreTable       = document.getElementById('scoreTable');
 
   // --- 初期化 ---
@@ -197,6 +198,11 @@ var App = (function() {
 
     document.getElementById('btnRetrySave').addEventListener('click', function() {
       Outbox.flushNow();
+    });
+
+    // タブ切替やスリープから戻ったら、他端末の書き込みを取りに行く
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') refreshFromServer();
     });
 
     // 未送信の採点があるときだけ離脱を警告する
@@ -399,6 +405,53 @@ var App = (function() {
     renderScoreGrid(p);
     if (changed) resetTimer();
     updatePlayerList();
+    // 別の選手を開いたら、他端末（運営画面や別コートの端末）の書き込みを取りに行く。
+    // 通信は待たない。届いたら refreshFromServer が画面を作り直す。
+    if (changed) refreshFromServer();
+  }
+
+  // --- 他端末の書き込みの取り込み ---
+  // 選手を切り替えたときと、画面に戻ってきたとき（タブ切替・スリープ復帰）にサーバーから読み直す。
+  // 表示中の選手をこの端末で編集している最中（gridEdited）は画面を作り直さない（入力を壊さない）。
+  // 未送信の採点はキューが正なので adoptEvent（Outbox.applyPending）が上書きする。
+  var refreshSeq = 0;
+
+  async function refreshFromServer() {
+    if (!currentEvent) return;
+    var eventId = currentEvent.id;
+    var seq = ++refreshSeq;
+    var loaded = await Api.loadEvent(eventId);
+    if (seq !== refreshSeq) return;                              // 追い越された
+    if (!currentEvent || currentEvent.id !== eventId) return;    // 大会が変わった
+    if (!loaded) return;                                         // 通信失敗は今の表示を保つ
+    var current = visiblePlayers[currentIndex];
+    var currentId = current ? current.id : null;
+    var keepRow = selectedRow;
+    adoptEvent(loaded);
+    refreshCourtList();
+    visiblePlayers = Courts.filter(players, currentCourt);
+    var idx = -1;
+    for (var i = 0; i < visiblePlayers.length; i++) {
+      if (visiblePlayers[i].id === currentId) { idx = i; break; }
+    }
+    if (idx === -1) {
+      // 表示中の選手が消えた（名簿の入れ直しなど）。先頭から出し直す
+      applyCourtFilter();
+      return;
+    }
+    currentIndex = idx;
+    if (gridEdited) {
+      // 編集中はサーバー値で画面を作り直さない。編集した値は保存のたびにキューへ積んであり、
+      // adoptEvent がその値を新しい選手オブジェクトへ反映済みなので、一覧だけ描き直す。
+      refreshPlayerList();
+      updatePlayerList();
+      return;
+    }
+    updatePlayerLabels(visiblePlayers[idx]);
+    renderScoreGrid(visiblePlayers[idx]);
+    selectRow(keepRow);
+    refreshPlayerList();
+    updatePlayerList();
   }
 
   function updatePlayerLabels(p) {
@@ -422,9 +475,10 @@ var App = (function() {
     noticeRow = null;
     selectedRow = -1;
     var techNames = [player.tech1, player.tech2, player.tech3].filter(Boolean);
-    // 全体補正点・備考は技の有無に関わらず表示する（技が無いときは編集不可）
     totalAdjustInput.value = adjustText(player.totalAdjust);
     noteInput.value = player.note || '';
+    // 技が無い選手は補正段ごと隠す（無効の欄に値だけ見えていると「合計に入っていない」ように見えるため）
+    adjustBar.classList.toggle('is-hidden', techNames.length === 0);
     if (techNames.length === 0) {
       // 技が未入力（進行タブでまだ入力されていない二巡目の選手など）。
       // 空のグリッドから合計0を計算して上書き保存すると既存の得点が消えるので、
@@ -623,6 +677,7 @@ var App = (function() {
 
   // 選手が表示されていないとき（大会未選択・そのコートに選手がいない）の補正段
   function clearAdjustInputs() {
+    adjustBar.classList.add('is-hidden');
     totalAdjustInput.value = '';
     noteInput.value = '';
     totalAdjustInput.disabled = true;
