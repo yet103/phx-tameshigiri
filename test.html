@@ -68,6 +68,38 @@
     assert('loadEvent name', loaded.name, 'テスト大会');
     assert('loadEvent players空', loaded.players.length, 0);
 
+    // PATCH: 補正点・備考・確定・負の得点
+    // 採点済みの選手を残すと後続の replace インポートが採点済みガードに引っかかるので、専用の大会で行う
+    var padEvent = await Api.saveEvent({ name: '補正点テスト', date: '2026-09-13', venue: '', players: [] });
+    await Api.importCsv(padEvent.id, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n補正 太郎,A-男子-1-9,四方,,,0,,,', 'replace');
+    var padLoaded = await Api.loadEvent(padEvent.id);
+    var padP = padLoaded.players.filter(function(p) { return p.name === '補正 太郎'; })[0];
+    var padRes = await Api.updatePlayerInfo(padEvent.id, padP.id, {
+      adjust: [1, -2, 0], totalAdjust: -3, note: '  審判メモ  ', confirmed: true, score: -4
+    });
+    assert('PATCH adjust を保存', padRes.player.adjust, [1, -2, 0]);
+    assert('PATCH totalAdjust を保存', padRes.player.totalAdjust, -3);
+    assert('PATCH note は trim', padRes.player.note, '審判メモ');
+    assert('PATCH confirmed を保存', padRes.player.confirmed, true);
+    assert('PATCH 負の score を受理', padRes.player.score, -4);
+    var badRes = await Api.updatePlayerInfo(padEvent.id, padP.id, {
+      adjust: [1, 2], totalAdjust: 1.5, note: 12, confirmed: 'yes', score: NaN
+    });
+    assert('PATCH 長さ3でない adjust は無視', badRes.player.adjust, [1, -2, 0]);
+    assert('PATCH 整数でない totalAdjust は無視', badRes.player.totalAdjust, -3);
+    assert('PATCH 文字列でない note は無視', badRes.player.note, '審判メモ');
+    assert('PATCH 真偽値でない confirmed は無視', badRes.player.confirmed, true);
+    var csvOut = await Api.exportCsv(padEvent.id);
+    var csvHead = csvOut.replace(/^\uFEFF/, '').split('\r\n')[0];
+    assert('export は15列', csvHead.split(',').length, 15);
+    assert('export のヘッダー末尾', csvHead.split(',').slice(9), ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定']);
+    var csvRow = csvOut.replace(/^\uFEFF/, '').split('\r\n').filter(function(l) { return l.indexOf('補正 太郎') === 0; })[0];
+    assert('export に補正点・確定が出る', csvRow.split(',').slice(9), ['1', '-2', '0', '-3', '審判メモ', '○']);
+    var longNote = new Array(202).join('あ');   // 201文字
+    var longRes = await Api.updatePlayerInfo(padEvent.id, padP.id, { note: longNote });
+    assert('PATCH note は200文字で切る', longRes.player.note.length, 200);
+    await Api.deleteEvent(padEvent.id);
+
     // CSVインポートテスト
     var csv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n山田 太郎,A-男子-1-1,破図味,夢想返し,響き返し,55,,,';
     var importResult = await Api.importCsv(testEventId, csv, 'replace');
@@ -243,8 +275,9 @@
     assert('round を変えると巡目が組み立て直される', roundRes.player.order, 'B-女子-2-1');
     assert('不正なコート名は status 400',
       (await Api.updatePlayerInfo(edEvent.id, edP.id, { court: 'A-1' })).status, 400);
-    assert('負の得点は無視される',
-      (await Api.updatePlayerInfo(edEvent.id, edP.id, { score: -5 })).player.score, 0);
+    // 補正点でマイナスになりうるので負の得点も受理する
+    assert('負の得点は受理される',
+      (await Api.updatePlayerInfo(edEvent.id, edP.id, { score: -5 })).player.score, -5);
 
     assert('存在しない選手は status 404',
       (await Api.updatePlayerInfo(edEvent.id, 'nosuchplayer', { name: 'x' })).status, 404);
