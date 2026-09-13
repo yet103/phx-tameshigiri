@@ -8,7 +8,6 @@ body {
   font-size: 14px;
   background: var(--bg);
   color: var(--text);
-  min-width: 768px; /* 採点画面は意図的にタブレット専用。運営画面は admin.html 側 */
 }
 button {
   cursor: pointer;
@@ -31,6 +30,7 @@ input[type="file"] { display: none; }
   border-bottom: 2px solid var(--border);
   padding: 8px 12px;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .player-nav .nav-btn {
   background: var(--accent);
@@ -58,6 +58,7 @@ input[type="file"] { display: none; }
   gap: 8px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 .timer-display {
   background: var(--timer-bg);
@@ -137,6 +138,35 @@ input[type="file"] { display: none; }
   color: var(--warn);
   font-weight: bold;
 }
+.score-table td.tech-name { cursor: pointer; }
+.score-table td.strike-cell.empty { color: var(--text-muted); font-weight: normal; font-size: 14px; }
+.score-table tr.selected td { background: var(--row-selected); }
+.score-table tr.selected td.strike-cell.success { background: var(--cell-success); }
+.score-table tr.selected td.strike-cell.fail { background: var(--cell-fail); }
+.score-table tr.selected td.strike-cell.disabled { background: var(--cell-disabled); }
+.score-table td.adjust-cell { padding: 2px 4px; }
+.adjust-input {
+  width: 64px; height: 40px; text-align: center; font-size: 16px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
+}
+.score-table.confirmed td.score-col { color: var(--score-confirmed); }
+.total-score.confirmed { color: var(--score-confirmed); }
+
+/* ===== 全体補正点・備考 ===== */
+.adjust-bar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 8px 12px;
+}
+.adjust-bar label { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.adjust-bar .note-label { flex: 1; min-width: 200px; }
+.adjust-bar #noteInput {
+  flex: 1; height: 40px; padding: 0 8px; font-size: 16px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
+}
+
+/* ===== 確定 ===== */
+.btn-confirm { background: var(--btn-neutral); color: #fff; }
+.btn-confirm.on { background: var(--score-confirmed); color: #fff; }
 
 /* ===== アクションバー ===== */
 .action-bar {
@@ -231,51 +261,15 @@ input[type="file"] { display: none; }
 }
 .tech-table td:first-child input[type="text"] { width: 120px; }
 
-/* ===== 選手一覧フローティングパネル ===== */
-.player-list-panel {
-  display: none;
-  position: fixed;
-  top: 60px;
-  right: 12px;
-  width: 480px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 80px);
-  background: var(--bg);
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-  z-index: 1000;
-  display: none;
-  flex-direction: column;
+/* ===== 選手一覧（ページ下部・開閉） ===== */
+.player-list-section { border-top: 2px solid var(--border); }
+.player-list-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
+  padding: 0 12px; text-align: left; font-weight: bold; font-size: 14px;
+  background: var(--bg-header); color: var(--text); border-radius: 0;
 }
-.player-list-panel.open {
-  display: flex;
-}
-.player-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--bg-header);
-  border-bottom: 1px solid var(--border);
-  border-radius: 6px 6px 0 0;
-  font-weight: bold;
-  font-size: 14px;
-}
-.player-list-close {
-  background: none;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  color: var(--text);
-  padding: 0 4px;
-  line-height: 1;
-}
-.player-list-close:hover { opacity: 0.6; }
-.player-list-body {
-  overflow-y: auto;
-  flex: 1;
-}
+.player-list-section.closed .player-list-body { display: none; }
+.player-list-body { overflow: auto; max-height: 50vh; }
 .player-list-table {
   width: 100%;
   border-collapse: collapse;
@@ -296,12 +290,14 @@ input[type="file"] { display: none; }
   padding: 5px 8px;
   cursor: pointer;
   white-space: nowrap;
+  height: 44px;
 }
 .player-list-table td:last-child {
   text-align: right;
   font-weight: bold;
   color: var(--score-color);
 }
+.player-list-table td.confirmed { color: var(--score-confirmed); }
 .player-list-table tr:hover td { opacity: 0.75; }
 .player-list-table tr.current-player td {
   background: var(--accent);

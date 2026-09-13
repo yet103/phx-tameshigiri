@@ -13,7 +13,7 @@
     .modal label { display:block; margin-bottom:12px; }
     .modal input { display:block; width:100%; padding:8px; margin-top:4px; box-sizing:border-box; }
     .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
-    .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg-secondary,#f5f5f5); border-bottom:1px solid var(--border,#ddd); }
+    .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg-secondary,#f5f5f5); border-bottom:1px solid var(--border,#ddd); flex-wrap:wrap; }
     .event-bar select { padding:4px 8px; }
   </style>
 </head>
@@ -86,10 +86,10 @@
         <tr>
           <th>技</th>
           <th>初太刀</th>
-          <th>二の太刀</th>
-          <th>三の太刀</th>
-          <th>四の太刀</th>
-          <th>技術点</th>
+          <th>二ノ太刀</th>
+          <th>三ノ太刀</th>
+          <th>四ノ太刀</th>
+          <th>補正点</th>
           <th>得点</th>
         </tr>
       </thead>
@@ -99,10 +99,17 @@
     </table>
   </div>
 
+  <!-- 全体補正点・備考 -->
+  <div class="adjust-bar">
+    <label>全体補正点 <input type="number" step="1" inputmode="numeric" class="adjust-input" id="totalAdjustInput"></label>
+    <label class="note-label">備考 <input type="text" maxlength="200" id="noteInput" placeholder="（任意）"></label>
+  </div>
+
   <!-- アクションバー -->
   <div class="action-bar">
     <button class="btn-success" id="btnAllSuccess">形成功</button>
     <button class="btn-fail"    id="btnAllFail">失敗</button>
+    <button class="btn-confirm" id="btnConfirm">確定</button>
     <div class="total-score" id="totalScoreDisplay">合計: 0点</div>
   </div>
 
@@ -111,17 +118,15 @@
   <div class="toolbar">
     <button id="btnExport">CSVエクスポート</button>
     <button id="btnDownloadHtml">HTML保存</button>
-    <button id="btnPlayerList">選手一覧</button>
     <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
   </div>
 
-  <!-- 選手一覧フローティングパネル -->
-  <div class="player-list-panel" id="playerListPanel">
-    <div class="player-list-header">
-      <span>選手一覧</span>
-      <button class="player-list-close" id="btnPlayerListClose">✕</button>
-    </div>
-    <div class="player-list-body">
+  <!-- 選手一覧（ページ下部に常設。見出しで開閉） -->
+  <section class="player-list-section" id="playerListSection">
+    <button type="button" class="player-list-toggle" id="btnPlayerListToggle" aria-expanded="true">
+      <span class="player-list-arrow">▾</span> 選手一覧
+    </button>
+    <div class="player-list-body" id="playerListBody-wrap">
       <table class="player-list-table" id="playerListTable">
         <thead>
           <tr>
@@ -136,7 +141,7 @@
         <tbody id="playerListBody"></tbody>
       </table>
     </div>
-  </div>
+  </section>
 
   <script src="data.js"></script>
   <script src="scoring.js"></script>
