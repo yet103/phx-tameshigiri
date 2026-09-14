@@ -95,6 +95,51 @@ async function get(base, p, headers) {
   return fetch(base + p, { headers: headers || {}, redirect: 'manual' });
 }
 
+// ── 単体: 静的配信の許可リスト ──
+const { classify } = require('./static-policy');
+
+test('classify: 観客用ページとそのアセットは public', () => {
+  for (const p of ['/share.html', '/present.html', '/board.html', '/help.html',
+                   '/theme.css', '/share.css', '/present.css', '/board.css', '/help.css',
+                   '/api.js', '/share.js', '/present.js', '/board.js', '/scoring.js',
+                   '/help/img/admin_bulk.png', '/fonts/ShipporiMinchoB1-Bold.woff2']) {
+    assert.strictEqual(classify(p, { production: true }), 'public', p);
+  }
+});
+
+test('classify: 運営用ページとそのアセットは protected', () => {
+  for (const p of ['/', '/index.html', '/admin.html', '/ranking.html', '/techniques.html',
+                   '/style.css', '/admin.css',
+                   '/app.js', '/admin.js', '/admin-events.js', '/admin-players.js', '/admin-round.js',
+                   '/admin-results.js', '/courts.js', '/data.js', '/outbox.js', '/route.js',
+                   '/storage.js', '/techpicker.js']) {
+    assert.strictEqual(classify(p, { production: true }), 'protected', p);
+  }
+});
+
+test('classify: test.html は開発時だけ protected、本番は配信しない', () => {
+  assert.strictEqual(classify('/test.html', { production: false }), 'protected');
+  assert.strictEqual(classify('/test.html', { production: true }), null);
+});
+
+test('classify: 表にないパスは配信しない', () => {
+  for (const p of ['/deploy.sh', '/package.json', '/Dockerfile', '/docker-compose.yml',
+                   '/.gitignore', '/.dockerignore', '/.env', '/docs/', '/docs/superpowers/specs/x.md',
+                   '/server/index.js', '/server/data/events/abc.json', '/%73erver/data/',
+                   '/nonexistent', '/help', '/help/img', '/help/img/', '/fonts', '/fonts/',
+                   '/SHARE.HTML', '/share.html/', '/api.js.map']) {
+    assert.strictEqual(classify(p, { production: false }), null, p);
+  }
+});
+
+test('classify: 正規化で迂回できない', () => {
+  assert.strictEqual(classify('/help/img/../../deploy.sh', { production: false }), null);
+  assert.strictEqual(classify('/fonts/..%2F..%2Fserver/index.js', { production: false }), null);
+  assert.strictEqual(classify('//share.html', { production: false }), 'public');
+  assert.strictEqual(classify('/a/../share.html', { production: false }), 'public');
+  assert.strictEqual(classify('/%zz', { production: false }), null);   // 不正なエンコード
+});
+
 // ── スモーク: 開発・認証なしは従来どおり ──
 test('開発・認証なし: / と GET /api/events が無認証で 200', async () => {
   await withServer(NO_AUTH_DEV, async base => {
