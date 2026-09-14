@@ -17,7 +17,7 @@ var Outbox = (function() {
   var statusHandler = null;
   var discardHandler = null;
   var dropped = [];          // 恒久的に送れず捨てたエントリ
-  var lastStatus = null;     // 直近に失敗した HTTP ステータス（0=通信断）。成功で null に戻す
+  var lastStatus = null;     // 直近に失敗した HTTP ステータス（0=通信断）。成功か破棄で null に戻す
 
   // 同一の大会・選手のエントリを後勝ちでマージする。元の配列とエントリは変更しない。
   // 単純に置き換えないのは、備考だけのエントリ（score / result を持たない）が
@@ -179,6 +179,7 @@ var Outbox = (function() {
           if (queue[0] === entry) queue.shift();
           save();
           dropped.push(entry);
+          lastStatus = null;
           notify();
         } else {
           lastStatus = res ? res.status : 0;

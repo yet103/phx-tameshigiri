@@ -3,6 +3,10 @@
 # PHX Tameshigiri - Deployment Script
 # ---------------------------------------------------------
 
+# どこかで失敗したら止める（.env が無くて compose が起動を拒否したのに
+# 「完了」と出て、古い無認証コンテナが動き続けるのを防ぐ）
+set -e
+
 echo "🚀 Starting deployment for PHX Tameshigiri..."
 
 # Pull the latest changes from the production branch

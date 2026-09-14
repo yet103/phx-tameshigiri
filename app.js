@@ -116,6 +116,10 @@ var App = (function() {
     } else {
       saveBannerEl.style.display = 'none';
     }
+
+    // 認証切れのときの「今すぐ再試行」は 401 を繰り返すだけなので隠す
+    var btnRetrySave = document.getElementById('btnRetrySave');
+    if (btnRetrySave) btnRetrySave.hidden = authLost;
   }
 
   // 送り先が見つからず捨てた採点があれば伝える。
@@ -215,9 +219,13 @@ var App = (function() {
       if (document.visibilityState === 'visible') refreshFromServer();
     });
 
-    // 未送信の採点があるときだけ離脱を警告する
+    // 未送信の採点があるときだけ離脱を警告する。
+    // 認証切れのときは再読み込みが復旧手段なので、離脱確認で止めない
+    // （未送信の採点は localStorage に残っており、再読み込み後に再送される）。
     window.addEventListener('beforeunload', function(e) {
-      if (Outbox.pendingCount() > 0) {
+      var st = Outbox.status();
+      var authLost = st.lastStatus === 401 || st.lastStatus === 403;
+      if (Outbox.pendingCount() > 0 && !authLost) {
         e.preventDefault();
         e.returnValue = '';
       }
