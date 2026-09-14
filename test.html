@@ -844,7 +844,8 @@
     assert('bundle は履歴を持つ', b2.history.length, 1);
     assert('bundle は shareToken を含まない', b2Text.indexOf('shareToken'), -1);
     assert('bundle は live を含まない', b2Text.indexOf('"live"'), -1);
-    assert('存在しない大会の bundle は null', await Api.exportBundle('zzzzzzzznotexist'), null);
+    assert('存在しない大会の bundle はエラーを返す（null は通信失敗のみ）',
+      (await Api.exportBundle('zzzzzzzznotexist')).error, '大会が見つかりません');
     await Api.deleteEvent(b2Event.id);
 
     // --- 大会の取り込み（import） ---
@@ -925,6 +926,82 @@
     assert('技リストが無ければ雛形の複製が入る',
       b3NoTechLoaded.techniques, (await Api.loadTechniques()).techniques);
     await Api.deleteEvent(b3NoTech.id);
+
+    // history が配列でない／techniques が空配列（レビュー指摘の追加検証）
+    var b3HistNotArray = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '履歴不正テスト' }, history: 'not-an-array' });
+    assert('history が配列でなければ断る', b3HistNotArray.error, '履歴が配列ではありません');
+    var b3EmptyTech = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '空技リストテスト', techniques: [] } });
+    assert('techniques が空配列なら断る', b3EmptyTech.error, '技リスト: 技は1〜200件で指定してください');
+
+    // --- bundle の Content-Disposition ヘッダー ---
+    var b4Event = await Api.saveEvent({ name: 'ヘッダーテスト', date: '2026-09-14', venue: '', players: [] });
+    var b4Res = await fetch('/api/events/' + b4Event.id + '/bundle');
+    var b4Disp = b4Res.headers.get('Content-Disposition') || '';
+    assert('bundle の Content-Disposition は添付ファイル名で始まる',
+      b4Disp.indexOf("attachment; filename*=UTF-8''tameshigiri_") === 0, true);
+    await Api.deleteEvent(b4Event.id);
+
+    // --- bundle → import の往復（全項目・二巡目・履歴。レビュー指摘の追加テスト） ---
+    var rtEvent = await Api.saveEvent({ name: '往復テスト', date: '2026-09-14', venue: '道場', players: [] });
+    var rtTechList = [
+      { name: '往復技A', strikes: [10, null, null, null] },
+      { name: '往復技B', strikes: [5, 5, null, null] }
+    ];
+    await Api.saveEventTechniques(rtEvent.id, rtTechList);
+    var rtBulk = await Api.createPlayersBulk(rtEvent.id, {
+      court: 'A', isFemale: false, isNewFace: false, names: ['往復 一郎', '往復 二郎']
+    });
+    var rtP1 = rtBulk.players[0], rtP2 = rtBulk.players[1];
+    await Api.updatePlayerInfo(rtEvent.id, rtP1.id, {
+      tech1: '往復技A', result: '1    ', adjust: [2, 0, 0], totalAdjust: 3,
+      note: '一郎メモ', confirmed: true, score: 12
+    });
+    await Api.updatePlayerInfo(rtEvent.id, rtP2.id, {
+      tech1: '往復技B', result: '11   ', adjust: [0, 1, 0], totalAdjust: -1,
+      note: '二郎メモ', confirmed: false, score: 9
+    });
+    var rtRound = await Api.generateNextRound(rtEvent.id);
+    assert('往復テスト用に二巡目が生成される', rtRound && rtRound.created, 2);
+    await Api.addHistory(rtEvent.id, { action: 'round2_generated', detail: '往復テスト' });
+    await Api.addHistory(rtEvent.id, { action: 'note', detail: '往復テスト2' });
+
+    var rtBundleText = await Api.exportBundle(rtEvent.id);
+    var rtBundle = JSON.parse(rtBundleText);
+    var rtImportRes = await Api.importBundle(rtBundle);
+    assert('往復インポートは成功し4名になる', [rtImportRes.success, rtImportRes.playerCount], [true, 4]);
+
+    var rtLoaded = await Api.loadEvent(rtImportRes.id);
+    assert('往復: 技リストがそのまま復元される', rtLoaded.techniques, rtTechList);
+
+    var rt1st = rtLoaded.players.filter(function(p) { return /-1-\d+$/.test(p.order); });
+    var rt2nd = rtLoaded.players.filter(function(p) { return /-2-\d+$/.test(p.order); });
+    assert('往復: 一巡目2名・二巡目2名が復元される', [rt1st.length, rt2nd.length], [2, 2]);
+
+    var rtIchiro = rt1st.find(function(p) { return p.name === '往復 一郎'; });
+    var rtJiro = rt1st.find(function(p) { return p.name === '往復 二郎'; });
+    assert('往復: 一郎の各項目が復元される',
+      [rtIchiro.tech1, rtIchiro.score, rtIchiro.result, rtIchiro.adjust,
+       rtIchiro.totalAdjust, rtIchiro.note, rtIchiro.confirmed],
+      ['往復技A', 12, '1    ', [2, 0, 0], 3, '一郎メモ', true]);
+    // confirmed は true の選手にだけ付く（pickBundlePlayer / import とも共通）ので、
+    // confirmed: false で送った二郎には付かず undefined のまま。
+    assert('往復: 二郎の各項目が復元される',
+      [rtJiro.tech1, rtJiro.score, rtJiro.result, rtJiro.adjust,
+       rtJiro.totalAdjust, rtJiro.note, rtJiro.confirmed],
+      ['往復技B', 9, '11   ', [0, 1, 0], -1, '二郎メモ', undefined]);
+
+    var rtIchiro2 = rt2nd.find(function(p) { return p.sourcePlayerId === rtIchiro.id; });
+    var rtJiro2 = rt2nd.find(function(p) { return p.sourcePlayerId === rtJiro.id; });
+    assert('往復: 二巡目の一郎行が sourcePlayerId で取り込み後の一郎を指す', !!rtIchiro2, true);
+    assert('往復: 二巡目の二郎行が sourcePlayerId で取り込み後の二郎を指す', !!rtJiro2, true);
+
+    var rtHist = await Api.loadHistory(rtImportRes.id);
+    assert('往復: 履歴の件数が復元される', rtHist.entries.length, 2);
+
+    await Api.deleteEvent(rtEvent.id);
+    await Api.deleteEvent(rtImportRes.id);
   }
 
   (async function() {
