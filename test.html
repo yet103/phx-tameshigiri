@@ -1226,6 +1226,17 @@
       return ['note' in q[0], q[0].score];
     })(), [false, 7]);
 
+    // 401/403 は資格情報の失効。再認証すれば通るので捨ててはいけない
+    // （捨てると採点が黙って失われる）。404/400 は何度送っても通らないので捨てる。
+    assert('isPermanentFailure: 401 は捨てない', Outbox.isPermanentFailure(401), false);
+    assert('isPermanentFailure: 403 は捨てない', Outbox.isPermanentFailure(403), false);
+    assert('isPermanentFailure: 408 は捨てない', Outbox.isPermanentFailure(408), false);
+    assert('isPermanentFailure: 429 は捨てない', Outbox.isPermanentFailure(429), false);
+    assert('isPermanentFailure: 404 は捨てる', Outbox.isPermanentFailure(404), true);
+    assert('isPermanentFailure: 400 は捨てる', Outbox.isPermanentFailure(400), true);
+    assert('isPermanentFailure: 0（通信断）は捨てない', Outbox.isPermanentFailure(0), false);
+    assert('isPermanentFailure: 500 は捨てない', Outbox.isPermanentFailure(500), false);
+
     // 注意: このページは index.html と localStorage を共有する。
     // 以下のテストは tmg_outbox を一時的に書き換えるため、
     // 採点中の端末でこのページを開かないこと。
@@ -1253,6 +1264,23 @@
     assert('404のエントリを捨てて後続を送る', sent, ['gone', 'alive']);
     assert('捨てたエントリを呼び出し元に伝える', droppedSeen.length, 1);
     assert('捨てた後キューが空になる', Outbox.pendingCount(), 0);
+
+    // 401 のエントリはキューに残り、状態に lastStatus が出る
+    Api.updatePlayer = async function() { return { ok: false, status: 401 }; };
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'ev1', playerId: 'pa', score: 1, result: 'a', queuedAt: 't8' }
+    ]));
+    var dropped401 = [];
+    Outbox.init(function() {}, function(list) { dropped401 = dropped401.concat(list); });
+    await new Promise(function(r) { setTimeout(r, 400); });
+    assert('401 のエントリは捨てない', Outbox.pendingCount(), 1);
+    assert('401 で捨てたと通知しない', dropped401.length, 0);
+    assert('401 の直後の状態は retrying', Outbox.status().state, 'retrying');
+    assert('状態に直近の失敗ステータスが乗る', Outbox.status().lastStatus, 401);
+    Api.updatePlayer = async function() { return { ok: true }; };
+    Outbox.flushNow();
+    await new Promise(function(r) { setTimeout(r, 300); });
+    assert('再認証後に送れたら lastStatus は消える', [Outbox.pendingCount(), Outbox.status().lastStatus], [0, null]);
 
     // 備考だけのエントリは score / result を PATCH に載せない
     // （載せると undefined になり、サーバー側で採点が巻き戻る）

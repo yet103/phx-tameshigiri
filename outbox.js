@@ -17,6 +17,7 @@ var Outbox = (function() {
   var statusHandler = null;
   var discardHandler = null;
   var dropped = [];          // 恒久的に送れず捨てたエントリ
+  var lastStatus = null;     // 直近に失敗した HTTP ステータス（0=通信断）。成功で null に戻す
 
   // 同一の大会・選手のエントリを後勝ちでマージする。元の配列とエントリは変更しない。
   // 単純に置き換えないのは、備考だけのエントリ（score / result を持たない）が
@@ -56,7 +57,10 @@ var Outbox = (function() {
   // 何度送っても通らない失敗か。
   // 4xx はリクエスト自体が受け付けられていないので再送しても同じ。
   // ただし 408（タイムアウト）と 429（レート制限）は時間を置けば通る。
+  // 401 / 403（資格情報の失効）も、ページを再読み込みして再認証すれば通るので捨てない。
+  // 捨てると未送信の採点が黙って失われる。
   function isPermanentFailure(status) {
+    if (status === 401 || status === 403) return false;
     if (status === 408 || status === 429) return false;
     return status >= 400 && status < 500;
   }
@@ -97,7 +101,8 @@ var Outbox = (function() {
     return {
       state: state,
       pending: queue.length,
-      failingSince: failingSince
+      failingSince: failingSince,
+      lastStatus: lastStatus
     };
   }
 
@@ -165,6 +170,7 @@ var Outbox = (function() {
           save();
           backoffMs = BACKOFF_MIN;
           failingSince = null;
+          lastStatus = null;
           notify();
         } else if (res && isPermanentFailure(res.status)) {
           // 送り先が存在しない、リクエストが受け付けられない等。
@@ -175,6 +181,7 @@ var Outbox = (function() {
           dropped.push(entry);
           notify();
         } else {
+          lastStatus = res ? res.status : 0;
           if (!failingSince) failingSince = Date.now();
           sending = false;
           notify();
@@ -260,6 +267,7 @@ var Outbox = (function() {
     pendingCount: pendingCount,
     applyPending: applyPending,
     status: status,
-    coalesce: coalesce
+    coalesce: coalesce,
+    isPermanentFailure: isPermanentFailure
   };
 })();

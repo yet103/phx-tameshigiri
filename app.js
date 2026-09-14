@@ -86,20 +86,30 @@ var App = (function() {
 
   function onSaveStatus(st) {
     if (!saveStatusEl) return;
+    // 401/403 は資格情報の失効。再送では直らず、ページを開き直して再認証する必要がある。
+    var authLost = st.pending > 0 && (st.lastStatus === 401 || st.lastStatus === 403);
     saveStatusEl.classList.remove('sending', 'retrying');
     if (st.state === 'idle') {
       saveStatusEl.textContent = '● 保存済み';
     } else if (st.state === 'sending') {
       saveStatusEl.textContent = '◌ 保存中…';
       saveStatusEl.classList.add('sending');
+    } else if (authLost) {
+      saveStatusEl.textContent = '⚠ 認証が切れました・ページを再読み込みしてください';
+      saveStatusEl.classList.add('retrying');
     } else {
       saveStatusEl.textContent = '⚠ 未保存 ' + st.pending + ' 件・再送中';
       saveStatusEl.classList.add('retrying');
     }
 
-    // 最初の失敗から30秒経っても未保存が残っていればバナーに昇格する
+    // 最初の失敗から30秒経っても未保存が残っていればバナーに昇格する。
+    // 認証切れは待っても直らないので即座に昇格する。
     var stale = st.failingSince && (Date.now() - st.failingSince >= BANNER_AFTER_MS);
-    if (st.pending > 0 && stale) {
+    if (authLost) {
+      saveBannerTextEl.textContent =
+        '⚠ 認証が切れています。ページを再読み込みしてください（未保存 ' + st.pending + ' 件は保持されます）';
+      saveBannerEl.style.display = 'flex';
+    } else if (st.pending > 0 && stale) {
       saveBannerTextEl.textContent =
         '⚠ サーバーに保存できていません（' + st.pending + '件未保存）';
       saveBannerEl.style.display = 'flex';
