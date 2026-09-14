@@ -24,6 +24,9 @@ package-lock.json
 # Server data
 server/data/
 
+# worktree ごとのテスト実行用スクリプト・ブラウザプロファイル（レビュー・動作確認の作業用）
+.tests-runner/
+
 # Brainstorm mockups (visual companion)
 .superpowers/
 

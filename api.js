@@ -255,15 +255,21 @@ var Api = (function() {
 
   async function saveTechniques(techs) {
     // POST /api/techniques
+    // 戻り値: { success: true } | { success: false, error }（4xx。行番号つきの理由）
+    //       | null（通信失敗）
     try {
       var res = await fetch('/api/techniques', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ techniques: techs })
       });
-      return res.ok;
+      if (!res.ok) {
+        var errJson = await res.json();
+        return { success: false, error: errJson.error };
+      }
+      return await res.json();
     } catch (e) {
-      return false;
+      return null;
     }
   }
 
@@ -271,6 +277,52 @@ var Api = (function() {
     // DELETE /api/techniques
     try {
       var res = await fetch('/api/techniques', { method: 'DELETE' });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // --- Event Techniques（大会ごとの技マスタ） ---
+  // 雛形用の loadTechniques / saveTechniques / resetTechniques とは別物。
+  // 大会を選んでいるときは必ずこちら（または Api.loadEvent の応答の techniques）を使う。
+  async function loadEventTechniques(eventId) {
+    // GET /api/events/:eventId/techniques
+    // 戻り値: { source: 'event' | 'template', techniques: [...] } | null（400/404/通信失敗）
+    try {
+      var res = await fetch('/api/events/' + eventId + '/techniques');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function saveEventTechniques(eventId, techs) {
+    // PUT /api/events/:eventId/techniques
+    // 戻り値: { success: true, techniques } | { success: false, error }（4xx。行番号つきの理由）
+    //       | null（通信失敗）
+    try {
+      var res = await fetch('/api/events/' + eventId + '/techniques', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ techniques: techs })
+      });
+      if (!res.ok) {
+        var errJson = await res.json();
+        return { success: false, error: errJson.error };
+      }
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function resetEventTechniques(eventId) {
+    // DELETE /api/events/:eventId/techniques（雛形の複製で置き換える）
+    // 戻り値: 真偽
+    try {
+      var res = await fetch('/api/events/' + eventId + '/techniques', { method: 'DELETE' });
       return res.ok;
     } catch (e) {
       return false;
@@ -428,6 +480,9 @@ var Api = (function() {
     loadTechniques: loadTechniques,
     saveTechniques: saveTechniques,
     resetTechniques: resetTechniques,
+    loadEventTechniques: loadEventTechniques,
+    saveEventTechniques: saveEventTechniques,
+    resetEventTechniques: resetEventTechniques,
     loadHistory: loadHistory,
     addHistory: addHistory,
     putLive: putLive,

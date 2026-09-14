@@ -78,6 +78,34 @@ const DEFAULT_TECHNIQUES = [
   { name: "四方",        strikes: [17, 5,    7,    3   ] }
 ];
 
+// 技リストの複製と正規化。
+// 雛形（DEFAULT_TECHNIQUES / custom.json）をそのまま大会 JSON に入れると、
+// あとで雛形を変えたときに採点中の大会の配点まで動いたように見える。必ず複製して渡す。
+// 同時に { name, strikes } 以外のキーを落とす（保存する形はこの2つだけ）。
+function cloneTechniques(list) {
+  return (Array.isArray(list) ? list : []).map(function(t) {
+    return {
+      name: (t && typeof t.name === 'string') ? t.name.trim() : '',
+      strikes: [0, 1, 2, 3].map(function(i) {
+        const v = (t && Array.isArray(t.strikes)) ? t.strikes[i] : null;
+        return Number.isInteger(v) ? v : null;
+      })
+    };
+  });
+}
+
+// その大会の採点に使う技リスト（有効な技リスト）。
+// event.techniques が配列ならそれ、無ければ雛形の複製。技リストを読むハンドラは必ずこれを使う。
+function effectiveTechniques(event) {
+  if (event && Array.isArray(event.techniques)) return event.techniques;
+  return cloneTechniques(readTechniques().techniques);
+}
+
+// その大会が自前の技リストを持っているか。GET の techniquesSource に使う。
+function techniquesSourceOf(event) {
+  return (event && Array.isArray(event.techniques)) ? 'event' : 'template';
+}
+
 // CSVパース関数（RFC 4180対応）
 function parseCSV(text) {
   const lines = [];
@@ -311,6 +339,7 @@ app.use(express.json({ limit: '50mb' }));
 //   PUT    /api/events/:id/live/:court
 //   POST   /api/links               （大会ファイルに shareToken を書き込む）
 //   POST   /api/techniques / DELETE /api/techniques
+//   PUT    /api/events/:id/techniques / DELETE /api/events/:id/techniques
 // ── Event API ──
 
 // GET /api/events : 大会一覧
@@ -346,6 +375,10 @@ app.get('/api/events/:id', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    // 有効な技リストは応答にだけ足す（ファイルには書かない）。
+    // techniques を持たない大会（この機能より前に作られた大会）は雛形で動き続ける。
+    data.techniquesSource = techniquesSourceOf(data);
+    data.techniques = effectiveTechniques(data);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -386,6 +419,33 @@ app.post('/api/events', (req, res) => {
     // 名簿を入れ直した大会の live には、もう居ない選手の playerId が残りうる。
     // 落としても配信用ボードが数秒「待機中」になるだけで、コート端末の次の
     // publishLive がすぐ入れ直す（トークンのように配布済みで失うと困る値ではない）。
+
+    // 技リスト（大会ごとの配点）。body に techniques が無いときは
+    //   既存ファイルがある → その大会の techniques を引き継ぐ（shareToken と同じ扱い）
+    //   既存ファイルが無い → 雛形（custom.json / 既定値）を複製して持たせる
+    // 複製なので、あとで雛形を変えてもこの大会の配点は動かない。
+    if (!Array.isArray(event.techniques)) {
+      let inherited = null;
+      if (fs.existsSync(eventPath)) {
+        try {
+          const prevForTech = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+          if (Array.isArray(prevForTech.techniques)) inherited = prevForTech.techniques;
+        } catch (e) {
+          // 壊れた既存ファイルは上書きを止めない
+        }
+      }
+      event.techniques = inherited || cloneTechniques(readTechniques().techniques);
+    } else {
+      // body が techniques を送ってきたとき（技術リスト編集画面からの保存し直しなど）は
+      // PUT /api/events/:id/techniques と同じ検証を通す。素通りさせると壊れた
+      // 技リストがそのまま保存され、以後の PUT/DELETE の挙動が壊れる。
+      const badTech = validateTechniques(event.techniques);
+      if (badTech) return res.status(400).json({ error: badTech });
+      event.techniques = cloneTechniques(event.techniques);
+    }
+    // GET /api/events/:id の応答にだけ足す値。そのまま POST に投げ返されても
+    // ファイルには残さない（ファイルの内容は techniquesSourceOf で毎回判定する）。
+    delete event.techniquesSource;
 
     writeJsonAtomic(eventPath, event);
     res.json({ success: true, id: event.id });
@@ -836,6 +896,95 @@ app.get('/api/events/:id/export', (req, res) => {
   }
 });
 
+// ── Event Techniques API ──
+// 大会ごとの技マスタ。雛形（GET/POST/DELETE /api/techniques）とは別物で、
+// 大会 JSON の techniques に持つ。読み出しは必ず effectiveTechniques を通す。
+
+const STRIKE_LABELS = ['初太刀', '二ノ太刀', '三ノ太刀', '四ノ太刀'];
+
+// 技リストの検証。PUT /api/events/:id/techniques と POST /api/events/import で共用する。
+// 戻り値: エラー文字列（日本語。行番号は1始まり） or null（妥当）
+// 技名は trim して比較する。'胸尽くし(男)' と '胸尽くし(女)' は別名として扱う（そのまま別の文字列）。
+function validateTechniques(list) {
+  if (!Array.isArray(list)) return '技リストが配列ではありません';
+  if (list.length < 1 || list.length > 200) return '技は1〜200件で指定してください';
+  const seen = Object.create(null);   // 技名が '__proto__' でも壊れないように
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i];
+    const n = i + 1;
+    if (!t || typeof t !== 'object' || Array.isArray(t)) return n + ' 行目の形式が不正です';
+    const name = typeof t.name === 'string' ? t.name.trim() : '';
+    if (!name) return n + ' 行目の技名が空です';
+    if (name.length > 50) return n + ' 行目の技名が長すぎます（50文字まで）';
+    if (seen[name]) return n + ' 行目の技名「' + name + '」が重複しています';
+    seen[name] = true;
+    if (!Array.isArray(t.strikes) || t.strikes.length !== 4) return n + ' 行目の配点は4つ必要です';
+    for (let s = 0; s < 4; s++) {
+      const v = t.strikes[s];
+      if (v === null) continue;
+      if (!Number.isInteger(v) || v < 0 || v > 99) {
+        return n + ' 行目の' + STRIKE_LABELS[s] + 'の配点が不正です（0〜99の整数か空）';
+      }
+    }
+  }
+  return null;
+}
+
+// GET /api/events/:id/techniques : その大会の有効な技リスト
+app.get('/api/events/:id/techniques', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    res.json({ source: techniquesSourceOf(event), techniques: effectiveTechniques(event) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/events/:id/techniques : その大会の技リストを置き換える
+app.put('/api/events/:id/techniques', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const body = req.body || {};
+    const invalid = validateTechniques(body.techniques);
+    if (invalid) return res.status(400).json({ error: invalid });
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    event.techniques = cloneTechniques(body.techniques);
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true, techniques: event.techniques });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/events/:id/techniques : 雛形の複製で置き換える（「雛形に戻す」）
+// 雛形との連動状態には戻さない。戻すと、あとで雛形を変えたときに採点中の大会の配点が動く。
+app.delete('/api/events/:id/techniques', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    event.techniques = cloneTechniques(readTechniques().techniques);
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true, techniques: event.techniques });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Round API ──
 
 // POST /api/events/:id/rounds/2/generate : 二巡目の行を生成
@@ -1058,14 +1207,15 @@ app.get('/api/techniques', (req, res) => {
 });
 
 // POST /api/techniques : カスタム技術保存
+// PUT /api/events/:id/techniques と同じ検証を通す。ここが緩いと、
+// 壊れた雛形（技名が空など）を複製した新規大会が以後 PUT で保存できなくなる。
 app.post('/api/techniques', (req, res) => {
   try {
     const { techniques } = req.body;
-    if (!Array.isArray(techniques)) {
-      return res.status(400).json({ error: 'Invalid data' });
-    }
+    const badTech = validateTechniques(techniques);
+    if (badTech) return res.status(400).json({ error: badTech });
     const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
-    writeJsonAtomic(customPath, techniques);
+    writeJsonAtomic(customPath, cloneTechniques(techniques));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1289,7 +1439,9 @@ app.get('/api/links/:token/live', (req, res) => {
       eventName: event.name || '',
       now: new Date().toISOString(),
       courts: courts,
-      techniques: readTechniques().techniques
+      // 配点は大会ごと。雛形ではなくこの大会の有効な技リストを返す
+      // （board.html は返ってきた配点で得点の内訳を描く）。
+      techniques: effectiveTechniques(event)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
