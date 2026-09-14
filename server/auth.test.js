@@ -140,6 +140,54 @@ test('classify: 正規化で迂回できない', () => {
   assert.strictEqual(classify('/%zz', { production: false }), null);   // 不正なエンコード
 });
 
+// ── 単体: 認証 ──
+const { parseBasic, isPublicApi, createAuth } = require('./auth');
+
+test('parseBasic: 最初の ":" で分割し、パスワードに ":" を含められる', () => {
+  const h = 'Basic ' + Buffer.from('staff:pa:ss').toString('base64');
+  assert.deepStrictEqual(parseBasic(h), { user: 'staff', pass: 'pa:ss' });
+  assert.deepStrictEqual(parseBasic('basic ' + Buffer.from('a:b').toString('base64')), { user: 'a', pass: 'b' });
+});
+
+test('parseBasic: 無い・形式違い・":" なしは null', () => {
+  assert.strictEqual(parseBasic(undefined), null);
+  assert.strictEqual(parseBasic('Bearer xyz'), null);
+  assert.strictEqual(parseBasic('Basic'), null);
+  assert.strictEqual(parseBasic('Basic ' + Buffer.from('nocolon').toString('base64')), null);
+});
+
+test('isPublicApi: 共有リンクの GET 3 本だけが公開', () => {
+  assert.strictEqual(isPublicApi('GET', '/api/links/abc123'), true);
+  assert.strictEqual(isPublicApi('GET', '/api/links/abc123/ranking'), true);
+  assert.strictEqual(isPublicApi('GET', '/api/links/abc123/live'), true);
+  assert.strictEqual(isPublicApi('POST', '/api/links'), false);
+  assert.strictEqual(isPublicApi('GET', '/api/links'), false);
+  assert.strictEqual(isPublicApi('GET', '/api/links/'), false);
+  assert.strictEqual(isPublicApi('GET', '/api/links/abc/other'), false);
+  assert.strictEqual(isPublicApi('DELETE', '/api/links/abc'), false);
+  assert.strictEqual(isPublicApi('GET', '/api/events'), false);
+  assert.strictEqual(isPublicApi('GET', '/api/events/abc'), false);
+  assert.strictEqual(isPublicApi('GET', '/api/techniques'), false);
+});
+
+test('createAuth: 資格情報が揃っていれば有効、欠けていれば無効（全て通す）', () => {
+  assert.strictEqual(createAuth({ user: 'a', pass: 'b' }).enabled, true);
+  assert.strictEqual(createAuth({ user: 'a', pass: '' }).enabled, false);
+  assert.strictEqual(createAuth({ user: '', pass: 'b' }).enabled, false);
+  assert.strictEqual(createAuth({}).enabled, false);
+  assert.strictEqual(createAuth({}).isAuthorized({ headers: {} }), true);
+});
+
+test('createAuth.isAuthorized: 正しい組だけ通す', () => {
+  const auth = createAuth({ user: USER, pass: PASS });
+  const req = h => ({ headers: h ? { authorization: h.Authorization } : {} });
+  assert.strictEqual(auth.isAuthorized(req(basic(USER, PASS))), true);
+  assert.strictEqual(auth.isAuthorized(req(basic(USER, 'wrong'))), false);
+  assert.strictEqual(auth.isAuthorized(req(basic('wrong', PASS))), false);
+  assert.strictEqual(auth.isAuthorized(req(basic(USER, PASS + 'x'))), false);
+  assert.strictEqual(auth.isAuthorized(req(null)), false);
+});
+
 // ── スモーク: 開発・認証なしは従来どおり ──
 test('開発・認証なし: / と GET /api/events が無認証で 200', async () => {
   await withServer(NO_AUTH_DEV, async base => {
