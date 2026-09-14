@@ -53,6 +53,7 @@ async function startServer(env) {
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let out = '';
+  child.on('error', e => { out += String(e); });
   const exit = new Promise(resolve => child.on('exit', code => resolve(code)));
   const ready = new Promise((resolve, reject) => {
     child.stdout.on('data', d => { out += d; if (out.includes('running at')) resolve(); });
@@ -91,8 +92,13 @@ function basic(user, pass) {
   return { Authorization: 'Basic ' + Buffer.from(user + ':' + pass).toString('base64') };
 }
 
+// 応答が返らないとテスト全体が止まるので、1 リクエストごとに打ち切る
 async function get(base, p, headers) {
-  return fetch(base + p, { headers: headers || {}, redirect: 'manual' });
+  return fetch(base + p, {
+    headers: headers || {},
+    redirect: 'manual',
+    signal: AbortSignal.timeout(5000)
+  });
 }
 
 // ── 単体: 静的配信の許可リスト ──
