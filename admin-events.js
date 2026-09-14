@@ -15,7 +15,12 @@
     btnImport.type = 'button';
     btnImport.className = 'head-btn';
     btnImport.textContent = '📂 取り込む';
-    btnImport.addEventListener('click', pickBundle);
+    btnImport.addEventListener('click', function() {
+      // ファイル選択〜取り込み完了まで二重送信を防ぐ。成功・失敗・キャンセルの
+      // どれで終わっても pickBundle が最後に呼ぶコールバックで必ず戻す。
+      btnImport.disabled = true;
+      pickBundle(function() { btnImport.disabled = false; });
+    });
 
     var btnNew = document.createElement('button');
     btnNew.type = 'button';
@@ -135,8 +140,12 @@
       var json = await Api.exportBundle(ev.id);
       btnSave.disabled = false;
       sheet.lock(false);
-      if (!json) {
-        alert('大会をファイルに保存できませんでした。通信を確認してください。');
+      // json: 成功時は文字列、サーバーがエラーを返したときは {error}、
+      // 通信そのものに失敗したときは null。
+      if (typeof json !== 'string') {
+        alert(json && json.error
+          ? '大会をファイルに保存できませんでした。\n' + json.error
+          : '大会をファイルに保存できませんでした。通信を確認してください。');
         return;   // シートは開いたまま
       }
       // ファイル名はサーバーの Content-Disposition ではなくクライアントで組む
@@ -231,7 +240,9 @@
   }
 
   // admin.html には file input を置かない（DOM は計画3との契約）。その場で作って捨てる。
-  function pickBundle() {
+  // onDone はファイル選択〜取り込みが完全に終わった時点（成功・失敗・キャンセルの
+  // どれでも）で一度だけ呼ぶ。呼び出し元はこれでボタンの disabled を戻す。
+  function pickBundle(onDone) {
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json,application/json';
@@ -239,31 +250,48 @@
     document.body.appendChild(input);
 
     var removed = false;
+    var fileChosen = false;   // change でファイルを受け取ったら true
+    var finished = false;
     function cleanup() {
       if (removed) return;
       removed = true;
       window.removeEventListener('focus', onFocus);
       if (input.parentNode) input.parentNode.removeChild(input);
     }
+    function finish() {
+      if (finished) return;
+      finished = true;
+      if (onDone) onDone();
+    }
     // ファイル選択ダイアログをキャンセルすると change は発火しない。
     // cancel イベントが取れる環境ではそれで、取れない環境（フォールバック）では
     // ダイアログを閉じてウィンドウに戻ってきた最初の focus で片付ける。
     // change が先に来た場合はそちらの removeChild が先に効き、cleanup は何もしない。
+    function onCancel() { cleanup(); finish(); }
     function onFocus() {
       // change がこの同じ tick で来ることがある（フォーカスが先に戻る環境）。
       // ここで即 cleanup すると、その change を取りこぼす。
-      setTimeout(cleanup, 0);
+      setTimeout(function() {
+        cleanup();
+        // ファイルを選んでいれば、finish は取り込みの完了（change 側）に任せる。
+        if (!fileChosen) finish();
+      }, 0);
     }
-    input.addEventListener('cancel', cleanup);
+    input.addEventListener('cancel', onCancel);
     window.addEventListener('focus', onFocus);
 
     input.addEventListener('change', function(e) {
       var file = e.target.files[0];
       if (file) {
+        fileChosen = true;
         var reader = new FileReader();
-        reader.onload = function(ev) { importBundleText(ev.target.result); };
-        reader.onerror = function() { alert('ファイルを読めませんでした。'); };
+        reader.onload = function(ev) {
+          importBundleText(ev.target.result).then(finish);
+        };
+        reader.onerror = function() { alert('ファイルを読めませんでした。'); finish(); };
         reader.readAsText(file, 'UTF-8');
+      } else {
+        finish();
       }
       cleanup();
     });
@@ -278,9 +306,14 @@
       alert('ファイルを読めませんでした。');
       return;
     }
-    if (!bundle || typeof bundle !== 'object' ||
-        bundle.format !== 'phx-tameshigiri-event' || bundle.version !== 1) {
+    if (!bundle || typeof bundle !== 'object' || bundle.format !== 'phx-tameshigiri-event') {
       alert('このアプリのエクスポートファイルではありません。');
+      return;
+    }
+    if (bundle.version !== 1) {
+      // format は合っているが version が違う（新しい版が書き出したファイルなど）。
+      // サーバー（server/index.js の POST /api/events/import）と文言を揃える。
+      alert('対応していないファイル形式です（version: ' + bundle.version + '）\nこのアプリを更新してください。');
       return;
     }
     var name = (bundle.event && bundle.event.name) || '';

@@ -412,8 +412,12 @@ var Admin = (function() {
         var json = ev ? await Api.exportBundle(eventId) : null;
         btnBundle.disabled = false;
         sheet.lock(false);
-        if (!ev || !json) {
-          alert('大会をファイルに保存できませんでした。通信を確認してください。');
+        // json: 成功時は文字列、サーバーがエラーを返したときは {error}、
+        // 通信そのものに失敗したときは null。
+        if (!ev || typeof json !== 'string') {
+          alert(json && json.error
+            ? '大会をファイルに保存できませんでした。\n' + json.error
+            : '大会をファイルに保存できませんでした。通信を確認してください。');
           return;   // シートは開いたまま
         }
         Storage.downloadText(Storage.bundleFilename(ev.name, ev.date), json,

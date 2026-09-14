@@ -201,12 +201,15 @@ var Api = (function() {
   // --- Event Bundle（大会1件の書き出し・取り込み） ---
   async function exportBundle(eventId) {
     // GET /api/events/:eventId/bundle
-    // 戻り値: JSON 文字列 | null（400/404/通信失敗）
+    // 戻り値: JSON 文字列（成功）
+    //       | { error }（404/500 などサーバーがエラー応答を返した。JSON でない
+    //         エラー応答（413 やプロキシの HTML エラーページなど）でも同じ形にする）
+    //       | null（通信そのものの失敗。fetch が投げた場合のみ）
     // ファイル名はサーバーの Content-Disposition を使わず Storage.bundleFilename で組む。
     try {
       var res = await fetch('/api/events/' + eventId + '/bundle');
-      if (!res.ok) return null;
-      return await res.text();
+      if (res.ok) return await res.text();
+      return { error: await readErrorMessage(res) };
     } catch (e) {
       return null;
     }
@@ -216,7 +219,9 @@ var Api = (function() {
     // POST /api/events/import
     // Body: エクスポートファイルの JSON をパースしたオブジェクト
     // 戻り値: { success: true, id, playerCount }
-    //       | { success: false, error }（4xx: 失敗理由を画面に出すため） | null（通信失敗）
+    //       | { success: false, error }（4xx/5xx: 失敗理由を画面に出すため。JSON でない
+    //         エラー応答でも「通信を確認してください」に丸めず理由を出せるようにする）
+    //       | null（通信そのものの失敗。fetch が投げた場合のみ）
     // 常に新しい大会として追加される（既存の大会は上書きされない）。
     try {
       var res = await fetch('/api/events/import', {
@@ -225,13 +230,25 @@ var Api = (function() {
         body: JSON.stringify(bundle)
       });
       if (!res.ok) {
-        var errJson = await res.json();
-        return { success: false, error: errJson.error };
+        return { success: false, error: await readErrorMessage(res) };
       }
       return await res.json();
     } catch (e) {
       return null;
     }
+  }
+
+  // !res.ok の応答本文を読み、error フィールドを取り出す共通処理。
+  // 本文が JSON でない（413 やプロキシの HTML エラーページなど）ときは
+  // catch で null になって「通信を確認してください」に丸めてしまわないよう、
+  // ステータスコードだけを使った定型文にする。
+  async function readErrorMessage(res) {
+    var text = '';
+    try { text = await res.text(); } catch (e) { /* 本文が読めなくても続ける */ }
+    var json = null;
+    try { json = JSON.parse(text); } catch (e) { /* JSON でない応答 */ }
+    if (json && typeof json.error === 'string') return json.error;
+    return 'サーバーがエラーを返しました（' + res.status + '）';
   }
 
   // --- Rounds ---
