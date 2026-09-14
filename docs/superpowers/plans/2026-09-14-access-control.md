@@ -719,7 +719,7 @@ app.use((req, res) => {
 - [ ] **Step 6: 通ることを確認**
 
 Run: `npm test`
-Expected: `Result: 21 passed, 0 failed`
+Expected: `Result: 23 passed, 0 failed`
 
 - [ ] **Step 7: 開発サーバーで従来のブラウザテストが通ることを確認**
 
@@ -896,7 +896,7 @@ export に `isPermanentFailure` を足す:
 - [ ] **Step 5: 通ることを確認**
 
 ブラウザで `http://localhost:3457/test.html` を**新しいタブで**開く（同一タブの再読み込みは bfcache で古い JS が残ることがある）。
-Expected: 追加した 14 件を含めて `failed` が 0。
+Expected: 追加した 13 件を含めて `failed` が 0。
 
 - [ ] **Step 6: コミット**
 
@@ -969,7 +969,7 @@ Expected: `AUTH_USER を .env に設定してください` を含むエラーで
 - [ ] **Step 6: `npm test` が通ることを確認**
 
 Run: `npm test`
-Expected: `Result: 21 passed, 0 failed`
+Expected: `Result: 23 passed, 0 failed`
 
 - [ ] **Step 7: コミット**
 
@@ -987,7 +987,7 @@ git commit -m "chore: 認証の資格情報を .env から注入し、cors 依�
 - [ ] **Step 1: 全テスト**
 
 Run: `npm test`
-Expected: `Result: 21 passed, 0 failed`
+Expected: `Result: 23 passed, 0 failed`
 
 - [ ] **Step 2: 認証ありの開発サーバーでブラウザ確認**
 
@@ -1029,3 +1029,18 @@ Expected: `AUTH_USER と AUTH_PASS が設定されていません…` と `exit=
 | §F `auth.test.js`・`test.html` | Task 1–5 |
 | §G 同期の維持 | 全タスク共通ルール |
 | §H phx-tournament | 設計書に手順あり。本計画の範囲外 |
+
+---
+
+## レビュー後の追加（2026-09-14、実装時のレビューで計画に足したもの）
+
+| 項目 | コミット | 理由 |
+|---|---|---|
+| テストランナーは `process.exit()` でなく `process.exitCode` | c38dd84 | Windows/Node 24 で子プロセス停止直後の `process.exit()` が libuv をクラッシュさせる |
+| `fetch` に `AbortSignal.timeout(5000)`、spawn の `error` を捕捉 | 1c2a3e9 | 応答が返らないとテスト全体が止まる |
+| API 認証を `express.json` より**前**に、公開 API は HEAD も通す | 7744221 | body-parser の 400/413 が認証を素通りする。無認証の 50MB を読まない |
+| 認証切れ時の `beforeunload` 抑止、再試行ボタン非表示、drop 時の `lastStatus` リセット、`deploy.sh` に `set -e` | d6a8fef | バナーの「再読み込みしてください」と離脱確認の矛盾。compose 失敗で古い無認証コンテナが残る |
+| **`case sensitive routing` と小文字化判定（Critical）** | 9800c31 | Express の既定では `/API/events` がルートに一致しつつ `'/api/'` 判定をすり抜け、**無認証で読み書きできた** |
+
+最終: `npm test` 23 件、`test.html` 418 件（認証あり／なし双方で 0 failed）。
+
