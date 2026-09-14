@@ -66,6 +66,8 @@
 
 公開 API の判定は GET に加えて HEAD も通す（監視ツールが HEAD を使うことがある。Express は HEAD を GET ハンドラに流す）。
 
+**パスの大文字小文字。** Express のルーティングは既定で大文字小文字を区別しないため、`/API/events` がルートに一致する一方で認証ミドルウェアの `'/api/'` 判定をすり抜け、無認証で読み書きできてしまう（2026-09-14 最終レビューで発見）。`app.set('case sensitive routing', true)` で `/API/...` をルートに一致させず、さらにミドルウェア側でも小文字化して判定する二重の守りにする。`server/auth.test.js` が `/API/events` `/Api/Techniques` 等が決して 200 にならないことを固定する。
+
 ---
 
 ## B. 静的配信の許可リスト
@@ -128,9 +130,10 @@ environment:
 
 **配備手順（サーバーで一度だけ）**
 
-1. リポジトリ直下に `.env` を作り `AUTH_USER` / `AUTH_PASS` を書く（パスワードは十分長いランダム文字列）。
+1. リポジトリ直下に `.env` を作り `AUTH_USER` / `AUTH_PASS` を書く（パスワードは十分長いランダム文字列。`# $ 空白` を含む場合は単一引用符で囲む — 二重引用符だと compose が `$` を展開する）。
 2. `bash deploy.sh`。
-3. 確認: `curl -sS -o /dev/null -w '%{http_code}' https://tameshigiri.phx-base.org/` → `401`、同 `/share.html` → `200`、同 `/deploy.sh` → `404`、同 `/api/events` → `401`、`curl -u user:pass .../api/events` → `200`。
+3. 確認: `curl -sS -o /dev/null -w '%{http_code}' https://tameshigiri.phx-base.org/` → `401`、同 `/share.html` → `200`、同 `/deploy.sh` → `404`、同 `/api/events` → `401`、同 `/API/events` → `401` か `404`、`curl -u user:pass .../api/events` → `200`。
+4. `.env` は `chmod 600` にしておく（`sudo docker compose` は root で読むので問題ない）。
 
 ---
 
@@ -158,7 +161,7 @@ environment:
 ### `test.html`
 
 - `Outbox.isPermanentFailure`: 401 → `false`、403 → `false`、404 → `true`、408 → `false`、400 → `true`。
-- 既存の 267 件は認証なしの開発サーバーで従来どおり通ること。認証ありの開発サーバーでは `test.html` を開いた時点でダイアログが出て、以降の `fetch` に資格情報が付くので同じく通ること。
+- 既存のテスト（実装時点で 405 件）は認証なしの開発サーバーで従来どおり通ること。認証ありの開発サーバーでは `test.html` を開いた時点でダイアログが出て、以降の `fetch` に資格情報が付くので同じく通ること。
 
 ---
 
