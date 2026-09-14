@@ -286,7 +286,8 @@
         fileChosen = true;
         var reader = new FileReader();
         reader.onload = function(ev) {
-          importBundleText(ev.target.result).then(finish);
+          // 成功でも例外でも「📂 取り込む」を戻す（reject 側を落とすとボタンが無効のまま残る）
+          importBundleText(ev.target.result).then(finish, finish);
         };
         reader.onerror = function() { alert('ファイルを読めませんでした。'); finish(); };
         reader.readAsText(file, 'UTF-8');
