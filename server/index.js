@@ -1026,7 +1026,7 @@ function pickBundlePlayer(p) {
     result: typeof src.result === 'string' ? src.result : ''
   };
   if (Array.isArray(src.adjust)) out.adjust = src.adjust.slice();
-  if (Number.isFinite(src.totalAdjust)) out.totalAdjust = src.totalAdjust;
+  if (Number.isInteger(src.totalAdjust)) out.totalAdjust = src.totalAdjust;
   if (typeof src.note === 'string' && src.note !== '') out.note = src.note;
   if (src.confirmed === true) out.confirmed = true;
   if (isValidId(src.sourcePlayerId)) out.sourcePlayerId = src.sourcePlayerId;
@@ -1070,11 +1070,15 @@ app.get('/api/events/:id/bundle', (req, res) => {
       history: entries
     };
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" +
-      encodeURIComponent(bundleFilename(bundle.event.name, bundle.event.date)));
+    // RFC 5987 の attr-char は英数字と一部の記号だけで、' ( ) * は含まれない。
+    // encodeURIComponent はこの4文字をエスケープせずに残すため、追加で %XX にする。
+    const encodedName = encodeURIComponent(bundleFilename(bundle.event.name, bundle.event.date))
+      .replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodedName);
     res.send(JSON.stringify(bundle, null, 2));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('大会の書き出しに失敗:', err);
+    res.status(500).json({ error: '大会の書き出しに失敗しました' });
   }
 });
 
@@ -1195,10 +1199,11 @@ app.post('/api/events/import', (req, res) => {
       techniques: techniques,
       players: players
     };
-    writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
 
     // 履歴はオブジェクトの要素だけ通す。キーが '__proto__' でもプロトタイプを汚さないよう
     // setOwn で写す（computeRanking が氏名の辞書に Object.create(null) を使うのと同じ理由）。
+    // なお履歴の playerId は選手 ID の振り直しに追従しない（参照用の記録であり、
+    // 付け替えると元の履歴の意味が変わってしまうため）。
     const entries = rawHistory
       .filter(e => e && typeof e === 'object' && !Array.isArray(e))
       .map(e => {
@@ -1207,13 +1212,21 @@ app.post('/api/events/import', (req, res) => {
         if (typeof copy.timestamp !== 'string' || !copy.timestamp) setOwn(copy, 'timestamp', now);
         return copy;
       });
+
+    // 履歴を先に書き、大会を後に書く。どちらも新しい ID の新規作成なので、
+    // 途中で失敗しても他端末とは競合しない。順序が逆（大会を先）だと、
+    // 履歴の書き込みだけが失敗したときに「大会はあるが履歴が欠けた」半端な
+    // 取り込みが成立してしまう。この順序なら、失敗するのはせいぜい
+    // 「参照されない孤児の履歴ファイルが残る」だけで実害が無い。
     if (entries.length > 0) {
       writeJsonAtomic(path.join(HISTORY_DIR, `${id}.json`), { eventId: id, entries: entries });
     }
+    writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
 
     res.json({ success: true, id: id, playerCount: players.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('大会の取り込みに失敗:', err);
+    res.status(500).json({ error: '大会の取り込みに失敗しました' });
   }
 });
 
