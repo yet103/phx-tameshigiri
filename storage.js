@@ -33,6 +33,23 @@ var Storage = (function() {
     downloadText(filename, htmlContent, 'text/html;charset=utf-8');
   }
 
+  // 大会を1ファイルに書き出すときのファイル名。
+  //   bundleFilename('名古屋城決戦', '2025-10-25') → 'tameshigiri_2025-10-25_名古屋城決戦.json'
+  // Windows / macOS のファイル名に使えない文字と制御文字を '_' に置き換え、大会名は40文字で切る。
+  // サーバー（server/index.js の bundleFilename）にも同じ規則の実装があり、
+  // そちらは Content-Disposition 用。画面はサーバーのヘッダーを使わずこちらで組む。
+  function bundleFilename(name, date) {
+    var safe = String(name == null ? '' : name)
+      .replace(/[\/\\:*?"<>|]/g, '_')
+      .replace(/[\x00-\x1f\x7f]/g, '_')
+      .slice(0, 40)
+      .trim();
+    if (!safe) safe = '大会';
+    var d = String(date == null ? '' : date).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) d = 'nodate';
+    return 'tameshigiri_' + d + '_' + safe + '.json';
+  }
+
   // --- HTML生成 ---
   // 列は CSV エクスポート（server/index.js の export）と同じ15列に揃える。
   function buildPlayersHtml(players) {
@@ -70,6 +87,7 @@ var Storage = (function() {
     downloadText: downloadText,
     downloadCsv: downloadCsv,
     downloadHtml: downloadHtml,
+    bundleFilename: bundleFilename,
     buildPlayersHtml: buildPlayersHtml,
     esc: esc
   };

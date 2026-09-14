@@ -2,25 +2,26 @@
 (function() {
   var currentCourt = '';
   var courtOwner = null;   // currentCourt がどの大会のものか（大会が変われば全コートに戻す）
-  var techCache = null;    // Api.loadTechniques() の techniques
-  var techPromise = null;  // 実行中の Api.loadTechniques()。同時にタップされても fetch は1回にする
+  // 技リストは大会ごと（大会 JSON の techniques）。render のたびに ctx.techniques で
+  // 入れ替える。どの大会のものかを一緒に覚えて、大会をまたいで前の大会の配点を使わない。
+  var techCache = null;
+  var techOwner = null;
 
   // 行の並び順（巡目 → コート → 性別 → 番号）は courts.js の Courts.compareOrder
   // を使う（進行タブ admin-round.js と共有）。
 
-  // 技術リストを必要なときだけ取りに行く（追加・編集フォームでチップを
-  // タップしたとき）。キャッシュがあればそれを返す。
-  async function ensureTechniques() {
-    if (techCache) return techCache;
-    // 同時にタップされても Api.loadTechniques() は1回だけ叩く。
-    if (!techPromise) techPromise = Api.loadTechniques();
-    var td = await techPromise;
-    techPromise = null;   // 失敗（null）していれば次のタップで取り直せるようにする
-    if (td && td.techniques) techCache = td.techniques;
-    return techCache;
+  function adoptTechniques(ctx) {
+    techOwner = ctx.eventId;
+    techCache = (Array.isArray(ctx.techniques) && ctx.techniques.length > 0) ? ctx.techniques : null;
+  }
+
+  // いま開いている大会の技リストが手元にあるか
+  function hasTechniques(ctx) {
+    return techOwner === ctx.eventId && !!techCache;
   }
 
   async function render(container, ctx) {
+    adoptTechniques(ctx);
     if (courtOwner !== ctx.eventId) {
       currentCourt = '';
       courtOwner = ctx.eventId;
@@ -70,10 +71,6 @@
     }
     Admin.renderCourtChips(chips, ctx.players, currentCourt, onCourtChange);
     renderList(list, ctx);
-
-    // 技術リストは追加・編集フォームで使う。フォームを開くまで待たず、
-    // ここで先読みしておく（DOM の描画は待たない）。
-    ensureTechniques();
   }
 
   function renderList(list, ctx) {
@@ -288,10 +285,9 @@
     el.appendChild(fTech);
 
     function renderTechChips() {
-      TechPicker.renderChips(chips, techState, async function(index) {
-        await ensureTechniques();
-        if (!techCache) {
-          alert('技術リストを取得できませんでした。技以外は保存できます。');
+      TechPicker.renderChips(chips, techState, function(index) {
+        if (!hasTechniques(ctx)) {
+          alert('技術リストを取得できませんでした。大会を開き直してください。技以外は保存できます。');
           return;
         }
         TechPicker.open({

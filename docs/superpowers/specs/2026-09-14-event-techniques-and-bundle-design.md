@@ -134,7 +134,7 @@
 **運営画面・大会タブ（admin-events.js）**:
 
 - 各大会の行の右端の「✕」を「⋯」に替え、シートに「💾 ファイルに保存」「🗑 削除」を置く（削除の確認文言は今のまま）。「ファイルに保存」は `Api.exportBundle` → `Storage.downloadText(filename, json, 'application/json')`（`downloadCsv` と同じ仕組み）。ファイル名はサーバーの `Content-Disposition` を使わず、クライアントで同じ規則で組む（`Storage.bundleFilename(name, date)`。純粋関数にしてテストする）。
-- 見出しの「＋ 新規大会」の左に「📂 取り込む」。`<input type="file" accept=".json,application/json">` を開き、読んだテキストを `JSON.parse`。失敗したら「ファイルを読めませんでした」。取り込み前に `format`/`version` を見て違えば「このアプリのエクスポートファイルではありません」。大会一覧に同名・同日の大会があれば「同じ名前と日付の大会が既にあります。別の大会として追加しますか？」で確認。成功したら toast「大会を取り込みました（n 名）」→ 選手タブへ。400 の `error` は alert。
+- 見出しの「＋ 新規大会」の左に「📂 取り込む」。`<input type="file" accept=".json,application/json">` を開き、読んだテキストを `JSON.parse`。失敗したら「ファイルを読めませんでした」。取り込み前に `format`/`version` を見る。`format` 違いは「このアプリのエクスポートファイルではありません」、`version` 違いは「対応していないファイル形式です（version: n）」。大会一覧に同名・同日の大会があれば「同じ名前と日付の大会が既にあります。別の大会として追加しますか？」で確認。成功したら toast「大会を取り込みました（n 名）」→ 選手タブへ。400 の `error` は alert。
 - 運営画面の⋯メニューにも「💾 大会をファイルに保存」（大会選択中のみ）。
 
 **採点画面**: 変更なし（CSV エクスポート・HTML 保存は残す）。
