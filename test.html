@@ -1525,6 +1525,34 @@
     assert('parseHash: URL エンコードされたコート名を戻す',
       Board.parseHash('#abc/' + encodeURIComponent('東')), { token: 'abc', court: '東' });
 
+    // storage.js テスト（大会ファイルのファイル名。純粋関数）
+    var h2s = document.createElement('h2');
+    h2s.textContent = 'storage.js';
+    results.appendChild(h2s);
+
+    assert('bundleFilename: 大会名と日付を並べる',
+      Storage.bundleFilename('名古屋城決戦', '2025-10-25'),
+      'tameshigiri_2025-10-25_名古屋城決戦.json');
+    assert('bundleFilename: 使えない文字は _ にする',
+      Storage.bundleFilename('a/b\\c:d*e?f"g<h>i|j', '2025-10-25'),
+      'tameshigiri_2025-10-25_a_b_c_d_e_f_g_h_i_j.json');
+    assert('bundleFilename: 制御文字も _ にする',
+      Storage.bundleFilename('a\nb\tc', '2025-10-25'),
+      'tameshigiri_2025-10-25_a_b_c.json');
+    assert('bundleFilename: 大会名は40文字で切る',
+      Storage.bundleFilename('あ'.repeat(45), '2025-10-25'),
+      'tameshigiri_2025-10-25_' + 'あ'.repeat(40) + '.json');
+    assert('bundleFilename: 日付が無ければ nodate',
+      Storage.bundleFilename('大会', ''), 'tameshigiri_nodate_大会.json');
+    assert('bundleFilename: 日付の形が違えば nodate',
+      Storage.bundleFilename('大会', '2025/10/25'), 'tameshigiri_nodate_大会.json');
+    assert('bundleFilename: 大会名が空なら「大会」',
+      Storage.bundleFilename('', '2025-10-25'), 'tameshigiri_2025-10-25_大会.json');
+    assert('bundleFilename: 前後の空白は落とす',
+      Storage.bundleFilename('  名古屋  ', '2025-10-25'), 'tameshigiri_2025-10-25_名古屋.json');
+    assert('bundleFilename: null でも落ちない',
+      Storage.bundleFilename(null, null), 'tameshigiri_nodate_大会.json');
+
     await runApiTests();
 
     // 結果サマリ
