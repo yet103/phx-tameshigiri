@@ -985,6 +985,98 @@ app.delete('/api/events/:id/techniques', (req, res) => {
   }
 });
 
+// ── Event Bundle API（大会1件の書き出し・取り込み） ──
+// 大会情報＋技マスタ＋選手（全項目）＋採点履歴を1つの JSON にまとめる。
+// 共有トークン（shareToken）と配信ボードの状態（live）は出さない。取り込み先で作り直す。
+
+const BUNDLE_FORMAT = 'phx-tameshigiri-event';
+const BUNDLE_VERSION = 1;
+
+// Content-Disposition に入れるファイル名。
+// クライアント側の同じ規則の実装は storage.js の Storage.bundleFilename
+// （画面はサーバーのヘッダーを使わず自分で組む。規則が食い違ったら test.html の
+//  bundleFilename のテストとこの関数を突き合わせること）。
+function bundleFilename(name, date) {
+  let safe = String(name == null ? '' : name)
+    .replace(/[\/\\:*?"<>|]/g, '_')
+    .replace(/[\x00-\x1f\x7f]/g, '_')
+    .slice(0, 40)
+    .trim();
+  if (!safe) safe = '大会';
+  let d = String(date == null ? '' : date).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) d = 'nodate';
+  return 'tameshigiri_' + d + '_' + safe + '.json';
+}
+
+// エクスポートに出す選手の項目。ここに無いキーは出さない。
+// adjust / totalAdjust / note / confirmed / sourcePlayerId は持っている選手にだけ付ける。
+function pickBundlePlayer(p) {
+  const src = (p && typeof p === 'object') ? p : {};
+  const out = {
+    id: typeof src.id === 'string' ? src.id : '',
+    name: typeof src.name === 'string' ? src.name : '',
+    order: typeof src.order === 'string' ? src.order : '',
+    tech1: typeof src.tech1 === 'string' ? src.tech1 : '',
+    tech2: typeof src.tech2 === 'string' ? src.tech2 : '',
+    tech3: typeof src.tech3 === 'string' ? src.tech3 : '',
+    score: typeof src.score === 'number' ? src.score : 0,
+    isNewFace: src.isNewFace === true,
+    isFemale: src.isFemale === true,
+    result: typeof src.result === 'string' ? src.result : ''
+  };
+  if (Array.isArray(src.adjust)) out.adjust = src.adjust.slice();
+  if (Number.isFinite(src.totalAdjust)) out.totalAdjust = src.totalAdjust;
+  if (typeof src.note === 'string' && src.note !== '') out.note = src.note;
+  if (src.confirmed === true) out.confirmed = true;
+  if (isValidId(src.sourcePlayerId)) out.sourcePlayerId = src.sourcePlayerId;
+  return out;
+}
+
+// GET /api/events/:id/bundle : 大会1件を丸ごと書き出す
+app.get('/api/events/:id/bundle', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    const historyPath = path.join(HISTORY_DIR, `${req.params.id}.json`);
+    let entries = [];
+    if (fs.existsSync(historyPath)) {
+      try {
+        const h = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+        if (Array.isArray(h.entries)) entries = h.entries;
+      } catch (e) {
+        // 履歴が壊れていても大会の書き出しは止めない
+      }
+    }
+    const bundle = {
+      format: BUNDLE_FORMAT,
+      version: BUNDLE_VERSION,
+      exportedAt: new Date().toISOString(),
+      sourceEventId: typeof event.id === 'string' ? event.id : req.params.id,
+      event: {
+        name: event.name || '',
+        date: event.date || '',
+        venue: event.venue || '',
+        createdAt: event.createdAt || '',
+        updatedAt: event.updatedAt || '',
+        // 雛形を使っている大会も複製を書き出す。取り込み先の雛形に依存させない。
+        techniques: effectiveTechniques(event),
+        players: (Array.isArray(event.players) ? event.players : []).map(pickBundlePlayer)
+      },
+      history: entries
+    };
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" +
+      encodeURIComponent(bundleFilename(bundle.event.name, bundle.event.date)));
+    res.send(JSON.stringify(bundle, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Round API ──
 
 // POST /api/events/:id/rounds/2/generate : 二巡目の行を生成

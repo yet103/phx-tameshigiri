@@ -811,6 +811,41 @@
     assert('POST /api/events: techniquesSource が混ざっていても保存できる',
       pOkLoaded.techniquesSource, 'event');
     await Api.deleteEvent(pOkEvent.id);
+
+    // --- 大会のエクスポート（bundle。トラックB） ---
+    var b2Event = await Api.saveEvent({ name: 'バンドルテスト', date: '2026-09-14', venue: '道場', players: [] });
+    var b2Bulk = await Api.createPlayersBulk(b2Event.id, {
+      court: 'A', isFemale: false, isNewFace: true, names: ['束 太郎']
+    });
+    var b2Player = b2Bulk.players[0];
+    await Api.updatePlayerInfo(b2Event.id, b2Player.id, {
+      tech1: '真', result: '11   ', adjust: [2, 0, 0], totalAdjust: 1,
+      note: 'メモ', confirmed: true, score: 15
+    });
+    await Api.addHistory(b2Event.id, { action: 'test_entry', detail: 'バンドル履歴' });
+    await Api.createShareLink(b2Event.id);
+    await Api.putLive(b2Event.id, 'A', { playerId: b2Player.id });
+
+    var b2Text = await Api.exportBundle(b2Event.id);
+    var b2 = JSON.parse(b2Text);
+    assert('bundle は format と version を持つ', [b2.format, b2.version], ['phx-tameshigiri-event', 1]);
+    assert('bundle は書き出し時刻を持つ', typeof b2.exportedAt, 'string');
+    assert('bundle は元の大会IDを参照用に持つ', b2.sourceEventId, b2Event.id);
+    assert('bundle は大会情報を持つ',
+      [b2.event.name, b2.event.date, b2.event.venue], ['バンドルテスト', '2026-09-14', '道場']);
+    assert('bundle は技リストを持つ', Array.isArray(b2.event.techniques), true);
+    assert('bundle の技リストは空でない', b2.event.techniques.length > 0, true);
+    assert('bundle は選手の全項目を持つ',
+      [b2.event.players[0].name, b2.event.players[0].order, b2.event.players[0].tech1,
+       b2.event.players[0].score, b2.event.players[0].isNewFace, b2.event.players[0].result,
+       b2.event.players[0].adjust, b2.event.players[0].totalAdjust,
+       b2.event.players[0].note, b2.event.players[0].confirmed],
+      ['束 太郎', 'A-男子-1-1', '真', 15, true, '11   ', [2, 0, 0], 1, 'メモ', true]);
+    assert('bundle は履歴を持つ', b2.history.length, 1);
+    assert('bundle は shareToken を含まない', b2Text.indexOf('shareToken'), -1);
+    assert('bundle は live を含まない', b2Text.indexOf('"live"'), -1);
+    assert('存在しない大会の bundle は null', await Api.exportBundle('zzzzzzzznotexist'), null);
+    await Api.deleteEvent(b2Event.id);
   }
 
   (async function() {

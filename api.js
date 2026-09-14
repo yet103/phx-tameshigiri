@@ -198,6 +198,20 @@ var Api = (function() {
     }
   }
 
+  // --- Event Bundle（大会1件の書き出し・取り込み） ---
+  async function exportBundle(eventId) {
+    // GET /api/events/:eventId/bundle
+    // 戻り値: JSON 文字列 | null（400/404/通信失敗）
+    // ファイル名はサーバーの Content-Disposition を使わず Storage.bundleFilename で組む。
+    try {
+      var res = await fetch('/api/events/' + eventId + '/bundle');
+      if (!res.ok) return null;
+      return await res.text();
+    } catch (e) {
+      return null;
+    }
+  }
+
   // --- Rounds ---
   async function generateNextRound(eventId, force) {
     // POST /api/events/:eventId/rounds/2/generate
@@ -476,6 +490,7 @@ var Api = (function() {
     deletePlayer: deletePlayer,
     importCsv: importCsv,
     exportCsv: exportCsv,
+    exportBundle: exportBundle,
     generateNextRound: generateNextRound,
     loadTechniques: loadTechniques,
     saveTechniques: saveTechniques,
