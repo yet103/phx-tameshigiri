@@ -348,6 +348,16 @@ var Admin = (function() {
     btnTechniques.textContent = '🗒 技術リスト編集';
     body.appendChild(btnTechniques);
 
+    // 大会を選んでいるときだけ出す（どの大会を保存するのか決まらないため）
+    var btnBundle = null;
+    if (currentEventId()) {
+      btnBundle = document.createElement('button');
+      btnBundle.type = 'button';
+      btnBundle.className = 'menu-item';
+      btnBundle.textContent = '💾 大会をファイルに保存';
+      body.appendChild(btnBundle);
+    }
+
     var btnRanking = document.createElement('button');
     btnRanking.type = 'button';
     btnRanking.className = 'menu-item';
@@ -389,6 +399,29 @@ var Admin = (function() {
       sheet.close();
       location.href = 'help.html';
     });
+
+    if (btnBundle) {
+      btnBundle.addEventListener('click', async function() {
+        // await をまたぐので、対象の大会をここで固定する
+        var eventId = currentEventId();
+        if (!eventId) return;
+        btnBundle.disabled = true;
+        sheet.lock(true);
+        // ファイル名に使う大会名と日付は大会データから取る
+        var ev = await Api.loadEvent(eventId);
+        var json = ev ? await Api.exportBundle(eventId) : null;
+        btnBundle.disabled = false;
+        sheet.lock(false);
+        if (!ev || !json) {
+          alert('大会をファイルに保存できませんでした。通信を確認してください。');
+          return;   // シートは開いたまま
+        }
+        Storage.downloadText(Storage.bundleFilename(ev.name, ev.date), json,
+          'application/json;charset=utf-8');
+        sheet.close();
+        toast('ファイルに保存しました');
+      });
+    }
   }
 
   // --- テーマ ---
