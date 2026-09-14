@@ -202,4 +202,120 @@ test('開発・認証なし: / と GET /api/events が無認証で 200', async (
   });
 });
 
+// ── 結合: 開発・認証あり ──
+test('公開ページとアセットは無認証で 200', async () => {
+  await withServer(AUTH_DEV, async base => {
+    for (const p of ['/share.html', '/present.html', '/board.html', '/help.html',
+                     '/theme.css', '/api.js', '/scoring.js',
+                     '/fonts/ShipporiMinchoB1-Bold.woff2', '/help/img/admin_bulk.png']) {
+      assert.strictEqual((await get(base, p)).status, 200, p);
+    }
+  });
+});
+
+test('共有リンク API は無認証で通る（存在しないトークンは 404）', async () => {
+  await withServer(AUTH_DEV, async base => {
+    for (const p of ['/api/links/zzzzzz', '/api/links/zzzzzz/ranking', '/api/links/zzzzzz/live']) {
+      const res = await get(base, p);
+      assert.notStrictEqual(res.status, 401, p);
+      assert.strictEqual(res.status, 404, p);
+    }
+  });
+});
+
+test('運営用ページは無認証で 401 + WWW-Authenticate', async () => {
+  await withServer(AUTH_DEV, async base => {
+    for (const p of ['/', '/index.html', '/admin.html', '/ranking.html', '/techniques.html',
+                     '/app.js', '/admin.js', '/style.css', '/test.html']) {
+      const res = await get(base, p);
+      assert.strictEqual(res.status, 401, p);
+      assert.ok(/^Basic realm=/.test(res.headers.get('www-authenticate') || ''), p);
+    }
+  });
+});
+
+test('保護 API は無認証で 401、WWW-Authenticate なし、JSON 本文', async () => {
+  await withServer(AUTH_DEV, async base => {
+    const cases = [
+      ['GET', '/api/events'], ['GET', '/api/events/abc'], ['GET', '/api/events/abc/export'],
+      ['GET', '/api/events/abc/history'], ['GET', '/api/events/abc/ranking'],
+      ['GET', '/api/techniques'], ['POST', '/api/links'], ['POST', '/api/events'],
+      ['PATCH', '/api/events/abc/players/p1'], ['DELETE', '/api/events/abc'],
+      ['PUT', '/api/events/abc/live/A'], ['GET', '/api/nonexistent']
+    ];
+    for (const [method, p] of cases) {
+      const res = await fetch(base + p, {
+        method, headers: { 'Content-Type': 'application/json' },
+        body: method === 'GET' ? undefined : '{}',
+        signal: AbortSignal.timeout(5000)
+      });
+      assert.strictEqual(res.status, 401, method + ' ' + p);
+      assert.strictEqual(res.headers.get('www-authenticate'), null, method + ' ' + p);
+      assert.deepStrictEqual(await res.json(), { error: '認証が必要です' }, method + ' ' + p);
+    }
+  });
+});
+
+test('誤った資格情報は 401、正しい資格情報で通る', async () => {
+  await withServer(AUTH_DEV, async base => {
+    assert.strictEqual((await get(base, '/', basic(USER, 'wrong'))).status, 401);
+    assert.strictEqual((await get(base, '/api/events', basic('wrong', PASS))).status, 401);
+    assert.strictEqual((await get(base, '/', basic(USER, PASS))).status, 200);
+    assert.strictEqual((await get(base, '/admin.html', basic(USER, PASS))).status, 200);
+    assert.strictEqual((await get(base, '/test.html', basic(USER, PASS))).status, 200);
+    assert.strictEqual((await get(base, '/api/events', basic(USER, PASS))).status, 200);
+    assert.strictEqual((await get(base, '/api/techniques', basic(USER, PASS))).status, 200);
+  });
+});
+
+test('表にないファイルは認証付きでも 404（index.html を返さない）', async () => {
+  await withServer(AUTH_DEV, async base => {
+    for (const p of ['/deploy.sh', '/package.json', '/Dockerfile', '/docker-compose.yml',
+                     '/.gitignore', '/server/index.js', '/server/data/', '/%73erver/data/',
+                     '/docs/', '/docs/superpowers/specs/2026-09-14-access-control-design.md',
+                     '/nonexistent', '/anything/deep', '/help/img/../../deploy.sh']) {
+      const res = await get(base, p, basic(USER, PASS));
+      assert.strictEqual(res.status, 404, p);
+      const body = await res.text();
+      assert.ok(!body.includes('<html'), p + ' が HTML を返した');
+    }
+  });
+});
+
+test('Access-Control-Allow-Origin を返さない', async () => {
+  await withServer(AUTH_DEV, async base => {
+    for (const p of ['/share.html', '/api/links/zzzzzz/ranking']) {
+      const res = await get(base, p, { Origin: 'https://evil.example' });
+      assert.strictEqual(res.headers.get('access-control-allow-origin'), null, p);
+    }
+    const res = await get(base, '/api/events', Object.assign({ Origin: 'https://evil.example' }, basic(USER, PASS)));
+    assert.strictEqual(res.headers.get('access-control-allow-origin'), null);
+  });
+});
+
+// ── 結合: 本番 ──
+test('本番・認証あり: test.html は認証付きでも 404', async () => {
+  await withServer(AUTH_PROD, async base => {
+    assert.strictEqual((await get(base, '/test.html', basic(USER, PASS))).status, 404);
+    assert.strictEqual((await get(base, '/share.html')).status, 200);
+    assert.strictEqual((await get(base, '/')).status, 401);
+  });
+});
+
+test('本番・認証なし: 終了コード 1 で起動しない', async () => {
+  const s = await startServer({ NODE_ENV: 'production', AUTH_USER: '', AUTH_PASS: '' });
+  const code = await s.exit;
+  assert.strictEqual(code, 1);
+  assert.ok(s.output().includes('AUTH_USER'), '理由をログに出す: ' + s.output());
+});
+
+// ── 結合: 開発・認証なし ──
+test('開発・認証なし: 許可リストは効く（deploy.sh は 404、share.html は 200）', async () => {
+  await withServer(NO_AUTH_DEV, async base => {
+    assert.strictEqual((await get(base, '/deploy.sh')).status, 404);
+    assert.strictEqual((await get(base, '/share.html')).status, 200);
+    assert.strictEqual((await get(base, '/test.html')).status, 200);
+  });
+});
+
 main();

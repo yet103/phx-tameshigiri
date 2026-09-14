@@ -1,8 +1,9 @@
 const express = require('express');
-const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { createAuth, isPublicApi } = require('./auth');
+const { classify } = require('./static-policy');
 
 const app = express();
 const PORT = process.env.PORT || 3457;
@@ -283,10 +284,37 @@ function computeRanking(event) {
   };
 }
 
+// ────────────────────────────────────────
+// 認証
+// ────────────────────────────────────────
+// 資格情報は環境変数。本番で未設定なら無防備なまま上がらないよう起動を拒否する。
+// 開発時は警告だけ出して認証なしで動かす（test.html の従来運用を壊さない）。
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const auth = createAuth({ user: process.env.AUTH_USER, pass: process.env.AUTH_PASS });
+if (!auth.enabled) {
+  if (IS_PRODUCTION) {
+    console.error('AUTH_USER と AUTH_PASS が設定されていません。本番では認証なしで起動できません。');
+    process.exit(1);
+  }
+  console.warn('⚠ AUTH_USER / AUTH_PASS が未設定のため認証なしで起動します（開発用）');
+}
+
 // ミドルウェア
-app.use(cors());
+// CORS は返さない。全ページが同一オリジンから fetch しており、
+// Access-Control-Allow-Origin: * を出すと外部サイトから API を叩く余地が残る。
 // ペイロードサイズ制限を緩和
 app.use(express.json({ limit: '50mb' }));
+
+// API の認証。共有リンク越しの読み出し（isPublicApi）だけ無認証で通す。
+// 401 に WWW-Authenticate を付けないのは、共有ページを見ている観客の画面に
+// ブラウザのパスワードダイアログが出ないようにするため。運営端末は保護された
+// HTML を開いた時点で認証済みなので、fetch にはブラウザが自動で資格情報を付ける。
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  if (isPublicApi(req.method, req.path)) return next();
+  if (auth.isAuthorized(req)) return next();
+  auth.rejectApi(res);
+});
 
 // ────────────────────────────────────────
 // API ルート
@@ -1321,6 +1349,18 @@ app.use((req, res, next) => {
   next();
 });
 
+// 許可リスト。表にあるファイルだけ配信し、運営用は認証してから返す（server/static-policy.js）。
+// 未定義の /api/ パスもここで 404 にする。
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: '見つかりません' });
+  }
+  const kind = classify(req.path, { production: IS_PRODUCTION });
+  if (!kind) return res.status(404).end();
+  if (kind === 'protected' && !auth.isAuthorized(req)) return auth.rejectPage(res);
+  next();
+});
+
 app.use(express.static(PUBLIC_DIR, {
     etag: false,
     setHeaders(res) {
@@ -1328,12 +1368,10 @@ app.use(express.static(PUBLIC_DIR, {
     }
 }));
 
-app.use((req, res, next) => {
-    if (!req.path.startsWith('/api/')) {
-        res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
-    } else {
-        next();
-    }
+// SPA フォールバックは置かない。画面遷移はハッシュと ?token= で行っており、
+// パスによるルーティングはないため、未知のパスは 404 でよい。
+app.use((req, res) => {
+    res.status(404).end();
 });
 
 app.listen(PORT, () => {
