@@ -11,6 +11,10 @@ services:
     environment:
       - PORT=3457
       - NODE_ENV=production
+      # 運営用ページと書き込み API の Basic 認証。リポジトリ直下の .env から読む。
+      # 未設定なら compose が起動前に止まる（無防備なまま上げない）。
+      - AUTH_USER=${AUTH_USER:?AUTH_USER を .env に設定してください}
+      - AUTH_PASS=${AUTH_PASS:?AUTH_PASS を .env に設定してください}
 
 volumes:
   tameshigiri-data:
