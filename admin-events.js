@@ -11,6 +11,12 @@
     h2.textContent = '大会';
     var spacer = document.createElement('div');
     spacer.className = 'spacer';
+    var btnImport = document.createElement('button');
+    btnImport.type = 'button';
+    btnImport.className = 'head-btn';
+    btnImport.textContent = '📂 取り込む';
+    btnImport.addEventListener('click', pickBundle);
+
     var btnNew = document.createElement('button');
     btnNew.type = 'button';
     btnNew.className = 'head-btn';
@@ -19,6 +25,7 @@
 
     head.appendChild(h2);
     head.appendChild(spacer);
+    head.appendChild(btnImport);
     head.appendChild(btnNew);
     container.appendChild(head);
 
@@ -221,6 +228,88 @@
     field.appendChild(input);
     parent.appendChild(field);
     return input;
+  }
+
+  // admin.html には file input を置かない（DOM は計画3との契約）。その場で作って捨てる。
+  function pickBundle() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    var removed = false;
+    function cleanup() {
+      if (removed) return;
+      removed = true;
+      window.removeEventListener('focus', onFocus);
+      if (input.parentNode) input.parentNode.removeChild(input);
+    }
+    // ファイル選択ダイアログをキャンセルすると change は発火しない。
+    // cancel イベントが取れる環境ではそれで、取れない環境（フォールバック）では
+    // ダイアログを閉じてウィンドウに戻ってきた最初の focus で片付ける。
+    // change が先に来た場合はそちらの removeChild が先に効き、cleanup は何もしない。
+    function onFocus() {
+      // change がこの同じ tick で来ることがある（フォーカスが先に戻る環境）。
+      // ここで即 cleanup すると、その change を取りこぼす。
+      setTimeout(cleanup, 0);
+    }
+    input.addEventListener('cancel', cleanup);
+    window.addEventListener('focus', onFocus);
+
+    input.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function(ev) { importBundleText(ev.target.result); };
+        reader.onerror = function() { alert('ファイルを読めませんでした。'); };
+        reader.readAsText(file, 'UTF-8');
+      }
+      cleanup();
+    });
+    input.click();
+  }
+
+  async function importBundleText(text) {
+    var bundle;
+    try {
+      bundle = JSON.parse(text);
+    } catch (e) {
+      alert('ファイルを読めませんでした。');
+      return;
+    }
+    if (!bundle || typeof bundle !== 'object' ||
+        bundle.format !== 'phx-tameshigiri-event' || bundle.version !== 1) {
+      alert('このアプリのエクスポートファイルではありません。');
+      return;
+    }
+    var name = (bundle.event && bundle.event.name) || '';
+    var date = (bundle.event && bundle.event.date) || '';
+
+    // 取り込みは常に新しい大会として追加される。同名・同日があれば先に断りを入れる。
+    var existing = await Api.listEvents();
+    if (Array.isArray(existing)) {
+      var dup = existing.filter(function(e) {
+        return String(e.name || '').trim() === String(name).trim() &&
+               String(e.date || '') === String(date);
+      });
+      if (dup.length > 0 &&
+          !confirm('同じ名前と日付の大会が既にあります。\n別の大会として追加しますか？')) {
+        return;
+      }
+    }
+
+    var result = await Api.importBundle(bundle);
+    if (!result) {
+      alert('取り込みに失敗しました。通信を確認してください。');
+      return;
+    }
+    if (!result.success) {
+      alert('取り込みに失敗しました。\n' + (result.error || ''));
+      return;
+    }
+    Admin.toast('大会を取り込みました（' + (result.playerCount || 0) + '名）');
+    Admin.navigate('players', result.id);
   }
 
   Admin.registerTab('events', { render: render });
