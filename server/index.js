@@ -435,7 +435,17 @@ app.post('/api/events', (req, res) => {
         }
       }
       event.techniques = inherited || cloneTechniques(readTechniques().techniques);
+    } else {
+      // body が techniques を送ってきたとき（技術リスト編集画面からの保存し直しなど）は
+      // PUT /api/events/:id/techniques と同じ検証を通す。素通りさせると壊れた
+      // 技リストがそのまま保存され、以後の PUT/DELETE の挙動が壊れる。
+      const badTech = validateTechniques(event.techniques);
+      if (badTech) return res.status(400).json({ error: badTech });
+      event.techniques = cloneTechniques(event.techniques);
     }
+    // GET /api/events/:id の応答にだけ足す値。そのまま POST に投げ返されても
+    // ファイルには残さない（ファイルの内容は techniquesSourceOf で毎回判定する）。
+    delete event.techniquesSource;
 
     writeJsonAtomic(eventPath, event);
     res.json({ success: true, id: event.id });
@@ -1197,14 +1207,15 @@ app.get('/api/techniques', (req, res) => {
 });
 
 // POST /api/techniques : カスタム技術保存
+// PUT /api/events/:id/techniques と同じ検証を通す。ここが緩いと、
+// 壊れた雛形（技名が空など）を複製した新規大会が以後 PUT で保存できなくなる。
 app.post('/api/techniques', (req, res) => {
   try {
     const { techniques } = req.body;
-    if (!Array.isArray(techniques)) {
-      return res.status(400).json({ error: 'Invalid data' });
-    }
+    const badTech = validateTechniques(techniques);
+    if (badTech) return res.status(400).json({ error: badTech });
     const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
-    writeJsonAtomic(customPath, techniques);
+    writeJsonAtomic(customPath, cloneTechniques(techniques));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

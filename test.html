@@ -718,14 +718,18 @@
     assert('検証に落ちた保存は大会を書き換えない', (await Api.loadEvent(a2Event.id)).techniques, a2Techs);
 
     // 雛形を変えても、自前の技リストを持つ大会は動かない
+    // 雛形を書き換えたあとの assert で例外が出ても雛形の復元だけは必ず行う（try/finally）。
     var a2TmplBefore = await Api.loadTechniques();
-    await Api.saveTechniques([{ name: '雛形だけの技', strikes: [7, null, null, null] }]);
-    assert('雛形を変えても大会の技リストは変わらない',
-      (await Api.loadEvent(a2Event.id)).techniques, a2Techs);
-    // 雛形を元に戻す。もともと custom.json が無かった環境では消して戻す
-    // （残すと次回の実行で「デフォルト一致」の2件がスキップされ、テスト件数が変わる）。
-    if (a2TmplBefore.isCustom) await Api.saveTechniques(a2TmplBefore.techniques);
-    else await Api.resetTechniques();
+    try {
+      await Api.saveTechniques([{ name: '雛形だけの技', strikes: [7, null, null, null] }]);
+      assert('雛形を変えても大会の技リストは変わらない',
+        (await Api.loadEvent(a2Event.id)).techniques, a2Techs);
+    } finally {
+      // 雛形を元に戻す。もともと custom.json が無かった環境では消して戻す
+      // （残すと次回の実行で「デフォルト一致」の2件がスキップされ、テスト件数が変わる）。
+      if (a2TmplBefore.isCustom) await Api.saveTechniques(a2TmplBefore.techniques);
+      else await Api.resetTechniques();
+    }
     assert('雛形は元に戻っている', (await Api.loadTechniques()).techniques, a2TmplBefore.techniques);
 
     var a2Reset = await Api.resetEventTechniques(a2Event.id);
@@ -750,6 +754,63 @@
     assert('loadLive はその大会の技リストを返す（雛形ではない）',
       a3Live.techniques, [{ name: 'ボード専用技', strikes: [5, 2, null, null] }]);
     await Api.deleteEvent(a3Event.id);
+
+    // --- validateTechniques の境界値 ---
+    var vEvent = await Api.saveEvent({ name: '技検証テスト', date: '2026-09-14', venue: '', players: [] });
+
+    // 通る側の境界: 200件ちょうど・技名50文字・strikes 99・strikes null
+    var vOk = [{ name: 'x'.repeat(50), strikes: [99, 99, 99, 99] }];
+    for (var vi = 1; vi < 200; vi++) vOk.push({ name: '技' + vi, strikes: [null, null, null, null] });
+    var vOkRes = await Api.saveEventTechniques(vEvent.id, vOk);
+    assert('境界値: 200件・50文字の技名・strikes 99 は通る', vOkRes.success, true);
+    assert('境界値: strikes が全部 null でも通る', vOkRes.success, true);
+    assert('境界値: 保存した件数は200件のまま', vOkRes.techniques.length, 200);
+
+    // 通らない側の境界: 非整数・文字列・真偽値・範囲外
+    var vBad1 = await Api.saveEventTechniques(vEvent.id, [{ name: '不正', strikes: [1.5, null, null, null] }]);
+    assert('境界値: strikes が 1.5（非整数）は断る', vBad1.error, '1 行目の初太刀の配点が不正です（0〜99の整数か空）');
+    var vBad2 = await Api.saveEventTechniques(vEvent.id, [{ name: '不正', strikes: [null, '3', null, null] }]);
+    assert('境界値: strikes が文字列 "3" は断る', vBad2.error, '1 行目の二ノ太刀の配点が不正です（0〜99の整数か空）');
+    var vBad3 = await Api.saveEventTechniques(vEvent.id, [{ name: '不正', strikes: [null, null, true, null] }]);
+    assert('境界値: strikes が真偽値 true は断る', vBad3.error, '1 行目の三ノ太刀の配点が不正です（0〜99の整数か空）');
+    var vBad4 = await Api.saveEventTechniques(vEvent.id, [{ name: '不正', strikes: [null, null, null, -1] }]);
+    assert('境界値: strikes が -1（範囲外）は断る', vBad4.error, '1 行目の四ノ太刀の配点が不正です（0〜99の整数か空）');
+
+    // 余分なキーは落ちる・技名は trim される
+    var vExtra = await Api.saveEventTechniques(vEvent.id, [
+      { name: '  余分キーテスト  ', strikes: [1, null, null, null], foo: 'bar', bar: 123 }
+    ]);
+    assert('余分なキーは落ちる・技名は trim される',
+      vExtra.techniques, [{ name: '余分キーテスト', strikes: [1, null, null, null] }]);
+
+    await Api.deleteEvent(vEvent.id);
+
+    // --- POST /api/events の techniques 検証（雛形・PUT と共用の validateTechniques） ---
+    // Api.saveEvent は 4xx を null にしてしまう（エラー文言を運ばない）ので、
+    // ここだけ生の fetch でエラー本文を確かめる。
+    var pBadRes = await fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '不正技リストテスト', date: '2026-09-14', venue: '', players: [],
+        techniques: [{ name: '', strikes: [1, null, null, null] }] })
+    });
+    var pBadJson = await pBadRes.json();
+    assert('POST /api/events: 不正な techniques は断る',
+      [pBadRes.status, pBadJson.error], [400, '1 行目の技名が空です']);
+
+    var pOkEvent = await Api.saveEvent({ name: '技リスト同梱テスト', date: '2026-09-14', venue: '', players: [],
+      techniques: [{ name: '同梱技', strikes: [3, null, null, null], extra: 'drop-me' }],
+      techniquesSource: 'event' });
+    var pOkLoaded = await Api.loadEvent(pOkEvent.id);
+    assert('POST /api/events: 妥当な techniques は保存され、余分なキーは落ちる',
+      pOkLoaded.techniques, [{ name: '同梱技', strikes: [3, null, null, null] }]);
+
+    // body に techniquesSource（GET 応答にだけ足す値）が混ざっていても保存を妨げない
+    // （server/index.js が書き込み前に delete する。ファイルの中身は techniquesSourceOf が
+    // 毎回 techniques 配列の有無から判定するので、この呼び出しが 200 で返ること自体が確認になる）。
+    assert('POST /api/events: techniquesSource が混ざっていても保存できる',
+      pOkLoaded.techniquesSource, 'event');
+    await Api.deleteEvent(pOkEvent.id);
   }
 
   (async function() {
