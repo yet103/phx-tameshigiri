@@ -11,6 +11,17 @@
     h2.textContent = '大会';
     var spacer = document.createElement('div');
     spacer.className = 'spacer';
+    var btnImport = document.createElement('button');
+    btnImport.type = 'button';
+    btnImport.className = 'head-btn';
+    btnImport.textContent = '📂 取り込む';
+    btnImport.addEventListener('click', function() {
+      // ファイル選択〜取り込み完了まで二重送信を防ぐ。成功・失敗・キャンセルの
+      // どれで終わっても pickBundle が最後に呼ぶコールバックで必ず戻す。
+      btnImport.disabled = true;
+      pickBundle(function() { btnImport.disabled = false; });
+    });
+
     var btnNew = document.createElement('button');
     btnNew.type = 'button';
     btnNew.className = 'head-btn';
@@ -19,6 +30,7 @@
 
     head.appendChild(h2);
     head.appendChild(spacer);
+    head.appendChild(btnImport);
     head.appendChild(btnNew);
     container.appendChild(head);
 
@@ -82,29 +94,80 @@
       Admin.navigate('players', ev.id);
     });
 
-    var del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'row-del';
-    del.textContent = '✕';
-    del.addEventListener('click', function() {
-      del.disabled = true;
-      onDelete(ev, del);
+    // 行の操作は「⋯」のシートにまとめる（削除だけだった「✕」の置き換え）。
+    // タップ目標の大きさは .row-del のまま（44px）。
+    var more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'row-del';
+    more.textContent = '⋯';
+    more.setAttribute('aria-label', (ev.name || '(名称未設定)') + ' の操作');
+    more.addEventListener('click', function() {
+      openRowMenu(ev);
     });
 
     row.appendChild(body);
-    row.appendChild(del);
+    row.appendChild(more);
     return row;
   }
 
-  async function onDelete(ev, del) {
+  // 行の「⋯」メニュー。ファイルに保存と削除。
+  function openRowMenu(ev) {
+    var body = document.createElement('div');
+
+    var btnSave = document.createElement('button');
+    btnSave.type = 'button';
+    btnSave.className = 'menu-item';
+    btnSave.textContent = '💾 ファイルに保存';
+    body.appendChild(btnSave);
+
+    var btnDel = document.createElement('button');
+    btnDel.type = 'button';
+    btnDel.className = 'menu-item';
+    btnDel.textContent = '🗑 削除';
+    body.appendChild(btnDel);
+
+    var btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'btn';
+    btnClose.textContent = '閉じる';
+
+    var sheet = Admin.openSheet(ev.name || '(名称未設定)', body, [btnClose]);
+    btnClose.addEventListener('click', sheet.close);
+
+    btnSave.addEventListener('click', async function() {
+      btnSave.disabled = true;
+      sheet.lock(true);
+      var json = await Api.exportBundle(ev.id);
+      btnSave.disabled = false;
+      sheet.lock(false);
+      // json: 成功時は文字列、サーバーがエラーを返したときは {error}、
+      // 通信そのものに失敗したときは null。
+      if (typeof json !== 'string') {
+        alert(json && json.error
+          ? '大会をファイルに保存できませんでした。\n' + json.error
+          : '大会をファイルに保存できませんでした。通信を確認してください。');
+        return;   // シートは開いたまま
+      }
+      // ファイル名はサーバーの Content-Disposition ではなくクライアントで組む
+      Storage.downloadText(Storage.bundleFilename(ev.name, ev.date), json,
+        'application/json;charset=utf-8');
+      sheet.close();
+      Admin.toast('ファイルに保存しました');
+    });
+
+    btnDel.addEventListener('click', function() {
+      sheet.close();
+      onDelete(ev);
+    });
+  }
+
+  async function onDelete(ev) {
     if (!confirm('大会「' + (ev.name || '(名称未設定)') + '」を削除します。\n選手データも一緒に消えます。よろしいですか？')) {
-      del.disabled = false;
       return;
     }
     var ok = await Api.deleteEvent(ev.id);
     if (!ok) {
       alert('大会の削除に失敗しました。');
-      del.disabled = false;
       return;
     }
     Admin.toast('大会を削除しました');
@@ -174,6 +237,112 @@
     field.appendChild(input);
     parent.appendChild(field);
     return input;
+  }
+
+  // admin.html には file input を置かない（DOM は計画3との契約）。その場で作って捨てる。
+  // onDone はファイル選択〜取り込みが完全に終わった時点（成功・失敗・キャンセルの
+  // どれでも）で一度だけ呼ぶ。呼び出し元はこれでボタンの disabled を戻す。
+  function pickBundle(onDone) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    var removed = false;
+    var fileChosen = false;   // change でファイルを受け取ったら true
+    var finished = false;
+    function cleanup() {
+      if (removed) return;
+      removed = true;
+      window.removeEventListener('focus', onFocus);
+      if (input.parentNode) input.parentNode.removeChild(input);
+    }
+    function finish() {
+      if (finished) return;
+      finished = true;
+      if (onDone) onDone();
+    }
+    // ファイル選択ダイアログをキャンセルすると change は発火しない。
+    // cancel イベントが取れる環境ではそれで、取れない環境（フォールバック）では
+    // ダイアログを閉じてウィンドウに戻ってきた最初の focus で片付ける。
+    // change が先に来た場合はそちらの removeChild が先に効き、cleanup は何もしない。
+    function onCancel() { cleanup(); finish(); }
+    function onFocus() {
+      // change がこの同じ tick で来ることがある（フォーカスが先に戻る環境）。
+      // ここで即 cleanup すると、その change を取りこぼす。
+      setTimeout(function() {
+        cleanup();
+        // ファイルを選んでいれば、finish は取り込みの完了（change 側）に任せる。
+        if (!fileChosen) finish();
+      }, 0);
+    }
+    input.addEventListener('cancel', onCancel);
+    window.addEventListener('focus', onFocus);
+
+    input.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (file) {
+        fileChosen = true;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          importBundleText(ev.target.result).then(finish);
+        };
+        reader.onerror = function() { alert('ファイルを読めませんでした。'); finish(); };
+        reader.readAsText(file, 'UTF-8');
+      } else {
+        finish();
+      }
+      cleanup();
+    });
+    input.click();
+  }
+
+  async function importBundleText(text) {
+    var bundle;
+    try {
+      bundle = JSON.parse(text);
+    } catch (e) {
+      alert('ファイルを読めませんでした。');
+      return;
+    }
+    if (!bundle || typeof bundle !== 'object' || bundle.format !== 'phx-tameshigiri-event') {
+      alert('このアプリのエクスポートファイルではありません。');
+      return;
+    }
+    if (bundle.version !== 1) {
+      // format は合っているが version が違う（新しい版が書き出したファイルなど）。
+      // サーバー（server/index.js の POST /api/events/import）と文言を揃える。
+      alert('対応していないファイル形式です（version: ' + bundle.version + '）\nこのアプリを更新してください。');
+      return;
+    }
+    var name = (bundle.event && bundle.event.name) || '';
+    var date = (bundle.event && bundle.event.date) || '';
+
+    // 取り込みは常に新しい大会として追加される。同名・同日があれば先に断りを入れる。
+    var existing = await Api.listEvents();
+    if (Array.isArray(existing)) {
+      var dup = existing.filter(function(e) {
+        return String(e.name || '').trim() === String(name).trim() &&
+               String(e.date || '') === String(date);
+      });
+      if (dup.length > 0 &&
+          !confirm('同じ名前と日付の大会が既にあります。\n別の大会として追加しますか？')) {
+        return;
+      }
+    }
+
+    var result = await Api.importBundle(bundle);
+    if (!result) {
+      alert('取り込みに失敗しました。通信を確認してください。');
+      return;
+    }
+    if (!result.success) {
+      alert('取り込みに失敗しました。\n' + (result.error || ''));
+      return;
+    }
+    Admin.toast('大会を取り込みました（' + (result.playerCount || 0) + '名）');
+    Admin.navigate('players', result.id);
   }
 
   Admin.registerTab('events', { render: render });

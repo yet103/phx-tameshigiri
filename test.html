@@ -811,6 +811,197 @@
     assert('POST /api/events: techniquesSource が混ざっていても保存できる',
       pOkLoaded.techniquesSource, 'event');
     await Api.deleteEvent(pOkEvent.id);
+
+    // --- 大会のエクスポート（bundle。トラックB） ---
+    var b2Event = await Api.saveEvent({ name: 'バンドルテスト', date: '2026-09-14', venue: '道場', players: [] });
+    var b2Bulk = await Api.createPlayersBulk(b2Event.id, {
+      court: 'A', isFemale: false, isNewFace: true, names: ['束 太郎']
+    });
+    var b2Player = b2Bulk.players[0];
+    await Api.updatePlayerInfo(b2Event.id, b2Player.id, {
+      tech1: '真', result: '11   ', adjust: [2, 0, 0], totalAdjust: 1,
+      note: 'メモ', confirmed: true, score: 15
+    });
+    await Api.addHistory(b2Event.id, { action: 'test_entry', detail: 'バンドル履歴' });
+    await Api.createShareLink(b2Event.id);
+    await Api.putLive(b2Event.id, 'A', { playerId: b2Player.id });
+
+    var b2Text = await Api.exportBundle(b2Event.id);
+    var b2 = JSON.parse(b2Text);
+    assert('bundle は format と version を持つ', [b2.format, b2.version], ['phx-tameshigiri-event', 1]);
+    assert('bundle は書き出し時刻を持つ', typeof b2.exportedAt, 'string');
+    assert('bundle は元の大会IDを参照用に持つ', b2.sourceEventId, b2Event.id);
+    assert('bundle は大会情報を持つ',
+      [b2.event.name, b2.event.date, b2.event.venue], ['バンドルテスト', '2026-09-14', '道場']);
+    assert('bundle は技リストを持つ', Array.isArray(b2.event.techniques), true);
+    assert('bundle の技リストは空でない', b2.event.techniques.length > 0, true);
+    assert('bundle は選手の全項目を持つ',
+      [b2.event.players[0].name, b2.event.players[0].order, b2.event.players[0].tech1,
+       b2.event.players[0].score, b2.event.players[0].isNewFace, b2.event.players[0].result,
+       b2.event.players[0].adjust, b2.event.players[0].totalAdjust,
+       b2.event.players[0].note, b2.event.players[0].confirmed],
+      ['束 太郎', 'A-男子-1-1', '真', 15, true, '11   ', [2, 0, 0], 1, 'メモ', true]);
+    assert('bundle は履歴を持つ', b2.history.length, 1);
+    assert('bundle は shareToken を含まない', b2Text.indexOf('shareToken'), -1);
+    assert('bundle は live を含まない', b2Text.indexOf('"live"'), -1);
+    assert('存在しない大会の bundle はエラーを返す（null は通信失敗のみ）',
+      (await Api.exportBundle('zzzzzzzznotexist')).error, '大会が見つかりません');
+    await Api.deleteEvent(b2Event.id);
+
+    // --- 大会の取り込み（import） ---
+    var b3Bundle = {
+      format: 'phx-tameshigiri-event',
+      version: 1,
+      exportedAt: '2026-09-14T00:00:00.000Z',
+      sourceEventId: 'sourceevent1',
+      event: {
+        id: 'sourceevent1',
+        shareToken: 'tokentok',
+        live: { A: { playerId: 'p1' } },
+        name: ' 取り込みテスト ',
+        date: '2026-09-14',
+        venue: '会場',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+        techniques: [{ name: '取込技', strikes: [9, null, null, null] }],
+        players: [
+          { id: 'p1', name: '取込 甲', order: 'A-男子-1-1', tech1: '取込技', tech2: '', tech3: '',
+            score: 9, isNewFace: true, isFemale: false, result: '1    ',
+            adjust: [1, 0, 0], totalAdjust: 2, note: 'メモ', confirmed: true, secret: 'x' },
+          { id: 'p2', name: '取込 甲', order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '',
+            score: 0, isNewFace: true, isFemale: false, result: '', sourcePlayerId: 'p1' },
+          { id: '../bad', name: '取込 乙', order: 'A-男子-1-2', tech1: '', tech2: '', tech3: '',
+            score: 0, isNewFace: false, isFemale: false, result: 'xx' }
+        ]
+      },
+      history: [{ action: 'imported', detail: '取り込み履歴' }]
+    };
+    var b3Res = await Api.importBundle(b3Bundle);
+    assert('importBundle は成功と人数を返す', [b3Res.success, b3Res.playerCount], [true, 3]);
+    assert('取り込んだ大会のIDは元と違う', b3Res.id !== 'sourceevent1', true);
+    var b3Loaded = await Api.loadEvent(b3Res.id);
+    assert('大会名は trim される', b3Loaded.name, '取り込みテスト');
+    assert('会場が復元される', b3Loaded.venue, '会場');
+    assert('技リストが復元される', b3Loaded.techniques,
+      [{ name: '取込技', strikes: [9, null, null, null] }]);
+    var b3P1 = b3Loaded.players[0], b3P2 = b3Loaded.players[1], b3P3 = b3Loaded.players[2];
+    assert('選手の項目が復元される',
+      [b3P1.name, b3P1.order, b3P1.tech1, b3P1.score, b3P1.isNewFace, b3P1.result,
+       b3P1.adjust, b3P1.totalAdjust, b3P1.note, b3P1.confirmed],
+      ['取込 甲', 'A-男子-1-1', '取込技', 9, true, '1    ', [1, 0, 0], 2, 'メモ', true]);
+    assert('許可リスト外のキーは落ちる', b3P1.secret, undefined);
+    assert('有効で一意な選手IDはそのまま使う', b3P1.id, 'p1');
+    assert('sourcePlayerId は取り込み後のIDを指す', b3P2.sourcePlayerId, b3P1.id);
+    assert('不正な選手IDは振り直す', b3P3.id === '../bad', false);
+    assert('振り直した選手IDも有効なID', /^[A-Za-z0-9_-]{1,64}$/.test(b3P3.id), true);
+    assert('0と1と空白以外の result は空にする', b3P3.result, '');
+    assert('shareToken は取り込まない', b3Loaded.shareToken, undefined);
+    assert('live は取り込まない', b3Loaded.live, undefined);
+    assert('createdAt は取り込み時刻で付け直す', b3Loaded.createdAt === '2020-01-01T00:00:00.000Z', false);
+    var b3Hist = await Api.loadHistory(b3Res.id);
+    assert('履歴が書かれる', b3Hist.entries.length, 1);
+    assert('履歴に timestamp が付く', typeof b3Hist.entries[0].timestamp, 'string');
+    await Api.deleteEvent(b3Res.id);
+
+    // 検証（4xx は理由を返す）
+    var b3BadFormat = await Api.importBundle({ format: 'x', version: 1, event: { name: 'a' } });
+    assert('format 違いは断る', b3BadFormat.error, 'このアプリのエクスポートファイルではありません');
+    var b3BadVer = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 99, event: { name: 'a' } });
+    assert('version 違いは断る', b3BadVer.error, '対応していないファイル形式です（version: 99）');
+    var b3NoName = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1, event: { name: '   ' } });
+    assert('大会名が空なら断る', b3NoName.error, '大会名が不正です（1〜100文字）');
+    var b3Many = [];
+    for (var b3i = 0; b3i < 2001; b3i++) b3Many.push({ name: '大量' + b3i });
+    var b3TooMany = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '上限テスト', players: b3Many } });
+    assert('選手2001名は断る', b3TooMany.error, '選手は2000名までです');
+    var b3BadTech = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '技不正テスト', techniques: [{ name: '', strikes: [1, null, null, null] }] } });
+    assert('技リストの不正は行番号つきで断る', b3BadTech.error, '技リスト: 1 行目の技名が空です');
+
+    // 技リストが無ければ雛形を複製する
+    var b3NoTech = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '技なしテスト', players: [] } });
+    var b3NoTechLoaded = await Api.loadEvent(b3NoTech.id);
+    assert('技リストが無ければ雛形の複製が入る',
+      b3NoTechLoaded.techniques, (await Api.loadTechniques()).techniques);
+    await Api.deleteEvent(b3NoTech.id);
+
+    // history が配列でない／techniques が空配列（レビュー指摘の追加検証）
+    var b3HistNotArray = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '履歴不正テスト' }, history: 'not-an-array' });
+    assert('history が配列でなければ断る', b3HistNotArray.error, '履歴が配列ではありません');
+    var b3EmptyTech = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '空技リストテスト', techniques: [] } });
+    assert('techniques が空配列なら断る', b3EmptyTech.error, '技リスト: 技は1〜200件で指定してください');
+
+    // --- bundle の Content-Disposition ヘッダー ---
+    var b4Event = await Api.saveEvent({ name: 'ヘッダーテスト', date: '2026-09-14', venue: '', players: [] });
+    var b4Res = await fetch('/api/events/' + b4Event.id + '/bundle');
+    var b4Disp = b4Res.headers.get('Content-Disposition') || '';
+    assert('bundle の Content-Disposition は添付ファイル名で始まる',
+      b4Disp.indexOf("attachment; filename*=UTF-8''tameshigiri_") === 0, true);
+    await Api.deleteEvent(b4Event.id);
+
+    // --- bundle → import の往復（全項目・二巡目・履歴。レビュー指摘の追加テスト） ---
+    var rtEvent = await Api.saveEvent({ name: '往復テスト', date: '2026-09-14', venue: '道場', players: [] });
+    var rtTechList = [
+      { name: '往復技A', strikes: [10, null, null, null] },
+      { name: '往復技B', strikes: [5, 5, null, null] }
+    ];
+    await Api.saveEventTechniques(rtEvent.id, rtTechList);
+    var rtBulk = await Api.createPlayersBulk(rtEvent.id, {
+      court: 'A', isFemale: false, isNewFace: false, names: ['往復 一郎', '往復 二郎']
+    });
+    var rtP1 = rtBulk.players[0], rtP2 = rtBulk.players[1];
+    await Api.updatePlayerInfo(rtEvent.id, rtP1.id, {
+      tech1: '往復技A', result: '1    ', adjust: [2, 0, 0], totalAdjust: 3,
+      note: '一郎メモ', confirmed: true, score: 12
+    });
+    await Api.updatePlayerInfo(rtEvent.id, rtP2.id, {
+      tech1: '往復技B', result: '11   ', adjust: [0, 1, 0], totalAdjust: -1,
+      note: '二郎メモ', confirmed: false, score: 9
+    });
+    var rtRound = await Api.generateNextRound(rtEvent.id);
+    assert('往復テスト用に二巡目が生成される', rtRound && rtRound.created, 2);
+    await Api.addHistory(rtEvent.id, { action: 'round2_generated', detail: '往復テスト' });
+    await Api.addHistory(rtEvent.id, { action: 'note', detail: '往復テスト2' });
+
+    var rtBundleText = await Api.exportBundle(rtEvent.id);
+    var rtBundle = JSON.parse(rtBundleText);
+    var rtImportRes = await Api.importBundle(rtBundle);
+    assert('往復インポートは成功し4名になる', [rtImportRes.success, rtImportRes.playerCount], [true, 4]);
+
+    var rtLoaded = await Api.loadEvent(rtImportRes.id);
+    assert('往復: 技リストがそのまま復元される', rtLoaded.techniques, rtTechList);
+
+    var rt1st = rtLoaded.players.filter(function(p) { return /-1-\d+$/.test(p.order); });
+    var rt2nd = rtLoaded.players.filter(function(p) { return /-2-\d+$/.test(p.order); });
+    assert('往復: 一巡目2名・二巡目2名が復元される', [rt1st.length, rt2nd.length], [2, 2]);
+
+    var rtIchiro = rt1st.find(function(p) { return p.name === '往復 一郎'; });
+    var rtJiro = rt1st.find(function(p) { return p.name === '往復 二郎'; });
+    assert('往復: 一郎の各項目が復元される',
+      [rtIchiro.tech1, rtIchiro.score, rtIchiro.result, rtIchiro.adjust,
+       rtIchiro.totalAdjust, rtIchiro.note, rtIchiro.confirmed],
+      ['往復技A', 12, '1    ', [2, 0, 0], 3, '一郎メモ', true]);
+    // confirmed は true の選手にだけ付く（pickBundlePlayer / import とも共通）ので、
+    // confirmed: false で送った二郎には付かず undefined のまま。
+    assert('往復: 二郎の各項目が復元される',
+      [rtJiro.tech1, rtJiro.score, rtJiro.result, rtJiro.adjust,
+       rtJiro.totalAdjust, rtJiro.note, rtJiro.confirmed],
+      ['往復技B', 9, '11   ', [0, 1, 0], -1, '二郎メモ', undefined]);
+
+    var rtIchiro2 = rt2nd.find(function(p) { return p.sourcePlayerId === rtIchiro.id; });
+    var rtJiro2 = rt2nd.find(function(p) { return p.sourcePlayerId === rtJiro.id; });
+    assert('往復: 二巡目の一郎行が sourcePlayerId で取り込み後の一郎を指す', !!rtIchiro2, true);
+    assert('往復: 二巡目の二郎行が sourcePlayerId で取り込み後の二郎を指す', !!rtJiro2, true);
+
+    var rtHist = await Api.loadHistory(rtImportRes.id);
+    assert('往復: 履歴の件数が復元される', rtHist.entries.length, 2);
+
+    await Api.deleteEvent(rtEvent.id);
+    await Api.deleteEvent(rtImportRes.id);
   }
 
   (async function() {
@@ -1524,6 +1715,34 @@
       Board.parseHash(''), { token: '', court: '' });
     assert('parseHash: URL エンコードされたコート名を戻す',
       Board.parseHash('#abc/' + encodeURIComponent('東')), { token: 'abc', court: '東' });
+
+    // storage.js テスト（大会ファイルのファイル名。純粋関数）
+    var h2s = document.createElement('h2');
+    h2s.textContent = 'storage.js';
+    results.appendChild(h2s);
+
+    assert('bundleFilename: 大会名と日付を並べる',
+      Storage.bundleFilename('名古屋城決戦', '2025-10-25'),
+      'tameshigiri_2025-10-25_名古屋城決戦.json');
+    assert('bundleFilename: 使えない文字は _ にする',
+      Storage.bundleFilename('a/b\\c:d*e?f"g<h>i|j', '2025-10-25'),
+      'tameshigiri_2025-10-25_a_b_c_d_e_f_g_h_i_j.json');
+    assert('bundleFilename: 制御文字も _ にする',
+      Storage.bundleFilename('a\nb\tc', '2025-10-25'),
+      'tameshigiri_2025-10-25_a_b_c.json');
+    assert('bundleFilename: 大会名は40文字で切る',
+      Storage.bundleFilename('あ'.repeat(45), '2025-10-25'),
+      'tameshigiri_2025-10-25_' + 'あ'.repeat(40) + '.json');
+    assert('bundleFilename: 日付が無ければ nodate',
+      Storage.bundleFilename('大会', ''), 'tameshigiri_nodate_大会.json');
+    assert('bundleFilename: 日付の形が違えば nodate',
+      Storage.bundleFilename('大会', '2025/10/25'), 'tameshigiri_nodate_大会.json');
+    assert('bundleFilename: 大会名が空なら「大会」',
+      Storage.bundleFilename('', '2025-10-25'), 'tameshigiri_2025-10-25_大会.json');
+    assert('bundleFilename: 前後の空白は落とす',
+      Storage.bundleFilename('  名古屋  ', '2025-10-25'), 'tameshigiri_2025-10-25_名古屋.json');
+    assert('bundleFilename: null でも落ちない',
+      Storage.bundleFilename(null, null), 'tameshigiri_nodate_大会.json');
 
     await runApiTests();
 

@@ -139,13 +139,22 @@
 
     <figure class="shot-mobile">
       <img src="help/img/admin_events.png" loading="lazy" alt="運営画面の大会タブ。大会の一覧が並び、右上に「＋ 新規大会」ボタンがある。">
-      <figcaption>大会タブ。1件ごとに日付と人数が出ます。右の <span class="ui">✕</span> はその大会の削除です。</figcaption>
+      <figcaption>大会タブ。1件ごとに日付と人数が出ます。右の <span class="ui">⋯</span> から <span class="ui">💾 ファイルに保存</span> と <span class="ui">🗑 削除</span> を選べます。</figcaption>
     </figure>
 
     <figure class="shot-mobile">
       <img src="help/img/admin_new_event.png" loading="lazy" alt="「新規大会」のシート。大会名・日付・会場の入力欄と、緑色の「作成」ボタン。">
       <figcaption><span class="ui">＋ 新規大会</span> のシート。会場は空のままでもかまいません。</figcaption>
     </figure>
+
+    <h3>別のサーバーや PC から取り込む</h3>
+    <p>ほかのサーバーで作った大会を、そのまま持ってこられます。大会情報・技の配点・選手（採点済みの得点も）・採点履歴が一緒に入ります。</p>
+    <ol>
+      <li>持ち出す側の運営画面で、大会タブの行の <span class="ui">⋯</span> → <span class="ui">💾 ファイルに保存</span> を押す。<code>tameshigiri_日付_大会名.json</code> が保存されます。</li>
+      <li>取り込む側の運営画面で、大会タブの見出しの <span class="ui">📂 取り込む</span> を押し、そのファイルを選ぶ。</li>
+      <li><span class="msg">大会を取り込みました（n 名）</span> と出て、選手タブが開きます。</li>
+    </ol>
+    <div class="note">取り込みは<span class="term">いつも新しい大会として追加</span>されます。同じ名前の大会があっても上書きされません。同じ名前と日付の大会が既にあるときは <span class="msg">同じ名前と日付の大会が既にあります。別の大会として追加しますか？</span> と確認が出ます。共有リンクと配信用ボードのアドレスは持ち込まれないので、取り込んだ側で作り直してください（§4）。</div>
 
     <h3>選手を登録する</h3>
     <p>タブで <span class="ui">選手</span> を選びます。登録のしかたは3通りあります。</p>
@@ -545,6 +554,16 @@
     </ul>
 
     <div class="note">配信用ボードのアドレスは共有リンクと同じトークンを使います。配信に映すだけなら誰にも配る必要はありません（URL を知られると順位も見られます）。</div>
+
+    <h3>大会をファイルに保存する</h3>
+    <p>大会1件を丸ごと1つのファイルに書き出せます。大会が終わったあとの控えや、別のサーバーへの持ち出しに使います。</p>
+    <ol>
+      <li>運営画面の大会タブで、その大会の行の <span class="ui">⋯</span> を押す。</li>
+      <li><span class="ui">💾 ファイルに保存</span> を押す。<code>tameshigiri_日付_大会名.json</code> がダウンロードされます。</li>
+    </ol>
+    <p>大会を選んでいるときは、右上の <span class="ui">⋯</span> → <span class="ui">💾 大会をファイルに保存</span> からも同じことができます。</p>
+    <div class="note">共有リンクのトークンと配信用ボードの状態はファイルに入りません。取り込んだ先で <span class="ui">共有リンクをコピー</span> を押して作り直してください（元のリンクとは別の URL になります）。</div>
+
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
   </section>
 
@@ -585,6 +604,14 @@
 
     <h3>二巡目を生成できない</h3>
     <p>一巡目の選手が1人も登録されていないか、通信が切れています。選手タブと端末の通信を確かめてください。コートが決まっていない選手の扱いは §2「二巡目の並び順」を見てください（その選手の二巡目は作られず、トーストに人数が出ます）。</p>
+
+    <h3>大会のファイルを取り込めない</h3>
+    <ul>
+      <li><span class="msg">ファイルを読めませんでした。</span> — 選んだファイルがこのアプリの書き出したものではありません。CSV や画像ではなく、<code>tameshigiri_…json</code> を選んでください。</li>
+      <li><span class="msg">このアプリのエクスポートファイルではありません。</span> — 中身は JSON ですが、このアプリの形式ではありません。<span class="ui">⋯</span> → <span class="ui">💾 ファイルに保存</span> で作ったファイルか確かめてください。</li>
+      <li><span class="msg">対応していないファイル形式です（version: …）</span> — 新しい版のアプリが書き出したファイルです。取り込む側のアプリを更新してください。</li>
+      <li>そのほかの理由（大会名が空、選手が多すぎる、技リストの n 行目が不正）はそのまま画面に出ます。書き出した側でその大会を直してから、もう一度保存し直してください。</li>
+    </ul>
 
     <h3>このマニュアルの開き方</h3>
     <ul>
