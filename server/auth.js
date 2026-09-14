@@ -29,7 +29,7 @@ function parseBasic(header) {
 // 無認証で通す API。共有リンク越しの読み出しだけ（大会 ID は伏せられている）。
 const PUBLIC_API = /^\/api\/links\/[^/]+(\/ranking|\/live)?$/;
 function isPublicApi(method, urlPath) {
-  return method === 'GET' && PUBLIC_API.test(urlPath);
+  return (method === 'GET' || method === 'HEAD') && PUBLIC_API.test(urlPath);
 }
 
 function createAuth(opts) {

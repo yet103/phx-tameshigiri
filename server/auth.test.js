@@ -162,10 +162,11 @@ test('parseBasic: 無い・形式違い・":" なしは null', () => {
   assert.strictEqual(parseBasic('Basic ' + Buffer.from('nocolon').toString('base64')), null);
 });
 
-test('isPublicApi: 共有リンクの GET 3 本だけが公開', () => {
+test('isPublicApi: 共有リンクの GET/HEAD 3 本だけが公開', () => {
   assert.strictEqual(isPublicApi('GET', '/api/links/abc123'), true);
   assert.strictEqual(isPublicApi('GET', '/api/links/abc123/ranking'), true);
   assert.strictEqual(isPublicApi('GET', '/api/links/abc123/live'), true);
+  assert.strictEqual(isPublicApi('HEAD', '/api/links/abc123/ranking'), true);   // 監視の HEAD を通す
   assert.strictEqual(isPublicApi('POST', '/api/links'), false);
   assert.strictEqual(isPublicApi('GET', '/api/links'), false);
   assert.strictEqual(isPublicApi('GET', '/api/links/'), false);
@@ -256,6 +257,17 @@ test('保護 API は無認証で 401、WWW-Authenticate なし、JSON 本文', a
   });
 });
 
+test('壊れた JSON でも無認証なら 401（body-parser の 400 を見せない）', async () => {
+  await withServer(AUTH_DEV, async base => {
+    const res = await fetch(base + '/api/events', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{bad',
+      signal: AbortSignal.timeout(5000)
+    });
+    assert.strictEqual(res.status, 401);
+    assert.deepStrictEqual(await res.json(), { error: '認証が必要です' });
+  });
+});
+
 test('誤った資格情報は 401、正しい資格情報で通る', async () => {
   await withServer(AUTH_DEV, async base => {
     assert.strictEqual((await get(base, '/', basic(USER, 'wrong'))).status, 401);
@@ -270,10 +282,12 @@ test('誤った資格情報は 401、正しい資格情報で通る', async () =
 
 test('表にないファイルは認証付きでも 404（index.html を返さない）', async () => {
   await withServer(AUTH_DEV, async base => {
+    // ".." を含むパスは fetch がクライアント側で正規化してしまうので、サーバー側の
+    // 正規化は classify の単体テストで見る。%73erver はそのまま送られる。
     for (const p of ['/deploy.sh', '/package.json', '/Dockerfile', '/docker-compose.yml',
                      '/.gitignore', '/server/index.js', '/server/data/', '/%73erver/data/',
                      '/docs/', '/docs/superpowers/specs/2026-09-14-access-control-design.md',
-                     '/nonexistent', '/anything/deep', '/help/img/../../deploy.sh']) {
+                     '/nonexistent', '/anything/deep']) {
       const res = await get(base, p, basic(USER, PASS));
       assert.strictEqual(res.status, 404, p);
       const body = await res.text();
@@ -307,6 +321,7 @@ test('本番・認証なし: 終了コード 1 で起動しない', async () => 
   const code = await s.exit;
   assert.strictEqual(code, 1);
   assert.ok(s.output().includes('AUTH_USER'), '理由をログに出す: ' + s.output());
+  await assert.rejects(fetch(s.base + '/', { signal: AbortSignal.timeout(2000) }), 'ポートが開いていない');
 });
 
 // ── 結合: 開発・認証なし ──
