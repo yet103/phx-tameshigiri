@@ -268,6 +268,23 @@ test('壊れた JSON でも無認証なら 401（body-parser の 400 を見せ�
   });
 });
 
+test('パスの大文字小文字で認証を迂回できない', async () => {
+  await withServer(AUTH_DEV, async base => {
+    const cases = [['GET', '/API/events'], ['GET', '/Api/Techniques'], ['POST', '/API/events'],
+                   ['DELETE', '/API/events/x'], ['POST', '/API/links'], ['GET', '/API/links/zzzzzz/ranking']];
+    for (const [method, p] of cases) {
+      const res = await fetch(base + p, {
+        method, headers: { 'Content-Type': 'application/json' },
+        body: method === 'GET' ? undefined : '{}', signal: AbortSignal.timeout(5000)
+      });
+      // 401（認証で弾く）か 404（ルートに一致しない）のどちらか。200 は絶対にだめ
+      assert.ok(res.status === 401 || res.status === 404, method + ' ' + p + ' → ' + res.status);
+    }
+    // 大文字のページパスも配信しない
+    assert.strictEqual((await get(base, '/INDEX.HTML', basic(USER, PASS))).status, 404);
+  });
+});
+
 test('誤った資格情報は 401、正しい資格情報で通る', async () => {
   await withServer(AUTH_DEV, async base => {
     assert.strictEqual((await get(base, '/', basic(USER, 'wrong'))).status, 401);

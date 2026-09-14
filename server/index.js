@@ -6,6 +6,9 @@ const { createAuth, isPublicApi } = require('./auth');
 const { classify } = require('./static-policy');
 
 const app = express();
+// ルーティングを大文字小文字で区別する。既定の区別なしだと /API/events が
+// ルートに一致する一方、認証ミドルウェアの '/api/' 判定をすり抜ける。
+app.set('case sensitive routing', true);
 const PORT = process.env.PORT || 3457;
 
 // データ保存先ディレクトリ
@@ -309,9 +312,11 @@ if (!auth.enabled) {
 // 401 に WWW-Authenticate を付けないのは、共有ページを見ている観客の画面に
 // ブラウザのパスワードダイアログが出ないようにするため。運営端末は保護された
 // HTML を開いた時点で認証済みなので、fetch にはブラウザが自動で資格情報を付ける。
+// パスは小文字化して判定する（case sensitive routing と二重の守り。/API/ を素通りさせない）。
 app.use((req, res, next) => {
-  if (!req.path.startsWith('/api/')) return next();
-  if (isPublicApi(req.method, req.path)) return next();
+  const p = req.path.toLowerCase();
+  if (!p.startsWith('/api/')) return next();
+  if (isPublicApi(req.method, p)) return next();
   if (auth.isAuthorized(req)) return next();
   auth.rejectApi(res);
 });
@@ -1355,7 +1360,7 @@ app.use((req, res, next) => {
 // 許可リスト。表にあるファイルだけ配信し、運営用は認証してから返す（server/static-policy.js）。
 // 未定義の /api/ パスもここで 404 にする。
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) {
+  if (req.path.toLowerCase().startsWith('/api/')) {
     return res.status(404).json({ error: '見つかりません' });
   }
   const kind = classify(req.path, { production: IS_PRODUCTION });
