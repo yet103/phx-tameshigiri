@@ -255,15 +255,21 @@ var Api = (function() {
 
   async function saveTechniques(techs) {
     // POST /api/techniques
+    // 戻り値: { success: true } | { success: false, error }（4xx。行番号つきの理由）
+    //       | null（通信失敗）
     try {
       var res = await fetch('/api/techniques', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ techniques: techs })
       });
-      return res.ok;
+      if (!res.ok) {
+        var errJson = await res.json();
+        return { success: false, error: errJson.error };
+      }
+      return await res.json();
     } catch (e) {
-      return false;
+      return null;
     }
   }
 

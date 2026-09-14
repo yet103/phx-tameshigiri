@@ -158,7 +158,6 @@
         scoredWarn.hidden = true;
         return;
       }
-      scoredWarn.hidden = true;   // 前の対象の警告を残さない（この直後に updateScoredWarning が出し直す）
       var ev = eventById(targetId);
       // 大会一覧が取れていない（Api.listEvents() 失敗）ときは eventsCache に無く名前が
       // 分からない。空欄より ID を出すほうが「今どの対象を触っているか」を誤認しない。
@@ -202,6 +201,10 @@
       btnReset.disabled = false;
       btnCopy.disabled = false;
       location.hash = id ? '#' + encodeURIComponent(id) : '';
+      // 対象を切り替えた直後に前の対象の採点済み警告を残さない。
+      // updateChrome は保存・雛形に戻すの直後にも呼ばれる（対象は変わらない）ので、
+      // そちらでは隠さない。ここで隠した分は、この下で updateScoredWarning が出し直す。
+      scoredWarn.hidden = true;
       if (!id) {
         updateChrome('');
         var td = await Api.loadTechniques();
@@ -209,7 +212,7 @@
         if (!td) {
           fallbackToLocal('技術リストをサーバーから取得できませんでした。\n' +
             '端末側の既定値を表示しています。\n' +
-            '上書きを防ぐため、保存は無効にしました。再読み込みしてください。');
+            '保存・雛形に戻す・別の大会からコピーを無効にしました。再読み込みしてください。');
           return;
         }
         renderTable(td.techniques);
@@ -221,7 +224,7 @@
         updateChrome('');
         fallbackToLocal('この大会の技リストを取得できませんでした。\n' +
           '端末側の既定値を表示しています。\n' +
-          '上書きを防ぐため、保存は無効にしました。再読み込みしてください。');
+          '保存・雛形に戻す・別の大会からコピーを無効にしました。再読み込みしてください。');
         return;
       }
       updateChrome(data.source);
@@ -344,8 +347,9 @@
       btnSave.addEventListener('click', async function() {
         var techs = collectTechs();
         if (!targetId) {
-          var ok = await Api.saveTechniques(techs);
-          if (!ok) { alert('保存に失敗しました。'); return; }
+          var r0 = await Api.saveTechniques(techs);
+          if (!r0) { alert('保存に失敗しました。通信を確認してください。'); return; }
+          if (!r0.success) { alert(r0.error || '保存に失敗しました。'); return; }
           dirty = false;
           alert('雛形を保存しました。\nこれから作る大会の初期値になります。');
           return;
