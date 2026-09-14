@@ -82,29 +82,76 @@
       Admin.navigate('players', ev.id);
     });
 
-    var del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'row-del';
-    del.textContent = '✕';
-    del.addEventListener('click', function() {
-      del.disabled = true;
-      onDelete(ev, del);
+    // 行の操作は「⋯」のシートにまとめる（削除だけだった「✕」の置き換え）。
+    // タップ目標の大きさは .row-del のまま（44px）。
+    var more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'row-del';
+    more.textContent = '⋯';
+    more.setAttribute('aria-label', (ev.name || '(名称未設定)') + ' の操作');
+    more.addEventListener('click', function() {
+      openRowMenu(ev);
     });
 
     row.appendChild(body);
-    row.appendChild(del);
+    row.appendChild(more);
     return row;
   }
 
-  async function onDelete(ev, del) {
+  // 行の「⋯」メニュー。ファイルに保存と削除。
+  function openRowMenu(ev) {
+    var body = document.createElement('div');
+
+    var btnSave = document.createElement('button');
+    btnSave.type = 'button';
+    btnSave.className = 'menu-item';
+    btnSave.textContent = '💾 ファイルに保存';
+    body.appendChild(btnSave);
+
+    var btnDel = document.createElement('button');
+    btnDel.type = 'button';
+    btnDel.className = 'menu-item';
+    btnDel.textContent = '🗑 削除';
+    body.appendChild(btnDel);
+
+    var btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'btn';
+    btnClose.textContent = '閉じる';
+
+    var sheet = Admin.openSheet(ev.name || '(名称未設定)', body, [btnClose]);
+    btnClose.addEventListener('click', sheet.close);
+
+    btnSave.addEventListener('click', async function() {
+      btnSave.disabled = true;
+      sheet.lock(true);
+      var json = await Api.exportBundle(ev.id);
+      btnSave.disabled = false;
+      sheet.lock(false);
+      if (!json) {
+        alert('大会をファイルに保存できませんでした。通信を確認してください。');
+        return;   // シートは開いたまま
+      }
+      // ファイル名はサーバーの Content-Disposition ではなくクライアントで組む
+      Storage.downloadText(Storage.bundleFilename(ev.name, ev.date), json,
+        'application/json;charset=utf-8');
+      sheet.close();
+      Admin.toast('ファイルに保存しました');
+    });
+
+    btnDel.addEventListener('click', function() {
+      sheet.close();
+      onDelete(ev);
+    });
+  }
+
+  async function onDelete(ev) {
     if (!confirm('大会「' + (ev.name || '(名称未設定)') + '」を削除します。\n選手データも一緒に消えます。よろしいですか？')) {
-      del.disabled = false;
       return;
     }
     var ok = await Api.deleteEvent(ev.id);
     if (!ok) {
       alert('大会の削除に失敗しました。');
-      del.disabled = false;
       return;
     }
     Admin.toast('大会を削除しました');
