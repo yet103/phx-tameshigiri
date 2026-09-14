@@ -409,7 +409,8 @@ function parseBasic(header) {
 // 無認証で通す API。共有リンク越しの読み出しだけ（大会 ID は伏せられている）。
 const PUBLIC_API = /^\/api\/links\/[^/]+(\/ranking|\/live)?$/;
 function isPublicApi(method, urlPath) {
-  return method === 'GET' && PUBLIC_API.test(urlPath);
+  // 監視ツールの HEAD も通す（Express は HEAD を GET ハンドラに流す）
+  return (method === 'GET' || method === 'HEAD') && PUBLIC_API.test(urlPath);
 }
 
 function createAuth(opts) {
@@ -647,10 +648,10 @@ if (!auth.enabled) {
 // ミドルウェア
 // CORS は返さない。全ページが同一オリジンから fetch しており、
 // Access-Control-Allow-Origin: * を出すと外部サイトから API を叩く余地が残る。
-// ペイロードサイズ制限を緩和
-app.use(express.json({ limit: '50mb' }));
 
-// API の認証。共有リンク越しの読み出し（isPublicApi）だけ無認証で通す。
+// API の認証。本文を読む前に弾く（無認証の巨大 JSON をメモリに載せない、
+// body-parser の 400/413 を無認証クライアントに見せない）。
+// 共有リンク越しの読み出し（isPublicApi）だけ無認証で通す。
 // 401 に WWW-Authenticate を付けないのは、共有ページを見ている観客の画面に
 // ブラウザのパスワードダイアログが出ないようにするため。運営端末は保護された
 // HTML を開いた時点で認証済みなので、fetch にはブラウザが自動で資格情報を付ける。
@@ -660,6 +661,9 @@ app.use((req, res, next) => {
   if (auth.isAuthorized(req)) return next();
   auth.rejectApi(res);
 });
+
+// ペイロードサイズ制限を緩和
+app.use(express.json({ limit: '50mb' }));
 ```
 
 - [ ] **Step 5: 静的配信を許可リストにし、SPA フォールバックを廃止する**
