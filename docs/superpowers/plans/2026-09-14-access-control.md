@@ -90,8 +90,11 @@ async function startServer(env) {
     child.stdout.on('data', d => { out += d; if (out.includes('running at')) resolve(); });
     child.stderr.on('data', d => { out += d; });
     exit.then(code => reject(new Error('server exited with code ' + code + '\n' + out)));
-    setTimeout(() => reject(new Error('server did not start in 10s\n' + out)), 10000);
+    setTimeout(() => reject(new Error('server did not start in 10s\n' + out)), 10000).unref();
   });
+  // 起動拒否を検証するテストは ready を待たずに exit だけ見る。
+  // そのとき ready の拒否が未処理にならないよう、ここで握っておく（await ready は従来どおり拒否される）。
+  ready.catch(() => {});
   return {
     base: 'http://127.0.0.1:' + port,
     ready,
@@ -712,7 +715,7 @@ app.use((req, res) => {
 - [ ] **Step 6: 通ることを確認**
 
 Run: `npm test`
-Expected: `Result: 22 passed, 0 failed`
+Expected: `Result: 21 passed, 0 failed`
 
 - [ ] **Step 7: 開発サーバーで従来のブラウザテストが通ることを確認**
 
@@ -759,13 +762,12 @@ git commit -m "feat: Basic 認証と静的配信の許可リストを組み込�
 
 ```js
     // 401 のエントリはキューに残り、状態に lastStatus が出る
-    var statuses = [];
     Api.updatePlayer = async function() { return { ok: false, status: 401 }; };
     localStorage.setItem('tmg_outbox', JSON.stringify([
       { eventId: 'ev1', playerId: 'pa', score: 1, result: 'a', queuedAt: 't8' }
     ]));
     var dropped401 = [];
-    Outbox.init(function(st) { statuses.push(st); }, function(list) { dropped401 = dropped401.concat(list); });
+    Outbox.init(function() {}, function(list) { dropped401 = dropped401.concat(list); });
     await new Promise(function(r) { setTimeout(r, 400); });
     assert('401 のエントリは捨てない', Outbox.pendingCount(), 1);
     assert('401 で捨てたと通知しない', dropped401.length, 0);
@@ -963,7 +965,7 @@ Expected: `AUTH_USER を .env に設定してください` を含むエラーで
 - [ ] **Step 6: `npm test` が通ることを確認**
 
 Run: `npm test`
-Expected: `Result: 22 passed, 0 failed`
+Expected: `Result: 21 passed, 0 failed`
 
 - [ ] **Step 7: コミット**
 
@@ -981,7 +983,7 @@ git commit -m "chore: 認証の資格情報を .env から注入し、cors 依�
 - [ ] **Step 1: 全テスト**
 
 Run: `npm test`
-Expected: `Result: 22 passed, 0 failed`
+Expected: `Result: 21 passed, 0 failed`
 
 - [ ] **Step 2: 認証ありの開発サーバーでブラウザ確認**
 
