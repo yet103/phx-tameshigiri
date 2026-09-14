@@ -846,6 +846,85 @@
     assert('bundle は live を含まない', b2Text.indexOf('"live"'), -1);
     assert('存在しない大会の bundle は null', await Api.exportBundle('zzzzzzzznotexist'), null);
     await Api.deleteEvent(b2Event.id);
+
+    // --- 大会の取り込み（import） ---
+    var b3Bundle = {
+      format: 'phx-tameshigiri-event',
+      version: 1,
+      exportedAt: '2026-09-14T00:00:00.000Z',
+      sourceEventId: 'sourceevent1',
+      event: {
+        id: 'sourceevent1',
+        shareToken: 'tokentok',
+        live: { A: { playerId: 'p1' } },
+        name: ' 取り込みテスト ',
+        date: '2026-09-14',
+        venue: '会場',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+        techniques: [{ name: '取込技', strikes: [9, null, null, null] }],
+        players: [
+          { id: 'p1', name: '取込 甲', order: 'A-男子-1-1', tech1: '取込技', tech2: '', tech3: '',
+            score: 9, isNewFace: true, isFemale: false, result: '1    ',
+            adjust: [1, 0, 0], totalAdjust: 2, note: 'メモ', confirmed: true, secret: 'x' },
+          { id: 'p2', name: '取込 甲', order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '',
+            score: 0, isNewFace: true, isFemale: false, result: '', sourcePlayerId: 'p1' },
+          { id: '../bad', name: '取込 乙', order: 'A-男子-1-2', tech1: '', tech2: '', tech3: '',
+            score: 0, isNewFace: false, isFemale: false, result: 'xx' }
+        ]
+      },
+      history: [{ action: 'imported', detail: '取り込み履歴' }]
+    };
+    var b3Res = await Api.importBundle(b3Bundle);
+    assert('importBundle は成功と人数を返す', [b3Res.success, b3Res.playerCount], [true, 3]);
+    assert('取り込んだ大会のIDは元と違う', b3Res.id !== 'sourceevent1', true);
+    var b3Loaded = await Api.loadEvent(b3Res.id);
+    assert('大会名は trim される', b3Loaded.name, '取り込みテスト');
+    assert('会場が復元される', b3Loaded.venue, '会場');
+    assert('技リストが復元される', b3Loaded.techniques,
+      [{ name: '取込技', strikes: [9, null, null, null] }]);
+    var b3P1 = b3Loaded.players[0], b3P2 = b3Loaded.players[1], b3P3 = b3Loaded.players[2];
+    assert('選手の項目が復元される',
+      [b3P1.name, b3P1.order, b3P1.tech1, b3P1.score, b3P1.isNewFace, b3P1.result,
+       b3P1.adjust, b3P1.totalAdjust, b3P1.note, b3P1.confirmed],
+      ['取込 甲', 'A-男子-1-1', '取込技', 9, true, '1    ', [1, 0, 0], 2, 'メモ', true]);
+    assert('許可リスト外のキーは落ちる', b3P1.secret, undefined);
+    assert('有効で一意な選手IDはそのまま使う', b3P1.id, 'p1');
+    assert('sourcePlayerId は取り込み後のIDを指す', b3P2.sourcePlayerId, b3P1.id);
+    assert('不正な選手IDは振り直す', b3P3.id === '../bad', false);
+    assert('振り直した選手IDも有効なID', /^[A-Za-z0-9_-]{1,64}$/.test(b3P3.id), true);
+    assert('0と1と空白以外の result は空にする', b3P3.result, '');
+    assert('shareToken は取り込まない', b3Loaded.shareToken, undefined);
+    assert('live は取り込まない', b3Loaded.live, undefined);
+    assert('createdAt は取り込み時刻で付け直す', b3Loaded.createdAt === '2020-01-01T00:00:00.000Z', false);
+    var b3Hist = await Api.loadHistory(b3Res.id);
+    assert('履歴が書かれる', b3Hist.entries.length, 1);
+    assert('履歴に timestamp が付く', typeof b3Hist.entries[0].timestamp, 'string');
+    await Api.deleteEvent(b3Res.id);
+
+    // 検証（4xx は理由を返す）
+    var b3BadFormat = await Api.importBundle({ format: 'x', version: 1, event: { name: 'a' } });
+    assert('format 違いは断る', b3BadFormat.error, 'このアプリのエクスポートファイルではありません');
+    var b3BadVer = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 99, event: { name: 'a' } });
+    assert('version 違いは断る', b3BadVer.error, '対応していないファイル形式です（version: 99）');
+    var b3NoName = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1, event: { name: '   ' } });
+    assert('大会名が空なら断る', b3NoName.error, '大会名が不正です（1〜100文字）');
+    var b3Many = [];
+    for (var b3i = 0; b3i < 2001; b3i++) b3Many.push({ name: '大量' + b3i });
+    var b3TooMany = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '上限テスト', players: b3Many } });
+    assert('選手2001名は断る', b3TooMany.error, '選手は2000名までです');
+    var b3BadTech = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '技不正テスト', techniques: [{ name: '', strikes: [1, null, null, null] }] } });
+    assert('技リストの不正は行番号つきで断る', b3BadTech.error, '技リスト: 1 行目の技名が空です');
+
+    // 技リストが無ければ雛形を複製する
+    var b3NoTech = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1,
+      event: { name: '技なしテスト', players: [] } });
+    var b3NoTechLoaded = await Api.loadEvent(b3NoTech.id);
+    assert('技リストが無ければ雛形の複製が入る',
+      b3NoTechLoaded.techniques, (await Api.loadTechniques()).techniques);
+    await Api.deleteEvent(b3NoTech.id);
   }
 
   (async function() {

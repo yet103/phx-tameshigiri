@@ -212,6 +212,28 @@ var Api = (function() {
     }
   }
 
+  async function importBundle(bundle) {
+    // POST /api/events/import
+    // Body: エクスポートファイルの JSON をパースしたオブジェクト
+    // 戻り値: { success: true, id, playerCount }
+    //       | { success: false, error }（4xx: 失敗理由を画面に出すため） | null（通信失敗）
+    // 常に新しい大会として追加される（既存の大会は上書きされない）。
+    try {
+      var res = await fetch('/api/events/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bundle)
+      });
+      if (!res.ok) {
+        var errJson = await res.json();
+        return { success: false, error: errJson.error };
+      }
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
   // --- Rounds ---
   async function generateNextRound(eventId, force) {
     // POST /api/events/:eventId/rounds/2/generate
@@ -491,6 +513,7 @@ var Api = (function() {
     importCsv: importCsv,
     exportCsv: exportCsv,
     exportBundle: exportBundle,
+    importBundle: importBundle,
     generateNextRound: generateNextRound,
     loadTechniques: loadTechniques,
     saveTechniques: saveTechniques,

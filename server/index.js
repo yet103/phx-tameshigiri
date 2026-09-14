@@ -335,6 +335,7 @@ app.use(express.json({ limit: '50mb' }));
 //   DELETE /api/events/:id/players/:playerId
 //   POST   /api/events/:id/rounds/2/generate
 //   POST   /api/events/:id/import
+//   POST   /api/events/import      （大会ファイルの取り込み。新しい ID で作る）
 //   POST   /api/events/:id/history
 //   PUT    /api/events/:id/live/:court
 //   POST   /api/links               （大会ファイルに shareToken を書き込む）
@@ -1072,6 +1073,145 @@ app.get('/api/events/:id/bundle', (req, res) => {
     res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" +
       encodeURIComponent(bundleFilename(bundle.event.name, bundle.event.date)));
     res.send(JSON.stringify(bundle, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/events/import : エクスポートファイル1件を新しい大会として取り込む
+// 常に新しい ID を採番する（既存の大会は上書きしない）。
+// event の id / shareToken / live は入っていても無視する。
+// 大会ファイルと履歴ファイルはどちらも新しい ID の新規作成なので、
+// 他端末との read-modify-write の競合は起きない（writeJsonAtomic を2回呼ぶ）。
+app.post('/api/events/import', (req, res) => {
+  try {
+    const bundle = req.body || {};
+    if (bundle.format !== BUNDLE_FORMAT) {
+      return res.status(400).json({ error: 'このアプリのエクスポートファイルではありません' });
+    }
+    if (bundle.version !== BUNDLE_VERSION) {
+      return res.status(400).json({ error: '対応していないファイル形式です（version: ' + bundle.version + '）' });
+    }
+    const src = bundle.event;
+    if (!src || typeof src !== 'object' || Array.isArray(src)) {
+      return res.status(400).json({ error: '大会データがありません' });
+    }
+    const name = typeof src.name === 'string' ? src.name.trim() : '';
+    if (!name || name.length > 100) {
+      return res.status(400).json({ error: '大会名が不正です（1〜100文字）' });
+    }
+
+    let techniques;
+    if (src.techniques === undefined || src.techniques === null) {
+      techniques = cloneTechniques(readTechniques().techniques);
+    } else {
+      const techErr = validateTechniques(src.techniques);
+      if (techErr) return res.status(400).json({ error: '技リスト: ' + techErr });
+      techniques = cloneTechniques(src.techniques);
+    }
+
+    const rawPlayers = (src.players === undefined || src.players === null) ? [] : src.players;
+    if (!Array.isArray(rawPlayers)) {
+      return res.status(400).json({ error: '選手データが配列ではありません' });
+    }
+    if (rawPlayers.length > 2000) {
+      return res.status(400).json({ error: '選手は2000名までです' });
+    }
+    const rawHistory = (bundle.history === undefined || bundle.history === null) ? [] : bundle.history;
+    if (!Array.isArray(rawHistory)) {
+      return res.status(400).json({ error: '履歴が配列ではありません' });
+    }
+    if (rawHistory.length > 20000) {
+      return res.status(400).json({ error: '履歴は20000件までです' });
+    }
+
+    const now = new Date().toISOString();
+
+    // 名前の無い行は落とす（CSV インポートと同じ）。ID の割り当ての前に落として、
+    // sourcePlayerId が「落とした選手」を指さないようにする。
+    const kept = rawPlayers.filter(p => p && typeof p === 'object' && !Array.isArray(p) &&
+      typeof p.name === 'string' && p.name.trim() !== '');
+
+    // 選手 ID の割り当て。有効（isValidId）かつファイル内で一意ならそのまま、
+    // そうでなければ振り直す。旧 ID → 新 ID の対応を残し、sourcePlayerId を付け替える。
+    const usedIds = Object.create(null);
+    const idMap = Object.create(null);
+    const assigned = kept.map(p => {
+      const oldId = typeof p.id === 'string' ? p.id : '';
+      let newId;
+      if (isValidId(oldId) && !usedIds[oldId]) {
+        newId = oldId;
+      } else {
+        newId = generateId();
+        while (usedIds[newId]) newId = generateId();
+      }
+      usedIds[newId] = true;
+      if (oldId && !Object.prototype.hasOwnProperty.call(idMap, oldId)) idMap[oldId] = newId;
+      return newId;
+    });
+
+    // 許可リストのキーだけを取り込む。それ以外は捨てる。
+    const players = kept.map((p, i) => {
+      const player = {
+        id: assigned[i],
+        name: p.name.trim().slice(0, 100),
+        order: typeof p.order === 'string' ? p.order.slice(0, 40) : '',
+        tech1: typeof p.tech1 === 'string' ? p.tech1.trim().slice(0, 50) : '',
+        tech2: typeof p.tech2 === 'string' ? p.tech2.trim().slice(0, 50) : '',
+        tech3: typeof p.tech3 === 'string' ? p.tech3.trim().slice(0, 50) : '',
+        score: Number.isFinite(p.score) ? p.score : 0,
+        isNewFace: p.isNewFace === true,
+        isFemale: p.isFemale === true,
+        // 結果は 1=○, 0=×, 空白=未入力 のエンコード。それ以外が混じっていたら捨てる
+        // （採点画面の decodeResult が読めない文字列を保存しない）。
+        result: (typeof p.result === 'string' && p.result.length <= 100 && /^[01 ]*$/.test(p.result))
+          ? p.result : ''
+      };
+      if (Array.isArray(p.adjust) && p.adjust.length === 3 && p.adjust.every(n => Number.isInteger(n))) {
+        player.adjust = p.adjust.slice();
+      }
+      if (Number.isInteger(p.totalAdjust)) player.totalAdjust = p.totalAdjust;
+      if (typeof p.note === 'string') {
+        const note = p.note.trim().slice(0, 200);
+        if (note) player.note = note;
+      }
+      if (p.confirmed === true) player.confirmed = true;
+      // 元ファイルのどの選手も指していない sourcePlayerId は捨てる
+      if (typeof p.sourcePlayerId === 'string' &&
+          Object.prototype.hasOwnProperty.call(idMap, p.sourcePlayerId)) {
+        player.sourcePlayerId = idMap[p.sourcePlayerId];
+      }
+      return player;
+    });
+
+    const id = generateId();
+    const event = {
+      id: id,
+      name: name,
+      date: typeof src.date === 'string' ? src.date.slice(0, 20) : '',
+      venue: typeof src.venue === 'string' ? src.venue.slice(0, 100) : '',
+      createdAt: now,
+      updatedAt: now,
+      techniques: techniques,
+      players: players
+    };
+    writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
+
+    // 履歴はオブジェクトの要素だけ通す。キーが '__proto__' でもプロトタイプを汚さないよう
+    // setOwn で写す（computeRanking が氏名の辞書に Object.create(null) を使うのと同じ理由）。
+    const entries = rawHistory
+      .filter(e => e && typeof e === 'object' && !Array.isArray(e))
+      .map(e => {
+        const copy = {};
+        Object.keys(e).forEach(k => setOwn(copy, k, e[k]));
+        if (typeof copy.timestamp !== 'string' || !copy.timestamp) setOwn(copy, 'timestamp', now);
+        return copy;
+      });
+    if (entries.length > 0) {
+      writeJsonAtomic(path.join(HISTORY_DIR, `${id}.json`), { eventId: id, entries: entries });
+    }
+
+    res.json({ success: true, id: id, playerCount: players.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
