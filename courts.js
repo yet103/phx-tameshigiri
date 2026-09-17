@@ -112,6 +112,26 @@ var Courts = (function() {
     return list.sort(function(a, b) { return a - b; });
   }
 
+  // 絞り込み条件の既定値。court '' は全コート、sex '' は男女、round 0 は全巡。
+  function defaultFilter() {
+    return { court: '', sex: '', round: 0, newFace: false, noTech: false, query: '' };
+  }
+
+  // 絞り込み。すべての条件を AND で適用し、新しい配列を返す。
+  function applyFilter(players, f) {
+    f = f || defaultFilter();
+    var q = normalizeName(f.query);
+    return (players || []).filter(function(p) {
+      if (f.court && courtOf(p) !== f.court) return false;
+      if (f.sex && sexOf(p) !== f.sex) return false;
+      if (f.round && roundOf(p) !== f.round) return false;
+      if (f.newFace && !p.isNewFace) return false;
+      if (f.noTech && !hasNoTech(p)) return false;
+      if (q && normalizeName(p.name).indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+
   // 二巡目生成 API の 409 応答（reason: 'unscored' | 'exists'）を確認文言にする。
   // 採点画面（app.js）と運営画面（admin-round.js）で同じ文言を使う。
   // fixHint: コート未設定の選手をどこで直すかの案内（画面ごとに違う）
@@ -160,6 +180,8 @@ var Courts = (function() {
     hasNoTech: hasNoTech,
     sexOf: sexOf,
     roundsOf: roundsOf,
+    defaultFilter: defaultFilter,
+    applyFilter: applyFilter,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage
   };

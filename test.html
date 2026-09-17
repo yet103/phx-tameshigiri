@@ -1228,6 +1228,29 @@
     assert('orderKey: 番号を数値で返す', Courts.orderKey({ order: 'A-男子-1-10' }).no, 10);
     assert('orderKey: 解析不能は 0', Courts.orderKey({ order: '' }).no, 0);
 
+    var fPlayers = [
+      { order: 'A-男子-1-1', name: 'ジュリアーノ熊代', tech1: '破図味', tech2: '夢想返し', tech3: '響き返し', score: 66 },
+      { order: 'A-男子-1-2', name: '箕輪 憲人', tech1: '水月', tech2: '', tech3: '', score: 47, isNewFace: true },
+      { order: 'A-女子-1-1', name: '佐藤 花', tech1: '', tech2: '', tech3: '', score: 0 },
+      { order: 'B-男子-1-1', name: '田中 太郎', tech1: '四方', tech2: '両車', tech3: '陽中陰', score: 30 },
+      { order: 'A-男子-2-1', name: 'ジュリアーノ熊代', tech1: '真', tech2: '真', tech3: '真', score: 10 }
+    ];
+    function ordersOf(rows) { return rows.map(function(p) { return p.order; }); }
+    function withFilter(patch) { return Object.assign(Courts.defaultFilter(), patch); }
+
+    assert('defaultFilter: 既定値', Courts.defaultFilter(), { court: '', sex: '', round: 0, newFace: false, noTech: false, query: '' });
+    assert('applyFilter: 既定は全件', Courts.applyFilter(fPlayers, Courts.defaultFilter()).length, 5);
+    assert('applyFilter: コート', ordersOf(Courts.applyFilter(fPlayers, withFilter({ court: 'B' }))), ['B-男子-1-1']);
+    assert('applyFilter: 性別', ordersOf(Courts.applyFilter(fPlayers, withFilter({ sex: '女子' }))), ['A-女子-1-1']);
+    assert('applyFilter: 巡目', ordersOf(Courts.applyFilter(fPlayers, withFilter({ round: 2 }))), ['A-男子-2-1']);
+    assert('applyFilter: 新人', ordersOf(Courts.applyFilter(fPlayers, withFilter({ newFace: true }))), ['A-男子-1-2']);
+    assert('applyFilter: 技未入力', ordersOf(Courts.applyFilter(fPlayers, withFilter({ noTech: true }))), ['A-女子-1-1']);
+    assert('applyFilter: 名前の部分一致（空白の違いを無視）', ordersOf(Courts.applyFilter(fPlayers, withFilter({ query: '箕輪憲' }))), ['A-男子-1-2']);
+    assert('applyFilter: 名前の空白だけの検索は全件', Courts.applyFilter(fPlayers, withFilter({ query: '  ' })).length, 5);
+    assert('applyFilter: 複数条件は AND', ordersOf(Courts.applyFilter(fPlayers, withFilter({ court: 'A', sex: '男子', round: 1 }))), ['A-男子-1-1', 'A-男子-1-2']);
+    assert('applyFilter: filter が無ければ全件', Courts.applyFilter(fPlayers, null).length, 5);
+    assert('applyFilter: 元配列を変えない', fPlayers.length, 5);
+
     var h2tp = document.createElement('h2');
     h2tp.textContent = 'techpicker.js';
     results.appendChild(h2tp);
