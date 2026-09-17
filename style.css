@@ -153,6 +153,7 @@ input[type="file"] { display: none; }
 .score-table td.score-col {
   color: var(--score-color);
   font-weight: bold;
+  font-size: 20px;
   padding: 4px 8px;
   min-width: 44px;
 }
@@ -217,10 +218,13 @@ input[type="file"] { display: none; }
 .btn-neutral { background: var(--btn-neutral); color: #fff; }
 .total-score {
   margin-left: auto;
+  display: flex; align-items: baseline; gap: 4px;
   font-size: 18px;
   font-weight: bold;
   color: var(--score-color);
 }
+/* 合計の数字。min-width は app.js の syncTotalWidth が表の「得点」列の幅に合わせる（数字が得点列の真下で中央にそろう） */
+.total-score .total-value { display: inline-block; min-width: 60px; text-align: center; font-size: 28px; line-height: 1; }
 
 /* ===== ツールバー ===== */
 .toolbar {

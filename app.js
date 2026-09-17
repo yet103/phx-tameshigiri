@@ -27,6 +27,7 @@ var App = (function() {
   var playerNameLabel  = document.getElementById('playerNameLabel');
   var scoreTableBody   = document.getElementById('scoreTableBody');
   var totalScoreDisplay= document.getElementById('totalScoreDisplay');
+  var totalScoreValue  = document.getElementById('totalScoreValue');
   var timerDisplay     = document.getElementById('timerDisplay');
   var playerListSection = document.getElementById('playerListSection');
   var playerListBody   = document.getElementById('playerListBody');
@@ -759,8 +760,19 @@ var App = (function() {
   function pad(n) { return n < 10 ? '0' + n : String(n); }
 
   function setTotalDisplay(n) {
-    totalScoreDisplay.textContent = '合計: ' + n + '点';
+    totalScoreValue.textContent = String(n);
+    syncTotalWidth();
   }
+
+  // 合計の数字の幅を表の「得点」列にそろえ、数字が得点列の真下で中央にそろうようにする。
+  // 表は幅 100% で列幅が内容と画面幅で決まるので、描画のたびに測り直す。
+  function syncTotalWidth() {
+    var th = scoreTable.querySelector('thead th:last-child');
+    if (!th) return;
+    var w = th.getBoundingClientRect().width;
+    if (w > 0) totalScoreValue.style.minWidth = Math.round(w) + 'px';
+  }
+  window.addEventListener('resize', syncTotalWidth);
 
   // 確定済みの見た目（得点列・合計・下部一覧の得点を青）とボタンの状態
   function applyConfirmedStyle(on) {
