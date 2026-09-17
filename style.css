@@ -225,6 +225,7 @@ input[type="file"] { display: none; }
 }
 /* 合計の数字。min-width は app.js の syncTotalWidth が表の「得点」列の幅に合わせる（数字が得点列の真下で中央にそろう） */
 .total-score .total-value { display: inline-block; min-width: 60px; text-align: center; font-size: 28px; line-height: 1; }
+.total-score .total-unit { font-size: 14px; margin-left: 2px; }
 
 /* ===== ツールバー ===== */
 .toolbar {

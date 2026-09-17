@@ -28,6 +28,7 @@ var App = (function() {
   var scoreTableBody   = document.getElementById('scoreTableBody');
   var totalScoreDisplay= document.getElementById('totalScoreDisplay');
   var totalScoreValue  = document.getElementById('totalScoreValue');
+  var totalScoreBox    = document.getElementById('totalScoreBox');
   var timerDisplay     = document.getElementById('timerDisplay');
   var playerListSection = document.getElementById('playerListSection');
   var playerListBody   = document.getElementById('playerListBody');
@@ -770,7 +771,7 @@ var App = (function() {
     var th = scoreTable.querySelector('thead th:last-child');
     if (!th) return;
     var w = th.getBoundingClientRect().width;
-    if (w > 0) totalScoreValue.style.minWidth = Math.round(w) + 'px';
+    if (w > 0) totalScoreBox.style.minWidth = Math.round(w) + 'px';
   }
   window.addEventListener('resize', syncTotalWidth);
 
