@@ -296,24 +296,34 @@ var Admin = (function() {
     TechPicker.dismiss();
   }
 
-  // コート絞り込みのチップ列。「全コート」（court = ''）＋ Courts.listFrom の並び。
-  // 選手タブと進行タブで共用する。
-  function renderCourtChips(container, players, current, onChange) {
+  // チップの帯を描く。items は [{ value, label }]、current は選択中の value
+  // （比較は文字列化して行う。数値の巡目や真偽値のトグルもそのまま渡せる）。
+  // small が true なら高さ 32px の小型（.chip-sm）。
+  // 選手タブの絞り込み（性別・巡目・新人・技未入力）と下の renderCourtChips で共用。
+  function renderChips(container, items, current, onChange, small) {
     container.innerHTML = '';
-    var list = [''].concat(Courts.listFrom(players));
-    list.forEach(function(c) {
+    items.forEach(function(it) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = (c === (current || '')) ? 'court-chip on' : 'court-chip';
-      if (c === '') b.textContent = '全コート';
-      else if (c === Courts.UNASSIGNED) b.textContent = Courts.UNASSIGNED;
-      else b.textContent = c + ' コート';
-      b.dataset.court = c;
+      b.className = 'court-chip'
+        + (small ? ' chip-sm' : '')
+        + (String(it.value) === String(current) ? ' on' : '');
+      b.textContent = it.label;
       b.addEventListener('click', function() {
-        if (onChange) onChange(this.dataset.court);
+        if (onChange) onChange(it.value);
       });
       container.appendChild(b);
     });
+  }
+
+  // コートの絞り込みチップ（「全コート」「A コート」…「未分類」）。選手タブと進行タブで共用。
+  function renderCourtChips(container, players, current, onChange) {
+    var items = [''].concat(Courts.listFrom(players)).map(function(c) {
+      var label = c === '' ? '全コート'
+        : (c === Courts.UNASSIGNED ? Courts.UNASSIGNED : c + ' コート');
+      return { value: c, label: label };
+    });
+    renderChips(container, items, current || '', onChange);
   }
 
   // 採点画面のハッシュ（route.js の Route.build と同じ形。admin.html は route.js を読まない）。
@@ -471,6 +481,7 @@ var Admin = (function() {
     reloadEvent: reloadEvent,
     currentEventId: currentEventId,
     toast: toast,
+    renderChips: renderChips,
     renderCourtChips: renderCourtChips,
     scoringHref: scoringHref,
     openSheet: openSheet,
