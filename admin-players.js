@@ -1,14 +1,17 @@
 // 選手タブ（#players/<大会ID>）。選手の一覧・追加・編集・削除。
 (function() {
-  var currentCourt = '';
-  var courtOwner = null;   // currentCourt がどの大会のものか（大会が変われば全コートに戻す）
+  // 絞り込みと並べ替えの状態。形は Courts.defaultFilter() / Courts.defaultSort()。
+  // 大会が変われば既定に戻す。選手の追加・編集後の再描画（Admin.reloadEvent）では保つ。
+  var filter = null;
+  var sort = null;
+  var stateOwner = null;   // filter / sort がどの大会のものか
   // 技リストは大会ごと（大会 JSON の techniques）。render のたびに ctx.techniques で
   // 入れ替える。どの大会のものかを一緒に覚えて、大会をまたいで前の大会の配点を使わない。
   var techCache = null;
   var techOwner = null;
 
-  // 行の並び順（巡目 → コート → 性別 → 番号）は courts.js の Courts.compareOrder
-  // を使う（進行タブ admin-round.js と共有）。
+  // 絞り込み（Courts.applyFilter）と並べ替え（Courts.sortBy）は courts.js の純粋関数。
+  // 並び順の既定は巡目 → コート → 性別 → 番号（進行タブ admin-round.js と同じ compareOrder）。
 
   function adoptTechniques(ctx) {
     techOwner = ctx.eventId;
@@ -22,12 +25,14 @@
 
   async function render(container, ctx) {
     adoptTechniques(ctx);
-    if (courtOwner !== ctx.eventId) {
-      currentCourt = '';
-      courtOwner = ctx.eventId;
+    if (stateOwner !== ctx.eventId) {
+      filter = Courts.defaultFilter();
+      sort = Courts.defaultSort();
+      stateOwner = ctx.eventId;
     }
-    // 絞り込み中のコートの選手が全員いなくなったら全コートに戻す
-    if (currentCourt && Courts.listFrom(ctx.players).indexOf(currentCourt) === -1) currentCourt = '';
+    // 絞り込み中のコート・巡目の選手が全員いなくなったら「全コート」「全巡」に戻す
+    if (filter.court && Courts.listFrom(ctx.players).indexOf(filter.court) === -1) filter.court = '';
+    if (filter.round && Courts.roundsOf(ctx.players).indexOf(filter.round) === -1) filter.round = 0;
 
     container.innerHTML = '';
 
@@ -48,13 +53,30 @@
     head.appendChild(btnMenu);
     container.appendChild(head);
 
-    var chips = document.createElement('div');
-    chips.className = 'court-chips';
-    container.appendChild(chips);
+    // 1 段目: コート
+    var courtChips = document.createElement('div');
+    courtChips.className = 'court-chips';
+    container.appendChild(courtChips);
 
-    var list = document.createElement('div');
-    list.className = 'list';
-    container.appendChild(list);
+    // 2 段目: 性別・巡目・新人・技未入力
+    var filterChips = document.createElement('div');
+    filterChips.className = 'court-chips players-filters';
+    container.appendChild(filterChips);
+
+    // 3 段目: 名前検索
+    var search = document.createElement('div');
+    search.className = 'players-search';
+    var input = document.createElement('input');
+    input.type = 'search';
+    input.placeholder = '名前で検索';
+    input.setAttribute('aria-label', '名前で検索');
+    input.value = filter.query;
+    search.appendChild(input);
+    container.appendChild(search);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'players-table-wrap';
+    container.appendChild(wrap);
 
     var fab = document.createElement('button');
     fab.type = 'button';
@@ -63,73 +85,141 @@
     fab.addEventListener('click', function() { openAddSheet(ctx); });
     container.appendChild(fab);
 
-    // コートを切り替えたらチップと一覧を描き直す
-    function onCourtChange(court) {
-      currentCourt = court;
-      Admin.renderCourtChips(chips, ctx.players, currentCourt, onCourtChange);
-      renderList(list, ctx);
+    // チップを押したらチップの帯と表を描き直す（検索欄は作り直さない。入力中の文字を保つ）
+    function redraw() {
+      Admin.renderCourtChips(courtChips, ctx.players, filter.court, function(c) {
+        filter.court = c;
+        redraw();
+      });
+      renderFilterChips(filterChips, ctx, redraw);
+      renderTable(wrap, ctx);
     }
-    Admin.renderCourtChips(chips, ctx.players, currentCourt, onCourtChange);
-    renderList(list, ctx);
+    input.addEventListener('input', function() {
+      filter.query = input.value;
+      renderTable(wrap, ctx);
+    });
+    redraw();
   }
 
-  function renderList(list, ctx) {
-    list.innerHTML = '';
-    var rows = Courts.filter(ctx.players, currentCourt).slice().sort(Courts.compareOrder);
-    if (rows.length === 0) {
-      var none = document.createElement('p');
-      none.className = 'empty';
-      none.textContent = ctx.players.length === 0
-        ? '選手がまだいません。右下の「＋」で追加してください。'
-        : 'このコートに選手がいません。';
-      list.appendChild(none);
+  // 2 段目のチップ。性別・巡目は 1 つ選ぶ、新人・技未入力は押すたびに on/off。
+  function renderFilterChips(el, ctx, redraw) {
+    el.innerHTML = '';
+    function group(items, current, onPick) {
+      var g = document.createElement('span');
+      g.className = 'chip-group';
+      Admin.renderChips(g, items, current, function(v) { onPick(v); redraw(); }, true);
+      el.appendChild(g);
+    }
+    group([{ value: '', label: '男女' }, { value: '男子', label: '男子' }, { value: '女子', label: '女子' }],
+      filter.sex, function(v) { filter.sex = v; });
+    group([{ value: 0, label: '全巡' }].concat(Courts.roundsOf(ctx.players).map(function(r) {
+      return { value: r, label: r + '巡' };
+    })), filter.round, function(v) { filter.round = v; });
+    group([{ value: true, label: '新人' }], filter.newFace, function() { filter.newFace = !filter.newFace; });
+    group([{ value: true, label: '技未入力' }], filter.noTech, function() { filter.noTech = !filter.noTech; });
+  }
+
+  // 表の列。key があるものは見出しタップで並べ替えられる（巡・コート・性は絞り込み軸なので対象外）。
+  var COLUMNS = [
+    { label: '巡' },
+    { label: 'コート' },
+    { label: '性' },
+    { key: 'order', label: 'No' },
+    { key: 'name', label: '名前', cls: 'col-name' },
+    { label: '技①' },
+    { label: '技②' },
+    { label: '技③' },
+    { label: '新' },
+    { key: 'score', label: '得点', cls: 'col-score' }
+  ];
+
+  function renderTable(wrap, ctx) {
+    wrap.innerHTML = '';
+    if (ctx.players.length === 0) {
+      wrap.appendChild(emptyMessage('選手がまだいません。右下の「＋」で追加してください。'));
       return;
     }
+    var rows = Courts.sortBy(Courts.applyFilter(ctx.players, filter), sort);
+    if (rows.length === 0) {
+      wrap.appendChild(emptyMessage('条件に合う選手がいません。'));
+      return;
+    }
+
+    var table = document.createElement('table');
+    table.className = 'players-table';
+    var thead = document.createElement('thead');
+    var tr = document.createElement('tr');
+    COLUMNS.forEach(function(col) {
+      var th = document.createElement('th');
+      if (col.cls) th.className = col.cls;
+      if (!col.key) {
+        th.textContent = col.label;
+      } else {
+        var on = sort.key === col.key;
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = on ? 'sort-btn on' : 'sort-btn';
+        b.textContent = col.label + (on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '');
+        b.addEventListener('click', function() {
+          // 同じ列なら昇⇄降、別の列なら昇順から
+          if (sort.key === col.key) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
+          else sort = { key: col.key, dir: 'asc' };
+          renderTable(wrap, ctx);
+        });
+        th.appendChild(b);
+      }
+      tr.appendChild(th);
+    });
+    thead.appendChild(tr);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
     rows.forEach(function(p) {
-      list.appendChild(buildRow(ctx, p));
+      tbody.appendChild(buildTr(ctx, p));
     });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
   }
 
-  function buildRow(ctx, p) {
-    var row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'row';
-
-    var badge = document.createElement('span');
-    badge.className = 'row-badge';
-    badge.textContent = String(Courts.roundOf(p));
-
-    var body = document.createElement('span');
-    body.className = 'row-body';
-    var main = document.createElement('span');
-    main.className = 'row-main';
-    main.textContent = (p.order || '') + '  ' + (p.name || '');
-    var sub = document.createElement('span');
-    sub.className = 'row-sub';
-    // 3枠とも表示する（filter で詰めると ['', '真', '真'] と ['真', '真', ''] が
-    // 同じ見た目になり、どの枠が空か運営が分からなくなる）。空き枠は「—」。
-    var slots = [p.tech1, p.tech2, p.tech3];
-    var subText = (slots[0] || slots[1] || slots[2])
-      ? [slots[0] || '—', slots[1] || '—', slots[2] || '—'].join(' / ')
-      : '技 未入力';
-    if (p.isNewFace) subText += '　新人';
-    sub.textContent = subText;
-    body.appendChild(main);
-    body.appendChild(sub);
-
-    var score = document.createElement('span');
-    score.className = 'row-score';
-    score.textContent = String(p.score || 0);
-
-    row.addEventListener('click', function() {
-      openEditSheet(ctx, p);
-    });
-
-    row.appendChild(badge);
-    row.appendChild(body);
-    row.appendChild(score);
-    return row;
+  function emptyMessage(text) {
+    var none = document.createElement('p');
+    none.className = 'empty';
+    none.textContent = text;
+    return none;
   }
+
+  // 1 人 1 行。order（A-男子-1-1）は巡・コート・性・No の 4 列に分けて出す。
+  function buildTr(ctx, p) {
+    var tr = document.createElement('tr');
+    var key = Courts.orderKey(p);
+    var noTech = Courts.hasNoTech(p);
+    function cell(text, cls) {
+      var td = document.createElement('td');
+      td.textContent = text;
+      if (cls) td.className = cls;
+      tr.appendChild(td);
+    }
+    cell(String(Courts.roundOf(p)));
+    cell(Courts.courtOf(p));
+    cell(Courts.sexOf(p) === '女子' ? '女' : '男');
+    cell(key.no ? String(key.no) : '');
+    cell(p.name || '', 'col-name');
+    // 3枠とも表示する（詰めると ['', '真', '真'] と ['真', '真', ''] が同じ見た目になり、
+    // どの枠が空か運営が分からなくなる）。空き枠は「—」。3枠とも空なら技①に「未入力」。
+    cell(noTech ? '未入力' : (p.tech1 || '—'), noTech ? 'muted' : '');
+    cell(p.tech2 || '—');
+    cell(p.tech3 || '—');
+    cell(p.isNewFace ? '●' : '');
+    cell(String(p.score || 0), 'col-score');
+
+    tr.tabIndex = 0;
+    tr.addEventListener('click', function() { openEditSheet(ctx, p); });
+    tr.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditSheet(ctx, p); }
+    });
+    return tr;
+  }
+
 
   // コート・性別・新人の入力部品（1人ずつの追加・編集フォームと一括登録シートで共用）
   // 戻り値: { el, court(), isFemale(), isNewFace() }
