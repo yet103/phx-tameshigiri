@@ -95,6 +95,7 @@ var Courts = (function() {
 
   // 性別（'男子' | '女子'）。order の第 2 セグメントを優先し、解析できなければ isFemale で補う
   // （選手データは両方を持っているが、採番の元になる order を正とする）。
+  // 巡目・番号が欠けた order でも第 2 セグメントがあれば性別として使う（orderKey より緩い。絞り込み用なので拾える方を優先）。
   function sexOf(p) {
     var m = String((p && p.order) || '').match(/^[^-]+-(男子|女子)-/);
     if (m) return m[1];

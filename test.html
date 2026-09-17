@@ -1220,6 +1220,7 @@
     assert('sexOf: order の男子を優先', Courts.sexOf({ order: 'A-男子-1-3', isFemale: true }), '男子');
     assert('sexOf: order が解析不能なら isFemale', Courts.sexOf({ order: '', isFemale: true }), '女子');
     assert('sexOf: order が解析不能で isFemale も無ければ男子', Courts.sexOf({}), '男子');
+    assert('sexOf: 巡目・番号が欠けていても第2セグメントで判定', Courts.sexOf({ order: 'A-女子-1' }), '女子');
 
     assert('roundsOf: 一意な巡目を昇順', Courts.roundsOf([{ order: 'A-男子-2-1' }, { order: 'A-男子-1-1' }, { order: 'B-男子-2-1' }]), [1, 2]);
     assert('roundsOf: 解析不能は 1 巡目', Courts.roundsOf([{ order: '' }]), [1]);
@@ -1249,18 +1250,18 @@
     assert('applyFilter: 名前の空白だけの検索は全件', Courts.applyFilter(fPlayers, withFilter({ query: '  ' })).length, 5);
     assert('applyFilter: 複数条件は AND', ordersOf(Courts.applyFilter(fPlayers, withFilter({ court: 'A', sex: '男子', round: 1 }))), ['A-男子-1-1', 'A-男子-1-2']);
     assert('applyFilter: filter が無ければ全件', Courts.applyFilter(fPlayers, null).length, 5);
-    assert('applyFilter: 元配列を変えない', fPlayers.length, 5);
+    assert('applyFilter: 元配列を変えない', ordersOf(fPlayers), ['A-男子-1-1', 'A-男子-1-2', 'A-女子-1-1', 'B-男子-1-1', 'A-男子-2-1']);
 
     var sPlayers = [
-      { order: 'A-男子-1-10', name: 'い', score: 9 },
-      { order: 'A-男子-1-2', name: 'あ', score: 10 },
+      { order: 'A-男子-1-10', name: 'あ', score: 9 },
+      { order: 'A-男子-1-2', name: 'い', score: 10 },
       { order: 'B-男子-1-1', name: 'う', score: 10 }
     ];
     assert('defaultSort: 既定は order 昇順', Courts.defaultSort(), { key: 'order', dir: 'asc' });
     assert('sortBy: order 昇順は compareOrder と同じ', ordersOf(Courts.sortBy(sPlayers, Courts.defaultSort())), ['A-男子-1-2', 'A-男子-1-10', 'B-男子-1-1']);
     assert('sortBy: order 降順', ordersOf(Courts.sortBy(sPlayers, { key: 'order', dir: 'desc' })), ['B-男子-1-1', 'A-男子-1-10', 'A-男子-1-2']);
-    assert('sortBy: 名前昇順（日本語順）', ordersOf(Courts.sortBy(sPlayers, { key: 'name', dir: 'asc' })), ['A-男子-1-2', 'A-男子-1-10', 'B-男子-1-1']);
-    assert('sortBy: 名前降順', ordersOf(Courts.sortBy(sPlayers, { key: 'name', dir: 'desc' })), ['B-男子-1-1', 'A-男子-1-10', 'A-男子-1-2']);
+    assert('sortBy: 名前昇順（日本語順）', ordersOf(Courts.sortBy(sPlayers, { key: 'name', dir: 'asc' })), ['A-男子-1-10', 'A-男子-1-2', 'B-男子-1-1']);
+    assert('sortBy: 名前降順', ordersOf(Courts.sortBy(sPlayers, { key: 'name', dir: 'desc' })), ['B-男子-1-1', 'A-男子-1-2', 'A-男子-1-10']);
     assert('sortBy: 得点降順は数値順（10 が 9 より上）、同点は order 順', ordersOf(Courts.sortBy(sPlayers, { key: 'score', dir: 'desc' })), ['A-男子-1-2', 'B-男子-1-1', 'A-男子-1-10']);
     assert('sortBy: 得点昇順でも同点は order 昇順', ordersOf(Courts.sortBy(sPlayers, { key: 'score', dir: 'asc' })), ['A-男子-1-10', 'A-男子-1-2', 'B-男子-1-1']);
     assert('sortBy: 得点が文字列でも数値順', ordersOf(Courts.sortBy([{ order: 'A-男子-1-1', score: '9' }, { order: 'A-男子-1-2', score: '10' }], { key: 'score', dir: 'desc' })), ['A-男子-1-2', 'A-男子-1-1']);
