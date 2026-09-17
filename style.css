@@ -299,6 +299,16 @@ input[type="file"] { display: none; }
   text-align: center;
 }
 .tech-table td:first-child input[type="text"] { width: 120px; }
+/* スマホ幅: 余白と入力幅を詰めて、横スクロールなしに四ノ太刀まで見せる。
+   375px（有効幅 351px）で 配点列 ≒53px × 4 ＋ 技名列 ≒139px。
+   見出しは 12px にして「四ノ太刀」が 1 行に収まるようにする。 */
+@media (max-width: 767px) {
+  .tech-table th, .tech-table td { padding: 3px 2px; }
+  .tech-table th { font-size: 12px; white-space: nowrap; }
+  .tech-table input[type="number"] { width: 44px; }
+  .tech-table td:first-child { width: 100%; }   /* 残り幅を技名列に寄せる */
+  .tech-table td:first-child input[type="text"] { width: 100%; min-width: 0; }
+}
 
 /* ===== 選手一覧（ページ下部・開閉） ===== */
 .player-list-section { border-top: 2px solid var(--border); }
