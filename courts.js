@@ -132,6 +132,27 @@ var Courts = (function() {
     });
   }
 
+  // 並べ替えの既定値（= 従来の compareOrder 順）。
+  function defaultSort() {
+    return { key: 'order', dir: 'asc' };
+  }
+
+  // 並べ替え。key は 'order' | 'name' | 'score'、dir は 'asc' | 'desc'。
+  // 同値のときは compareOrder（昇順）で並べて安定させる。元配列は変えない。
+  function sortBy(players, s) {
+    s = s || defaultSort();
+    var sign = s.dir === 'desc' ? -1 : 1;
+    function primary(a, b) {
+      if (s.key === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'ja');
+      if (s.key === 'score') return (Number(a.score) || 0) - (Number(b.score) || 0);
+      return compareOrder(a, b);
+    }
+    return (players || []).slice().sort(function(a, b) {
+      var c = primary(a, b) * sign;
+      return c !== 0 ? c : compareOrder(a, b);
+    });
+  }
+
   // 二巡目生成 API の 409 応答（reason: 'unscored' | 'exists'）を確認文言にする。
   // 採点画面（app.js）と運営画面（admin-round.js）で同じ文言を使う。
   // fixHint: コート未設定の選手をどこで直すかの案内（画面ごとに違う）
@@ -182,6 +203,8 @@ var Courts = (function() {
     roundsOf: roundsOf,
     defaultFilter: defaultFilter,
     applyFilter: applyFilter,
+    defaultSort: defaultSort,
+    sortBy: sortBy,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage
   };

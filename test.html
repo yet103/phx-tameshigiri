@@ -1251,6 +1251,23 @@
     assert('applyFilter: filter が無ければ全件', Courts.applyFilter(fPlayers, null).length, 5);
     assert('applyFilter: 元配列を変えない', fPlayers.length, 5);
 
+    var sPlayers = [
+      { order: 'A-男子-1-10', name: 'い', score: 9 },
+      { order: 'A-男子-1-2', name: 'あ', score: 10 },
+      { order: 'B-男子-1-1', name: 'う', score: 10 }
+    ];
+    assert('defaultSort: 既定は order 昇順', Courts.defaultSort(), { key: 'order', dir: 'asc' });
+    assert('sortBy: order 昇順は compareOrder と同じ', ordersOf(Courts.sortBy(sPlayers, Courts.defaultSort())), ['A-男子-1-2', 'A-男子-1-10', 'B-男子-1-1']);
+    assert('sortBy: order 降順', ordersOf(Courts.sortBy(sPlayers, { key: 'order', dir: 'desc' })), ['B-男子-1-1', 'A-男子-1-10', 'A-男子-1-2']);
+    assert('sortBy: 名前昇順（日本語順）', ordersOf(Courts.sortBy(sPlayers, { key: 'name', dir: 'asc' })), ['A-男子-1-2', 'A-男子-1-10', 'B-男子-1-1']);
+    assert('sortBy: 名前降順', ordersOf(Courts.sortBy(sPlayers, { key: 'name', dir: 'desc' })), ['B-男子-1-1', 'A-男子-1-10', 'A-男子-1-2']);
+    assert('sortBy: 得点降順は数値順（10 が 9 より上）、同点は order 順', ordersOf(Courts.sortBy(sPlayers, { key: 'score', dir: 'desc' })), ['A-男子-1-2', 'B-男子-1-1', 'A-男子-1-10']);
+    assert('sortBy: 得点昇順でも同点は order 昇順', ordersOf(Courts.sortBy(sPlayers, { key: 'score', dir: 'asc' })), ['A-男子-1-10', 'A-男子-1-2', 'B-男子-1-1']);
+    assert('sortBy: 得点が文字列でも数値順', ordersOf(Courts.sortBy([{ order: 'A-男子-1-1', score: '9' }, { order: 'A-男子-1-2', score: '10' }], { key: 'score', dir: 'desc' })), ['A-男子-1-2', 'A-男子-1-1']);
+    assert('sortBy: 得点が無ければ 0 扱い', ordersOf(Courts.sortBy([{ order: 'A-男子-1-1' }, { order: 'A-男子-1-2', score: 1 }], { key: 'score', dir: 'desc' })), ['A-男子-1-2', 'A-男子-1-1']);
+    assert('sortBy: sort が無ければ order 昇順', ordersOf(Courts.sortBy(sPlayers, null)), ['A-男子-1-2', 'A-男子-1-10', 'B-男子-1-1']);
+    assert('sortBy: 元配列を変えない', ordersOf(sPlayers), ['A-男子-1-10', 'A-男子-1-2', 'B-男子-1-1']);
+
     var h2tp = document.createElement('h2');
     h2tp.textContent = 'techpicker.js';
     results.appendChild(h2tp);
