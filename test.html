@@ -1205,6 +1205,29 @@
     assert('nextRoundResultMessage: 通常',
       Courts.nextRoundResultMessage({ created: 3, existingCount: 0, unassignedCount: 1 }), '二巡目を生成しました（3名）（コート未設定の 1 名は作っていません）');
 
+    // ---- 選手タブの絞り込み・並べ替え（設計書 2026-09-18-players-table-design.md） ----
+    assert('normalizeName: 全角・半角スペースと前後空白を除く', Courts.normalizeName('　箕輪 憲人 '), '箕輪憲人');
+    assert('normalizeName: 大文字小文字を同一視', Courts.normalizeName('Abc'), 'abc');
+    assert('normalizeName: null は空文字', Courts.normalizeName(null), '');
+
+    assert('hasNoTech: 3つとも空文字', Courts.hasNoTech({ tech1: '', tech2: '', tech3: '' }), true);
+    assert('hasNoTech: 未定義でも空', Courts.hasNoTech({}), true);
+    assert('hasNoTech: 空白だけは空', Courts.hasNoTech({ tech1: ' ' }), true);
+    assert('hasNoTech: 1つでも入っていれば false', Courts.hasNoTech({ tech2: '真' }), false);
+    assert('hasNoTech: null でも落ちない', Courts.hasNoTech(null), true);
+
+    assert('sexOf: order の女子を優先', Courts.sexOf({ order: 'A-女子-1-3', isFemale: false }), '女子');
+    assert('sexOf: order の男子を優先', Courts.sexOf({ order: 'A-男子-1-3', isFemale: true }), '男子');
+    assert('sexOf: order が解析不能なら isFemale', Courts.sexOf({ order: '', isFemale: true }), '女子');
+    assert('sexOf: order が解析不能で isFemale も無ければ男子', Courts.sexOf({}), '男子');
+
+    assert('roundsOf: 一意な巡目を昇順', Courts.roundsOf([{ order: 'A-男子-2-1' }, { order: 'A-男子-1-1' }, { order: 'B-男子-2-1' }]), [1, 2]);
+    assert('roundsOf: 解析不能は 1 巡目', Courts.roundsOf([{ order: '' }]), [1]);
+    assert('roundsOf: 空配列は空', Courts.roundsOf([]), []);
+
+    assert('orderKey: 番号を数値で返す', Courts.orderKey({ order: 'A-男子-1-10' }).no, 10);
+    assert('orderKey: 解析不能は 0', Courts.orderKey({ order: '' }).no, 0);
+
     var h2tp = document.createElement('h2');
     h2tp.textContent = 'techpicker.js';
     results.appendChild(h2tp);

@@ -79,6 +79,39 @@ var Courts = (function() {
     return x.no - y.no;
   }
 
+  // ---- 選手タブの絞り込み・並べ替え（admin-players.js から使う純粋関数） ----
+
+  // 名前検索の正規化。前後の空白と全角・半角スペースを取り除き、大文字小文字を同一視する
+  // （「箕輪 憲人」を「箕輪憲人」でも当てる）。
+  function normalizeName(s) {
+    return String(s == null ? '' : s).replace(/[\s　]+/g, '').toLowerCase();
+  }
+
+  // 技が 3 枠とも空か（空白だけも空とみなす）。受付で技の入力漏れを探すのに使う。
+  function hasNoTech(p) {
+    if (!p) return true;
+    return !(String(p.tech1 || '').trim() || String(p.tech2 || '').trim() || String(p.tech3 || '').trim());
+  }
+
+  // 性別（'男子' | '女子'）。order の第 2 セグメントを優先し、解析できなければ isFemale で補う
+  // （選手データは両方を持っているが、採番の元になる order を正とする）。
+  function sexOf(p) {
+    var m = String((p && p.order) || '').match(/^[^-]+-(男子|女子)-/);
+    if (m) return m[1];
+    return (p && p.isFemale) ? '女子' : '男子';
+  }
+
+  // 選手にある巡目の一意な値を昇順で（巡目の絞り込みチップの候補）。
+  function roundsOf(players) {
+    var seen = {};
+    var list = [];
+    (players || []).forEach(function(p) {
+      var r = roundOf(p);
+      if (!seen[r]) { seen[r] = true; list.push(r); }
+    });
+    return list.sort(function(a, b) { return a - b; });
+  }
+
   // 二巡目生成 API の 409 応答（reason: 'unscored' | 'exists'）を確認文言にする。
   // 採点画面（app.js）と運営画面（admin-round.js）で同じ文言を使う。
   // fixHint: コート未設定の選手をどこで直すかの案内（画面ごとに違う）
@@ -122,6 +155,11 @@ var Courts = (function() {
     roundOf: roundOf,
     isScored: isScored,
     compareOrder: compareOrder,
+    orderKey: orderKey,
+    normalizeName: normalizeName,
+    hasNoTech: hasNoTech,
+    sexOf: sexOf,
+    roundsOf: roundsOf,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage
   };
