@@ -77,8 +77,8 @@
 ```
 
 - `court`：'' で全コート。`Courts.courtOf(p)` と一致
-- `sex`：'' | '男子' | '女子'。`order` の第 2 セグメントで判定（`isFemale` は持たない前提。
-  `orderKey(p).sex` を使う）
+- `sex`：'' | '男子' | '女子'。`Courts.sexOf(p)` と一致。`sexOf` は `order` の第 2 セグメントで
+  判定し、解析できなければ `p.isFemale`（選手データにも持っている）で補う
 - `round`：0 で全巡。`Courts.roundOf(p)` と一致
 - `newFace`：true なら `p.isNewFace` が真の行だけ
 - `noTech`：true なら `tech1/tech2/tech3` がすべて空の行だけ
@@ -115,7 +115,7 @@
 
 | ファイル | 変更 |
 |---|---|
-| `courts.js` | 純粋関数を追加：`Courts.normalizeName(s)`、`Courts.hasNoTech(p)`、`Courts.sexOf(p)`（'男子' \| '女子' \| ''）、`Courts.applyFilter(players, filter)`、`Courts.sortBy(players, sort)`（元配列を変更せず新しい配列を返す）、`Courts.defaultFilter()`、`Courts.defaultSort()` |
+| `courts.js` | 純粋関数を追加：`Courts.normalizeName(s)`、`Courts.hasNoTech(p)`、`Courts.sexOf(p)`（'男子' \| '女子'）、`Courts.applyFilter(players, filter)`、`Courts.sortBy(players, sort)`（元配列を変更せず新しい配列を返す）、`Courts.defaultFilter()`、`Courts.defaultSort()` |
 | `admin-players.js` | `currentCourt` を `filter` / `sort` の 2 オブジェクトに置き換え。`renderList` を `<table>` 生成に書き換え（`buildRow` → `buildTr`）。チップ・検索欄・見出しタップの配線。`openMenu` / `openAddSheet` / `openEditSheet` / 一括登録は触らない |
 | `admin.js` | 汎用の `Admin.renderChips(container, items, current, onChange)` を追加（`items` は `{ value, label }` の配列）。`renderCourtChips` はこれを使う薄いラッパーにし、進行タブから見た挙動（クラス名・`dataset.court`・文言）は変えない |
 | `admin.css` | `.players-filters`（2 段目の帯）、`.chip-sm`（32px チップ）、`.players-search`、`.players-table-wrap`（横スクロール枠）、`.players-table`（nowrap・名前列 sticky・見出しの ▲▼・行 44px）を追加。既存の `.row` 系は進行タブが使うので残す |
@@ -127,7 +127,8 @@
 
 - `normalizeName`：前後空白、全角スペース、半角スペースを除き、大文字小文字を同一視
 - `hasNoTech`：3 つとも空（未定義・空文字）→ true。1 つでも入っていれば false
-- `sexOf`：`A-女子-1-3` → '女子'、解析不能 → ''
+- `sexOf`：`A-女子-1-3` → '女子'、`order` が解析不能で `isFemale: true` → '女子'、
+  解析不能で `isFemale` も無い → '男子'
 - `applyFilter`：コート／性別／巡目／新人／技未入力／名前の各条件が単独で効くこと、
   複数条件が AND になること、既定のフィルタで全件が返ること
 - `sortBy`：`order` 昇順が `compareOrder` と一致、降順が逆順。`name` が日本語順。
