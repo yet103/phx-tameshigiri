@@ -2373,6 +2373,23 @@
 
     assert('todayLocal: YYYY-MM-DD の形', /^\d{4}-\d{2}-\d{2}$/.test(Storage.todayLocal()), true);
 
+    // ---- 取り込むファイルの検証（PC 運営とスマホ運営で共用。文言はサーバーと揃える） ----
+    assert('checkBundle: 正しいファイルは ok',
+      Storage.checkBundle({ format: 'phx-tameshigiri-event', version: 1, event: { name: 'a' } }),
+      { ok: true });
+    assert('checkBundle: format が違えば断る',
+      Storage.checkBundle({ format: 'x', version: 1 }),
+      { ok: false, error: 'このアプリのエクスポートファイルではありません。' });
+    assert('checkBundle: JSON がオブジェクトでなければ断る',
+      Storage.checkBundle('abc'),
+      { ok: false, error: 'このアプリのエクスポートファイルではありません。' });
+    assert('checkBundle: null でも落ちない',
+      Storage.checkBundle(null),
+      { ok: false, error: 'このアプリのエクスポートファイルではありません。' });
+    assert('checkBundle: version が違えば更新を促す',
+      Storage.checkBundle({ format: 'phx-tameshigiri-event', version: 2 }),
+      { ok: false, error: '対応していないファイル形式です（version: 2）\nこのアプリを更新してください。' });
+
     await runApiTests();
 
     // 結果サマリ

@@ -89,6 +89,89 @@ var Storage = (function() {
     return d.getFullYear() + '-' + mm + '-' + dd;
   }
 
+  // --- 大会ファイルの取り込み（PC 運営 desk-events.js とスマホ運営 admin-events.js で共用）---
+
+  // ファイル選択ダイアログを出し、選ばれた JSON ファイルの中身（文字列）を onText に渡す。
+  // onText は Promise を返してもよい（取り込みの完了まで onDone を待たせる）。
+  // onDone は選択〜取り込みが終わった時点（成功・失敗・キャンセルのどれでも）で一度だけ
+  // 呼ぶ。呼び出し元はこれでボタンの disabled を戻す。
+  // ページに <input type="file"> を置かずに済ませるため、その場で作って捨てる。
+  function pickJsonFile(onText, onDone) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    var removed = false;
+    var fileChosen = false;   // change でファイルを受け取ったら true
+    var finished = false;
+    function cleanup() {
+      if (removed) return;
+      removed = true;
+      window.removeEventListener('focus', onFocus);
+      if (input.parentNode) input.parentNode.removeChild(input);
+    }
+    function finish() {
+      if (finished) return;
+      finished = true;
+      if (onDone) onDone();
+    }
+    // ファイル選択ダイアログをキャンセルすると change は発火しない。
+    // cancel イベントが取れる環境ではそれで、取れない環境（フォールバック）では
+    // ダイアログを閉じてウィンドウに戻ってきた最初の focus で片付ける。
+    function onCancel() { cleanup(); finish(); }
+    function onFocus() {
+      // change がこの同じ tick で来ることがある（フォーカスが先に戻る環境）。
+      // ここで即 cleanup すると、その change を取りこぼす。
+      setTimeout(function() {
+        cleanup();
+        if (!fileChosen) finish();   // ファイルを選んでいれば finish は change 側に任せる
+      }, 0);
+    }
+    input.addEventListener('cancel', onCancel);
+    window.addEventListener('focus', onFocus);
+
+    input.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (file) {
+        fileChosen = true;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          var r = null;
+          try {
+            r = onText(ev.target.result);
+          } catch (err) {
+            console.error(err);
+          }
+          // 成功でも例外でもボタンを戻す（reject 側を落とすと無効のまま残る）
+          if (r && typeof r.then === 'function') r.then(finish, finish);
+          else finish();
+        };
+        reader.onerror = function() { alert('ファイルを読めませんでした。'); finish(); };
+        reader.readAsText(file, 'UTF-8');
+      } else {
+        finish();
+      }
+      cleanup();
+    });
+    input.click();
+  }
+
+  // 取り込むファイルがこのアプリのエクスポートかどうか。
+  // 文言はサーバー（server/index.js の POST /api/events/import）と揃える。
+  // 戻り値: { ok: true } | { ok: false, error: '…' }
+  function checkBundle(bundle) {
+    if (!bundle || typeof bundle !== 'object' || bundle.format !== 'phx-tameshigiri-event') {
+      return { ok: false, error: 'このアプリのエクスポートファイルではありません。' };
+    }
+    if (bundle.version !== 1) {
+      return { ok: false, error: '対応していないファイル形式です（version: ' + bundle.version + '）\n' +
+        'このアプリを更新してください。' };
+    }
+    return { ok: true };
+  }
+
   // --- ダウンロードヘルパ ---
   function downloadText(filename, text, mime) {
     var blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
@@ -167,6 +250,8 @@ var Storage = (function() {
     modeHref: modeHref,
     adminHref: adminHref,
     todayLocal: todayLocal,
+    pickJsonFile: pickJsonFile,
+    checkBundle: checkBundle,
     downloadText: downloadText,
     downloadCsv: downloadCsv,
     downloadHtml: downloadHtml,
