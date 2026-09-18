@@ -94,10 +94,18 @@
       renderFilterChips(filterChips, ctx, redraw);
       renderTable(wrap, ctx);
     }
-    input.addEventListener('input', function() {
+    function applyQuery() {
       filter.query = input.value;
       renderTable(wrap, ctx);
+    }
+    input.addEventListener('input', function(ev) {
+      // IME 変換中は確定前の文字で絞り込まない（変換終了時に確定値で最後の input が発火する）
+      if (ev.isComposing) return;
+      applyQuery();
     });
+    // WebKit（iOS/macOS Safari）は input(isComposing:true) → compositionend の順で、
+    // その後 isComposing:false の input が発火しないため、compositionend でも絞り込む。
+    input.addEventListener('compositionend', applyQuery);
     redraw();
   }
 
@@ -156,6 +164,7 @@
         th.textContent = col.label;
       } else {
         var on = sort.key === col.key;
+        th.setAttribute('aria-sort', on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
         var b = document.createElement('button');
         b.type = 'button';
         b.className = on ? 'sort-btn on' : 'sort-btn';
@@ -219,7 +228,6 @@
     });
     return tr;
   }
-
 
   // コート・性別・新人の入力部品（1人ずつの追加・編集フォームと一括登録シートで共用）
   // 戻り値: { el, court(), isFemale(), isNewFace() }

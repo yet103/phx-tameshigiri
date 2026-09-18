@@ -102,15 +102,8 @@ main { padding: 8px 12px 16px; }
 .row button.row-body { background: transparent; color: inherit; text-align: left; min-height: 44px; border-radius: 0; }
 .row-main { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-sub { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 選手タブの行は <button> なので子は <span>。縦に積む */
+/* 大会タブの行は <button> なので子は <span>。縦に積む */
 .row .row-main, .row .row-sub { display: block; }
-.row-badge {
-  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 13px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: bold;
-  background: var(--bg-header); color: var(--text-muted);
-}
-.row-score { flex: 0 0 auto; font-weight: bold; color: var(--score-color); }
 .row-del { flex: 0 0 auto; min-width: 44px; min-height: 44px; background: transparent; color: var(--text-muted); font-size: 16px; }
 
 /* ===== 選手タブの絞り込みと表 =====
