@@ -483,21 +483,26 @@ app.post('/api/events', (req, res) => {
 
     const eventPath = path.join(EVENTS_DIR, `${event.id}.json`);
     // status はこの経路では変えない。状態を変える経路は POST /api/events/:id/status だけ。
-    // body に status が入っていても捨て、既存の大会ならその値（無ければ推定値）を
-    // 引き継ぐ。新規なら draft。shareToken と同じ扱い。
+    // body に status が入っていても捨てる。既存の大会が status を持っていればその値を
+    // そのまま引き継ぎ、持たない大会（この機能より前に作られた・取り込んだ大会）は
+    // 書かずに推定のままにする（EventStatus.of が読み出しのたびに選手から推定する）。
+    // ここで推定値を書き込んでしまうと、「status の無い大会」という区別が消え、
+    // 以後は常にこの POST 時点の推定値に固定されてしまう。新規作成のときだけ draft。
     delete event.status;
-    let carriedStatus = 'draft';
-    if (fs.existsSync(eventPath)) {
+    if (!fs.existsSync(eventPath)) {
+      event.status = 'draft';
+    } else {
       try {
         const prevForStatus = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
         // 確定済みの大会を丸ごと上書きさせない（得点・選手・技が消える）
         if (rejectIfLocked(res, prevForStatus)) return;
-        carriedStatus = EventStatus.of(prevForStatus);
+        if (EventStatus.STATES.indexOf(prevForStatus.status) !== -1) {
+          event.status = prevForStatus.status;
+        }
       } catch (e) {
-        // 壊れた既存ファイルは上書きを止めない（draft のまま）
+        // 壊れた既存ファイルは上書きを止めない（status も付けない）
       }
     }
-    event.status = carriedStatus;
     // 既存の shareToken を落とさない。落とすと links/<token>.json が孤児になり、
     // 連鎖削除も効かなくなる（消えた大会を指すトークンが生き残る）。
     if (!isValidId(event.shareToken) && fs.existsSync(eventPath)) {
