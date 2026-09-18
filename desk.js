@@ -349,6 +349,16 @@ var Desk = (function() {
     return wrap;
   }
 
+  // 段階表示の遷移ボタン（次へ進む・戻す・二巡目なしで終了）。通信中は連打・二重送信を
+  // 防ぐため無効にする。成功時は reloadEvent が上部を描き直す（ボタンごと作り直されるので
+  // 戻し忘れにならない）。失敗時・通信断のときだけここで明示的に戻す。
+  function setStageButtonsDisabled(flag) {
+    ['btnDeskNext', 'btnDeskBack', 'btnDeskSkipRound2'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.disabled = flag;
+    });
+  }
+
   // 状態を変える。確認文言は courts.js（スマホ運営と共通）。
   // 失敗の理由はサーバーの文言をそのまま出し、読み直す
   // （transition の 409 は他の端末が先に進めていた場合）。
@@ -358,13 +368,16 @@ var Desk = (function() {
     if (!eventId) return;
     if (!confirm(Courts.statusConfirmMessage(from, to, players))) return;
     var seq = renderSeq;
+    setStageButtonsDisabled(true);
     var res = await Api.changeStatus(eventId, to);
     if (seq !== renderSeq || selectedEventId !== eventId) return;   // 通信中に画面を離れた
     if (!res) {
+      setStageButtonsDisabled(false);
       alert('状態を変えられませんでした。通信を確認してください。');
       return;
     }
     if (!res.ok) {
+      setStageButtonsDisabled(false);
       alert(res.error);
       await reloadEvent();   // 他の端末が先に進めていた可能性がある
       return;
