@@ -1,9 +1,8 @@
 /* PC 運営画面（desk.html）専用のスタイル。幅 1024px 以上を前提に組む。
    style.css / admin.css は読み込まない（採点画面・スマホ運営のレイアウトを持ち込まない）。
    色は theme.css の変数だけを使う。1280px で横スクロールを作らないこと。
-   このファイルは計画2の Task 4 で書き切る。以降のタスクでは編集しない
-   （区画ごとに CSS を足すと並行作業で衝突するため。足りない見た目が出たら
-    計画の Task 4 の節に追記してからまとめて直す）。 */
+   区画ごとに少しずつ足すと並行作業で衝突するので、CSS を足すのは計画ごとに
+   1 つのタスクにまとめる（計画2は Task 4、計画4は Task 5）。 */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -109,6 +108,77 @@ a { color: var(--accent); }
   border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-muted);
 }
 .desk-badge.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+
+/* ===== 選手の表（desk-players.js） ===== */
+/* 帯は PC 幅なので 1 段（スマホの選手タブは 3 段）。右端に名前の検索。 */
+.desk-players-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.desk-players-chips { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.desk-chip-group { display: inline-flex; gap: 4px; }
+.desk-chip {
+  min-height: 28px; padding: 0 10px; font-size: 13px;
+  background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border);
+}
+.desk-chip:hover { border-color: var(--accent); color: var(--text); }
+.desk-chip.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
+.desk-players-search { width: 200px; margin-left: auto; }
+
+/* 1280px では横スクロールしない幅に収める。窓が狭いときだけ表の枠が横に流れ、
+   名前の列は左に固定して誰の行か分かるようにする（採点表の固定列と同じ手法）。 */
+.desk-players-wrap { overflow-x: auto; }
+/* table-layout: fixed は表そのものに幅が無いと列幅を「比率」としてしか使わず、
+   窓を狭めても列が縮むだけでスクロールが起きない（確認で見つかった）。
+   列幅の合計（994px）を表の width にして初めて、狭いときに表の枠だけが
+   横スクロールし、sticky の名前列が効くようになる。border-collapse: collapse は
+   既定の border-spacing（列の間の隙間）を消して幅の計算を列幅の合計どおりにする。 */
+.desk-players-table { table-layout: fixed; width: 994px; border-collapse: collapse; }
+.desk-players-table th, .desk-players-table td { padding: 2px 6px; vertical-align: middle; }
+.desk-players-table tbody tr { height: 34px; }
+.desk-players-table th.col-name, .desk-players-table td.col-name { position: sticky; left: 0; z-index: 1; }
+.desk-players-table th.col-name { background: var(--bg-header); }
+.desk-players-table td.col-name { background: var(--card-bg); }
+.desk-players-table tbody tr:hover td.col-name { background: var(--row-selected); }
+.desk-players-table .col-round { width: 40px; }
+.desk-players-table .col-no { width: 52px; }
+.desk-players-table .col-name { width: 190px; }
+.desk-players-table .col-court { width: 96px; }
+.desk-players-table .col-sex { width: 84px; }
+.desk-players-table .col-new { width: 52px; text-align: center; }
+.desk-players-table .col-tech { width: 132px; }
+.desk-players-table .col-score { width: 64px; color: var(--score-color); font-weight: bold; }
+.desk-players-table th.act, .desk-players-table td.act { width: 48px; }
+
+/* セルの入力。ふだんは枠を見せず、触ったときだけ枠を出す（表が線だらけにならない）。 */
+.desk-cell-input, .desk-cell-select {
+  width: 100%; min-height: 28px; padding: 2px 4px;
+  background: transparent; color: inherit; border: 1px solid transparent; border-radius: 3px;
+}
+.desk-cell-input:hover:not(:disabled), .desk-cell-select:hover:not(:disabled) { border-color: var(--border); }
+.desk-cell-input:focus, .desk-cell-select:focus { border-color: var(--accent); background: var(--bg); outline: none; }
+.desk-cell-input:disabled, .desk-cell-select:disabled { opacity: .55; cursor: not-allowed; }
+/* 保存の通信中 */
+.desk-cell-input.saving, .desk-cell-select.saving { border-color: var(--accent); opacity: .5; }
+.desk-cell-check { display: block; margin: 0 auto; width: 16px; height: 16px; }
+
+/* 「＋ 行を追加」の下書き行（まだサーバーに無い行） */
+.desk-draft-row td { background: var(--bg-header); }
+.desk-draft-row td.col-name { background: var(--bg-header); }
+
+/* 並べ替えできる見出し */
+.sort-btn { background: transparent; color: inherit; font-size: 13px; font-weight: bold; padding: 2px 4px; }
+.sort-btn:hover { color: var(--accent); }
+.sort-btn.on { color: var(--accent); }
+
+/* 貼り付けて追加のダイアログ */
+.desk-paste { width: 100%; min-height: 140px; font-family: inherit; white-space: pre; }
+.desk-paste-count { margin: 8px 0 6px; font-size: 13px; }
+.desk-paste-preview {
+  max-height: 240px; overflow: auto; padding: 6px;
+  background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px;
+}
+.desk-paste-line { font-size: 13px; white-space: nowrap; }
+/* 取り込めない行。--btn-fail はダークで読みにくいので文字色は --cell-fail-text を使う */
+.desk-paste-line.bad, .desk-paste-bad { color: var(--cell-fail-text); }
+.desk-paste-bad { font-weight: bold; }
 
 /* ===== 行の ⋯ メニュー ===== */
 .desk-menu { position: relative; display: inline-block; }
