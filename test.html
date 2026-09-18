@@ -23,6 +23,7 @@
 <script src="outbox.js"></script>
 <script src="techpicker.js"></script>
 <script src="admin.js"></script>
+<script src="home.js"></script>
 <script src="present.js"></script>
 <script src="board.js"></script>
 <script>
@@ -2115,6 +2116,54 @@
     assert('scoringHref: 未分類とスペースをエンコードする',
       Admin.scoringHref('a b', '未分類'), 'index.html#event/a%20b/' + encodeURIComponent('未分類'));
 
+    var h2home = document.createElement('h2');
+    h2home.textContent = 'home.js';
+    results.appendChild(h2home);
+
+    // 転送（改名前のブックマーク対策）。ハッシュは組み直さずそのまま繋ぐ。
+    assert('redirectTarget: 大会とコートのハッシュは採点画面へ',
+      Home.redirectTarget('#event/abc/A'), 'scoring.html#event/abc/A');
+    assert('redirectTarget: コート無しでも転送する',
+      Home.redirectTarget('#event/abc'), 'scoring.html#event/abc');
+    assert('redirectTarget: エンコードをそのまま持ち回る（二重エンコードしない）',
+      Home.redirectTarget('#event/a%20b/' + encodeURIComponent('未分類')),
+      'scoring.html#event/a%20b/' + encodeURIComponent('未分類'));
+    assert('redirectTarget: ハッシュ無しは転送しない', Home.redirectTarget(''), null);
+    assert('redirectTarget: null でも落ちない', Home.redirectTarget(null), null);
+    assert('redirectTarget: 大会IDが無ければ転送しない', Home.redirectTarget('#event/'), null);
+    assert('redirectTarget: 運営画面のハッシュは転送しない', Home.redirectTarget('#events'), null);
+    assert('redirectTarget: 壊れたエンコードでも例外を投げず転送しない',
+      Home.redirectTarget('#event/%E0%A4%A'), null);
+
+    // 進行中の大会の並び（設計書「画面設計 > トップ」）。
+    var homeEvents = [
+      { id: 'd',   status: 'draft',       updatedAt: '2026-09-18T10:00:00.000Z' },
+      { id: 'f',   status: 'final',       updatedAt: '2026-09-18T12:00:00.000Z' },
+      { id: 'r1',  status: 'round1',      updatedAt: '2026-09-18T09:00:00.000Z' },
+      { id: 'a',   status: 'archived',    updatedAt: '2026-09-18T13:00:00.000Z' },
+      { id: 'r1d', status: 'round1_done', updatedAt: '2026-09-18T11:00:00.000Z' },
+      { id: 'r2',  status: 'round2',      updatedAt: '2026-09-18T08:00:00.000Z' }
+    ];
+    assert('sortForHome: 採点中が先、次に準備中と巡目終了、最後に最終結果',
+      Home.sortForHome(homeEvents).map(function(ev) { return ev.id; }),
+      ['r1', 'r2', 'r1d', 'd', 'f']);
+    assert('sortForHome: アーカイブは出さない',
+      Home.sortForHome(homeEvents).filter(function(ev) { return ev.id === 'a'; }).length, 0);
+    assert('sortForHome: 元の配列を書き換えない',
+      (function() {
+        var src = homeEvents.slice();
+        Home.sortForHome(src);
+        return src.map(function(ev) { return ev.id; });
+      })(), ['d', 'f', 'r1', 'a', 'r1d', 'r2']);
+    assert('sortForHome: 0 件でも落ちない', Home.sortForHome([]), []);
+    assert('sortForHome: null でも落ちない', Home.sortForHome(null), []);
+    assert('sortForHome: status の無い大会は推定する（一巡目を採点中 → 先頭）',
+      Home.sortForHome([
+        { id: 'x', status: 'final', updatedAt: '2026-09-18T20:00:00.000Z' },
+        { id: 'y', updatedAt: '2026-09-18T01:00:00.000Z',
+          players: [ { order: 'A-男子-1-1', score: 10 }, { order: 'A-男子-1-2', score: 0 } ] }
+      ]).map(function(ev) { return ev.id; }), ['y', 'x']);
+
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';
     results.appendChild(h2r);
@@ -2438,6 +2487,20 @@
     assert('adminHref: 控えが mobile なら admin.html', Storage.adminHref('#setup/e1'), 'admin.html#players/e1');
     Storage.saveMode('zzz');
     assert('saveMode: 知らない値は控えない（前の値のまま）', Storage.loadMode(), 'mobile');
+
+    // currentMode は「控え → 無ければ画面幅」の判定。adminHref がこれを使う。
+    Storage.saveMode('pc');
+    assert('currentMode: 控えた値をそのまま返す', Storage.currentMode(), 'pc');
+    Storage.saveMode('mobile');
+    assert('currentMode: 控えを変えたら追従する', Storage.currentMode(), 'mobile');
+    try { localStorage.removeItem('tmg_mode'); } catch (e) {}
+    assert('currentMode: 控えが無くても pc か mobile のどちらかを返す',
+      ['pc', 'mobile'].indexOf(Storage.currentMode()) !== -1, true);
+    // 控えが無いときの既定は画面幅で決まる（テストの窓幅に依るので値は固定しない）。
+    // 大事なのは「ボタンの表示に使う currentMode」と「リンクの行き先 adminHref」が食い違わないこと。
+    assert('currentMode: adminHref と同じモードを指す',
+      Storage.adminHref('#events'),
+      (Storage.currentMode() === 'pc' ? 'desk.html' : 'admin.html') + '#events');
     try {
       if (modeSaved === null) localStorage.removeItem('tmg_mode');
       else localStorage.setItem('tmg_mode', modeSaved);

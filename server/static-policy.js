@@ -15,9 +15,10 @@ const PUBLIC_DIRS = ['help/img', 'fonts'];
 
 // 認証してから配信する（運営用ページとその依存）
 const PROTECTED_FILES = new Set([
-  'index.html', 'admin.html', 'desk.html', 'ranking.html', 'techniques.html',
-  'style.css', 'admin.css', 'desk.css',
-  'app.js', 'admin.js', 'admin-events.js', 'admin-players.js', 'admin-round.js', 'admin-results.js',
+  'index.html', 'scoring.html', 'admin.html', 'desk.html', 'ranking.html', 'techniques.html',
+  'style.css', 'admin.css', 'desk.css', 'home.css',
+  'app.js', 'home.js',
+  'admin.js', 'admin-events.js', 'admin-players.js', 'admin-round.js', 'admin-results.js',
   'desk.js', 'desk-events.js', 'desk-setup.js', 'desk-techniques.js',
   'desk-players.js', 'desk-match.js', 'desk-results.js', 'techedit.js',
   'courts.js', 'data.js', 'outbox.js', 'route.js', 'status.js', 'storage.js', 'techpicker.js'

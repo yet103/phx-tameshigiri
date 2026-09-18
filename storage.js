@@ -63,19 +63,24 @@ var Storage = (function() {
     return MODE_PAGES[m] + mapHash(hash, m);
   }
 
-  // いまの端末で開くべき運営画面の URL。控えが無ければ画面幅（1024px 以上を PC）で決める。
-  function adminHref(hash) {
+  // いまの端末で開くべき運営画面のモード。控えが無ければ画面幅（1024px 以上を PC）で決める。
+  // トップの 🖥/📱 ボタンは「いまどちらか」の表示にこれを使う。表示と行き先が
+  // 食い違わないよう、adminHref もこの 1 つの判定を通す。
+  function currentMode() {
     var mode = loadMode();
-    if (!mode) {
-      var wide = false;
-      try {
-        wide = !!(window.matchMedia && window.matchMedia('(min-width: 1024px)').matches);
-      } catch (e) {
-        wide = false;
-      }
-      mode = wide ? 'pc' : 'mobile';
+    if (mode) return mode;
+    var wide = false;
+    try {
+      wide = !!(window.matchMedia && window.matchMedia('(min-width: 1024px)').matches);
+    } catch (e) {
+      wide = false;
     }
-    return modeHref(hash, mode);
+    return wide ? 'pc' : 'mobile';
+  }
+
+  // いまの端末で開くべき運営画面の URL（ハッシュ付き）。
+  function adminHref(hash) {
+    return modeHref(hash, currentMode());
   }
 
   // 今日の日付（YYYY-MM-DD）。toISOString は UTC なので JST の深夜に前日になる。
@@ -248,6 +253,7 @@ var Storage = (function() {
     saveMode: saveMode,
     mapHash: mapHash,
     modeHref: modeHref,
+    currentMode: currentMode,
     adminHref: adminHref,
     todayLocal: todayLocal,
     pickJsonFile: pickJsonFile,

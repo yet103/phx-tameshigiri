@@ -114,9 +114,9 @@ test('classify: 観客用ページとそのアセットは public', () => {
 });
 
 test('classify: 運営用ページとそのアセットは protected', () => {
-  for (const p of ['/', '/index.html', '/admin.html', '/ranking.html', '/techniques.html',
-                   '/style.css', '/admin.css',
-                   '/app.js', '/admin.js', '/admin-events.js', '/admin-players.js', '/admin-round.js',
+  for (const p of ['/', '/index.html', '/scoring.html', '/admin.html', '/ranking.html', '/techniques.html',
+                   '/style.css', '/admin.css', '/home.css',
+                   '/app.js', '/home.js', '/admin.js', '/admin-events.js', '/admin-players.js', '/admin-round.js',
                    '/admin-results.js', '/courts.js', '/data.js', '/outbox.js', '/route.js',
                    '/storage.js', '/techpicker.js']) {
     assert.strictEqual(classify(p, { production: true }), 'protected', p);
