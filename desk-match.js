@@ -450,6 +450,11 @@
 
   async function onCopyRow(p, src, selects, ctx, tr) {
     var arr = [src.tech1 || '', src.tech2 || '', src.tech3 || ''];
+    // 既に一巡目と同じ値なら PATCH を送らない（saveTech の確認・保存を素通りさせない）。
+    if ((p.tech1 || '') === arr[0] && (p.tech2 || '') === arr[1] && (p.tech3 || '') === arr[2]) {
+      Desk.toast('既に一巡目と同じ技です');
+      return;
+    }
     var ok = await saveTech(p, arr, selects, ctx, tr);
     if (ctx.isStale()) return;
     if (ok) Desk.toast('一巡目の技をコピーしました');
