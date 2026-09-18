@@ -1343,5 +1343,7 @@
     if (Desk.currentEventId() === eventId) Desk.reloadEvent();
   }
 
-  Desk.registerTab('players', { render: render });
+  // destroy: 区画から離れるときにポップオーバーを閉じる（document.body に置くので勝手には消えない）。
+  // closePopover(refocus) は引数なしで呼ばれても popover が無ければ何もしないので、そのまま渡せる。
+  Desk.registerTab('players', { render: render, destroy: closePopover });
 })();
