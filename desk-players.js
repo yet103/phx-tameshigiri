@@ -210,23 +210,295 @@
     wrap.appendChild(table);
   }
 
-  // 1 人 1 行。巡・No.（order から導出）と得点は読み取り。
-  // 名前・コート・性別・新人・技は Task 7 で入力にする。
+  // 1 人 1 行。名前・コート・性別・新人・技は編集できる。
+  // 巡・No.（order から導出）と得点は読み取り（得点は採点画面が書く）。
   function buildRow(ctx, p, locked) {
     var key = Courts.orderKey(p);
     var tr = document.createElement('tr');
     tr.appendChild(cell(String(Courts.roundOf(p)), 'num col-round'));
     tr.appendChild(cell(String(key.no || ''), 'num col-no'));
-    tr.appendChild(cell(p.name || '', 'col-name desk-cell-main'));
-    tr.appendChild(cell(Courts.courtOf(p), 'col-court'));
-    tr.appendChild(cell(Courts.sexOf(p), 'col-sex'));
-    tr.appendChild(cell(p.isNewFace ? '○' : '', 'col-new'));
-    tr.appendChild(cell(p.tech1 || '', 'col-tech'));
-    tr.appendChild(cell(p.tech2 || '', 'col-tech'));
-    tr.appendChild(cell(p.tech3 || '', 'col-tech'));
+    tr.appendChild(nameCell(ctx, p, locked));
+    tr.appendChild(courtCell(ctx, p, locked));
+    tr.appendChild(sexCell(ctx, p, locked));
+    tr.appendChild(newFaceCell(ctx, p, locked));
+    tr.appendChild(techCell(ctx, p, locked, 1));
+    tr.appendChild(techCell(ctx, p, locked, 2));
+    tr.appendChild(techCell(ctx, p, locked, 3));
     tr.appendChild(cell(String(p.score || 0), 'num col-score'));
     tr.appendChild(cell('', 'act'));
     return tr;
+  }
+
+  // --- セルの編集（1 項目ずつ保存する） ---
+
+  // 保存に成功した選手をその場で差し替える。表は描き直さないので、
+  // 次の保存の比較（Courts.scoreMayChange）が古い値を見ないようにする。
+  function adopt(dst, src) {
+    ['name', 'order', 'tech1', 'tech2', 'tech3', 'result'].forEach(function(k) {
+      if (typeof src[k] === 'string') dst[k] = src[k];
+    });
+    if (typeof src.score === 'number') dst.score = src.score;
+    dst.isFemale = src.isFemale === true;
+    dst.isNewFace = src.isNewFace === true;
+  }
+
+  // セル 1 つの保存。patch は送る 1 項目だけ。
+  //   revert : 失敗したときに表示を元へ戻す
+  //   after  : 成功したときの追加処理（order が変わるセルは表を描き直す）
+  // 失敗しても表は描き直さない（他のセルの入力途中を壊さないため）。
+  async function saveCell(ctx, p, el, patch, revert, after) {
+    // 採点済みの選手の性別・技は、採点画面が変更に気付けない（Courts.scoreMayChange 参照）
+    if (Courts.scoreMayChange(p, patch) && !confirm(Courts.scoreChangeConfirmMessage(p))) {
+      revert();
+      return;
+    }
+    el.disabled = true;
+    el.classList.add('saving');
+    var res = await Api.updatePlayerInfo(ctx.eventId, p.id, patch);
+    if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた。DOM にも alert にも触らない
+    el.disabled = false;
+    el.classList.remove('saving');
+    if (!res || !res.ok) {
+      revert();
+      if (res && res.reason === 'locked') {
+        alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+      } else {
+        alert('保存できませんでした。\n入力内容と通信を確認してください。');
+      }
+      return;
+    }
+    if (res.player) adopt(p, res.player);
+    Desk.toast('保存しました');
+    if (after) after();
+  }
+
+  // 文字の入力（名前）。blur で保存し、Enter は blur に流す（二重送信しない）。
+  // buildPatch(value) が null を返したら送らずに元へ戻す（理由は buildPatch が alert する）。
+  function bindText(ctx, p, el, buildPatch, after) {
+    var last = el.value;
+    var busy = false;
+    var composing = false;
+
+    async function commit() {
+      if (busy) return;
+      var value = el.value.trim();
+      el.value = value;
+      if (value === last) return;
+      var patch = buildPatch(value);
+      if (!patch) { el.value = last; return; }
+      busy = true;
+      await saveCell(ctx, p, el, patch, function() { el.value = last; }, after);
+      busy = false;
+      if (ctx.isStale()) return;
+      if (el.value === value) last = value;   // 成功（失敗なら revert で last に戻っている）
+    }
+
+    el.addEventListener('blur', function() { commit(); });
+    el.addEventListener('compositionstart', function() { composing = true; });
+    el.addEventListener('compositionend', function() { composing = false; });
+    el.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      // IME 変換中の Enter は変換の確定。保存には使わない
+      // （keyCode 229 は変換中を示す環境向けの保険）。
+      if (composing || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      el.blur();   // 保存は blur に一本化する
+    });
+  }
+
+  // セレクト・チェックの保存（change で1回だけ）。
+  //   readValue() : いまの値
+  //   toPatch(v)  : 送るオブジェクト
+  //   setValue(v) : 表示を書き戻す（失敗したときの巻き戻し）
+  function bindChoice(ctx, p, el, initial, readValue, toPatch, setValue, after) {
+    var last = initial;
+    var busy = false;
+    el.addEventListener('change', async function() {
+      if (busy) return;
+      var value = readValue();
+      if (value === last) return;
+      busy = true;
+      await saveCell(ctx, p, el, toPatch(value), function() { setValue(last); }, after);
+      busy = false;
+      if (ctx.isStale()) return;
+      if (readValue() === value) last = value;
+    });
+  }
+
+  function nameCell(ctx, p, locked) {
+    var td = document.createElement('td');
+    td.className = 'col-name';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'desk-cell-input';
+    input.value = p.name || '';
+    input.setAttribute('aria-label', '名前');
+    input.disabled = locked;
+    bindText(ctx, p, input, function(v) {
+      if (!v) { alert('名前を入力してください。'); return null; }
+      return { name: v };
+    }, null);
+    td.appendChild(input);
+    return td;
+  }
+
+  var NEW_COURT = ' new';   // 「新しいコート…」の選択肢の値（コート名には使えない文字）
+
+  // コートの選択肢。既存のコート＋その選手の今のコート＋「新しいコート…」。
+  function fillCourtOptions(sel, ctx, current) {
+    sel.innerHTML = '';
+    var list = Courts.listFrom(ctx.players).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    if (current && list.indexOf(current) === -1) list.push(current);   // 未分類のままの選手も表示する
+    list.forEach(function(c) { addOption(sel, c, c); });
+    addOption(sel, NEW_COURT, '新しいコート…');
+    sel.value = current;
+  }
+
+  function addOption(sel, value, label) {
+    var o = document.createElement('option');
+    o.value = value;
+    o.textContent = label;
+    sel.appendChild(o);
+    return o;
+  }
+
+  function hasOption(sel, value) {
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === value) return true;
+    }
+    return false;
+  }
+
+  // 新しく作ったコートを「新しいコート…」の手前に足して選ぶ
+  // （querySelector で値を探すとコート名の記号でセレクタが壊れるので options を舐める）。
+  function insertCourtOption(sel, name) {
+    if (!hasOption(sel, name)) {
+      var o = document.createElement('option');
+      o.value = name;
+      o.textContent = name;
+      sel.insertBefore(o, sel.lastChild);
+    }
+    sel.value = name;
+  }
+
+  // 新しいコート名の入力。order は「コート-性別-巡目-番号」なので "-" と「未分類」は使えない。
+  // 取りやめ・不正なら '' を返す（呼び出し側は選択を元に戻す）。
+  function askCourtName() {
+    var name = prompt('新しいコート名を入力してください（例: D）');
+    if (name === null) return '';
+    name = name.trim();
+    if (!name) { alert('コート名を入力してください。'); return ''; }
+    if (name.indexOf('-') >= 0) { alert('コート名に「-」は使えません。'); return ''; }
+    if (name === Courts.UNASSIGNED) { alert('「' + Courts.UNASSIGNED + '」はコート名に使えません。'); return ''; }
+    if (name.length > 32) { alert('コート名は32文字までです。'); return ''; }
+    return name;
+  }
+
+  function courtCell(ctx, p, locked) {
+    var td = document.createElement('td');
+    td.className = 'col-court';
+    var sel = document.createElement('select');
+    sel.className = 'desk-cell-select';
+    sel.setAttribute('aria-label', 'コート');
+    sel.disabled = locked;
+    var cur = Courts.courtOf(p);
+    fillCourtOptions(sel, ctx, cur);
+
+    var last = cur;
+    var busy = false;
+    sel.addEventListener('change', async function() {
+      if (busy) return;
+      var value = sel.value;
+      if (value === NEW_COURT) {
+        var name = askCourtName();
+        if (!name) { sel.value = last; return; }
+        insertCourtOption(sel, name);
+        value = name;
+      }
+      if (value === last) return;
+      busy = true;
+      // コートが変わると order が振り直される（番号が変わる）ので、表ごと読み直す
+      await saveCell(ctx, p, sel, { court: value }, function() { sel.value = last; },
+        function() { Desk.reloadEvent(); });
+      busy = false;
+      if (ctx.isStale()) return;
+      if (sel.value === value) last = value;
+    });
+    td.appendChild(sel);
+    return td;
+  }
+
+  function sexCell(ctx, p, locked) {
+    var td = document.createElement('td');
+    td.className = 'col-sex';
+    var sel = document.createElement('select');
+    sel.className = 'desk-cell-select';
+    sel.setAttribute('aria-label', '性別');
+    sel.disabled = locked;
+    addOption(sel, '男子', '男子');
+    addOption(sel, '女子', '女子');
+    var cur = Courts.sexOf(p);
+    sel.value = cur;
+    // 性別が変わると order が振り直される（男女で採番が別）ので、表ごと読み直す
+    bindChoice(ctx, p, sel, cur,
+      function() { return sel.value; },
+      function(v) { return { isFemale: v === '女子' }; },
+      function(v) { sel.value = v; },
+      function() { Desk.reloadEvent(); });
+    td.appendChild(sel);
+    return td;
+  }
+
+  function newFaceCell(ctx, p, locked) {
+    var td = document.createElement('td');
+    td.className = 'col-new';
+    var chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.className = 'desk-cell-check';
+    chk.checked = !!p.isNewFace;
+    chk.setAttribute('aria-label', '新人');
+    chk.disabled = locked;
+    bindChoice(ctx, p, chk, !!p.isNewFace,
+      function() { return chk.checked; },
+      function(v) { return { isNewFace: v }; },
+      function(v) { chk.checked = v; },
+      null);
+    td.appendChild(chk);
+    return td;
+  }
+
+  // 技の選択肢は「その大会の技リスト」＋空（技を消せるように）。
+  // 選手が持っている技がリストに無い場合（技リストを入れ替えた後など）は、
+  // 黙って空にしないよう、その名前も選択肢に足す。
+  function techCell(ctx, p, locked, slot) {
+    var td = document.createElement('td');
+    td.className = 'col-tech';
+    var sel = document.createElement('select');
+    sel.className = 'desk-cell-select';
+    sel.setAttribute('aria-label', '技' + slot);
+    sel.disabled = locked;
+    var cur = p['tech' + slot] || '';
+    addOption(sel, '', '—');
+    var found = false;
+    (ctx.techniques || []).forEach(function(t) {
+      var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
+      if (!n) return;
+      addOption(sel, n, n);
+      if (n === cur) found = true;
+    });
+    if (cur && !found) addOption(sel, cur, cur + '（リストに無い技）');
+    sel.value = cur;
+    bindChoice(ctx, p, sel, cur,
+      function() { return sel.value; },
+      function(v) {
+        var patch = {};
+        patch['tech' + slot] = v;
+        return patch;
+      },
+      function(v) { sel.value = v; },
+      null);
+    td.appendChild(sel);
+    return td;
   }
 
   Desk.registerTab('players', { render: render });
