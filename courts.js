@@ -260,6 +260,82 @@ var Courts = (function() {
     return EventStatus.LABELS[to] + 'に戻します。よろしいですか？';
   }
 
+  // ---- 貼り付けによる一括登録の解析（PC 運営 desk-players.js の「📋 貼り付けて追加」） ----
+
+  // 性別・新人の表記ゆれ。設計書「画面設計 > PC 運営 > 選手」の貼り付けの節のとおり。
+  var FEMALE_WORDS = ['女子', '女', 'f'];
+  var NEWFACE_WORDS = ['新人', '○', '〇', '1', 'true'];
+
+  // 貼り付けたテキストを 1 行 1 人に解析する。DOM には触らない（test.html で固定する）。
+  // 列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 の固定順。
+  // タブが1つでもある行はタブ区切り（Excel からの貼り付け）、無ければカンマ区切りとして切る。
+  // techniques はその大会の有効な技リスト（[{ name, strikes }]）。
+  // 戻り値: { headerSkipped, rows: [ {
+  //   line,      貼り付けた文字列の行番号（1 始まり。空行と見出しも数える）
+  //   name, court, isFemale, isNewFace,
+  //   techs,     ['技1', '技2', '技3']（空の枠は ''）
+  //   badTechs,  技リストに無い技名（画面で赤く示す）
+  //   ok,        サーバーに送ってよい行か
+  //   error      送れない理由（ok が true なら ''）
+  // } ] }
+  function parsePasteRows(text, techniques) {
+    var known = {};
+    (techniques || []).forEach(function(t) {
+      var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
+      if (n) known[n] = true;
+    });
+    var lines = String(text == null ? '' : text).split(/\r?\n/);
+    var rows = [];
+    var headerSkipped = false;
+    var seenFirst = false;
+    lines.forEach(function(line, i) {
+      if (!line.trim()) return;   // 空行は飛ばす（行番号は元のまま）
+      var cols = (line.indexOf('\t') >= 0 ? line.split('\t') : line.split(',')).map(function(s) {
+        return String(s).trim();
+      });
+      if (!seenFirst) {
+        seenFirst = true;
+        // Excel の1行目をそのまま貼れるように、「名前…」で始まる最初の行は見出しとみなす
+        if (cols[0].indexOf('名前') === 0) { headerSkipped = true; return; }
+      }
+      rows.push(parsePasteRow(cols, i + 1, known));
+    });
+    return { headerSkipped: headerSkipped, rows: rows };
+  }
+
+  // 1 行分。不正でも例外は投げず、ok: false と理由を付けて返す（画面が行ごとに赤く示す）。
+  function parsePasteRow(cols, line, known) {
+    var techs = [cols[4] || '', cols[5] || '', cols[6] || ''];
+    var badTechs = techs.filter(function(t) { return t && !known[t]; });
+    var row = {
+      line: line,
+      name: cols[0] || '',
+      court: cols[1] || '',
+      isFemale: FEMALE_WORDS.indexOf(String(cols[2] || '').toLowerCase()) !== -1,
+      isNewFace: NEWFACE_WORDS.indexOf(String(cols[3] || '').toLowerCase()) !== -1,
+      techs: techs,
+      badTechs: badTechs,
+      ok: true,
+      error: ''
+    };
+    if (!row.name) return badRow(row, '名前がありません');
+    if (!row.court) return badRow(row, 'コートがありません');
+    // order は「コート-性別-巡目-番号」。サーバーの isValidCourt と同じ条件で先に弾く。
+    if (row.court.indexOf('-') >= 0 || row.court === UNASSIGNED || row.court.length > 32) {
+      return badRow(row, 'コート名「' + row.court + '」は使えません');
+    }
+    if (badTechs.length > 0) {
+      return badRow(row, '技「' + badTechs.join('」「') + '」は技リストにありません');
+    }
+    return row;
+  }
+
+  function badRow(row, message) {
+    row.ok = false;
+    row.error = message;
+    return row;
+  }
+
   return {
     UNASSIGNED: UNASSIGNED,
     courtOf: courtOf,
@@ -281,6 +357,7 @@ var Courts = (function() {
     nextRoundResultMessage: nextRoundResultMessage,
     isTechIncomplete: isTechIncomplete,
     stageCountText: stageCountText,
-    statusConfirmMessage: statusConfirmMessage
+    statusConfirmMessage: statusConfirmMessage,
+    parsePasteRows: parsePasteRows
   };
 })();

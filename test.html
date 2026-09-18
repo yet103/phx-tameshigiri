@@ -1771,6 +1771,64 @@
     assert('statusConfirmMessage: archived から final への復元は確定の文言にならない',
       Courts.statusConfirmMessage('archived', 'final', tcP), '最終結果に戻します。よろしいですか？');
 
+    // ---- 貼り付けによる一括登録の解析（PC 運営の「📋 貼り付けて追加」） ----
+    // 列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 の固定順。
+    var pTech = [{ name: '四方' }, { name: '水月' }];
+    function pRows(text) { return Courts.parsePasteRows(text, pTech).rows; }
+    // 1 行を「行番号|名前|コート|女子か|新人か|技/技/技|送れるか|理由」の文字列にして比べる
+    function pBrief(text) {
+      return pRows(text).map(function(r) {
+        return [r.line, r.name, r.court, r.isFemale, r.isNewFace, r.techs.join('/'), r.ok, r.error].join('|');
+      });
+    }
+
+    assert('parsePasteRows: タブ区切り（Excel）を読む',
+      pBrief('山田 太郎\tA\t男子\t新人\t四方\t水月\t'),
+      ['1|山田 太郎|A|false|true|四方/水月/|true|']);
+    assert('parsePasteRows: カンマ区切りを読む',
+      pBrief('山田 太郎,A,女子,,四方,,'),
+      ['1|山田 太郎|A|true|false|四方//|true|']);
+    assert('parsePasteRows: 1行目が「名前」で始まれば見出しとして飛ばす',
+      pBrief('名前,コート,性別,新人,技1,技2,技3\n佐藤 花子,B,女,○,,,'),
+      ['2|佐藤 花子|B|true|true|//|true|']);
+    assert('parsePasteRows: headerSkipped で見出しを飛ばしたか分かる',
+      [Courts.parsePasteRows('名前,コート\n山田,A', pTech).headerSkipped,
+       Courts.parsePasteRows('山田,A', pTech).headerSkipped], [true, false]);
+    assert('parsePasteRows: 空行は飛ばし、行番号は元の文字列のまま',
+      pBrief('\n山田,A\n\n佐藤,B'),
+      ['2|山田|A|false|false|//|true|', '4|佐藤|B|false|false|//|true|']);
+    assert('parsePasteRows: 性別は 女子/女/F を女子、それ以外は男子',
+      pRows('あ,A,女子\nい,A,女\nう,A,f\nえ,A,F\nお,A,男子\nか,A,').map(function(r) { return r.isFemale; }),
+      [true, true, true, true, false, false]);
+    assert('parsePasteRows: 新人は 新人/○/1/true',
+      pRows('あ,A,,新人\nい,A,,○\nう,A,,1\nえ,A,,true\nお,A,,\nか,A,,男子').map(function(r) { return r.isNewFace; }),
+      [true, true, true, true, false, false]);
+    assert('parsePasteRows: 技リストに無い技名は badTechs に入れて送らない',
+      pRows('山田,A,,,四方,幻の太刀,').map(function(r) { return [r.badTechs, r.ok, r.error]; }),
+      [[['幻の太刀'], false, '技「幻の太刀」は技リストにありません']]);
+    assert('parsePasteRows: 空の技は許す',
+      pRows('山田,A,,,,,').map(function(r) { return [r.badTechs, r.ok]; }), [[[], true]]);
+    assert('parsePasteRows: 技リストが無ければ技名は全部「リストに無い」',
+      Courts.parsePasteRows('山田,A,,,四方', null).rows.map(function(r) { return [r.badTechs, r.ok]; }),
+      [[['四方'], false]]);
+    assert('parsePasteRows: 名前が空なら送らない',
+      pRows(',A,,,,,').map(function(r) { return [r.ok, r.error]; }), [[false, '名前がありません']]);
+    assert('parsePasteRows: コートが空なら送らない',
+      pRows('山田').map(function(r) { return [r.ok, r.error]; }), [[false, 'コートがありません']]);
+    assert('parsePasteRows: コート名に - は使えない',
+      pRows('山田,A-1').map(function(r) { return [r.ok, r.error]; }), [[false, 'コート名「A-1」は使えません']]);
+    assert('parsePasteRows: 未分類はコート名に使えない',
+      pRows('山田,未分類').map(function(r) { return r.ok; }), [false]);
+    assert('parsePasteRows: 列が足りなくても落ちない',
+      pBrief('山田,A'), ['1|山田|A|false|false|//|true|']);
+    assert('parsePasteRows: 前後の空白は落とす',
+      pBrief(' 山田 太郎 , A , 女子 , 新人 , 四方 , , '),
+      ['1|山田 太郎|A|true|true|四方//|true|']);
+    assert('parsePasteRows: null でも落ちない',
+      Courts.parsePasteRows(null, pTech), { headerSkipped: false, rows: [] });
+    assert('parsePasteRows: 空文字は 0 行',
+      Courts.parsePasteRows('   \n  ', pTech).rows.length, 0);
+
     var h2es = document.createElement('h2');
     h2es.textContent = 'status.js';
     results.appendChild(h2es);
