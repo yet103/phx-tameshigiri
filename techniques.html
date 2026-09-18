@@ -9,6 +9,9 @@
   <style>
     .tech-target { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
     .tech-target select { min-height: 44px; padding: 0 8px; max-width: 100%; }
+    .tech-head { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .tech-title { margin: 0; margin-right: auto; font-size: 18px; }
+    .tech-scroll { overflow-x: auto; }
     .tech-note, .tech-warn {
       margin: 0 0 12px; padding: 8px 10px; border-radius: 6px;
       font-size: 13px; line-height: 1.5; background: var(--card-bg);
@@ -46,33 +49,11 @@
       <select id="targetSelect">
         <option value="">雛形（新規大会の初期値）</option>
       </select>
+      <button class="theme-btn" id="btnTheme" style="margin-left:auto;">🌙 ダーク</button>
     </div>
 
-    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
-      <h2 id="targetTitle" style="margin:0;">技術リスト</h2>
-      <button id="btnCopyFrom" class="btn-neutral" style="margin-left:auto;">別の大会からコピー</button>
-      <button id="btnSaveTech" class="btn-neutral">保存</button>
-      <button id="btnResetTech" class="btn-fail">デフォルト設定に戻す</button>
-      <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
-    </div>
-
-    <p class="tech-note" id="sourceNote" hidden></p>
-    <p class="tech-warn" id="scoredWarn" hidden></p>
-
-    <div style="overflow-x:auto;">
-      <table class="tech-table" id="techTable">
-        <thead>
-          <tr>
-            <th>技名</th>
-            <th>初太刀</th>
-            <th>二ノ太刀</th>
-            <th>三ノ太刀</th>
-            <th>四ノ太刀</th>
-          </tr>
-        </thead>
-        <tbody id="techTableBody"></tbody>
-      </table>
-    </div>
+    <!-- 見出し・ボタン・注記・表は techedit.js（TechEdit.mount）が作る -->
+    <div id="techEditor"></div>
   </div>
 
   <script src="data.js"></script>
@@ -80,158 +61,28 @@
   <script src="api.js"></script>
   <script src="storage.js"></script>
   <script src="courts.js"></script>
+  <script src="techedit.js"></script>
   <script>
     // 配点は大会ごと（大会 JSON の techniques）。この画面は
     //   対象 = ''        → 雛形（POST/DELETE /api/techniques）
     //   対象 = 大会ID    → その大会（PUT/DELETE /api/events/:id/techniques）
     // を切り替えて編集する。ハッシュ #<大会ID> で開くとその大会が選ばれる。
-    var body = document.body;
-    var techTableBody = document.getElementById('techTableBody');
+    // 表の描画・保存・コピーは techedit.js（PC 運営の「技と配点」と共通）。
+    // この画面が持つのは「対象の選択」「ハッシュ」「テーマ」だけ。
     var targetSelect = document.getElementById('targetSelect');
-    var targetTitle = document.getElementById('targetTitle');
-    var sourceNote = document.getElementById('sourceNote');
-    var scoredWarn = document.getElementById('scoredWarn');
-    var btnSave = document.getElementById('btnSaveTech');
-    var btnReset = document.getElementById('btnResetTech');
-    var btnCopy = document.getElementById('btnCopyFrom');
+    var editor = document.getElementById('techEditor');
 
     var targetId = '';      // '' なら雛形
     var eventsCache = [];   // Api.listEvents() の結果（更新日の新しい順）
-    var dirty = false;      // 表を触ったか（対象を切り替えるときの確認に使う）
-
-    // 対象切り替えの再入ガード。app.js の loadSeq と同じ考え方。
-    // loadTarget は途中に await を複数持つ。対象を素早く切り替えると古い応答が
-    // 後から戻ってきて、見出し・ハッシュ・targetId は新しい対象のまま表だけ古い
-    // 対象のものに入れ替わる（この状態で保存すると新しい対象に古い配点を書く）。
-    var loadTargetSeq = 0;
+    var handle = null;      // TechEdit.mount の戻り値
 
     function applyTheme(theme) {
-      body.setAttribute('data-theme', theme);
+      document.body.setAttribute('data-theme', theme);
       document.getElementById('btnTheme').textContent = theme === 'dark' ? '☀ ライト' : '🌙 ダーク';
-    }
-
-    function renderTable(techs) {
-      techTableBody.innerHTML = '';
-      techs.forEach(function(t, i) {
-        var tr = document.createElement('tr');
-        tr.innerHTML =
-          '<td><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
-          [0,1,2,3].map(function(s) {
-            var v = t.strikes[s] !== null && t.strikes[s] !== undefined ? Storage.esc(String(t.strikes[s])) : '';
-            return '<td><input type="number" min="0" max="99" value="' + v +
-              '" data-field="strike" data-idx="' + i + '" data-strike="' + s + '"></td>';
-          }).join('');
-        techTableBody.appendChild(tr);
-      });
-      dirty = false;
-    }
-
-    function collectTechs() {
-      var techs = [];
-      var rows = techTableBody.querySelectorAll('tr');
-      rows.forEach(function(tr) {
-        var name = tr.querySelector('[data-field="name"]').value.trim();
-        var strikes = [0,1,2,3].map(function(s) {
-          var v = tr.querySelector('[data-strike="' + s + '"]').value;
-          if (v === '') return null;
-          var n = parseInt(v, 10);
-          return isNaN(n) ? null : n;
-        });
-        techs.push({ name: name, strikes: strikes });
-      });
-      return techs;
     }
 
     function eventById(id) {
       return eventsCache.filter(function(e) { return e.id === id; })[0] || null;
-    }
-
-    // 見出し・注記・ボタンの文言を対象に合わせる
-    function updateChrome(source) {
-      if (!targetId) {
-        targetTitle.textContent = '雛形（新規大会の初期値）';
-        btnReset.textContent = 'デフォルト設定に戻す';
-        btnCopy.style.display = 'none';   // 雛形には「別の大会からコピー」を出さない
-        sourceNote.hidden = false;
-        sourceNote.textContent =
-          'ここで保存した内容は、これから作る大会の初期値になります。既に技リストを持つ大会の配点は変わりません。';
-        scoredWarn.hidden = true;
-        return;
-      }
-      var ev = eventById(targetId);
-      // 大会一覧が取れていない（Api.listEvents() 失敗）ときは eventsCache に無く名前が
-      // 分からない。空欄より ID を出すほうが「今どの対象を触っているか」を誤認しない。
-      var label = ev ? (ev.name || '(名称未設定)') : targetId;
-      targetTitle.textContent = label + ' の技リスト';
-      btnReset.textContent = '雛形に戻す';
-      btnCopy.style.display = '';
-      if (source === 'template') {
-        sourceNote.hidden = false;
-        sourceNote.textContent =
-          'この大会はまだ雛形を使っています。保存するとこの大会だけの技リストになります。';
-      } else {
-        sourceNote.hidden = true;
-        sourceNote.textContent = '';
-      }
-    }
-
-    function updateScoredWarning(players) {
-      var n = (players || []).filter(function(p) { return Courts.isScored(p); }).length;
-      if (n === 0) { scoredWarn.hidden = true; scoredWarn.textContent = ''; return; }
-      scoredWarn.hidden = false;
-      scoredWarn.textContent = '採点済みの選手が ' + n + ' 名います。' +
-        '配点を変えても保存済みの得点は変わりません（採点し直すと新しい配点で計算されます）。';
-    }
-
-    // 通信に失敗したときは端末側の既定値を出し、保存・雛形に戻す・コピーを無効にする
-    // （この状態で保存すると、サーバーの技術リストを既定値で上書きしてしまう。
-    //  雛形に戻す・コピーもサーバーの現在値を前提にした操作なので同様に止める）。
-    function fallbackToLocal(message) {
-      alert(message);
-      renderTable(TECHNIQUES);
-      btnSave.disabled = true;
-      btnReset.disabled = true;
-      btnCopy.disabled = true;
-    }
-
-    async function loadTarget(id) {
-      var seq = ++loadTargetSeq;
-      targetId = id;
-      btnSave.disabled = false;
-      btnReset.disabled = false;
-      btnCopy.disabled = false;
-      location.hash = id ? '#' + encodeURIComponent(id) : '';
-      // 対象を切り替えた直後に前の対象の採点済み警告を残さない。
-      // updateChrome は保存・雛形に戻すの直後にも呼ばれる（対象は変わらない）ので、
-      // そちらでは隠さない。ここで隠した分は、この下で updateScoredWarning が出し直す。
-      scoredWarn.hidden = true;
-      if (!id) {
-        updateChrome('');
-        var td = await Api.loadTechniques();
-        if (seq !== loadTargetSeq) return;   // 待っている間に対象を切り替えられた
-        if (!td) {
-          fallbackToLocal('技術リストをサーバーから取得できませんでした。\n' +
-            '端末側の既定値を表示しています。\n' +
-            '保存・雛形に戻す・別の大会からコピーを無効にしました。再読み込みしてください。');
-          return;
-        }
-        renderTable(td.techniques);
-        return;
-      }
-      var data = await Api.loadEventTechniques(id);
-      if (seq !== loadTargetSeq) return;   // 待っている間に対象を切り替えられた
-      if (!data) {
-        updateChrome('');
-        fallbackToLocal('この大会の技リストを取得できませんでした。\n' +
-          '端末側の既定値を表示しています。\n' +
-          '保存・雛形に戻す・別の大会からコピーを無効にしました。再読み込みしてください。');
-        return;
-      }
-      updateChrome(data.source);
-      renderTable(data.techniques);
-      var ev = await Api.loadEvent(id);
-      if (seq !== loadTargetSeq) return;   // 待っている間に対象を切り替えられた
-      updateScoredWarning(ev ? ev.players : []);
     }
 
     function fillTargetSelect() {
@@ -257,61 +108,24 @@
       targetSelect.value = targetId;
     }
 
-    // 「別の大会からコピー」のシート。admin.css を読まないページなので、
-    // 最小限の要素をその場で組み立てて捨てる。
-    function openCopySheet() {
-      var others = eventsCache.filter(function(e) { return e.id !== targetId; });
-      if (others.length === 0) { alert('コピーできる大会がありません。'); return; }
-      var overlay = document.createElement('div');
-      overlay.className = 'tech-overlay';
-      var panel = document.createElement('div');
-      panel.className = 'tech-sheet';
-      var h = document.createElement('h3');
-      h.textContent = 'どの大会の技リストをコピーしますか？（保存するまでサーバーには書きません）';
-      panel.appendChild(h);
-
-      function close() {
-        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      }
-
-      others.forEach(function(ev) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'tech-sheet-item btn-neutral';
-        b.textContent = (ev.name || '(名称未設定)') + '（' + (ev.date || '日付なし') + '）';
-        b.addEventListener('click', async function() {
-          close();
-          // コピー元の応答を待つ間に対象そのものを切り替えられていたら、
-          // 戻ってきた表を今の対象（別の大会かもしれない）に流し込まない。
-          var seq = loadTargetSeq;
-          var data = await Api.loadEventTechniques(ev.id);
-          if (seq !== loadTargetSeq) return;
-          if (!data) { alert('その大会の技リストを取得できませんでした。'); return; }
-          renderTable(data.techniques);
-          dirty = true;
-          alert('「' + (ev.name || '(名称未設定)') + '」の技リストを読み込みました。\n' +
-                '保存を押すまでこの大会には反映されません。');
-        });
-        panel.appendChild(b);
+    // 対象を切り替える。前の TechEdit は destroy してから新しく mount する
+    // （古い応答で表が入れ替わらないようにする）。
+    function mountTarget(id) {
+      if (handle) handle.destroy();
+      targetId = id;
+      location.hash = id ? '#' + encodeURIComponent(id) : '';
+      var ev = eventById(id);
+      handle = TechEdit.mount(editor, id, {
+        events: eventsCache,
+        title: ev ? (ev.name || '(名称未設定)') : id
       });
-
-      var cancel = document.createElement('button');
-      cancel.type = 'button';
-      cancel.className = 'tech-sheet-item';
-      cancel.textContent = '閉じる';
-      cancel.addEventListener('click', close);
-      panel.appendChild(cancel);
-
-      overlay.appendChild(panel);
-      overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
-      document.body.appendChild(overlay);
     }
 
     (async function() {
       applyTheme(Storage.loadTheme());
 
       var list = await Api.listEvents();
-      var listFailed = (list === null);   // null＝取得失敗、[]＝大会0件。区別する（Api.listEvents の戻り値規約）
+      var listFailed = (list === null);   // null＝取得失敗、[]＝大会0件（Api.listEvents の戻り値規約）
       eventsCache = Array.isArray(list) ? list : [];
       // 更新日の新しい順
       eventsCache.sort(function(a, b) {
@@ -325,75 +139,20 @@
       // 一覧が取れているのに載っていない ID だけ捨てる。一覧の取得自体に失敗したときは
       // eventsCache が空になるだけで「その大会が無い」わけではないので、ハッシュの ID を
       // そのまま使う（GET /api/events/:id/techniques は一覧に依存しない）。
-      if (!listFailed && hashId && !eventsCache.filter(function(e) { return e.id === hashId; })[0]) hashId = '';
+      if (!listFailed && hashId && !eventById(hashId)) hashId = '';
       targetId = hashId;
       fillTargetSelect();
       if (listFailed) alert('大会一覧を取得できませんでした。');
-      await loadTarget(targetId);
+      mountTarget(targetId);
 
-      techTableBody.addEventListener('input', function() { dirty = true; });
-
-      targetSelect.addEventListener('change', async function() {
+      targetSelect.addEventListener('change', function() {
         var next = targetSelect.value;
-        if (dirty && !confirm('編集中の内容は保存されていません。\n破棄して切り替えますか？')) {
+        if (handle && handle.isDirty() &&
+            !confirm('編集中の内容は保存されていません。\n破棄して切り替えますか？')) {
           targetSelect.value = targetId;
           return;
         }
-        await loadTarget(next);
-      });
-
-      btnCopy.addEventListener('click', openCopySheet);
-
-      btnSave.addEventListener('click', async function() {
-        var techs = collectTechs();
-        if (!targetId) {
-          var r0 = await Api.saveTechniques(techs);
-          if (!r0) { alert('保存に失敗しました。通信を確認してください。'); return; }
-          if (!r0.success) { alert(r0.error || '保存に失敗しました。'); return; }
-          dirty = false;
-          alert('雛形を保存しました。\nこれから作る大会の初期値になります。');
-          return;
-        }
-        var r = await Api.saveEventTechniques(targetId, techs);
-        if (!r) { alert('保存に失敗しました。通信を確認してください。'); return; }
-        if (!r.success) { alert(r.error || '保存に失敗しました。'); return; }
-        dirty = false;
-        renderTable(r.techniques);
-        updateChrome('event');
-        alert('保存しました。');
-      });
-
-      btnReset.addEventListener('click', async function() {
-        if (!targetId) {
-          if (!confirm('デフォルト設定に戻します。よろしいですか？')) return;
-          var ok = await Api.resetTechniques();
-          if (!ok) { alert('リセットに失敗しました。'); return; }
-          // リセット自体は成功しているので、再取得に失敗しても表は出す。
-          // ただしその場合に表示できるのは端末側の既定値であって、
-          // サーバーが実際に採点で使う値ではない。黙って同じ顔をさせない。
-          var td = await Api.loadTechniques();
-          if (td) {
-            renderTable(td.techniques);
-            alert('デフォルトに戻しました。');
-          } else {
-            renderTable(TECHNIQUES);
-            alert('デフォルトに戻しました。\n' +
-                  'ただし最新の技術リストを取得できなかったため、\n' +
-                  'この画面には端末側の既定値を表示しています。');
-          }
-          return;
-        }
-        if (!confirm('この大会の技リストを雛形（新規大会の初期値）で置き換えます。\nよろしいですか？')) return;
-        var okEv = await Api.resetEventTechniques(targetId);
-        if (!okEv) { alert('リセットに失敗しました。'); return; }
-        var data = await Api.loadEventTechniques(targetId);
-        if (!data) {
-          alert('雛形に戻しました。\nただし最新の技リストを取得できませんでした。再読み込みしてください。');
-          return;
-        }
-        renderTable(data.techniques);
-        updateChrome(data.source);
-        alert('雛形に戻しました。');
+        mountTarget(next);
       });
 
       document.getElementById('btnTheme').addEventListener('click', function() {
