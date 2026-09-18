@@ -624,7 +624,7 @@ var App = (function() {
       var tdEmpty = document.createElement('td');
       tdEmpty.colSpan = 7;
       tdEmpty.className = 'score-empty';
-      tdEmpty.textContent = '技が未入力です。運営画面の進行タブで技を入力してください。';
+      tdEmpty.textContent = '技が未入力です。運営画面の試合進行で技を入力してください。';
       trEmpty.appendChild(tdEmpty);
       scoreTableBody.appendChild(trEmpty);
       setTotalDisplay(player.score || 0);
@@ -1192,7 +1192,7 @@ var App = (function() {
   function guardRowAction() {
     if (!currentEvent) { alert('大会が選択されていません。'); return null; }
     if (!hasScoreRows()) {
-      alert('技が未入力のため採点できません。運営画面の進行タブで技を入力してください。');
+      alert('技が未入力のため採点できません。運営画面の試合進行で技を入力してください。');
       return null;
     }
     // 行があれば renderScoreGrid が必ず1行目を選ぶので、いまは到達しない。
