@@ -138,6 +138,13 @@
     assert('bulk rows: 技リストに無い技名は行番号つきの 400',
       brBadTech && brBadTech.error, '2 行目: 技「ありえない技」は技リストにありません');
 
+    // Object.prototype のキー（toString など）を技名として素通ししない（computeRanking と同じ理由）
+    var brProtoTech = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '行 原子郎', court: 'A', tech1: 'toString' }]
+    });
+    assert('bulk rows: 技名が toString でも技リストに無ければ 400',
+      brProtoTech && brProtoTech.error, '1 行目: 技「toString」は技リストにありません');
+
     var brNoName = await Api.createPlayersBulk(brEvent.id, {
       rows: [{ name: '行 六郎', court: 'A' }, { name: '  ', court: 'A' }]
     });
@@ -1811,6 +1818,9 @@
     assert('parsePasteRows: 技リストが無ければ技名は全部「リストに無い」',
       Courts.parsePasteRows('山田,A,,,四方', null).rows.map(function(r) { return [r.badTechs, r.ok]; }),
       [[['四方'], false]]);
+    assert('parsePasteRows: 技名が Object.prototype のキー（toString）でも技リストに無ければ断る',
+      pRows('山田,A,,,toString').map(function(r) { return [r.badTechs, r.ok]; }),
+      [[['toString'], false]]);
     assert('parsePasteRows: 名前が空なら送らない',
       pRows(',A,,,,,').map(function(r) { return [r.ok, r.error]; }), [[false, '名前がありません']]);
     assert('parsePasteRows: コートが空なら送らない',

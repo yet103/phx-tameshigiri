@@ -339,7 +339,7 @@ var Courts = (function() {
   //   error      送れない理由（ok が true なら ''）
   // } ] }
   function parsePasteRows(text, techniques) {
-    var known = {};
+    var known = Object.create(null);   // 技名が 'toString' などでも壊れないように（computeRanking と同じ）
     (techniques || []).forEach(function(t) {
       var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
       if (n) known[n] = true;

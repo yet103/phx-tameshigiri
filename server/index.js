@@ -811,7 +811,7 @@ function bulkFromRows(req, res, rows) {
   if (rejectIfLocked(res, event)) return;
   if (!Array.isArray(event.players)) event.players = [];
 
-  const known = {};
+  const known = Object.create(null);   // 技名が 'toString' などでも壊れないように（computeRanking と同じ）
   effectiveTechniques(event).forEach(t => {
     const n = (t && typeof t.name === 'string') ? t.name.trim() : '';
     if (n) known[n] = true;
