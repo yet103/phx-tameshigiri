@@ -184,6 +184,14 @@ a { color: var(--accent); }
 /* 取り込めない行。--btn-fail はダークで読みにくいので文字色は --cell-fail-text を使う */
 .desk-paste-line.bad, .desk-paste-bad { color: var(--cell-fail-text); }
 .desk-paste-bad { font-weight: bold; }
+/* 上のセレクトから補ったコート（貼った値と区別する） */
+.desk-paste-filled { color: var(--text-muted); font-style: italic; }
+/* 「コートが空の行に使うコート」の行 */
+.desk-paste-court { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; }
+.desk-paste-court select {
+  min-height: 30px; padding: 2px 6px; border-radius: 3px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+}
 
 /* ===== 行の ⋯ メニュー ===== */
 .desk-menu { position: relative; display: inline-block; }

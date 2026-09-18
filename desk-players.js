@@ -740,9 +740,17 @@
     var div = document.createElement('div');
     div.className = 'desk-paste-line' + (row.ok ? '' : ' bad');
     var head = document.createElement('span');
-    head.textContent = row.line + ': ' + row.name + '　' + row.court + '　' +
-      (row.isFemale ? '女子' : '男子') + (row.isNewFace ? '　新人' : '') + '　';
+    head.textContent = row.line + ': ' + row.name + '　';
     div.appendChild(head);
+    // 補ったコートだけ薄く出す（貼った値と区別する）。取り込めない行は行ごと赤いので、
+    // その行では赤より薄い色が勝つが、断る理由は行末に出るので紛れない。
+    var court = document.createElement('span');
+    court.textContent = row.court || '—';
+    if (row.courtFilled) court.className = 'desk-paste-filled';
+    div.appendChild(court);
+    var mid = document.createElement('span');
+    mid.textContent = '　' + (row.isFemale ? '女子' : '男子') + (row.isNewFace ? '　新人' : '') + '　';
+    div.appendChild(mid);
     row.techs.forEach(function(t, i) {
       var span = document.createElement('span');
       span.textContent = (i > 0 ? '・' : '') + (t || '—');
@@ -765,13 +773,32 @@
     note.textContent = 'Excel の範囲をそのまま貼り付けられます。列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 の順' +
       '（タブ区切りかカンマ区切り）。1 行目が「名前」で始まるときは見出しとして読み飛ばします。' +
       '性別は「女子」「女」「F」が女子、それ以外は男子。新人は「新人」「○」「1」「true」。' +
-      '技はこの大会の技リストにある名前だけです。';
+      '技はこの大会の技リストにある名前だけです。' +
+      '名前だけの行でも登録できます（足りない列は 男子・新人なし・技は空。コートは下のセレクトの値）。';
     body.appendChild(note);
+
+    // 「コートが空の行に使うコート」。既存コート（未分類は除く）＋「新しいコート…」。
+    // 初期値は既存コートの先頭。大会にコートがまだ無ければ空（コート列が空の行は赤くなる）。
+    var courtRow = document.createElement('p');
+    courtRow.className = 'desk-paste-court';
+    var courtLabel = document.createElement('label');
+    courtLabel.textContent = 'コートが空の行に使うコート';
+    var selDefault = document.createElement('select');
+    selDefault.setAttribute('aria-label', 'コートが空の行に使うコート');
+    var courtList = Courts.listFrom(ctx.players).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    addOption(selDefault, '', '（指定しない）');
+    courtList.forEach(function(c) { addOption(selDefault, c, c); });
+    addOption(selDefault, NEW_COURT, '新しいコート…');
+    selDefault.value = courtList[0] || '';
+    var lastDefault = selDefault.value;
+    courtLabel.appendChild(selDefault);
+    courtRow.appendChild(courtLabel);
+    body.appendChild(courtRow);
 
     var ta = document.createElement('textarea');
     ta.className = 'desk-paste';
     ta.setAttribute('aria-label', '貼り付ける選手の一覧');
-    ta.placeholder = '山田 太郎\tA\t男子\t新人\t…\n佐藤 花子\tA\t女子\t\t…';
+    ta.placeholder = '山田 太郎\n佐藤 花子\tA\t女子\t\t…';
     body.appendChild(ta);
 
     var summary = document.createElement('p');
@@ -791,8 +818,13 @@
     var okRows = [];
     var ngCount = 0;
 
+    // 「新しいコート…」が選ばれたままの値をそのまま既定コートにしない
+    function defaultCourt() {
+      return selDefault.value === NEW_COURT ? '' : selDefault.value;
+    }
+
     function update() {
-      var parsed = Courts.parsePasteRows(ta.value, ctx.techniques || []);
+      var parsed = Courts.parsePasteRows(ta.value, ctx.techniques || [], { court: defaultCourt() });
       okRows = parsed.rows.filter(function(r) { return r.ok; });
       ngCount = parsed.rows.length - okRows.length;
       summary.textContent = okRows.length + ' 人を登録します' +
@@ -802,6 +834,15 @@
       parsed.rows.forEach(function(r) { preview.appendChild(pasteLine(r)); });
       btnAdd.disabled = okRows.length === 0;
     }
+    selDefault.addEventListener('change', function() {
+      if (selDefault.value === NEW_COURT) {
+        var name = askCourtName();
+        if (!name) { selDefault.value = lastDefault; update(); return; }
+        insertCourtOption(selDefault, name);   // 「新しいコート…」の手前に足して選ぶ
+      }
+      lastDefault = selDefault.value;
+      update();
+    });
     ta.addEventListener('input', update);
     update();
     ta.focus();
