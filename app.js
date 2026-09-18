@@ -747,6 +747,9 @@ var App = (function() {
   // （大会から離れるとき。表示中の選手を残すとボードが映し続けてしまう）。
   function publishLive(clear) {
     if (!currentEvent) return;
+    // 採点できない状態（準備中・終了・確定済みなど）では配信しない。
+    // ただし大会を離れるときの clear は通す（映したままにしないため）。
+    if (!clear && !scoringOpen()) return;
     var shown = visiblePlayers[currentIndex] || null;
     var p = clear ? null : shown;
     // 宛先は今映しているコート。全コート表示（currentCourt が空）のときは今の選手から導く。
