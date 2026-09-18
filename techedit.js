@@ -151,6 +151,9 @@ var TechEdit = (function() {
     }
 
     function updateScoredWarning(players) {
+      // readOnly（確定済み）では配点自体を編集できないので、
+      // 「配点を変えても…」という編集向けの注意書きは出さない。
+      if (readOnly) { warn.hidden = true; warn.textContent = ''; return; }
       var n = (players || []).filter(function(p) { return Courts.isScored(p); }).length;
       if (n === 0) { warn.hidden = true; warn.textContent = ''; return; }
       warn.hidden = false;
