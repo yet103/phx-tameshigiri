@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>試し斬り PC 運営</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="desk.css">
+</head>
+<body data-theme="light">
+
+  <header class="desk-top">
+    <span class="desk-title" id="deskTitle">試し斬り 運営</span>
+    <button id="btnTheme" class="desk-icon-btn" aria-label="テーマ切り替え">🌙</button>
+    <button id="btnMobile" class="desk-icon-btn" aria-label="スマホ運営に切り替える" title="スマホ運営に切り替える">📱</button>
+  </header>
+
+  <!-- 1024px 未満でだけ出す案内（desk.css のメディアクエリ） -->
+  <div class="desk-narrow" id="deskNarrow">
+    <p>この画面は幅 1024px 以上の PC 向けです。スマホでは運営画面のスマホ版をお使いください。</p>
+    <button type="button" class="desk-btn primary" id="btnNarrowSwitch">スマホ運営（admin.html）に切り替える</button>
+  </div>
+
+  <div class="desk-head" id="deskHead" hidden></div>
+
+  <div class="desk-body">
+    <nav class="desk-nav" id="deskNav"></nav>
+    <main class="desk-main" id="deskMain"></main>
+  </div>
+
+  <div id="deskToast" class="desk-toast" hidden></div>
+
+  <script src="api.js"></script>
+  <script src="storage.js"></script>
+  <script src="courts.js"></script>
+  <script src="status.js"></script>
+  <script src="desk.js"></script>
+
+</body>
+</html>

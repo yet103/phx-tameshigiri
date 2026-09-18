@@ -1,0 +1,198 @@
+/* PC 運営画面（desk.html）専用のスタイル。幅 1024px 以上を前提に組む。
+   style.css / admin.css は読み込まない（採点画面・スマホ運営のレイアウトを持ち込まない）。
+   色は theme.css の変数だけを使う。1280px で横スクロールを作らないこと。
+   このファイルは計画2の Task 4 で書き切る。以降のタスクでは編集しない
+   （区画ごとに CSS を足すと並行作業で衝突するため。足りない見た目が出たら
+    計画の Task 4 の節に追記してからまとめて直す）。 */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button { font-family: inherit; font-size: 14px; cursor: pointer; border: none; border-radius: 4px; }
+input[type="text"], input[type="date"], input[type="number"], select, textarea {
+  font-family: inherit; font-size: 14px; min-height: 34px; padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--text);
+}
+a { color: var(--accent); }
+
+/* ===== 上部バー ===== */
+.desk-top {
+  display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 8px 0 16px;
+  background: var(--band-bg); color: var(--band-text);
+}
+.desk-title { flex: 1; font-family: var(--mincho); font-size: 18px; font-weight: 700; color: var(--gold-light); }
+.desk-icon-btn { width: 36px; height: 36px; font-size: 18px; background: transparent; color: var(--band-text); }
+.desk-icon-btn:hover { background: var(--band-bg-2); }
+
+/* ===== 大会の見出しと段階表示 ===== */
+.desk-head { padding: 10px 16px; background: var(--bg-header); border-bottom: 1px solid var(--border); }
+.desk-head-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.desk-head-name { font-size: 18px; font-weight: bold; }
+.desk-head-meta { color: var(--text-muted); font-size: 13px; }
+.desk-stage { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.desk-stage-steps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.desk-stage-step { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+.desk-stage-step.done { color: var(--text); }
+.desk-stage-step.on { color: var(--accent); font-weight: bold; font-size: 14px; }
+.desk-stage-sep { color: var(--text-muted); }
+.desk-stage-archived {
+  padding: 1px 8px; border-radius: 10px; font-size: 12px;
+  border: 1px solid var(--warn); color: var(--warn);
+}
+.desk-stage-count { font-size: 13px; color: var(--text-muted); }
+.desk-stage-actions { margin-left: auto; display: flex; gap: 8px; }
+
+/* ===== ボタン ===== */
+.desk-btn {
+  min-height: 34px; padding: 0 14px;
+  background: var(--bg-secondary); color: var(--text); border: 1px solid var(--border);
+}
+.desk-btn:hover:not(:disabled) { border-color: var(--accent); }
+.desk-btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
+.desk-btn.danger { background: var(--btn-fail); color: #fff; border-color: var(--btn-fail); }
+.desk-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ===== 本体（左の区画ナビ＋本文） ===== */
+.desk-body { display: grid; grid-template-columns: 180px 1fr; align-items: start; min-height: calc(100vh - 48px); }
+.desk-nav {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 8px;
+  border-right: 1px solid var(--border); background: var(--bg-secondary);
+  position: sticky; top: 0;
+}
+.desk-nav button {
+  text-align: left; min-height: 40px; padding: 0 12px; border-radius: 0;
+  background: transparent; color: var(--text); border-left: 3px solid transparent;
+}
+.desk-nav button:hover:not(:disabled) { background: var(--card-bg); }
+.desk-nav button.on { background: var(--card-bg); color: var(--accent); font-weight: bold; border-left-color: var(--accent); }
+.desk-nav button:disabled { opacity: .45; cursor: not-allowed; }
+.desk-nav-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+.desk-main { padding: 16px 20px 40px; min-width: 0; }
+
+/* ===== 見出し・注記 ===== */
+.desk-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.desk-section-head h2 { font-size: 16px; }
+.desk-section-head .spacer { flex: 1; }
+.desk-empty { color: var(--text-muted); padding: 20px 0; }
+.desk-note, .desk-warn { padding: 8px 10px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; background: var(--card-bg); }
+.desk-note { border: 1px solid var(--border); color: var(--text-muted); }
+.desk-warn { border: 1px solid var(--warn); color: var(--warn); }
+
+/* ===== 表 ===== */
+.desk-table { border-collapse: collapse; width: 100%; background: var(--card-bg); }
+.desk-table th, .desk-table td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; white-space: nowrap; }
+.desk-table th { background: var(--bg-header); font-size: 13px; }
+.desk-table td.num { text-align: right; }
+.desk-table td.act { text-align: center; width: 48px; }
+.desk-table tbody tr:hover { background: var(--row-selected); }
+.desk-cell-main { font-weight: bold; }
+.desk-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-muted);
+}
+.desk-badge.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+
+/* ===== 行の ⋯ メニュー ===== */
+.desk-menu { position: relative; display: inline-block; }
+.desk-menu > summary {
+  list-style: none; cursor: pointer; width: 32px; height: 32px; line-height: 32px;
+  text-align: center; border-radius: 4px; background: var(--bg-secondary); color: var(--text);
+}
+.desk-menu > summary::-webkit-details-marker { display: none; }
+.desk-menu-body {
+  position: absolute; right: 0; top: 34px; z-index: 20;
+  display: flex; flex-direction: column; min-width: 190px; padding: 4px;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+}
+.desk-menu-body button {
+  text-align: left; min-height: 36px; padding: 0 10px; white-space: nowrap;
+  background: transparent; color: var(--text);
+}
+.desk-menu-body button:hover:not(:disabled) { background: var(--bg-secondary); }
+.desk-menu-body button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* アーカイブ済みの折りたたみ（大会一覧） */
+.desk-archived > summary {
+  list-style: none; cursor: pointer; margin-top: 16px; padding: 8px 0;
+  color: var(--text-muted); font-size: 13px;
+}
+.desk-archived > summary::-webkit-details-marker { display: none; }
+
+/* ===== フォーム ===== */
+.desk-form { display: grid; grid-template-columns: 120px 340px; gap: 10px 12px; align-items: center; margin-bottom: 16px; }
+.desk-form label { color: var(--text-muted); }
+.desk-form input, .desk-form select { width: 100%; }
+.desk-form-actions { grid-column: 2; display: flex; gap: 8px; }
+.desk-check { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; }
+
+/* ===== ダイアログ ===== */
+.desk-dialog-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+.desk-dialog {
+  display: flex; flex-direction: column; width: 480px; max-width: 92vw; max-height: 86vh;
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.desk-dialog-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: bold; }
+.desk-dialog-head .spacer { flex: 1; }
+.desk-dialog-close { width: 32px; height: 32px; font-size: 16px; background: transparent; color: var(--text); }
+.desk-dialog-body { padding: 16px; overflow: auto; }
+.desk-dialog-body .desk-form { grid-template-columns: 100px 1fr; margin-bottom: 0; }
+.desk-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+
+/* ===== トースト ===== */
+.desk-toast {
+  position: fixed; right: 20px; bottom: 20px; z-index: 60;
+  padding: 10px 16px; border-radius: 6px; font-weight: bold;
+  background: var(--accent); color: var(--accent-text);
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+
+/* ===== 技と配点（techedit.js が作る。class 名は techniques.html と同じ） ===== */
+.tech-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.tech-title { font-size: 16px; margin-right: auto; }
+.tech-note, .tech-warn { padding: 8px 10px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; background: var(--card-bg); }
+.tech-note { border: 1px solid var(--border); color: var(--text-muted); }
+.tech-warn { border: 1px solid var(--warn); color: var(--warn); }
+.tech-scroll { overflow-x: auto; }
+.tech-table { border-collapse: collapse; width: 100%; background: var(--card-bg); }
+.tech-table th, .tech-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; }
+.tech-table th { background: var(--bg-header); font-size: 13px; }
+.tech-table td:first-child { text-align: left; }
+.tech-table input[type="text"], .tech-table input[type="number"] { width: 70px; min-height: 28px; text-align: center; }
+.tech-table td:first-child input[type="text"] { width: 180px; }
+.btn-neutral { min-height: 34px; padding: 0 14px; background: var(--btn-neutral); color: #fff; }
+.btn-fail { min-height: 34px; padding: 0 14px; background: var(--btn-fail); color: #fff; }
+.btn-neutral:disabled, .btn-fail:disabled { opacity: .5; cursor: not-allowed; }
+.tech-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.tech-sheet {
+  width: 480px; max-width: 92vw; max-height: 70vh; overflow-y: auto; padding: 16px;
+  background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+}
+.tech-sheet h3 { margin: 0 0 10px; font-size: 15px; }
+.tech-sheet-item {
+  display: block; width: 100%; min-height: 44px; text-align: left; padding: 0 12px; margin-bottom: 8px;
+  background: var(--bg-secondary); color: var(--text);
+}
+
+/* ===== 狭い幅（スマホ運営への案内） ===== */
+.desk-narrow { display: none; }
+@media (max-width: 1023px) {
+  .desk-narrow {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+    margin: 16px; padding: 16px; border: 1px solid var(--warn); border-radius: 6px;
+    background: var(--card-bg); color: var(--warn);
+  }
+  .desk-head, .desk-body { display: none; }
+}
