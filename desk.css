@@ -110,17 +110,9 @@ a { color: var(--accent); }
 .desk-badge.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
 
 /* ===== 選手の表（desk-players.js） ===== */
-/* 帯は PC 幅なので 1 段（スマホの選手タブは 3 段）。右端に名前の検索。 */
-.desk-players-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-.desk-players-chips { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.desk-chip-group { display: inline-flex; gap: 4px; }
-.desk-chip {
-  min-height: 28px; padding: 0 10px; font-size: 13px;
-  background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border);
-}
-.desk-chip:hover { border-color: var(--accent); color: var(--text); }
-.desk-chip.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
-.desk-players-search { width: 200px; margin-left: auto; }
+/* 絞り込みは見出しの ▼ に寄せたので、表の上の帯は件数と「絞り込みを解除」だけ。 */
+.desk-players-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; min-height: 30px; }
+.desk-players-count { font-size: 13px; color: var(--text-muted); }
 
 /* 1280px では横スクロールしない幅に収める。窓が狭いときだけ表の枠が横に流れ、
    名前の列は左に固定して誰の行か分かるようにする（採点表の固定列と同じ手法）。
@@ -172,6 +164,36 @@ a { color: var(--accent); }
 .sort-btn { background: transparent; color: inherit; font-size: 13px; font-weight: bold; padding: 2px 4px; }
 .sort-btn:hover { color: var(--accent); }
 .sort-btn.on { color: var(--accent); }
+
+/* ===== 見出しの ▼ のフィルタ（desk-players.js） ===== */
+/* ▼ は見出しの文字の右に小さく。押しても並べ替えは起きない（JS 側で stopPropagation）。 */
+.filter-btn { background: transparent; color: var(--text-muted); font-size: 11px; padding: 0 2px; line-height: 1; }
+.filter-btn:hover { color: var(--accent); }
+.filter-btn.on { color: var(--accent); font-weight: bold; }
+/* 絞り込み中の列は見出しの背景を薄く色付ける。
+   .desk-players-table th.col-name（左に固定する名前列）と同じ詳細度なので、必ずその後ろに置く。 */
+.desk-players-table th.filtered, .desk-players-table th.col-name.filtered { background: var(--row-selected); }
+/* ポップオーバーは document.body に fixed で置く（.desk-players-wrap は overflow-x: auto の
+   ため中に絶対配置すると縦にも切られる。.desk-menu-body と同じ落とし穴）。位置は JS が入れる。 */
+.desk-filter-pop {
+  position: fixed; z-index: 30; min-width: 170px; max-width: 280px; padding: 6px;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+}
+.desk-filter-list { max-height: 220px; overflow-y: auto; }
+.desk-filter-row {
+  display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 4px;
+  cursor: pointer; white-space: nowrap; font-size: 13px; text-align: left;
+}
+.desk-filter-row:hover { background: var(--bg-secondary); }
+.desk-filter-row input { width: 16px; height: 16px; flex: 0 0 auto; }
+.desk-filter-actions { display: flex; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.desk-filter-search {
+  width: 100%; min-height: 30px; padding: 2px 6px; font-family: inherit;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 3px;
+}
+/* 条件に合う行が無いとき。見出しを残したいので、表の外ではなく行として出す。 */
+.desk-empty-row { text-align: center; color: var(--text-muted); padding: 16px 0; }
 
 /* 貼り付けて追加のダイアログ */
 .desk-paste { width: 100%; min-height: 140px; font-family: inherit; white-space: pre; }

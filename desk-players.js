@@ -1,6 +1,6 @@
 // 選手の区画（#players/<id>）。編集できる表。
 // 絞り込み・並べ替えはスマホ運営の選手登録タブと同じ純粋関数（Courts.applyFilter / Courts.sortBy）。
-// 帯は PC 幅なので 1 段に並べる（スマホの admin-players.js は 3 段）。
+// 絞り込みは見出しの ▼（Excel 風）。スマホの admin-players.js はチップの帯のまま。
 // セルの編集・行の追加・貼り付け・削除はこのあとのタスクで足す。
 (function() {
   // 絞り込みと並べ替えの状態。形は Courts.defaultFilter() / Courts.defaultSort()。
@@ -18,21 +18,31 @@
   // サーバーにはまだ無い行なので、大会を移ったら捨てる。
   var draft = null;   // null | { court, isFemale, isNewFace }
 
-  // 表の列。key があるものは見出しを押すと並べ替えられる
+  // 表の列。key があるものは見出しの文字を押すと並べ替えられる
   // （巡・コート・性別は絞り込みの軸なので並べ替えの対象にしない）。
+  // filter があるものは見出しに ▼ が付き、押すと絞り込みのポップオーバーが開く。
+  // 技1〜3 はどの列の ▼ からでも同じ「技が未入力の行だけ」を開く。
   var COLUMNS = [
-    { label: '巡', cls: 'col-round' },
+    { label: '巡', cls: 'col-round', filter: 'round' },
     { key: 'order', label: 'No.', cls: 'col-no' },
-    { key: 'name', label: '名前', cls: 'col-name' },
-    { label: 'コート', cls: 'col-court' },
-    { label: '性別', cls: 'col-sex' },
-    { label: '新人', cls: 'col-new' },
-    { label: '技1', cls: 'col-tech' },
-    { label: '技2', cls: 'col-tech' },
-    { label: '技3', cls: 'col-tech' },
+    { key: 'name', label: '名前', cls: 'col-name', filter: 'name' },
+    { label: 'コート', cls: 'col-court', filter: 'court' },
+    { label: '性別', cls: 'col-sex', filter: 'sex' },
+    { label: '新人', cls: 'col-new', filter: 'newFace' },
+    { label: '技1', cls: 'col-tech', filter: 'noTech' },
+    { label: '技2', cls: 'col-tech', filter: 'noTech' },
+    { label: '技3', cls: 'col-tech', filter: 'noTech' },
     { key: 'score', label: '得点', cls: 'col-score' },
     { label: '', cls: 'act' }
   ];
+
+  // この画面の絞り込みの初期値。複数選べるのはコートだけなので配列にする
+  // （Courts.applyFilter は文字列も配列も受ける。Courts.defaultFilter() の既定は '' のまま）。
+  function newFilter() {
+    var f = Courts.defaultFilter();
+    f.court = [];
+    return f;
+  }
 
   function cell(text, cls) {
     var td = document.createElement('td');
@@ -51,15 +61,18 @@
   function render(container, ctx) {
     var locked = EventStatus.isLocked(EventStatus.of(ctx.event));
     if (stateOwner !== ctx.eventId) {
-      filter = Courts.defaultFilter();
+      filter = newFilter();
       sort = Courts.defaultSort();
       draft = null;
       stateOwner = ctx.eventId;
     }
     if (locked) draft = null;   // 確定済みの大会では行を足せない
-    // 絞り込み中のコート・巡目の選手が全員いなくなったら「全コート」「全巡」に戻す
-    if (filter.court && Courts.listFrom(ctx.players).indexOf(filter.court) === -1) filter.court = '';
+    // 絞り込み中のコート・巡目の選手が全員いなくなったら「すべて」に戻す
+    var courtList = Courts.listFrom(ctx.players);
+    filter.court = (filter.court || []).filter(function(c) { return courtList.indexOf(c) !== -1; });
     if (filter.round && Courts.roundsOf(ctx.players).indexOf(filter.round) === -1) filter.round = 0;
+    // 前の描画のポップオーバーを残さない（document.body に置くので勝手には消えない）
+    closePopover();
 
     container.innerHTML = '';
 
@@ -99,106 +112,330 @@
       container.appendChild(warn);
     }
 
-    // 帯。チップは押すたびに作り直すが、検索の入力欄は作り直さない
-    // （入力中の文字と IME の変換を保つ。スマホの選手登録タブと同じ理由）。
+    // 表の上の行。絞り込みは見出しの ▼ に移したので、ここは件数と解除ボタンだけ。
     var bar = document.createElement('div');
     bar.className = 'desk-players-bar';
-    var chips = document.createElement('div');
-    chips.className = 'desk-players-chips';
-    var search = document.createElement('input');
-    search.type = 'search';
-    search.className = 'desk-players-search';
-    search.placeholder = '名前で検索';
-    search.setAttribute('aria-label', '名前で検索');
-    search.value = filter.query;
-    bar.appendChild(chips);
-    bar.appendChild(search);
     container.appendChild(bar);
 
     var wrap = document.createElement('div');
     wrap.className = 'desk-players-wrap';
     container.appendChild(wrap);
 
-    view = { chips: chips, wrap: wrap, ctx: ctx, locked: locked };
+    view = { bar: bar, wrap: wrap, ctx: ctx, locked: locked, heads: [], tbody: null };
 
+    redrawTable();
+  }
+
+  // 表ごと描き直す（見出しも作り直す。並べ替え・行の追加や削除・絞り込みの一括解除）。
+  // 開いているポップオーバーは見出しの ▼ を指しているので、先に閉じる。
+  function redrawTable() {
+    if (!view) return;
+    closePopover();
+    renderTable(view.wrap, view.ctx, view.locked);
+  }
+
+  // 行と件数だけ描き直す（絞り込みを変えたとき）。見出しは作り直さない
+  // ＝ 開いているポップオーバーの中の入力欄と IME の変換が生き残る。
+  function refreshRows() {
+    if (!view) return;
+    fillRows(view.ctx, view.locked);
+    updateHeadMarks();
+  }
+
+  // ---- 絞り込みの状態 ----
+
+  var FILTER_KINDS = ['round', 'name', 'court', 'sex', 'newFace', 'noTech'];
+
+  function isFilterActive(kind) {
+    if (kind === 'court') return (filter.court || []).length > 0;
+    if (kind === 'round') return !!filter.round;
+    if (kind === 'sex') return !!filter.sex;
+    if (kind === 'newFace') return !!filter.newFace;
+    if (kind === 'noTech') return !!filter.noTech;
+    if (kind === 'name') return !!filter.query;
+    return false;
+  }
+
+  function isAnyFilterActive() {
+    return FILTER_KINDS.some(isFilterActive);
+  }
+
+  function clearFilter() {
+    filter = newFilter();
+    redrawTable();   // 見出しの ▼ と背景も戻すので表ごと描き直す
+  }
+
+  // 見出しの ▼ と背景を、いまの絞り込みに合わせる（表は作り直さない）。
+  function updateHeadMarks() {
+    if (!view || !view.heads) return;
+    view.heads.forEach(function(h) {
+      var on = isFilterActive(h.kind);
+      h.th.classList.toggle('filtered', on);
+      h.btn.classList.toggle('on', on);
+    });
+  }
+
+  // ---- 見出しの ▼ のポップオーバー ----
+  // 画面に同時に 1 つだけ。外側クリック・Esc・スクロール・リサイズ・ハッシュ変更で閉じる。
+  // 表の枠（.desk-players-wrap）は overflow-x: auto なので中に絶対配置すると縦にも切られる
+  // （desk.css の .desk-menu のコメント参照）。document.body に fixed で置いて逃がす。
+  var popover = null;   // null | { el, btn, col }
+  var popoverBound = false;
+
+  function bindPopoverCloseOnce() {
+    if (popoverBound) return;
+    popoverBound = true;
+    document.addEventListener('click', function(e) {
+      if (!popover) return;
+      if (popover.el.contains(e.target)) return;   // ▼ 自身は stopPropagation でここに来ない
+      closePopover();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && popover) { e.preventDefault(); closePopover(); }
+    });
+    // 表や窓が動くと ▼ の位置がずれるので閉じる（中身のスクロールでは閉じない）
+    window.addEventListener('scroll', function(e) {
+      if (popover && popover.el.contains(e.target)) return;
+      closePopover();
+    }, true);
+    window.addEventListener('resize', function() { closePopover(); });
+    // 別の区画へ移っても body に残り続けないように
+    window.addEventListener('hashchange', function() { closePopover(); });
+  }
+
+  function closePopover() {
+    if (!popover) return;
+    var btn = popover.btn;
+    if (popover.el.parentNode) popover.el.parentNode.removeChild(popover.el);
+    popover = null;
+    if (btn && btn.isConnected) {
+      btn.setAttribute('aria-expanded', 'false');
+      btn.focus();
+    }
+  }
+
+  function togglePopover(btn, col) {
+    if (popover && popover.btn === btn) { closePopover(); return; }
+    openPopover(btn, col);
+  }
+
+  function openPopover(btn, col) {
+    closePopover();
+    bindPopoverCloseOnce();
+    var box = document.createElement('div');
+    box.className = 'desk-filter-pop';
+    document.body.appendChild(box);
+    popover = { el: box, btn: btn, col: col };
+    rebuildPopover();
+    placePopover();
+    btn.setAttribute('aria-expanded', 'true');
+    var first = box.querySelector('input');
+    if (first) first.focus();
+  }
+
+  // 中身だけ作り直す（「すべて選択」やチェックの入り直しを反映する）。
+  // 名前の検索欄は作り直すと入力中の文字と IME の変換が消えるので、ここからは呼ばない。
+  function rebuildPopover() {
+    if (!popover) return;
+    popover.el.innerHTML = '';
+    popover.el.appendChild(popoverBody(popover.col));
+  }
+
+  // ▼ の実座標から位置を決める。画面の右端からはみ出すときは寄せ戻す。
+  function placePopover() {
+    if (!popover) return;
+    var r = popover.btn.getBoundingClientRect();
+    popover.el.style.top = (r.bottom + 4) + 'px';
+    var left = r.left;
+    var w = popover.el.offsetWidth;
+    if (left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - w);
+    popover.el.style.left = left + 'px';
+  }
+
+  // チェック 1 行
+  function checkRow(label, checked, onChange) {
+    var lab = document.createElement('label');
+    lab.className = 'desk-filter-row';
+    var chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = checked;
+    chk.addEventListener('change', function() { onChange(chk.checked); });
+    lab.appendChild(chk);
+    var span = document.createElement('span');
+    span.textContent = label;
+    lab.appendChild(span);
+    return lab;
+  }
+
+  // 「すべて選択」＝ この列の絞り込みを外す。
+  // 設計書の「解除」は、この状態モデルでは同じ「絞り込みなし」に戻るため置かない
+  // （空＝すべて。「どれも表示しない」という状態が無い）。
+  function allButton(onAll) {
+    var row = document.createElement('div');
+    row.className = 'desk-filter-actions';
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'desk-btn';
+    b.textContent = 'すべて選択';
+    b.addEventListener('click', onAll);
+    row.appendChild(b);
+    return row;
+  }
+
+  function popoverBody(col) {
+    var ctx = view.ctx;
+    if (col.filter === 'name') return namePop();
+    if (col.filter === 'court') return courtPop(ctx);
+    if (col.filter === 'round') {
+      return triPop(Courts.roundsOf(ctx.players).map(function(r) {
+        return { value: r, label: r === 1 ? '一巡目' : r === 2 ? '二巡目' : r + '巡目' };
+      }), filter.round, 0, function(v) { filter.round = v; });
+    }
+    if (col.filter === 'sex') {
+      return triPop([{ value: '男子', label: '男子' }, { value: '女子', label: '女子' }],
+        filter.sex, '', function(v) { filter.sex = v; });
+    }
+    if (col.filter === 'newFace') {
+      return flagPop('新人だけ', filter.newFace, function(v) { filter.newFace = v; });
+    }
+    return flagPop('技が未入力の行だけ', filter.noTech, function(v) { filter.noTech = v; });
+  }
+
+  // コート。ここだけ本当の複数選択（filter.court は配列）。
+  // 空配列＝すべて。全部にチェックが入った状態も空配列に戻す（同じ意味なので状態を1つに保つ）。
+  function courtPop(ctx) {
+    var box = document.createElement('div');
+    var list = Courts.listFrom(ctx.players);   // 未分類も含む
+    var body = document.createElement('div');
+    body.className = 'desk-filter-list';
+    var all = (filter.court || []).length === 0;
+    list.forEach(function(c) {
+      body.appendChild(checkRow(c, all || filter.court.indexOf(c) !== -1, function(on) {
+        var cur = ((filter.court || []).length === 0) ? list.slice() : filter.court.slice();
+        var i = cur.indexOf(c);
+        if (on && i === -1) cur.push(c);
+        if (!on && i !== -1) cur.splice(i, 1);
+        filter.court = (cur.length === list.length) ? [] : cur;
+        refreshRows();   // チェックの見た目はブラウザが変えているので作り直さない
+      }));
+    });
+    box.appendChild(body);
+    box.appendChild(allButton(function() {
+      filter.court = [];
+      rebuildPopover();
+      refreshRows();
+    }));
+    return box;
+  }
+
+  // 3 値（すべて／A／B）をチェックで見せる。両方入り＝すべて、片方だけ＝その値。
+  // 最後の 1 つを外したら「すべて」に戻す（この状態モデルに「どれも出さない」は無い）。
+  // items は 1〜2 個（巡目は 1 巡だけの大会がある）。
+  function triPop(items, current, empty, set) {
+    var box = document.createElement('div');
+    var body = document.createElement('div');
+    body.className = 'desk-filter-list';
+    var all = String(current) === String(empty);
+    items.forEach(function(it) {
+      var on = all || String(current) === String(it.value);
+      body.appendChild(checkRow(it.label, on, function(checked) {
+        if (all) {
+          // すべて → この 1 つを外す ＝ 残りだけを見る
+          if (!checked) {
+            var other = items.filter(function(x) { return String(x.value) !== String(it.value); })[0];
+            set(other ? other.value : empty);
+          }
+        } else if (String(current) === String(it.value)) {
+          if (!checked) set(empty);     // 最後の 1 つを外したら「すべて」に戻す
+        } else if (checked) {
+          set(empty);                   // 2 つとも入った ＝ すべて
+        }
+        rebuildPopover();               // 相手側のチェックも入れ直す
+        refreshRows();
+      }));
+    });
+    box.appendChild(body);
+    box.appendChild(allButton(function() { set(empty); rebuildPopover(); refreshRows(); }));
+    return box;
+  }
+
+  // チェック 1 つだけ（新人・技未入力）。外した状態が「すべて」なのでボタンは要らない。
+  function flagPop(label, on, set) {
+    var box = document.createElement('div');
+    var body = document.createElement('div');
+    body.className = 'desk-filter-list';
+    body.appendChild(checkRow(label, !!on, function(checked) {
+      set(checked);
+      refreshRows();
+    }));
+    box.appendChild(body);
+    return box;
+  }
+
+  // 名前の検索。refreshRows は見出しを作り直さないので、打ち込みと IME の変換が続く。
+  function namePop() {
+    var box = document.createElement('div');
+    var input = document.createElement('input');
+    input.type = 'search';
+    input.className = 'desk-filter-search';
+    input.placeholder = '名前で検索';
+    input.setAttribute('aria-label', '名前で検索');
+    input.value = filter.query;
     function applyQuery() {
       // Chromium は変換確定で compositionend と input の両方が来るので、同じ文字列なら描き直さない
-      if (search.value === filter.query) return;
-      filter.query = search.value;
-      redrawTable();
+      if (input.value === filter.query) return;
+      filter.query = input.value;
+      refreshRows();
     }
-    search.addEventListener('input', function(ev) {
+    input.addEventListener('input', function(ev) {
       // IME 変換中は確定前の文字で絞り込まない（変換終了時に確定値で最後の input が来る）
       if (ev.isComposing) return;
       applyQuery();
     });
     // WebKit は input(isComposing:true) → compositionend の順で、その後 isComposing:false の
     // input が来ないため、compositionend でも絞り込む（techpicker.js の検索欄と同じ）。
-    search.addEventListener('compositionend', applyQuery);
-
-    refresh();
-  }
-
-  // 帯と表を描き直す（チップを押したとき）
-  function refresh() {
-    if (!view) return;
-    renderChips(view.chips, view.ctx);
-    renderTable(view.wrap, view.ctx, view.locked);
-  }
-
-  // 表だけ描き直す（並べ替え・名前の検索・行の追加や削除）
-  function redrawTable() {
-    if (!view) return;
-    renderTable(view.wrap, view.ctx, view.locked);
-  }
-
-  // チップの小さな並び（admin.js の Admin.renderChips の PC 版。desk.html は admin.js を読まない）。
-  function chipGroup(parent, items, current, onPick) {
-    var g = document.createElement('span');
-    g.className = 'desk-chip-group';
-    items.forEach(function(item) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'desk-chip' + (String(item.value) === String(current) ? ' on' : '');
-      b.textContent = item.label;
-      b.addEventListener('click', function() { onPick(item.value); refresh(); });
-      g.appendChild(b);
+    input.addEventListener('compositionend', applyQuery);
+    // Esc はブラウザの既定（入力欄を空にする）ではなくポップオーバーを閉じるほうに使う
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { e.preventDefault(); closePopover(); }
     });
-    parent.appendChild(g);
+    box.appendChild(input);
+    return box;
   }
 
-  function renderChips(el, ctx) {
-    el.innerHTML = '';
-    chipGroup(el, [{ value: '', label: '全コート' }].concat(Courts.listFrom(ctx.players).map(function(c) {
-      return { value: c, label: c === Courts.UNASSIGNED ? c : c + ' コート' };
-    })), filter.court, function(v) { filter.court = v; });
-
-    chipGroup(el, [{ value: '', label: '男女' }, { value: '男子', label: '男子' }, { value: '女子', label: '女子' }],
-      filter.sex, function(v) { filter.sex = v; });
-
-    chipGroup(el, [{ value: 0, label: '全巡' }].concat(Courts.roundsOf(ctx.players).map(function(r) {
-      return { value: r, label: r + '巡' };
-    })), filter.round, function(v) { filter.round = v; });
-
-    chipGroup(el, [{ value: true, label: '新人' }], filter.newFace, function() { filter.newFace = !filter.newFace; });
-    chipGroup(el, [{ value: true, label: '技未入力' }], filter.noTech, function() { filter.noTech = !filter.noTech; });
+  // 表の上の「表示 n / N 名」と「絞り込みを解除」。
+  function renderCount(shown, total) {
+    if (!view || !view.bar) return;
+    view.bar.innerHTML = '';
+    var span = document.createElement('span');
+    span.className = 'desk-players-count';
+    span.textContent = '表示 ' + shown + ' / ' + total + ' 名';
+    view.bar.appendChild(span);
+    if (!isAnyFilterActive()) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'desk-btn';
+    b.textContent = '絞り込みを解除';
+    b.addEventListener('click', function() { clearFilter(); });
+    view.bar.appendChild(b);
   }
 
-  function renderTable(wrap, ctx, locked) {
-    wrap.innerHTML = '';
-    var players = ctx.players || [];
-    if (players.length === 0 && !draft) {
-      wrap.appendChild(emptyMessage('まだ選手がいません。「＋ 行を追加」か「📋 貼り付けて追加」で登録してください。'));
-      return;
-    }
-    var rows = Courts.sortBy(Courts.applyFilter(players, filter), sort);
-    if (rows.length === 0 && !draft) {
-      wrap.appendChild(emptyMessage('条件に合う選手がいません。'));
-      return;
-    }
+  // 条件に合う行が無いときの 1 行。表の外に出すと見出しごと消えて
+  // 絞り込みを戻せなくなるので、行として出す。
+  function noMatchRow() {
+    var tr = document.createElement('tr');
+    var td = document.createElement('td');
+    td.className = 'desk-empty-row';
+    td.colSpan = COLUMNS.length;
+    td.textContent = '条件に合う選手がいません。';
+    tr.appendChild(td);
+    return tr;
+  }
 
-    var table = document.createElement('table');
-    table.className = 'desk-table desk-players-table';
+  // 見出し。絞り込みでは作り直さない（ポップオーバーの中の入力を保つため）。
+  // view.heads に { kind, th, btn } を貯めて、updateHeadMarks で色だけ塗り替える。
+  function buildHead(ctx) {
+    view.heads = [];
     var thead = document.createElement('thead');
     var tr = document.createElement('tr');
     COLUMNS.forEach(function(col) {
@@ -223,17 +460,62 @@
         });
         th.appendChild(b);
       }
+      if (col.filter) th.appendChild(filterButton(th, col));
       tr.appendChild(th);
     });
     thead.appendChild(tr);
-    table.appendChild(thead);
+    updateHeadMarks();
+    return thead;
+  }
 
-    var tbody = document.createElement('tbody');
+  // 見出しの ▼。並べ替え（見出しの文字のボタン）と分けるため、
+  // クリックは stopPropagation して外側クリックの判定にも流さない。
+  function filterButton(th, col) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'filter-btn';
+    b.textContent = '▼';
+    b.setAttribute('aria-label', (col.label || '操作') + 'の絞り込み');
+    b.setAttribute('aria-expanded', 'false');
+    b.addEventListener('click', function(e) {
+      e.stopPropagation();
+      togglePopover(b, col);
+    });
+    view.heads.push({ kind: col.filter, th: th, btn: b });
+    return b;
+  }
+
+  // 行と件数だけ作り直す（見出しはそのまま）。
+  function fillRows(ctx, locked) {
+    var tbody = view && view.tbody;
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    var players = ctx.players || [];
+    var rows = Courts.sortBy(Courts.applyFilter(players, filter), sort);
     rows.forEach(function(p) { tbody.appendChild(buildRow(ctx, p, locked)); });
+    if (rows.length === 0 && !draft) tbody.appendChild(noMatchRow());
     // 下書き行は絞り込みに関わらず必ず末尾に出す（打ち込んでいる途中で消えない）
     if (draft && !locked) tbody.appendChild(buildDraftRow(ctx));
+    renderCount(rows.length, players.length);
+  }
+
+  function renderTable(wrap, ctx, locked) {
+    wrap.innerHTML = '';
+    view.tbody = null;
+    var players = ctx.players || [];
+    if (players.length === 0 && !draft) {
+      if (view.bar) view.bar.innerHTML = '';
+      wrap.appendChild(emptyMessage('まだ選手がいません。「＋ 行を追加」か「📋 貼り付けて追加」で登録してください。'));
+      return;
+    }
+    var table = document.createElement('table');
+    table.className = 'desk-table desk-players-table';
+    table.appendChild(buildHead(ctx));
+    var tbody = document.createElement('tbody');
     table.appendChild(tbody);
     wrap.appendChild(table);
+    view.tbody = tbody;
+    fillRows(ctx, locked);
   }
 
   // 1 人 1 行。名前・コート・性別・新人・技は編集できる。
