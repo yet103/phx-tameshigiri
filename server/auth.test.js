@@ -291,6 +291,7 @@ test('誤った資格情報は 401、正しい資格情報で通る', async () =
     assert.strictEqual((await get(base, '/api/events', basic('wrong', PASS))).status, 401);
     assert.strictEqual((await get(base, '/', basic(USER, PASS))).status, 200);
     assert.strictEqual((await get(base, '/admin.html', basic(USER, PASS))).status, 200);
+    assert.strictEqual((await get(base, '/scoring.html', basic(USER, PASS))).status, 200);
     assert.strictEqual((await get(base, '/test.html', basic(USER, PASS))).status, 200);
     assert.strictEqual((await get(base, '/api/events', basic(USER, PASS))).status, 200);
     assert.strictEqual((await get(base, '/api/techniques', basic(USER, PASS))).status, 200);

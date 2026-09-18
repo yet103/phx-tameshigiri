@@ -1,0 +1,101 @@
+/* トップページ（index.html）専用のスタイル。
+   375px のスマホから PC まで、この 1 枚で読めるように組む。
+   style.css / admin.css / desk.css / help.css は読み込まない
+   （各画面のレイアウトを持ち込まない）。色は theme.css の変数だけを使う。
+   このファイルは計画3の Task 2 で書き切る。以降のタスクでは編集しない
+   （並行作業で衝突するため。足りない見た目が出たら計画の Task 2 の節に
+    追記してからまとめて直す）。 */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  background: var(--bg);
+  color: var(--text);
+}
+button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px; }
+
+/* ===== 上部バー ===== */
+.home-top {
+  display: flex; align-items: center; gap: 4px;
+  min-height: 48px; padding: 0 8px 0 16px;
+  background: var(--band-bg); color: var(--band-text);
+  border-bottom: 2px solid var(--gold);
+}
+.home-title {
+  flex: 1; min-width: 0;
+  font-family: var(--mincho); font-size: 18px; font-weight: 700; color: var(--gold-light);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 指で押す前提のタップ目標（他のページのバー類と同じ 44px） */
+.home-icon-btn {
+  width: 44px; height: 44px; font-size: 18px;
+  background: transparent; color: var(--band-text);
+}
+.home-icon-btn:hover { background: var(--band-bg-2); }
+
+/* ===== 本文 ===== */
+.home-main { max-width: 760px; margin: 0 auto; padding: 16px 16px 64px; }
+.home-main h2 {
+  font-family: var(--mincho); font-size: 18px; margin: 28px 0 10px;
+  padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.home-intro p { margin: 0 0 8px; }
+.home-intro a { color: var(--accent); }
+
+/* ===== 入口ボタン ===== */
+.home-entries { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 18px; }
+.home-entry {
+  display: flex; flex-direction: column; justify-content: center;
+  min-height: 64px; padding: 10px 14px;
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; text-decoration: none;
+}
+.home-entry:hover { border-color: var(--accent); }
+.home-entry.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.home-entry-main { font-size: 16px; font-weight: bold; }
+.home-entry-sub { font-size: 12px; color: var(--text-muted); }
+.home-entry.primary .home-entry-sub { color: var(--band-muted); }
+
+/* ===== 進行中の大会 ===== */
+.home-event-list { display: flex; flex-direction: column; gap: 8px; }
+.home-event {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  min-height: 56px; padding: 8px 14px;
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; text-decoration: none;
+}
+.home-event:hover { border-color: var(--accent); }
+.home-event-name { flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: bold; }
+.home-event-meta { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.home-badge {
+  padding: 1px 8px; border-radius: 10px; font-size: 12px; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-muted);
+}
+.home-badge.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+.home-note { color: var(--text-muted); font-size: 13px; }
+
+/* ===== 全体の流れの図（help.css の .diagram と同じ作り）=====
+   図の文字サイズは viewBox の単位。375px のスマホでは図が 343px まで縮む
+   （＝約 0.95 倍）ので、実際に 14px を割らないよう 16 単位を下限にする。 */
+.diagram {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px; margin: 14px 0;
+}
+.diagram svg { display: block; width: 100%; height: auto; max-width: 480px; margin: 0 auto; }
+.diagram .d-box { fill: var(--bg-secondary); stroke: var(--border); stroke-width: 1; }
+.diagram .d-box-key { fill: var(--band-bg); stroke: var(--gold); stroke-width: 2; }
+.diagram .d-title { fill: var(--text); font-family: var(--mincho); font-size: 18px; font-weight: bold; }
+.diagram .d-title-key { fill: var(--gold-light); font-family: var(--mincho); font-size: 18px; font-weight: bold; }
+.diagram .d-sub { fill: var(--text-muted); font-size: 16px; }
+.diagram .d-sub-key { fill: var(--band-muted); font-size: 16px; }
+.diagram .d-line { stroke: var(--gold-deep); stroke-width: 2; fill: none; }
+.diagram .d-arrow { fill: var(--gold-deep); }
+.diagram .d-legend { fill: var(--text); font-size: 16px; }
+
+/* 2 列に置けるだけの幅があるときだけ入口ボタンを並べる */
+@media (min-width: 620px) {
+  .home-entries { grid-template-columns: 1fr 1fr; }
+}

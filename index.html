@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>試し斬り採点システム</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="home.css">
+  <!-- スクリプトはすべて head で読む。改名前（採点画面が index.html だった頃）の
+       ブックマークを、本文を描く前に scoring.html へ転送したいため。
+       どれも読み込み時には何もしない小さなモジュールなので、描画は遅れない。 -->
+  <script src="route.js"></script>
+  <script src="status.js"></script>
+  <script src="api.js"></script>
+  <script src="storage.js"></script>
+  <script src="home.js"></script>
+  <script>Home.redirectIfScoring();</script>
+</head>
+<body data-theme="light">
+
+  <header class="home-top">
+    <span class="home-title">試し斬り採点システム</span>
+    <button type="button" class="home-icon-btn" id="btnTheme" aria-label="テーマ切り替え">🌙</button>
+    <button type="button" class="home-icon-btn" id="btnMode"></button>
+  </header>
+
+  <main class="home-main" id="homeMain">
+
+    <section class="home-intro">
+      <p>試し斬りの大会を、選手の登録から採点・順位の発表まで一本で進めるためのアプリです。</p>
+      <p>大会のデータはサーバーに1つだけあり、運営者の PC とスマホ、コートのタブレット、会場の大画面が同じ大会を読み書きします。</p>
+      <p>大会には<strong>状態</strong>があり、運営者が「次へ進む」で1段ずつ進めます。コートの端末で採点できるのは「一巡目 進行中」「二巡目 進行中」のときだけです。</p>
+      <p>初めての方は<a href="help.html">ヘルプ</a>をご覧ください。</p>
+    </section>
+
+    <section id="homeFlow"></section>
+
+    <nav class="home-entries" aria-label="入口">
+      <a class="home-entry primary" id="linkAdmin" href="admin.html#events">
+        <span class="home-entry-main">運営画面を開く</span>
+        <span class="home-entry-sub">大会の作成・選手の登録・試合の進行</span>
+      </a>
+      <a class="home-entry" href="scoring.html">
+        <span class="home-entry-main">採点画面（コート端末）</span>
+        <span class="home-entry-sub">コートのタブレットで得点を入れる</span>
+      </a>
+      <a class="home-entry" href="ranking.html">
+        <span class="home-entry-main">順位表示</span>
+        <span class="home-entry-sub">大会の順位を見る・成績表を保存する</span>
+      </a>
+      <a class="home-entry" href="help.html">
+        <span class="home-entry-main">ヘルプ</span>
+        <span class="home-entry-sub">当日の手引き（マニュアル）</span>
+      </a>
+    </nav>
+
+    <section id="homeEvents"></section>
+
+  </main>
+
+</body>
+</html>

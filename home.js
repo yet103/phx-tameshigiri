@@ -59,6 +59,60 @@ var Home = (function() {
     return rows.map(function(r) { return r.ev; });
   }
 
+  // --- 描画 ---
+
+  function applyTheme(theme) {
+    document.body.setAttribute('data-theme', theme);
+    document.getElementById('btnTheme').textContent = theme === 'dark' ? '☀' : '🌙';
+  }
+
+  // 🖥/📱 ボタン。いまのモードの「相手」を出す（スマホモードなら 🖥 ＝ PC へ）。
+  // トップ自体の見た目はモードで変わらない。変わるのは運営画面へのリンクの行き先だけなので、
+  // 押しても他のページへは移らず、控えとボタンとリンクだけを差し替える
+  // （admin.html / desk.html のボタンは相手のページへ移る。そこだけ挙動が違う）。
+  function applyMode() {
+    var toPc = (Storage.currentMode() !== 'pc');
+    var btn = document.getElementById('btnMode');
+    var label = toPc ? 'PC 運営に切り替える' : 'スマホ運営に切り替える';
+    btn.textContent = toPc ? '🖥' : '📱';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    updateAdminLinks();
+  }
+
+  function onModeClick() {
+    Storage.saveMode(Storage.currentMode() === 'pc' ? 'mobile' : 'pc');
+    applyMode();
+  }
+
+  // 運営画面へ向かうリンクの行き先をいまのモードで作り直す。
+  // 大会の行は描き直さず href だけ差し替える（読み込み中の一覧を消さないため）。
+  function updateAdminLinks() {
+    var link = document.getElementById('linkAdmin');
+    if (link) link.href = Storage.adminHref('#events');
+    var rows = document.querySelectorAll('[data-event-id]');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].href = Storage.adminHref('#players/' + encodeURIComponent(rows[i].getAttribute('data-event-id')));
+    }
+  }
+
+  // --- 起動 ---
+
+  function init() {
+    // test.html もこのファイルを読む。トップの DOM が無ければ何もしない。
+    if (!document.getElementById('homeMain')) return;
+    applyTheme(Storage.loadTheme());
+    document.getElementById('btnTheme').addEventListener('click', function() {
+      var next = Storage.loadTheme() === 'dark' ? 'light' : 'dark';
+      Storage.saveTheme(next);
+      applyTheme(next);
+    });
+    document.getElementById('btnMode').addEventListener('click', onModeClick);
+    applyMode();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+
   return {
     redirectTarget: redirectTarget,
     redirectIfScoring: redirectIfScoring,
