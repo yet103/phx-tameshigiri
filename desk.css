@@ -28,7 +28,11 @@ a { color: var(--accent); }
   display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 8px 0 16px;
   background: var(--band-bg); color: var(--band-text);
 }
-.desk-title { flex: 1; font-family: var(--mincho); font-size: 18px; font-weight: 700; color: var(--gold-light); }
+.desk-title {
+  flex: 1; font-family: var(--mincho); font-size: 18px; font-weight: 700;
+  color: var(--gold-light); text-decoration: none;
+}
+.desk-title:hover { filter: brightness(1.15); }
 .desk-icon-btn { width: 36px; height: 36px; font-size: 18px; background: transparent; color: var(--band-text); }
 .desk-icon-btn:hover { background: var(--band-bg-2); }
 

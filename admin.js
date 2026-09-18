@@ -365,6 +365,12 @@ var Admin = (function() {
 
     var body = document.createElement('div');
 
+    var btnHome = document.createElement('button');
+    btnHome.type = 'button';
+    btnHome.className = 'menu-item';
+    btnHome.textContent = '🏠 トップ';
+    body.appendChild(btnHome);
+
     var btnScoring = document.createElement('button');
     btnScoring.type = 'button';
     btnScoring.className = 'menu-item';
@@ -409,6 +415,10 @@ var Admin = (function() {
 
     // 選択中の大会があれば採点画面にもそのまま引き継ぐ（tmg_last / tmg_admin_last が
     // 別々の控えキーのため、ハッシュ無しだと採点画面側の控えに戻ってしまう）。
+    btnHome.addEventListener('click', function() {
+      sheet.close();
+      location.href = 'index.html';
+    });
     btnScoring.addEventListener('click', function() {
       sheet.close();
       location.href = scoringHref(currentEventId(), '');
