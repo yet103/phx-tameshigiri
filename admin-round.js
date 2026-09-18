@@ -48,8 +48,8 @@ var AdminRound = (function() {
 
   // --- 段階表示と遷移 ---
 
-  // 「採点済み n / N」。進行中はその巡目、一巡目終了は二巡目の技の入力状況、
-  // 二巡目終了以降は数を出さない（設計書「上部の段階表示」）。
+  // 「採点済み n / N」。進行中はその巡目、一巡目終了は二巡目の人数と技の入力状況、
+  // 準備中は一巡目の人数、二巡目終了以降は数を出さない（設計書「上部の段階表示」）。
   function stageCountText(st, players) {
     var r = EventStatus.scoringRound(st);
     if (r) {
@@ -59,6 +59,9 @@ var AdminRound = (function() {
     if (st === 'round1_done') {
       var r2 = roundTwo(players);
       return '二巡目 ' + r2.length + '名　技 未入力 ' + r2.filter(isTechIncomplete).length;
+    }
+    if (st === 'draft') {
+      return '一巡目 ' + roundOne(players).length + '名';
     }
     return '';
   }

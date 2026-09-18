@@ -310,7 +310,7 @@ createPlayersBulk(eventId, data) // 既存。data.rows があれば行形式で�
 ハッシュ: `#events` / `#setup/<id>` / `#techniques/<id>` / `#players/<id>` / `#match/<id>` / `#results/<id>`。
 `desk.js` は `admin.js` と同じ構造（`registerTab` / `applyRoute` / `renderSeq` / `isStale` / 控え `tmg_desk_last`）で作る。同じ大会を読み直す `reloadEvent` も同じ。
 
-**上部の段階表示**: 7 段階のうち `archived` は表示せず、`final` のときに「アーカイブ」ボタンを出す。現在の状態を強調し、通過した状態を塗る。「採点済み n / N」は `scoringRound` の巡目、`round1_done` では一巡目の技未入力の件数、`round2_done` 以降は出さない。
+**上部の段階表示**: 7 段階のうち `archived` は表示せず、`final` のときに「アーカイブ」ボタンを出す。現在の状態を強調し、通過した状態を塗る。「採点済み n / N」は `scoringRound` の巡目、`round1_done` では二巡目の人数と技未入力の件数、`draft` では一巡目の人数、`round2_done` 以降は出さない。
 「次へ進む」は `NEXT_LABELS`、`round1_done` では「二巡目を開始」の隣に小さく「二巡目なしで終了」。「戻す」は `prev` が null なら出さない。
 確認文言は「確認と拒否」の表のとおり。成功したら `reloadEvent`。`draft → round1` の成功時は採点画面を別ウィンドウで開く（`window.open('scoring.html#event/<id>', 'tmg_scoring')`）。
 
