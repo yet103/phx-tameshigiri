@@ -628,7 +628,11 @@
       btnDelete.disabled = false;
       if (!res || !res.ok) {
         // 失敗してもシートは閉じない（入力を残す）
-        alert('選手の更新に失敗しました。\n入力内容と通信を確認してください。');
+        if (res && res.reason === 'locked') {
+          alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else {
+          alert('選手の更新に失敗しました。\n入力内容と通信を確認してください。');
+        }
         return;
       }
       sheet.close();
@@ -649,6 +653,14 @@
       btnSave.disabled = true;
       sheet.lock(true);
       var res = await Api.deletePlayer(ctx.eventId, player.id, false);
+
+      if (res && res.blocked && res.reason === 'locked') {
+        sheet.lock(false);
+        btnDelete.disabled = false;
+        btnSave.disabled = false;
+        alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        return;
+      }
 
       if (res && res.blocked) {
         // 採点済みガード。得点を出してもう一度確認し、承諾したときだけ force。
@@ -781,6 +793,10 @@
       return;
     }
     var result = await Api.importCsv(eventId, text, mode);
+    if (result && result.blocked && result.reason === 'locked') {
+      alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+      return;
+    }
     if (result && result.blocked) {
       var ok = confirm(
         '大会「' + eventName + '」\n' +

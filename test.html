@@ -338,6 +338,29 @@
       await writeResult(lockBase + '/live/A', 'PUT', { playerId: lockP.id }),
       { status: 409, reason: 'locked' });
 
+    // Api の各関数も（changeStatus と同じ作法で）409 の reason と error をそのまま返す。
+    // 呼び出し側（admin-players.js / admin-round.js）はこの reason:'locked' を見て
+    // 「戻す」を案内する（採点済みガードの 409 と取り違えない）。
+    var apiDelLocked = await Api.deletePlayer(lockEvent.id, lockP.id, false);
+    assert('確定後の Api.deletePlayer は reason:locked を返す',
+      [apiDelLocked.blocked, apiDelLocked.reason], [true, 'locked']);
+    assert('確定後の Api.deletePlayer はエラー文言も返す', typeof apiDelLocked.error, 'string');
+
+    var apiImportLocked = await Api.importCsv(lockEvent.id, '選手名\n', 'append');
+    assert('確定後の Api.importCsv は reason:locked を返す',
+      [apiImportLocked.blocked, apiImportLocked.reason], [true, 'locked']);
+    assert('確定後の Api.importCsv はエラー文言も返す', typeof apiImportLocked.error, 'string');
+
+    var apiGenLocked = await Api.generateNextRound(lockEvent.id, true);
+    assert('確定後の Api.generateNextRound は reason:locked を返す',
+      [apiGenLocked.blocked, apiGenLocked.reason], [true, 'locked']);
+    assert('確定後の Api.generateNextRound はエラー文言も返す', typeof apiGenLocked.error, 'string');
+
+    var apiPatchLocked = await Api.updatePlayerInfo(lockEvent.id, lockP.id, { name: 'X' });
+    assert('確定後の Api.updatePlayerInfo は reason:locked を返す',
+      [apiPatchLocked.ok, apiPatchLocked.status, apiPatchLocked.reason], [false, 409, 'locked']);
+    assert('確定後の Api.updatePlayerInfo はエラー文言も返す', typeof apiPatchLocked.error, 'string');
+
     // 拒まない経路
     assert('確定後も GET は読める', (await Api.loadEvent(lockEvent.id)).status, 'final');
     assert('確定後も共有リンクは発行できる',

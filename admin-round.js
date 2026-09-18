@@ -382,7 +382,11 @@ var AdminRound = (function() {
       { tech1: arr[0], tech2: arr[1], tech3: arr[2] });
     if (ctx.isStale()) return !!(res && res.ok);   // 画面を離れていたら DOM に触れない（alert もしない）
     if (!res || !res.ok) {
-      alert('技を保存できませんでした。通信を確認してもう一度お試しください。');
+      if (res && res.reason === 'locked') {
+        alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+      } else {
+        alert('技を保存できませんでした。通信を確認してもう一度お試しください。');
+      }
       drawChips(p, row);
       return false;
     }
@@ -421,6 +425,15 @@ var AdminRound = (function() {
       return;
     }
     if (result.blocked) {
+      if (result.reason === 'locked') {
+        alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        return;
+      }
+      if (result.reason === 'status') {
+        alert(result.error);
+        return;
+      }
+      // nextRoundConflictMessage は unscored / exists の文言しか持たない
       if (!confirm(Courts.nextRoundConflictMessage(result, '選手タブでコートを設定してください'))) return;
       result = await Api.generateNextRound(eventId, true);
       if (ctx.isStale()) return;

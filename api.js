@@ -156,7 +156,9 @@ var Api = (function() {
     // PATCH /api/events/:eventId/players/:playerId（運営画面の編集専用）
     // Body: { name, tech1, tech2, tech3, isNewFace, isFemale, score, result, court, round }
     //       のうち送りたいものだけ。id と order は送っても無視される。
-    // 戻り値: { ok: true, player } | { ok: false, status: <HTTPステータス> }
+    // 戻り値: { ok: true, player } | { ok: false, status: <HTTPステータス>, reason, error }
+    //       （reason / error が付くのは 409 のときだけ。今のところ 409 は確定済み
+    //        ガード（reason: 'locked'）しか無い）
     // 通信自体に失敗した場合は status: 0。
     // 採点経路（Outbox → updatePlayer）と混ぜないため、同じPATCHでも別関数にしている。
     try {
@@ -165,7 +167,19 @@ var Api = (function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      if (!res.ok) return { ok: false, status: res.status };
+      if (!res.ok) {
+        if (res.status === 409) {
+          var conflict = null;
+          try { conflict = await res.json(); } catch (e) { /* JSON でない応答 */ }
+          return {
+            ok: false,
+            status: 409,
+            reason: (conflict && conflict.reason) || '',
+            error: (conflict && conflict.error) || 'サーバーがエラーを返しました（409）'
+          };
+        }
+        return { ok: false, status: res.status };
+      }
       var json = await res.json();
       return { ok: true, player: json.player || null };
     } catch (e) {
@@ -176,7 +190,9 @@ var Api = (function() {
   async function deletePlayer(eventId, playerId, force) {
     // DELETE /api/events/:eventId/players/:playerId?force=1
     // 戻り値: true（削除成功）
-    //       | { blocked: true, player: { name, order, score } | null }（409: 採点済み）
+    //       | { blocked: true, reason, error, player: { name, order, score } | null }
+    //         （409。reason は 'locked'（確定済み。この場合 player は無い）か
+    //          ''（採点済みガード。player が付く）。error はサーバーの文言）
     //       | false（404・400・通信失敗）
     // 削除後の再採番はしないので、番号には欠番が残る。
     try {
@@ -185,7 +201,12 @@ var Api = (function() {
       var res = await fetch(url, { method: 'DELETE' });
       if (res.status === 409) {
         var conflict = await res.json();
-        return { blocked: true, player: conflict.player || null };
+        return {
+          blocked: true,
+          reason: conflict.reason || '',
+          error: conflict.error || ('サーバーがエラーを返しました（' + res.status + '）'),
+          player: conflict.player || null
+        };
       }
       return res.ok;
     } catch (e) {
@@ -197,7 +218,8 @@ var Api = (function() {
     // POST /api/events/:eventId/import
     // Body: { csvText, mode: 'replace' | 'append', force }
     // 戻り値: { success: true, playerCount } |
-    //         { blocked: true, scoredCount } (409: 採点済みデータあり) |
+    //         { blocked: true, reason, error, scoredCount } (409: reason は 'locked'
+    //           （確定済み。この場合 scoredCount は0）か ''（採点済みデータあり）) |
     //         { success: false, error } (その他の4xx: 失敗理由を画面に出すため) | null（通信失敗）
     try {
       var res = await fetch('/api/events/' + eventId + '/import', {
@@ -207,7 +229,12 @@ var Api = (function() {
       });
       if (res.status === 409) {
         var conflict = await res.json();
-        return { blocked: true, scoredCount: conflict.scoredCount || 0 };
+        return {
+          blocked: true,
+          reason: conflict.reason || '',
+          error: conflict.error || ('サーバーがエラーを返しました（' + res.status + '）'),
+          scoredCount: conflict.scoredCount || 0
+        };
       }
       if (!res.ok) {
         var errJson = await res.json();
@@ -296,12 +323,14 @@ var Api = (function() {
     //     untrackedCount: 既存の二巡目行のうち sourcePlayerId を持たない件数
     //                     （CSVインポート由来。force すると重複生成される）
     //     unassignedCount: order が解析できず二巡目を作れなかった一巡目選手の人数
-    //   | { blocked: true, reason: 'unscored' | 'exists',
+    //   | { blocked: true, reason: 'unscored' | 'exists' | 'status' | 'locked', error,
     //       unscoredCount, existingCount, untrackedCount, unassignedCount }
-    //       （該当しない件数は 0）
+    //       （該当しない件数は 0。error はサーバーの文言で、'status' / 'locked' のときは
+    //        これをそのまま出す）
     //   | null（400: 一巡目が0名 / 404 / 通信失敗）
-    // どちらの 409 も force: true で越えられる。untrackedCount が 0 でないときは
+    // unscored / exists の 409 は force: true で越えられる。untrackedCount が 0 でないときは
     // force すると CSV由来の二巡目行と重複するので、呼び出し元で警告すること。
+    // status（一巡目終了より前）と locked（確定済み）は force でも越えられない。
     try {
       var res = await fetch('/api/events/' + eventId + '/rounds/2/generate', {
         method: 'POST',
@@ -313,6 +342,7 @@ var Api = (function() {
         return {
           blocked: true,
           reason: conflict.reason || '',
+          error: conflict.error || 'サーバーがエラーを返しました（409）',
           unscoredCount: conflict.unscoredCount || 0,
           existingCount: conflict.existingCount || 0,
           untrackedCount: conflict.untrackedCount || 0,
