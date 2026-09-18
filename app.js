@@ -267,6 +267,8 @@ var App = (function() {
   }
 
   // --- 大会管理 ---
+  // 大会の選択肢。archived は出さず、採点できる大会（進行中）を先頭にまとめる。
+  // 文言は「大会名（一巡目 進行中）」。当日どれを選べばよいかを一目で分かるようにする。
   async function refreshEventList() {
     var events = await Api.listEvents();
     if (!events) {
@@ -275,18 +277,33 @@ var App = (function() {
       alert('大会一覧を取得できませんでした。通信を確認してください。');
       return;
     }
+    var usable = events.filter(function(e) { return EventStatus.of(e) !== 'archived'; });
+    var open = usable.filter(function(e) { return EventStatus.isScoringOpen(EventStatus.of(e)); });
+    var rest = usable.filter(function(e) { return !EventStatus.isScoringOpen(EventStatus.of(e)); });
+    var ordered = open.concat(rest);   // 各群の中は listEvents の順（更新の新しい順）のまま
+
     var select = document.getElementById('eventSelect');
     select.innerHTML = '<option value="">-- 大会を選択 --</option>';
-    for (var i = 0; i < events.length; i++) {
-      var opt = document.createElement('option');
-      opt.value = events[i].id;
-      opt.textContent = events[i].name + ' (' + (events[i].date || '') + ')';
-      select.appendChild(opt);
+    for (var i = 0; i < ordered.length; i++) {
+      select.appendChild(eventOption(ordered[i]));
     }
-    // 前回選択していた大会があれば再選択
+    // 前回選択していた大会があれば再選択。一覧から外れている（アーカイブされた）
+    // ときは選択肢を足して残す。黙って別の大会に切り替わるのを防ぐ。
     if (currentEvent) {
+      var found = false;
+      for (var j = 0; j < ordered.length; j++) {
+        if (ordered[j].id === currentEvent.id) { found = true; break; }
+      }
+      if (!found) select.appendChild(eventOption(currentEvent));
       select.value = currentEvent.id;
     }
+  }
+
+  function eventOption(ev) {
+    var opt = document.createElement('option');
+    opt.value = ev.id;
+    opt.textContent = (ev.name || '(名称未設定)') + '（' + EventStatus.LABELS[EventStatus.of(ev)] + '）';
+    return opt;
   }
 
   // 大会読み込みの再入ガード。
