@@ -13,6 +13,11 @@
   // render のたびに入れ替える（古い ctx の DOM を触らない）。
   var view = null;   // { chips, wrap, ctx, locked }
 
+  // 「＋ 行を追加」の下書き行。null なら出さない。
+  // 値は次に作る行の初期値（直前の行のコート・性別・新人を引き継ぐ）。
+  // サーバーにはまだ無い行なので、大会を移ったら捨てる。
+  var draft = null;   // null | { court, isFemale, isNewFace }
+
   // 表の列。key があるものは見出しを押すと並べ替えられる
   // （巡・コート・性別は絞り込みの軸なので並べ替えの対象にしない）。
   var COLUMNS = [
@@ -48,8 +53,10 @@
     if (stateOwner !== ctx.eventId) {
       filter = Courts.defaultFilter();
       sort = Courts.defaultSort();
+      draft = null;
       stateOwner = ctx.eventId;
     }
+    if (locked) draft = null;   // 確定済みの大会では行を足せない
     // 絞り込み中のコート・巡目の選手が全員いなくなったら「全コート」「全巡」に戻す
     if (filter.court && Courts.listFrom(ctx.players).indexOf(filter.court) === -1) filter.court = '';
     if (filter.round && Courts.roundsOf(ctx.players).indexOf(filter.round) === -1) filter.round = 0;
@@ -68,6 +75,14 @@
     head.appendChild(h2);
     head.appendChild(spacer);
     head.appendChild(count);
+    if (!locked) {
+      var btnAdd = document.createElement('button');
+      btnAdd.type = 'button';
+      btnAdd.className = 'desk-btn';
+      btnAdd.textContent = '＋ 行を追加';
+      btnAdd.addEventListener('click', function() { startDraft(ctx); });
+      head.appendChild(btnAdd);
+    }
     container.appendChild(head);
 
     if (locked) {
@@ -165,12 +180,12 @@
   function renderTable(wrap, ctx, locked) {
     wrap.innerHTML = '';
     var players = ctx.players || [];
-    if (players.length === 0) {
-      wrap.appendChild(emptyMessage('まだ選手がいません。'));
+    if (players.length === 0 && !draft) {
+      wrap.appendChild(emptyMessage('まだ選手がいません。「＋ 行を追加」か「📋 貼り付けて追加」で登録してください。'));
       return;
     }
     var rows = Courts.sortBy(Courts.applyFilter(players, filter), sort);
-    if (rows.length === 0) {
+    if (rows.length === 0 && !draft) {
       wrap.appendChild(emptyMessage('条件に合う選手がいません。'));
       return;
     }
@@ -206,6 +221,8 @@
 
     var tbody = document.createElement('tbody');
     rows.forEach(function(p) { tbody.appendChild(buildRow(ctx, p, locked)); });
+    // 下書き行は絞り込みに関わらず必ず末尾に出す（打ち込んでいる途中で消えない）
+    if (draft && !locked) tbody.appendChild(buildDraftRow(ctx));
     table.appendChild(tbody);
     wrap.appendChild(table);
   }
@@ -499,6 +516,186 @@
       null);
     td.appendChild(sel);
     return td;
+  }
+
+  // --- 「＋ 行を追加」の下書き行 ---
+
+  // 直前の行（いま表に出ている最後の行）からコート・性別・新人を引き継ぐ。
+  // 表が空なら最初のコート（無ければ A）・男子・新人なし。
+  function draftSeed(ctx) {
+    var rows = Courts.sortBy(Courts.applyFilter(ctx.players || [], filter), sort);
+    var last = rows.length ? rows[rows.length - 1] : null;
+    var courts = Courts.listFrom(ctx.players).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    var court = last ? Courts.courtOf(last) : '';
+    if (!court || court === Courts.UNASSIGNED) court = courts[0] || 'A';
+    return {
+      court: court,
+      isFemale: last ? !!last.isFemale : false,
+      isNewFace: last ? !!last.isNewFace : false
+    };
+  }
+
+  function startDraft(ctx) {
+    draft = draftSeed(ctx);
+    redrawTable();
+    var input = view && view.wrap.querySelector('.desk-draft-row input[type="text"]');
+    if (input) input.focus();
+  }
+
+  function cancelDraft() {
+    draft = null;
+    redrawTable();
+  }
+
+  // 下書き行。サーバーにはまだ無いので、保存するのは名前を確定したとき 1 回だけ。
+  // コート・性別・新人・技はその場の値を持つだけで、通信はしない。
+  function buildDraftRow(ctx) {
+    var d = {
+      name: '', court: draft.court, isFemale: draft.isFemale, isNewFace: draft.isNewFace,
+      tech1: '', tech2: '', tech3: ''
+    };
+    var tr = document.createElement('tr');
+    tr.className = 'desk-draft-row';
+    tr.appendChild(cell('1', 'num col-round'));    // 追加は常に一巡目（二巡目は生成 API が作る）
+    tr.appendChild(cell('—', 'num col-no'));       // 番号はサーバーが採番する
+
+    var tdName = document.createElement('td');
+    tdName.className = 'col-name';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'desk-cell-input';
+    input.placeholder = '名前を入れて Enter';
+    input.setAttribute('aria-label', '追加する選手の名前');
+    tdName.appendChild(input);
+    tr.appendChild(tdName);
+
+    // コート
+    var tdCourt = document.createElement('td');
+    tdCourt.className = 'col-court';
+    var selCourt = document.createElement('select');
+    selCourt.className = 'desk-cell-select';
+    selCourt.setAttribute('aria-label', 'コート');
+    fillCourtOptions(selCourt, ctx, d.court);
+    selCourt.addEventListener('change', function() {
+      if (selCourt.value === NEW_COURT) {
+        var name = askCourtName();
+        if (!name) { selCourt.value = d.court; return; }
+        insertCourtOption(selCourt, name);
+      }
+      d.court = selCourt.value;
+    });
+    tdCourt.appendChild(selCourt);
+    tr.appendChild(tdCourt);
+
+    // 性別
+    var tdSex = document.createElement('td');
+    tdSex.className = 'col-sex';
+    var selSex = document.createElement('select');
+    selSex.className = 'desk-cell-select';
+    selSex.setAttribute('aria-label', '性別');
+    addOption(selSex, '男子', '男子');
+    addOption(selSex, '女子', '女子');
+    selSex.value = d.isFemale ? '女子' : '男子';
+    selSex.addEventListener('change', function() { d.isFemale = (selSex.value === '女子'); });
+    tdSex.appendChild(selSex);
+    tr.appendChild(tdSex);
+
+    // 新人
+    var tdNew = document.createElement('td');
+    tdNew.className = 'col-new';
+    var chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.className = 'desk-cell-check';
+    chk.checked = d.isNewFace;
+    chk.setAttribute('aria-label', '新人');
+    chk.addEventListener('change', function() { d.isNewFace = chk.checked; });
+    tdNew.appendChild(chk);
+    tr.appendChild(tdNew);
+
+    // 技 1〜3
+    [1, 2, 3].forEach(function(slot) {
+      var td = document.createElement('td');
+      td.className = 'col-tech';
+      var sel = document.createElement('select');
+      sel.className = 'desk-cell-select';
+      sel.setAttribute('aria-label', '技' + slot);
+      addOption(sel, '', '—');
+      (ctx.techniques || []).forEach(function(t) {
+        var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
+        if (n) addOption(sel, n, n);
+      });
+      sel.addEventListener('change', function() { d['tech' + slot] = sel.value; });
+      td.appendChild(sel);
+      tr.appendChild(td);
+    });
+
+    tr.appendChild(cell('—', 'num col-score'));
+    tr.appendChild(cell('', 'act'));
+
+    var busy = false;
+    var composing = false;
+
+    function setDisabled(flag) {
+      [input, selCourt, selSex, chk].forEach(function(el) { el.disabled = flag; });
+      var sels = tr.querySelectorAll('.col-tech select');
+      for (var i = 0; i < sels.length; i++) sels[i].disabled = flag;
+    }
+
+    async function create() {
+      if (busy) return;
+      var name = input.value.trim();
+      if (!name) { cancelDraft(); return; }
+      busy = true;
+      setDisabled(true);
+      var created = await Api.createPlayer(ctx.eventId, {
+        name: name, court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace,
+        tech1: d.tech1, tech2: d.tech2, tech3: d.tech3, round: 1
+      });
+      if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
+      busy = false;
+      setDisabled(false);
+      if (created && created.player === null) {
+        // 409（いまは確定済みガードだけ）。行は残す（入力を失わせない）
+        if (created.reason === 'locked') {
+          alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else {
+          alert(created.error);
+        }
+        return;
+      }
+      if (!created) {
+        alert('選手を追加できませんでした。\n入力内容と通信を確認してください。');
+        return;
+      }
+      Desk.toast(created.order + ' ' + created.name + ' を追加しました');
+      // 続けて打ち込めるよう、同じコート・性別・新人でもう 1 行出す
+      draft = { court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace };
+      await Desk.reloadEvent();
+      if (ctx.isStale()) return;
+      var next = view && view.wrap.querySelector('.desk-draft-row input[type="text"]');
+      if (next) next.focus();
+    }
+
+    input.addEventListener('compositionstart', function() { composing = true; });
+    input.addEventListener('compositionend', function() { composing = false; });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { e.preventDefault(); cancelDraft(); return; }
+      if (e.key !== 'Enter') return;
+      if (composing || e.isComposing || e.keyCode === 229) return;   // IME 変換中の Enter は確定
+      e.preventDefault();
+      create();
+    });
+    input.addEventListener('blur', function() {
+      // 行の中で Tab 移動しただけなら消さない。フォーカスが行の外へ出たときだけ判断する。
+      setTimeout(function() {
+        if (busy || !tr.parentNode) return;
+        if (tr.contains(document.activeElement)) return;
+        if (input.value.trim()) create();
+        else cancelDraft();
+      }, 0);
+    });
+
+    return tr;
   }
 
   Desk.registerTab('players', { render: render });
