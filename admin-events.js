@@ -184,16 +184,6 @@
     Admin.navigate('events');
   }
 
-  // toISOString は UTC なので JST の深夜に前日になる。ローカル日付を組み立てる。
-  function todayLocal() {
-    var d = new Date();
-    var mm = String(d.getMonth() + 1);
-    var dd = String(d.getDate());
-    if (mm.length < 2) mm = '0' + mm;
-    if (dd.length < 2) dd = '0' + dd;
-    return d.getFullYear() + '-' + mm + '-' + dd;
-  }
-
   // 新規大会のシート。
   // 保存に失敗したらシートを閉じない（閉じると入力し直しになる）。
   function openNewSheet() {
@@ -201,7 +191,7 @@
     var inName = addField(body, '大会名', 'text');
     var inDate = addField(body, '日付', 'date');
     var inVenue = addField(body, '会場', 'text');
-    inDate.value = todayLocal();
+    inDate.value = Storage.todayLocal();
 
     var btnSave = document.createElement('button');
     btnSave.type = 'button';

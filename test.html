@@ -2209,6 +2209,52 @@
     assert('bundleFilename: null でも落ちない',
       Storage.bundleFilename(null, null), 'tameshigiri_nodate_大会.json');
 
+    // ---- 運営画面のモード（PC / スマホ）とハッシュの対応（設計書「モードの切り替え」） ----
+    // 端末に控えてあるモードをテストで書き換えるので、最後に元へ戻す。
+    var modeSaved = null;
+    try { modeSaved = localStorage.getItem('tmg_mode'); } catch (e) {}
+
+    assert('mapHash: #events はどちらのモードでも #events',
+      [Storage.mapHash('#events', 'pc'), Storage.mapHash('#events', 'mobile')], ['#events', '#events']);
+    assert('mapHash: 空のハッシュは #events', Storage.mapHash('', 'pc'), '#events');
+    assert('mapHash: null でも #events', Storage.mapHash(null, 'pc'), '#events');
+    assert('mapHash: 先頭の # は無くてもよい', Storage.mapHash('players/e1', 'pc'), '#players/e1');
+    assert('mapHash: 大会IDの無い区画は #events に落とす', Storage.mapHash('#players', 'pc'), '#events');
+    assert('mapHash: #players はどちらでもそのまま',
+      [Storage.mapHash('#players/e1', 'pc'), Storage.mapHash('#players/e1', 'mobile')],
+      ['#players/e1', '#players/e1']);
+    assert('mapHash: #results はどちらでもそのまま',
+      [Storage.mapHash('#results/e1', 'pc'), Storage.mapHash('#results/e1', 'mobile')],
+      ['#results/e1', '#results/e1']);
+    assert('mapHash: スマホの #round は PC の #match', Storage.mapHash('#round/e1', 'pc'), '#match/e1');
+    assert('mapHash: PC の #match はスマホの #round', Storage.mapHash('#match/e1', 'mobile'), '#round/e1');
+    assert('mapHash: #setup は PC ではそのまま', Storage.mapHash('#setup/e1', 'pc'), '#setup/e1');
+    assert('mapHash: PC にしか無い #setup はスマホでは #players',
+      Storage.mapHash('#setup/e1', 'mobile'), '#players/e1');
+    assert('mapHash: PC にしか無い #techniques はスマホでは #players',
+      Storage.mapHash('#techniques/e1', 'mobile'), '#players/e1');
+    assert('mapHash: 知らない区画は #events', Storage.mapHash('#zzz/e1', 'pc'), '#events');
+    assert('mapHash: 大会IDのエンコードはそのまま保つ',
+      Storage.mapHash('#players/' + encodeURIComponent('a b'), 'pc'), '#players/a%20b');
+
+    assert('modeHref: pc は desk.html', Storage.modeHref('#round/e1', 'pc'), 'desk.html#match/e1');
+    assert('modeHref: mobile は admin.html', Storage.modeHref('#match/e1', 'mobile'), 'admin.html#round/e1');
+    assert('modeHref: 知らないモードはスマホ扱い', Storage.modeHref('#events', 'zzz'), 'admin.html#events');
+
+    Storage.saveMode('pc');
+    assert('loadMode: 控えた値を返す', Storage.loadMode(), 'pc');
+    assert('adminHref: 控えが pc なら desk.html', Storage.adminHref('#round/e1'), 'desk.html#match/e1');
+    Storage.saveMode('mobile');
+    assert('adminHref: 控えが mobile なら admin.html', Storage.adminHref('#setup/e1'), 'admin.html#players/e1');
+    Storage.saveMode('zzz');
+    assert('saveMode: 知らない値は控えない（前の値のまま）', Storage.loadMode(), 'mobile');
+    try {
+      if (modeSaved === null) localStorage.removeItem('tmg_mode');
+      else localStorage.setItem('tmg_mode', modeSaved);
+    } catch (e) {}
+
+    assert('todayLocal: YYYY-MM-DD の形', /^\d{4}-\d{2}-\d{2}$/.test(Storage.todayLocal()), true);
+
     await runApiTests();
 
     // 結果サマリ
