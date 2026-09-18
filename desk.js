@@ -371,15 +371,17 @@ var Desk = (function() {
     setStageButtonsDisabled(true);
     var res = await Api.changeStatus(eventId, to);
     if (seq !== renderSeq || selectedEventId !== eventId) return;   // 通信中に画面を離れた
+    // 成功しても reloadEvent が通信断で描き直せないことがあるので、分岐に置かず
+    // ここで必ず戻す（成功時は直後の reloadEvent が帯ごと作り直すので無害）。
+    setStageButtonsDisabled(false);
     if (!res) {
-      setStageButtonsDisabled(false);
       alert('状態を変えられませんでした。通信を確認してください。');
       return;
     }
     if (!res.ok) {
-      setStageButtonsDisabled(false);
       alert(res.error);
-      await reloadEvent();   // 他の端末が先に進めていた可能性がある
+      // 他の端末が先に進めていたときだけ読み直す（empty / no_round2 は自分の画面が古いわけではない）
+      if (res.reason === 'transition') await reloadEvent();
       return;
     }
     toast(EventStatus.LABELS[to] + ' にしました');

@@ -191,7 +191,7 @@ EventStatus.of(event)                 // event.status が有効ならそれ、�
 
 `EventStatus.isLocked(EventStatus.of(event))` のとき、次の書き込みを 409 `{ "error": "この大会は最終結果を確定済みです", "reason": "locked", "status": "final" }` で拒む。
 
-- `POST /api/events`（既存 ID の上書き）、`POST /api/events/:id/players`、`…/players/bulk`、`PATCH …/players/:playerId`、`DELETE …/players/:playerId`
+- `POST /api/events`（既存 ID の上書き）、`PATCH /api/events/:id`（基本情報）、`POST /api/events/:id/players`、`…/players/bulk`、`PATCH …/players/:playerId`、`DELETE …/players/:playerId`
 - `POST /api/events/:id/import`、`PUT` / `DELETE /api/events/:id/techniques`、`POST /api/events/:id/rounds/2/generate`、`PUT /api/events/:id/live/:court`
 
 拒まないもの: `POST /api/events/:id/status`（戻す・アーカイブ）、`DELETE /api/events/:id`（確認つきの削除は残す）、`GET` 系、`POST /api/links`。
@@ -255,6 +255,8 @@ body の allowlist は `name`（trim 後 1〜100 文字。送らなければ変�
 ```javascript
 changeStatus(eventId, to)        // → { ok: true, status } | { ok: false, status(HTTP), reason, error } | null（通信断）
 copyEvent(eventId, data)         // → { id, playerCount } | { error } | null
+updateEventInfo(eventId, data)   // → { ok: true, event } | { ok: false, status(HTTP), reason, error } | null（通信断）。名前・日付・会場だけを PATCH
+loadEventResult(id)              // → { ok: true, event } | { ok: false, status }（通信断は status 0）。loadEvent は残す。404 と通信断を出し分ける画面用
 createPlayersBulk(eventId, data) // 既存。data.rows があれば行形式で送る。失敗時に { error } を返せるようにする
 ```
 
