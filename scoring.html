@@ -49,7 +49,6 @@
 
   <!-- 選手ナビゲーション -->
   <div class="player-nav">
-    <button class="nav-btn" id="btnPrev">◀ 前の選手</button>
     <div class="player-info">
       <span class="court-label" id="courtLabel"></span>
       <div class="player-text">
@@ -57,15 +56,6 @@
         <strong id="playerNameLabel">（大会を選択してください）</strong>
       </div>
     </div>
-    <button class="nav-btn" id="btnNext">次の選手 ▶</button>
-  </div>
-
-  <!-- タイマー -->
-  <div class="timer-bar">
-    <button id="btnTimerStart">▶ 開始</button>
-    <button id="btnTimerStop">■ 停止</button>
-    <button id="btnTimerReset">↺ リセット</button>
-    <div class="timer-display" id="timerDisplay">05:00</div>
   </div>
 
   <!-- 採点テーブル -->
@@ -94,12 +84,25 @@
     <label class="note-label">備考 <input type="text" maxlength="200" id="noteInput" placeholder="（任意）"></label>
   </div>
 
-  <!-- アクションバー -->
-  <div class="action-bar">
-    <button class="btn-success" id="btnAllSuccess">形成功</button>
-    <button class="btn-fail"    id="btnAllFail">失敗</button>
-    <button class="btn-confirm" id="btnConfirm">確定</button>
-    <div class="total-score" id="totalScoreDisplay"><span class="total-label">合計</span><span class="total-value" id="totalScoreBox"><span id="totalScoreValue">0</span><span class="total-unit">点</span></span></div>
+  <!-- 前後の選手・タイマー・採点操作をひとつの区画にまとめる -->
+  <div class="action-block">
+    <!-- タイマー -->
+    <div class="timer-bar">
+      <button id="btnTimerStart">▶ 開始</button>
+      <button id="btnTimerStop">■ 停止</button>
+      <button id="btnTimerReset">↺ リセット</button>
+      <div class="timer-display" id="timerDisplay">05:00</div>
+    </div>
+
+    <!-- アクションバー -->
+    <div class="action-bar">
+      <button class="nav-btn" id="btnPrev">◀ 前の選手</button>
+      <button class="btn-success" id="btnAllSuccess">形成功</button>
+      <button class="btn-fail"    id="btnAllFail">失敗</button>
+      <button class="btn-confirm" id="btnConfirm">確定</button>
+      <div class="total-score" id="totalScoreDisplay"><span class="total-label">合計</span><span class="total-value" id="totalScoreBox"><span id="totalScoreValue">0</span><span class="total-unit">点</span></span></div>
+      <button class="nav-btn" id="btnNext">次の選手 ▶</button>
+    </div>
   </div>
 
   <!-- ツールバー -->
