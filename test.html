@@ -1511,6 +1511,10 @@
     ];
     var encoded = Scoring.encodeResult(encRows);
     assert('encodeResult 5文字目は空白（補正点は result に入れない）', encoded, '10   11   ');
+    // 途中失敗より後ろに保存済みの○が残っていても、encodeResult は
+    // effectiveValues で無効化してから書く（×の後ろは空白になる）。
+    var voidedRows = [{ techName: '破図味(男)', values: ['○', '×', '○', '○'], adjust: 0 }];
+    assert('encodeResult が無効化後の値（×の後ろは空白）を書く', Scoring.encodeResult(voidedRows), '10   ');
     var decoded = Scoring.decodeResult(encoded, 2, [3, 0, 0]);
     assert('decodeResult values[0]', decoded[0].values, ['○','×','','']);
     assert('decodeResult adjust[0] は adjust 配列から', decoded[0].adjust, 3);
