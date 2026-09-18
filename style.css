@@ -439,7 +439,7 @@ body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
    見出しの帯（ページリンク・大会バー・選手名・タイマー・ツールバー・表の見出し）は
    テーマに依らず黒地に金。作業面の色は theme.css の変数に任せる。
    ここは上書き専用の節なので、上の各節より後ろに置くこと。 */
-.page-links, .event-bar, .player-nav, .timer-bar, .toolbar {
+.page-links, .event-bar, .player-nav, .timer-bar, .toolbar, .action-bar {
   background: var(--band-bg);
   color: var(--band-text);
   border-color: var(--gold);
@@ -466,6 +466,9 @@ body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
 .score-table td.tech-name::before { color: var(--gold-deep); }
 .score-table tr.selected td.tech-name::before { color: inherit; }
 .action-block { border-color: var(--gold); }
+/* 合計は帯の上に乗るので、ライトで沈む --score-color / --score-confirmed の代わりに
+   --gold-light を使う（確定済みかどうかは下の採点表・確定ボタンでも分かる）。 */
+.total-score, .total-score.confirmed { color: var(--gold-light); }
 .player-list-toggle { background: var(--band-bg); color: var(--gold-light); }
 .player-list-section { border-top-color: var(--gold); }
 .ranking-section h3 { font-family: var(--mincho); }
