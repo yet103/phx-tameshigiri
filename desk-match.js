@@ -242,13 +242,17 @@
       bar.appendChild(btnAll);
     }
 
-    var incomplete = rows.filter(Courts.isTechIncomplete).length;
-    var count = document.createElement('span');
-    count.className = 'desk-match-count' + (incomplete === 0 ? ' done' : '');
-    count.id = 'matchRound2Count';
-    count.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + incomplete;
-    bar.appendChild(count);
-    wrap.appendChild(bar);
+    // 二巡目の行が0件のときは「二巡目 0名　技 未入力 0」を出さない
+    // （このあとの空メッセージと二重になるため）。
+    if (rows.length > 0) {
+      var incomplete = rows.filter(Courts.isTechIncomplete).length;
+      var count = document.createElement('span');
+      count.className = 'desk-match-count' + (incomplete === 0 ? ' done' : '');
+      count.id = 'matchRound2Count';
+      count.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + incomplete;
+      bar.appendChild(count);
+    }
+    if (bar.children.length > 0) wrap.appendChild(bar);
 
     if (rows.length === 0) {
       var none = document.createElement('p');
