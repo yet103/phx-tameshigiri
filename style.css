@@ -23,44 +23,44 @@ input[type="file"] { display: none; }
 .container { max-width: 1200px; margin: 0 auto; padding: 8px 12px; }
 
 /* ===== 選手ナビゲーションバー =====
-   前後の選手ボタンは .action-bar に移したので、ここは選手名の表示だけ。中央揃えにする。 */
+   前後の選手ボタンは .action-bar に移したので、ここは選手名の表示だけ。
+   「Aコート」が目立ちすぎないよう、3列（コート／順番+名前／空）にして中央の組を画面中央に置く。 */
 .player-nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: center;
+  column-gap: 12px;
   background: var(--bg-header);
   border-bottom: 2px solid var(--border);
   padding: 8px 12px;
-  gap: 8px;
-  flex-wrap: wrap;
 }
-/* 誰を採点しているかを離れた位置からも読めるように、コートはバッジ、名前は大きく太く。 */
-.player-nav .player-info {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  min-width: 0;
-  text-align: left;
-  font-weight: bold;
-}
+/* コートは左端に小さく（金のグラデーションは残す）。誰を採点しているかは中央の組の名前で読む。 */
 .player-nav .court-label {
-  flex: 0 0 auto;
-  font-size: 30px;
-  line-height: 1.1;
-  padding: 4px 14px;
-  border-radius: 10px;
+  grid-column: 1;
+  justify-self: start;
+  font-size: 13px;
+  line-height: 1.2;
+  padding: 2px 10px;
+  border-radius: 8px;
   background: var(--accent);
   color: var(--accent-text);
 }
 .player-nav .court-label:empty { display: none; }   /* 大会未選択・コート不明のときはバッジを出さない */
-.player-nav .player-text { display: flex; flex-direction: column; min-width: 0; }
-.player-nav .order-label { font-size: 13px; font-weight: normal; color: var(--text-muted); }
+/* 中央の組: 「男子 1巡目 1番」を選手名の左に横並びにし、この組ごと画面中央へ */
+.player-nav .player-text {
+  grid-column: 2;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  font-weight: bold;
+}
+.player-nav .order-label { font-size: 16px; font-weight: normal; color: var(--text-muted); white-space: nowrap; }
 .player-nav #playerNameLabel { font-size: 34px; line-height: 1.15; overflow-wrap: anywhere; }
 /* スマホ幅: 選手名だけの帯なので中央揃えのまま */
 @media (max-width: 767px) {
   .player-nav { row-gap: 8px; }
-  .player-nav .court-label { font-size: 24px; padding: 4px 10px; }
+  .player-nav .court-label { font-size: 20px; padding: 2px 8px; }
   .player-nav #playerNameLabel { font-size: 28px; }
 }
 
