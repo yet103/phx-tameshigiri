@@ -206,6 +206,8 @@
       th.className = col.cls;
       if (!col.key) {
         th.textContent = col.label;
+        // 操作列は見出しの文字が空なので、スクリーンリーダー向けに列名を付ける
+        if (col.cls === 'act') th.setAttribute('aria-label', '操作');
       } else {
         var on = sort.key === col.key;
         th.setAttribute('aria-sort', on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
