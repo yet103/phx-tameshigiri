@@ -340,3 +340,76 @@ a { color: var(--accent); }
 .desk-results-score { font-weight: bold; color: var(--score-color); }
 .desk-results-board { margin-top: 28px; }
 .desk-results-boardlist { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== 大会トーン（ポスター準拠） =====
+   帯（上部バー・大会の見出し・区画ナビ・表の見出し・ダイアログの見出し・トースト）は
+   テーマに依らず黒地に金。作業面（表の中身・入力欄・カードの本文）は theme.css の
+   色のまま。上書き専用の節なので、上の各節より後ろに置くこと。 */
+
+/* 上部バー */
+.desk-top { border-bottom: 1px solid var(--gold); letter-spacing: .04em; }
+
+/* 大会の見出しと段階表示。帯の中の文字は band- と gold- の変数からのみ取る */
+.desk-head { background: var(--band-bg); border-bottom: 2px solid var(--gold); }
+.desk-head-name { font-family: var(--mincho); letter-spacing: .04em; color: var(--gold-light); font-size: 20px; }
+.desk-head-meta { color: var(--band-muted); }
+.desk-stage-step { color: var(--band-muted); }
+.desk-stage-step.done { color: var(--gold-light); }
+.desk-stage-step.on {
+  background: linear-gradient(180deg, var(--gold-light), var(--gold-deep));
+  color: var(--band-bg); padding: 1px 10px; border-radius: 10px;
+}
+.desk-stage-sep { color: var(--gold-deep); }
+.desk-stage-archived { color: var(--gold-light); border-color: var(--gold-deep); }
+.desk-stage-count { color: var(--band-muted); }
+.desk-head .desk-btn-sub { color: var(--band-muted); }
+.desk-head .desk-btn-sub:hover:not(:disabled) { color: var(--gold-light); border-color: var(--gold); }
+
+/* 左の区画ナビ。ページリンクと同じ黒地に金 */
+.desk-nav { background: var(--band-bg); }
+.desk-nav button { color: var(--band-text); }
+.desk-nav button:hover:not(:disabled) { background: var(--band-bg-2); }
+.desk-nav button.on {
+  background: var(--band-bg-2); color: var(--gold-light);
+  border-left-color: var(--gold); font-family: var(--mincho);
+}
+.desk-nav-sep { background: var(--gold-deep); }
+
+/* 主ボタン。前後の選手ボタンと同じ黒地に金の枠 */
+.desk-btn { border-color: var(--gold-deep); }
+.desk-btn:hover:not(:disabled) { border-color: var(--gold); }
+.desk-btn.primary { background: var(--band-bg-2); color: var(--gold-light); border-color: var(--gold); }
+.desk-btn.primary:hover:not(:disabled) { border-color: var(--gold-light); }
+
+/* 表の見出し。大会一覧・選手表・二巡目の表はすべて .desk-table を共有 */
+.desk-table th { background: var(--band-bg); color: var(--gold-light); border-color: var(--gold); font-family: var(--mincho); }
+.desk-players-table th.col-name { background: var(--band-bg); }
+
+/* 区画の見出し */
+.desk-section-head h2 { font-family: var(--mincho); padding-bottom: 3px; border-bottom: 1px solid var(--gold); }
+
+/* カード（試合の区画・結果の列）。枠を金に、見出しを帯にする */
+.desk-match-card, .desk-results-col { border-color: var(--gold-deep); }
+.desk-match-court {
+  margin: -12px -14px 0; padding: 8px 14px; border-radius: 5px 5px 0 0;
+  background: var(--band-bg); color: var(--gold-light); font-family: var(--mincho);
+}
+.desk-results-col h3 {
+  margin: -12px -14px 8px; padding: 8px 14px; border-radius: 5px 5px 0 0; border-bottom: 1px solid var(--gold);
+  background: var(--band-bg); color: var(--gold-light);
+}
+
+/* ダイアログ */
+.desk-dialog { border-color: var(--gold); }
+.desk-dialog-head { background: var(--band-bg); color: var(--gold-light); font-family: var(--mincho); border-bottom-color: var(--gold); }
+.desk-dialog-close { color: var(--gold-light); }
+.desk-dialog-close:hover { background: var(--band-bg-2); }
+
+/* トースト */
+.desk-toast { background: var(--band-bg); color: var(--band-ok); border: 1px solid var(--gold-deep); }
+
+/* フォーカス。タイマー表示と同じ金の内枠 */
+input[type="text"]:focus, input[type="date"]:focus, input[type="number"]:focus, select:focus, textarea:focus,
+.desk-cell-input:focus, .desk-cell-select:focus {
+  box-shadow: 0 0 0 2px var(--gold) inset;
+}
