@@ -151,7 +151,7 @@ input[type="file"] { display: none; }
   min-width: 50px;
   user-select: none;
 }
-.score-table td.strike-cell:hover:not(.disabled) { opacity: 0.8; }
+.score-table td.strike-cell:hover:not(.disabled):not(.voided) { opacity: 0.8; }
 .score-table td.strike-cell.success {
   background: var(--cell-success);
   color: var(--cell-success-text);
@@ -162,6 +162,14 @@ input[type="file"] { display: none; }
 }
 .score-table td.strike-cell.disabled {
   background: var(--cell-disabled);
+  cursor: default;
+}
+/* 一つの形で途中失敗すると、それ以降の太刀（配点はある）は無効表示になり押せない */
+.score-table td.strike-cell.voided {
+  background: var(--cell-disabled);
+  color: var(--text-muted);
+  font-weight: normal;
+  font-size: 14px;
   cursor: default;
 }
 .score-table td.score-col {
@@ -191,6 +199,7 @@ input[type="file"] { display: none; }
 .score-table tr.selected td.strike-cell.success { background: var(--cell-success); }
 .score-table tr.selected td.strike-cell.fail { background: var(--cell-fail); }
 .score-table tr.selected td.strike-cell.disabled { background: var(--cell-disabled); }
+.score-table tr.selected td.strike-cell.voided { background: var(--cell-disabled); }
 .score-table td.adjust-cell { padding: 2px 4px; }
 .adjust-input {
   width: 64px; height: 44px; text-align: center; font-size: 16px;

@@ -724,6 +724,7 @@ var App = (function() {
     tdScore.className = 'score-col';
     tr.appendChild(tdScore);
 
+    applyVoiding(tr);
     updateRowScore(tr, isFemale);
     return tr;
   }
@@ -733,6 +734,29 @@ var App = (function() {
     if (value === '○') { td.textContent = '成功'; td.classList.add('success'); }
     else if (value === '×') { td.textContent = '失敗'; td.classList.add('fail'); }
     else { td.textContent = '未'; td.classList.add('empty'); }
+  }
+
+  // 一つの形で途中失敗したら、それ以降の太刀（配点のある太刀）を無効表示にする。
+  // 最初の×より前・×が無い行はここで押せる状態（未・成功・失敗）に戻す。
+  // 戻り値: この行に無効表示のセルが残っている（できた）かどうか
+  function applyVoiding(tr) {
+    var idx = Scoring.failedAt(rowValues(tr));
+    var voided = false;
+    for (var s = 0; s < 4; s++) {
+      var cell = tr.querySelector('[data-strike="' + s + '"]');
+      if (!cell || cell.classList.contains('disabled')) continue;
+      if (idx !== -1 && s > idx) {
+        cell.dataset.value = '';
+        cell.classList.remove('success', 'fail', 'empty');
+        cell.classList.add('voided');
+        cell.textContent = '—';
+        voided = true;
+      } else if (cell.classList.contains('voided')) {
+        cell.classList.remove('voided');
+        setCellDisplay(cell, cell.dataset.value || '');
+      }
+    }
+    return voided;
   }
 
   // 採点できる行（技の行）が出ているか。技が未入力の選手では偽。
@@ -995,7 +1019,7 @@ var App = (function() {
   function onStrikeClick(e) {
     if (!scoringOpen()) return;   // 採点できない状態（理由はバナーに出ている）
     var td = e.currentTarget;
-    if (td.classList.contains('disabled')) return;
+    if (td.classList.contains('disabled') || td.classList.contains('voided')) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     // 技が無い選手は採点できない
     if (!hasScoreRows()) return;
@@ -1007,6 +1031,7 @@ var App = (function() {
     var next = current === '' ? '○' : current === '○' ? '×' : '';
     td.dataset.value = next;
     setCellDisplay(td, next);
+    var voided = applyVoiding(tr);
 
     var p = visiblePlayers[currentIndex];
     gridEdited = true;
@@ -1015,6 +1040,9 @@ var App = (function() {
     updateTotal();
     saveCurrentState();
 
+    var detail = STRIKE_LABELS[parseInt(td.dataset.strike, 10)] + ' → ' +
+              (next === '○' ? '成功' : next === '×' ? '失敗' : '未');
+    if (voided) detail += '（以降の太刀は無効）';
     Api.addHistory(currentEvent.id, {
       action: 'score_update',
       playerName: p ? p.name : '',
@@ -1024,8 +1052,7 @@ var App = (function() {
       techRow: parseInt(tr.dataset.row, 10),
       strike: parseInt(td.dataset.strike, 10),
       value: next,
-      detail: STRIKE_LABELS[parseInt(td.dataset.strike, 10)] + ' → ' +
-              (next === '○' ? '成功' : next === '×' ? '失敗' : '未')
+      detail: detail
     });
   }
 
@@ -1118,6 +1145,7 @@ var App = (function() {
         setCellDisplay(cell, '○');
       }
     }
+    applyVoiding(tr);
     gridEdited = true;
     unconfirmIfNeeded();
     updateRowScore(tr, p ? p.isFemale : false);
@@ -1129,18 +1157,25 @@ var App = (function() {
     });
   }
 
-  // 「失敗」: 選択中の技の行の「未」だけを失敗にする（成功は触らない）
+  // 「失敗」: 選択中の技の行の最初の「未」（配点のある太刀）を失敗にする（残りは自動で無効になる）
   function setAllFail() {
     var tr = guardRowAction();
     if (!tr) return;
-    var p = visiblePlayers[currentIndex];
+    var target = null;
     for (var s = 0; s < 4; s++) {
       var cell = tr.querySelector('[data-strike="' + s + '"]');
-      if (cell && !cell.classList.contains('disabled') && (cell.dataset.value || '') === '') {
-        cell.dataset.value = '×';
-        setCellDisplay(cell, '×');
+      if (cell && !cell.classList.contains('disabled') && !cell.classList.contains('voided') &&
+          (cell.dataset.value || '') === '') {
+        target = cell;
+        break;
       }
     }
+    // 行に未が無ければ何もしない
+    if (!target) return;
+    var p = visiblePlayers[currentIndex];
+    target.dataset.value = '×';
+    setCellDisplay(target, '×');
+    var voided = applyVoiding(tr);
     gridEdited = true;
     unconfirmIfNeeded();
     updateRowScore(tr, p ? p.isFemale : false);
@@ -1148,7 +1183,8 @@ var App = (function() {
     saveCurrentState();
     Api.addHistory(currentEvent.id, {
       action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
-      techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×', detail: '未を失敗に'
+      techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×',
+      detail: '未を失敗に' + (voided ? '（以降の太刀は無効）' : '')
     });
   }
 
