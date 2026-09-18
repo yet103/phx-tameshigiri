@@ -70,9 +70,18 @@
       return x < y ? 1 : -1;
     });
 
-    events.forEach(function(ev) {
-      list.appendChild(buildRow(ev));
-    });
+    // アーカイブ済みは末尾にまとめる。当日の運営で押し間違えないよう、
+    // 進行中・準備中の大会と混ぜない。
+    var active = events.filter(function(ev) { return EventStatus.of(ev) !== 'archived'; });
+    var archived = events.filter(function(ev) { return EventStatus.of(ev) === 'archived'; });
+    active.forEach(function(ev) { list.appendChild(buildRow(ev)); });
+    if (archived.length > 0) {
+      var head2 = document.createElement('div');
+      head2.className = 'list-head';
+      head2.textContent = 'アーカイブ（' + archived.length + ' 件）';
+      list.appendChild(head2);
+      archived.forEach(function(ev) { list.appendChild(buildRow(ev)); });
+    }
   }
 
   function buildRow(ev) {
@@ -87,7 +96,8 @@
     main.textContent = ev.name || '(名称未設定)';
     var sub = document.createElement('span');
     sub.className = 'row-sub';
-    sub.textContent = (ev.date || '日付なし') + ' ・ ' + (ev.playerCount || 0) + '名';
+    sub.textContent = (ev.date || '日付なし') + ' ・ ' + (ev.playerCount || 0) + '名 ・ ' +
+      EventStatus.LABELS[EventStatus.of(ev)];
     body.appendChild(main);
     body.appendChild(sub);
     body.addEventListener('click', function() {

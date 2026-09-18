@@ -106,6 +106,16 @@ main { padding: 8px 12px 16px; }
 .row .row-main, .row .row-sub { display: block; }
 .row-del { flex: 0 0 auto; min-width: 44px; min-height: 44px; background: transparent; color: var(--text-muted); font-size: 16px; }
 
+/* 一覧の中の小見出し（大会タブの「アーカイブ（n 件）」） */
+.list-head {
+  padding: 12px 12px 4px;
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
 /* ===== 選手タブの絞り込みと表 =====
    絞り込みは 3 段（コート／性別・巡目・新人・技未入力／名前検索）。
    表は 1 行 1 段で折り返さず、幅を超えたら .players-table-wrap の中だけ横に流す。
