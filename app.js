@@ -371,14 +371,33 @@ var App = (function() {
   // 選択肢（#eventSelect）に大会が無ければ足す。一覧から外れている大会
   // （アーカイブされて #event/<id>/... で直接開いた場合など）を選んだときに使う。
   // 黙って未選択に戻ったり、別の大会が選ばれているように見えたりするのを防ぐ。
+  // 足した選択肢には data-rescued を付ける。その大会を離れたら
+  // removeStaleRescuedOptions で消すため（残しっぱなしにしない）。
   function ensureEventOption(event) {
     var select = document.getElementById('eventSelect');
     var found = false;
     for (var i = 0; i < select.options.length; i++) {
       if (select.options[i].value === event.id) { found = true; break; }
     }
-    if (!found) select.appendChild(eventOption(event));
+    if (!found) {
+      var opt = eventOption(event);
+      opt.dataset.rescued = '1';
+      select.appendChild(opt);
+    }
     select.value = event.id;
+  }
+
+  // ensureEventOption が救済で足した選択肢のうち、今の大会（keepEventId）以外を消す。
+  // 大会を離れる（keepEventId === ''）ときは救済の選択肢を全部消す。
+  // 別の大会に切り替わったときも、前の大会の救済分は残さない。
+  function removeStaleRescuedOptions(keepEventId) {
+    var select = document.getElementById('eventSelect');
+    for (var i = select.options.length - 1; i >= 0; i--) {
+      var opt = select.options[i];
+      if (opt.dataset.rescued === '1' && opt.value !== keepEventId) {
+        select.removeChild(opt);
+      }
+    }
   }
 
   // 大会読み込みの再入ガード。
@@ -461,6 +480,8 @@ var App = (function() {
       applyScoringLock();
       // 大会を離れたら配点も雛形に戻す（次に選ぶ大会まで前の大会の配点を持ち越さない）。
       if (templateTechniques) Scoring.setTechniques(templateTechniques);
+      // 救済で足した選択肢も、大会を離れたら残さない。
+      removeStaleRescuedOptions('');
       return;
     }
     var loaded = await Api.loadEvent(eventId);
@@ -475,6 +496,7 @@ var App = (function() {
     }
     adoptEvent(loaded);
     ensureEventOption(currentEvent);
+    removeStaleRescuedOptions(currentEvent.id);   // 前の大会の救済分は残さない
     if (court !== undefined) currentCourt = court;
     refreshCourtList();
     applyCourtFilter();
