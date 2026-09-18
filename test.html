@@ -1626,6 +1626,8 @@
     assert('listFrom: 未分類が無ければ含めない',
       Courts.listFrom([{ order: 'A-男子-1-1' }]), ['A']);
     assert('listFrom: 空配列は空配列', Courts.listFrom([]), []);
+    assert('listFrom: コート名が constructor でも落ちない',
+      Courts.listFrom([{ order: 'constructor-男子-1-1' }]), ['constructor']);
 
     assert('filter: 空文字は全件', Courts.filter(courtPlayers, '').length, 5);
     assert('filter: Aで2件', Courts.filter(courtPlayers, 'A').length, 2);
@@ -1776,6 +1778,9 @@
       Courts.courtProgress([{ order: '' }, { order: 'A-男子-1-1' }], 1).map(function(x) { return x.court; }),
       ['A', '未分類']);
     assert('courtProgress: players が無ければ空', Courts.courtProgress(null, 1), []);
+    assert('courtProgress: コート名が constructor でも落ちない',
+      Courts.courtProgress([{ order: 'constructor-男子-1-1' }], 1),
+      [{ court: 'constructor', total: 1, scored: 0 }]);
 
     var mcLive = { A: { playerId: 'p1', timer: { sec: 300, running: false } }, B: { playerId: null } };
     assert('livePlayerName: live の playerId から名前を引く', Courts.livePlayerName(mcLive, 'A', mcP), '山田');

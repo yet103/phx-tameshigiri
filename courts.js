@@ -12,7 +12,7 @@ var Courts = (function() {
 
   // 選手一覧から一意なコート名を昇順で返す。UNASSIGNED は末尾に置く。
   function listFrom(players) {
-    var seen = {};
+    var seen = Object.create(null);   // コート名が 'constructor' などでも壊れないように（parsePasteRow と同じ）
     var list = [];
     var hasUnassigned = false;
     (players || []).forEach(function(p) {
