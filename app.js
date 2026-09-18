@@ -441,14 +441,16 @@ var App = (function() {
   // ハッシュ無しの遷移だと相手側が最後に見ていた大会に着地してしまう。
   // ハッシュを付けて運営画面の選手タブへ直接渡す。
   function updateAdminLink(eventId) {
+    // linkAdmin と linkEventAdmin は別々のページにしか無いことがあるため、
+    // 片方のガードでもう片方の更新まで抜けてしまわないよう、先に済ませる。
+    var eventLink = document.getElementById('linkEventAdmin');
+    if (eventLink) eventLink.href = Storage.adminHref('#events');
+
     var link = document.getElementById('linkAdmin');
     if (!link) return;   // このリンクを持たないページから呼ばれても落ちないように
     // 行き先（PC の desk.html / スマホの admin.html）は端末のモードで決まる。
     // 組み立ては storage.js に任せる（採点画面はページ名を知らない）。
     link.href = Storage.adminHref(eventId ? '#players/' + encodeURIComponent(eventId) : '#events');
-
-    var eventLink = document.getElementById('linkEventAdmin');
-    if (eventLink) eventLink.href = Storage.adminHref('#events');
   }
 
   // 上部リンクの「技術リスト編集」。選択中の大会があればその大会の技リストを開く
