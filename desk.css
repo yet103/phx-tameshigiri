@@ -131,10 +131,11 @@ a { color: var(--accent); }
 .desk-players-wrap { overflow-x: auto; padding-bottom: 46px; }
 /* table-layout: fixed は表そのものに幅が無いと列幅を「比率」としてしか使わず、
    窓を狭めても列が縮むだけでスクロールが起きない（確認で見つかった）。
-   列幅の合計（994px）を表の width にして初めて、狭いときに表の枠だけが
-   横スクロールし、sticky の名前列が効くようになる。border-collapse: collapse は
-   既定の border-spacing（列の間の隙間）を消して幅の計算を列幅の合計どおりにする。 */
-.desk-players-table { table-layout: fixed; width: 994px; border-collapse: collapse; }
+   列幅の合計（40+52+190+96+84+52+132*3+64+48 = 1022px）を表の width にして
+   初めて、狭いときに表の枠だけが横スクロールし、sticky の名前列が効くように
+   なる。border-collapse: collapse は既定の border-spacing（列の間の隙間）を
+   消して幅の計算を列幅の合計どおりにする。 */
+.desk-players-table { table-layout: fixed; width: 1022px; border-collapse: collapse; }
 .desk-players-table th, .desk-players-table td { padding: 2px 6px; vertical-align: middle; }
 .desk-players-table tbody tr { height: 34px; }
 .desk-players-table th.col-name, .desk-players-table td.col-name { position: sticky; left: 0; z-index: 1; }
