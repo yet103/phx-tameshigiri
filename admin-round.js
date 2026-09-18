@@ -46,6 +46,103 @@ var AdminRound = (function() {
     return null;
   }
 
+  // --- 段階表示と遷移 ---
+
+  // 「採点済み n / N」。進行中はその巡目、一巡目終了は二巡目の技の入力状況、
+  // 二巡目終了以降は数を出さない（設計書「上部の段階表示」）。
+  function stageCountText(st, players) {
+    var r = EventStatus.scoringRound(st);
+    if (r) {
+      var rows = (players || []).filter(function(p) { return Courts.roundOf(p) === r; });
+      return '採点済み ' + rows.filter(Courts.isScored).length + ' / ' + rows.length;
+    }
+    if (st === 'round1_done') {
+      var r2 = roundTwo(players);
+      return '二巡目 ' + r2.length + '名　技 未入力 ' + r2.filter(isTechIncomplete).length;
+    }
+    return '';
+  }
+
+  // 設計書「確認と拒否」の表の確認文言。承諾したときだけ遷移する。
+  function advanceMessage(from, to, players) {
+    if (from === 'draft' && to === 'round1') {
+      var r1 = roundOne(players);
+      return '一巡目 ' + r1.length + '名。技が未入力の選手が ' +
+        r1.filter(isTechIncomplete).length + '名います。\n試合を開始しますか？';
+    }
+    if (from === 'round1' && to === 'round1_done') {
+      var a = roundOne(players);
+      return '一巡目の未採点が ' + a.filter(function(p) { return !Courts.isScored(p); }).length +
+        '名います。\n一巡目を終了しますか？';
+    }
+    if (from === 'round1_done' && to === 'round2') {
+      var b = roundTwo(players);
+      return '二巡目 ' + b.length + '名。技が未入力の選手が ' +
+        b.filter(isTechIncomplete).length + '名います。\n二巡目を開始しますか？';
+    }
+    if (from === 'round1_done' && to === 'final') {
+      return '二巡目を行わずに最終結果にします。\nよろしいですか？';
+    }
+    if (from === 'round2' && to === 'round2_done') {
+      var c = roundTwo(players);
+      return '二巡目の未採点が ' + c.filter(function(p) { return !Courts.isScored(p); }).length +
+        '名います。\n二巡目を終了しますか？';
+    }
+    if (to === 'final') {
+      return '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？';
+    }
+    if (to === 'archived') {
+      return '一覧のアーカイブ欄に移り、採点画面の選択肢から消えます。\nアーカイブしますか？';
+    }
+    return EventStatus.LABELS[to] + 'に戻します。よろしいですか？';
+  }
+
+  // 状態を変える。失敗の理由はサーバーの文言をそのまま出す。
+  // transition の 409 は他の端末が先に進めていた場合なので、画面を読み直す。
+  async function applyStatus(from, to) {
+    var ctx = CTX;
+    if (!confirm(advanceMessage(from, to, ctx.players))) return;
+    var res = await Api.changeStatus(ctx.eventId, to);
+    if (ctx.isStale()) return;   // 通信中に大会やタブを切り替えられた
+    if (!res) {
+      alert('状態を変えられませんでした。通信を確認してください。');
+      return;
+    }
+    if (!res.ok) {
+      alert(res.error);
+      await Admin.reloadEvent();   // 他の端末が先に進めていた可能性がある
+      return;
+    }
+    Admin.toast(EventStatus.LABELS[to] + ' にしました');
+    await Admin.reloadEvent();
+  }
+
+  // 進行タブの先頭の段階表示。現在の状態と「次へ進む」。
+  // 件数は下の .round-stat（stageCountText）に出す。
+  // 「戻す」と「二巡目なしで終了」は ⋯ メニュー（buildMenu）にある。
+  function buildStage(st) {
+    var wrap = document.createElement('div');
+    wrap.className = 'round-stage';
+
+    var label = document.createElement('div');
+    label.className = 'round-stage-label';
+    label.id = 'roundStageLabel';
+    label.textContent = '現在の状態: ' + EventStatus.LABELS[st];
+    wrap.appendChild(label);
+
+    var next = EventStatus.next(st);
+    if (next) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'round-next';
+      btn.id = 'btnRoundNext';
+      btn.textContent = EventStatus.NEXT_LABELS[st] + ' ▶';
+      btn.addEventListener('click', function() { applyStatus(st, next); });
+      wrap.appendChild(btn);
+    }
+    return wrap;
+  }
+
   // --- 描画 ---
 
   function render(container, ctx) {
@@ -68,22 +165,30 @@ var AdminRound = (function() {
     // 絞り込み中のコートが消えていたら全コートに戻す
     if (currentCourt && Courts.listFrom(players).indexOf(currentCourt) === -1) currentCourt = '';
 
-    // 見出し：一巡目の採点状況・生成ボタン・メニュー
+    // 段階表示(現在の状態と「次へ進む」)を先頭に置く
+    var st = EventStatus.of(ctx.event);
+    container.appendChild(buildStage(st));
+
+    // 見出し：採点の進み具合・生成ボタン・メニュー
     var head = document.createElement('div');
     head.className = 'round-head';
-    var src = roundOne(players);
-    var scored = src.filter(Courts.isScored).length;
     var stat = document.createElement('div');
     stat.className = 'round-stat';
     stat.id = 'roundScoredStat';
-    stat.textContent = '一巡目 採点済み ' + scored + ' / ' + src.length;
+    stat.textContent = stageCountText(st, players);
     head.appendChild(stat);
     var genBtn = document.createElement('button');
     genBtn.type = 'button';
     genBtn.className = 'round-gen';
     genBtn.id = 'btnGenRound2';
     genBtn.textContent = '二巡目を生成';
-    genBtn.addEventListener('click', onGenerate);
+    // 生成できるのは「一巡目終了」のときだけ（サーバーも 409 status で拒む）
+    if (st !== 'round1_done') {
+      genBtn.disabled = true;
+      genBtn.title = '「一巡目終了」のときだけ生成できます（今は「' + EventStatus.LABELS[st] + '」）';
+    } else {
+      genBtn.addEventListener('click', onGenerate);
+    }
     head.appendChild(genBtn);
     // 採点画面へ（絞り込み中のコートを引き継ぐ。採点画面の Route と同じ形 #event/<大会ID>/<コート>）
     var openBtn = document.createElement('a');
@@ -92,7 +197,7 @@ var AdminRound = (function() {
     openBtn.textContent = '採点画面へ';
     openBtn.href = Admin.scoringHref(ctx.eventId, currentCourt);
     head.appendChild(openBtn);
-    head.appendChild(buildMenu());
+    head.appendChild(buildMenu(st, players));
     container.appendChild(head);
 
     // コート絞り込み。チップは大会全体のコートから作る。
@@ -343,13 +448,41 @@ var AdminRound = (function() {
     });
   }
 
-  function buildMenu() {
+  function buildMenu(st, players) {
     bindOutsideClickOnce();
     var menu = document.createElement('details');
     menu.className = 'round-menu';
     var sum = document.createElement('summary');
     sum.textContent = '⋯';
     menu.appendChild(sum);
+
+    // 戻す（prev が無い draft では出さない）
+    var back = EventStatus.prev(st, players);
+    if (back) {
+      var btnBack = document.createElement('button');
+      btnBack.type = 'button';
+      btnBack.id = 'btnRoundBack';
+      btnBack.textContent = '◀ ' + EventStatus.LABELS[back] + ' に戻す';
+      btnBack.addEventListener('click', function() {
+        menu.open = false;
+        applyStatus(st, back);
+      });
+      menu.appendChild(btnBack);
+    }
+
+    // 二巡目なしで終了（一巡目終了のときだけ）
+    if (st === 'round1_done') {
+      var btnSkip = document.createElement('button');
+      btnSkip.type = 'button';
+      btnSkip.id = 'btnRoundSkipRound2';
+      btnSkip.textContent = '二巡目なしで終了';
+      btnSkip.addEventListener('click', function() {
+        menu.open = false;
+        applyStatus(st, 'final');
+      });
+      menu.appendChild(btnSkip);
+    }
+
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.id = 'btnRoundExport';
