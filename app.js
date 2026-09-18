@@ -362,8 +362,9 @@ var App = (function() {
 
   function eventOption(ev) {
     var opt = document.createElement('option');
+    var date = ev.date ? ' (' + ev.date + ')' : '';
     opt.value = ev.id;
-    opt.textContent = (ev.name || '(名称未設定)') + '（' + EventStatus.LABELS[EventStatus.of(ev)] + '）';
+    opt.textContent = (ev.name || '(名称未設定)') + date + '（' + EventStatus.LABELS[EventStatus.of(ev)] + '）';
     return opt;
   }
 

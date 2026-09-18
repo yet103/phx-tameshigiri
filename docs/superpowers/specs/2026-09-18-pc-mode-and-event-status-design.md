@@ -275,7 +275,7 @@ createPlayersBulk(eventId, data) // 既存。data.rows があれば行形式で�
 ### 採点画面 `scoring.html`（`app.js`）
 
 - 「＋ 新規大会」「大会削除」とそのモーダルを外す。代わりに「大会の作成は運営画面で」のリンク（`Storage.adminHref('#events')`）
-- 大会の選択肢: `archived` を除く。`isScoringOpen` を先頭に並べ、文言は `大会名（一巡目 進行中）`
+- 大会の選択肢: `archived` を除く。`isScoringOpen` を先頭に並べ、文言は `大会名 (日付)（一巡目 進行中）`（日付が無ければ括弧ごと省略）
 - 大会選択バーの下に状態バナー。`isScoringOpen` なら「一巡目 進行中」を淡く表示。それ以外は警告色で「この大会は「準備中」です。運営画面で「試合開始」を押すと採点できます」のように、`NEXT_LABELS` を使った文言
 - `isScoringOpen` のとき、表示する選手を `scoringRound(status)` の巡目に絞る（コートの絞り込みと併用）。それ以外は全巡目を表示する
 - `isScoringOpen` でないとき: 確定・形成功・失敗・得点の入力・補正点・備考を無効にする。前後の選手の移動、タイマー、CSV エクスポート、HTML 保存は使える
