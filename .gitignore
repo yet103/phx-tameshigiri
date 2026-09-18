@@ -36,3 +36,6 @@ server/data/
 # Browser-downloaded CSVs (repo root)
 /data_*.csv
 /test_*.csv
+
+# サブエージェントの作業用 worktree（Agent の isolation: worktree）
+.claude/worktrees/
