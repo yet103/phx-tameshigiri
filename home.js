@@ -221,6 +221,10 @@ var Home = (function() {
     applyMode();
     renderFlow();
     loadEvents().catch(function(e) { console.error(e); });
+    // トップを開いたままハッシュだけ書き換えられても転送する（採点画面のURLを
+    // 誤って共有・ブックマークされた場合など）。index.html の <head> での
+    // 呼び出しはページ読み込み時の 1 回だけなので、それとは別に効かせる。
+    window.addEventListener('hashchange', Home.redirectIfScoring);
   }
 
   document.addEventListener('DOMContentLoaded', init);
