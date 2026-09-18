@@ -1709,6 +1709,8 @@
       Courts.statusConfirmMessage('round1', 'draft', tcP), '準備中に戻します。よろしいですか？');
     assert('statusConfirmMessage: final から round1_done に戻す',
       Courts.statusConfirmMessage('final', 'round1_done', tcP), '一巡目終了に戻します。よろしいですか？');
+    assert('statusConfirmMessage: archived から final への復元は確定の文言にならない',
+      Courts.statusConfirmMessage('archived', 'final', tcP), '最終結果に戻します。よろしいですか？');
 
     var h2es = document.createElement('h2');
     h2es.textContent = 'status.js';

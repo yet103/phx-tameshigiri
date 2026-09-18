@@ -248,6 +248,9 @@ var Courts = (function() {
       return '二巡目の未採点が ' + round(2).filter(function(p) { return !isScored(p); }).length +
         '名います。\n二巡目を終了しますか？';
     }
+    if (from === 'archived' && to === 'final') {
+      return '最終結果に戻します。よろしいですか？';
+    }
     if (to === 'final') {
       return '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？';
     }
