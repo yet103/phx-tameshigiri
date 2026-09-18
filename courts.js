@@ -293,9 +293,42 @@ var Courts = (function() {
   var FEMALE_WORDS = ['女子', '女', 'f'];
   var NEWFACE_WORDS = ['新人', '○', '〇', '1', 'true'];
 
+  // 1 行を区切り文字で分割する（RFC4180 の引用符の規則）。'"' で囲まれた区間の区切り文字は
+  // フィールドを割らず、'""' は '"' 1 文字になる。server/index.js の parseCSV と同じ文字単位の
+  // 規則を「1 行分」に絞って持つ（モジュールを共有できないので、同じ規則を test.html で固定する）。
+  // parseCSV と同じく、'"' は フィールドの先頭でなくても現れた時点でトグルする（緩い実装）。
+  // 閉じていない引用符は error にその旨を入れて返す（呼び出し側は行ごと ok:false にする）。
+  function splitDelimited(line, delimiter) {
+    var s = String(line == null ? '' : line);
+    var fields = [];
+    var field = '';
+    var inQuotes = false;
+    for (var i = 0; i < s.length; i++) {
+      var c = s[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (s[i + 1] === '"') { field += '"'; i++; }   // "" は " 1 文字（エスケープ）
+          else { inQuotes = false; }
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === delimiter) {
+        fields.push(field);
+        field = '';
+      } else {
+        field += c;
+      }
+    }
+    fields.push(field);
+    return { fields: fields, error: inQuotes ? '引用符が閉じていません' : '' };
+  }
+
   // 貼り付けたテキストを 1 行 1 人に解析する。DOM には触らない（test.html で固定する）。
   // 列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 の固定順。
-  // タブが1つでもある行はタブ区切り（Excel からの貼り付け）、無ければカンマ区切りとして切る。
+  // タブが1つでもある行はタブ区切り（Excel からの貼り付け。区切り文字そのままで、
+  // 引用符は特別扱いしない＝名前の一部）、無ければ splitDelimited でカンマ区切りとして切る。
   // techniques はその大会の有効な技リスト（[{ name, strikes }]）。
   // 戻り値: { headerSkipped, rows: [ {
   //   line,      貼り付けた文字列の行番号（1 始まり。空行と見出しも数える）
@@ -317,15 +350,24 @@ var Courts = (function() {
     var seenFirst = false;
     lines.forEach(function(line, i) {
       if (!line.trim()) return;   // 空行は飛ばす（行番号は元のまま）
-      var cols = (line.indexOf('\t') >= 0 ? line.split('\t') : line.split(',')).map(function(s) {
-        return String(s).trim();
-      });
+      var quoteError = '';
+      var rawCols;
+      if (line.indexOf('\t') >= 0) {
+        rawCols = line.split('\t');
+      } else {
+        var split = splitDelimited(line, ',');
+        rawCols = split.fields;
+        quoteError = split.error;
+      }
+      var cols = rawCols.map(function(s) { return String(s).trim(); });
       if (!seenFirst) {
         seenFirst = true;
         // Excel の1行目をそのまま貼れるように、「名前…」で始まる最初の行は見出しとみなす
         if (cols[0].indexOf('名前') === 0) { headerSkipped = true; return; }
       }
-      rows.push(parsePasteRow(cols, i + 1, known));
+      var row = parsePasteRow(cols, i + 1, known);
+      if (quoteError) badRow(row, quoteError);   // 引用符の異常は他の理由より優先して断る
+      rows.push(row);
     });
     return { headerSkipped: headerSkipped, rows: rows };
   }
@@ -387,6 +429,7 @@ var Courts = (function() {
     isTechIncomplete: isTechIncomplete,
     stageCountText: stageCountText,
     statusConfirmMessage: statusConfirmMessage,
-    parsePasteRows: parsePasteRows
+    parsePasteRows: parsePasteRows,
+    splitDelimited: splitDelimited
   };
 })();

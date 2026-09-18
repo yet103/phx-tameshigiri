@@ -1829,6 +1829,30 @@
     assert('parsePasteRows: 空文字は 0 行',
       Courts.parsePasteRows('   \n  ', pTech).rows.length, 0);
 
+    // ---- splitDelimited（RFC4180 の引用符の規則で 1 行を分割。server/index.js の parseCSV と同じ規則） ----
+    assert('splitDelimited: 引用符内のカンマは区切らない',
+      Courts.splitDelimited('a,"b,c",d', ','), { fields: ['a', 'b,c', 'd'], error: '' });
+    assert('splitDelimited: "" は " 1 文字にする',
+      Courts.splitDelimited('a,"b""c",d', ','), { fields: ['a', 'b"c', 'd'], error: '' });
+    assert('splitDelimited: 閉じていない引用符は理由を返す',
+      Courts.splitDelimited('a,"b,c', ',').error, '引用符が閉じていません');
+    assert('splitDelimited: タブ区切りにも使える',
+      Courts.splitDelimited('a\t"b\tc"\td', '\t'), { fields: ['a', 'b\tc', 'd'], error: '' });
+
+    // ---- parsePasteRows の引用符付き CSV（カンマ区切りのときだけ RFC4180 で切る） ----
+    assert('parsePasteRows: 引用符付きのカンマは名前の一部として扱う',
+      pBrief('"庚, 七郎",B,,,,,'),
+      ['1|庚, 七郎|B|false|false|//|true|']);
+    assert('parsePasteRows: "" のエスケープを名前で読む',
+      pBrief('"山田""太郎",A,,,,,'),
+      ['1|山田"太郎|A|false|false|//|true|']);
+    assert('parsePasteRows: 閉じ忘れの引用符は ok:false で理由を返す',
+      pRows('"庚 七郎,B').map(function(r) { return [r.ok, r.error]; }),
+      [[false, '引用符が閉じていません']]);
+    assert('parsePasteRows: タブ区切りに引用符が含まれても名前の一部として扱う',
+      pBrief('山田"太郎\tA\t\t\t\t\t'),
+      ['1|山田"太郎|A|false|false|//|true|']);
+
     // ---- 採点済みの選手の性別・技を変えたときの警告（PC 運営とスマホ運営で共用） ----
     // 技の差し替えは result 文字列の長さを変えないので採点画面が気付けない。必ず断る。
     var smScored = { name: 'あ', order: 'A-男子-1-1', score: 66, isFemale: false, tech1: '真', tech2: '連', tech3: '左' };
