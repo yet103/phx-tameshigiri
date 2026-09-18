@@ -189,6 +189,33 @@ var Courts = (function() {
     return '二巡目を生成しました（' + created + '名）' + note;
   }
 
+  // ---- 採点済みの選手の訂正（スマホ運営の編集シートと PC 運営の表で共用） ----
+
+  // 採点済みの選手について、性別か技を変えると得点が変わりうるかどうか。
+  // 性別は配点が男女で違うので分かりやすいが、技の差し替えは result 文字列の
+  // 長さを変えないため、採点画面（Scoring.canDecode）はこの変更を検知できず、
+  // 黙って古い ○× を新しい技の配点で再解釈してしまう。だから必ず断る。
+  // data は「これから送る項目」だけでよい（PC の表はセル1つずつ保存する）。
+  // 含まれていないキーは「変えない」とみなす。
+  function scoreMayChange(player, data) {
+    if (!isScored(player)) return false;
+    var d = data || {};
+    if (typeof d.isFemale === 'boolean' && d.isFemale !== !!player.isFemale) return true;
+    var keys = ['tech1', 'tech2', 'tech3'];
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (typeof d[k] === 'string' && d[k] !== (player[k] || '')) return true;
+    }
+    return false;
+  }
+
+  // scoreMayChange が true のときに出す確認文言。
+  function scoreChangeConfirmMessage(player) {
+    return 'この選手は採点済みです（' + ((player && player.score) || 0) + '点）。\n' +
+      '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
+      'このまま保存しますか？';
+  }
+
   // ---- 大会の状態の段階表示（PC 運営の上部と スマホ運営の進行タブで共用） ----
   // EventStatus（status.js）は呼び出し時に参照する。この 3 つを使うページは
   // courts.js と status.js の両方を読むこと。
@@ -355,6 +382,8 @@ var Courts = (function() {
     sortBy: sortBy,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage,
+    scoreMayChange: scoreMayChange,
+    scoreChangeConfirmMessage: scoreChangeConfirmMessage,
     isTechIncomplete: isTechIncomplete,
     stageCountText: stageCountText,
     statusConfirmMessage: statusConfirmMessage,

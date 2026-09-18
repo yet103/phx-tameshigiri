@@ -582,18 +582,8 @@
     });
   }
 
-  // 採点済みの選手について、性別か技を変えると得点が変わりうるかどうか。
-  // 性別は配点が男女で違うので分かりやすいが、技の差し替えは result 文字列の
-  // 長さを変えないため、採点画面（Scoring.canDecode）はこの変更を検知できず、
-  // 黙って古い ○× を新しい技の配点で再解釈してしまう。
-  function scoreMayChange(player, data) {
-    if (!Courts.isScored(player)) return false;
-    if (data.isFemale !== !!player.isFemale) return true;
-    if (data.tech1 !== (player.tech1 || '')) return true;
-    if (data.tech2 !== (player.tech2 || '')) return true;
-    if (data.tech3 !== (player.tech3 || '')) return true;
-    return false;
-  }
+  // 採点済みの選手の性別・技を変えたときの警告は courts.js（Courts.scoreMayChange /
+  // Courts.scoreChangeConfirmMessage）に置いてある。PC 運営の選手表と同じ判定・同じ文言を使う。
 
   // 編集フォーム（行タップ）
   function openEditSheet(ctx, player) {
@@ -617,14 +607,9 @@
 
       // 採点済みの選手の性別や技を変えても、サーバーは得点を再計算しない。
       // 男女で配点が違う技があるほか、技の差し替えは採点画面が検知できないため、
-      // 採点画面で開き直してもらう必要がある（scoreMayChange 参照）。
-      if (scoreMayChange(player, data)) {
-        var ok = confirm(
-          'この選手は採点済みです（' + (player.score || 0) + '点）。\n' +
-          '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
-          'このまま保存しますか？'
-        );
-        if (!ok) return;
+      // 採点画面で開き直してもらう必要がある（Courts.scoreMayChange 参照）。
+      if (Courts.scoreMayChange(player, data) && !confirm(Courts.scoreChangeConfirmMessage(player))) {
+        return;
       }
 
       btnSave.disabled = true;

@@ -1829,6 +1829,37 @@
     assert('parsePasteRows: 空文字は 0 行',
       Courts.parsePasteRows('   \n  ', pTech).rows.length, 0);
 
+    // ---- 採点済みの選手の性別・技を変えたときの警告（PC 運営とスマホ運営で共用） ----
+    // 技の差し替えは result 文字列の長さを変えないので採点画面が気付けない。必ず断る。
+    var smScored = { name: 'あ', order: 'A-男子-1-1', score: 66, isFemale: false, tech1: '真', tech2: '連', tech3: '左' };
+    var smFresh = { name: 'い', order: 'A-男子-1-2', score: 0, isFemale: false, tech1: '真', tech2: '連', tech3: '左' };
+
+    assert('scoreMayChange: 未採点なら false', Courts.scoreMayChange(smFresh, { isFemale: true }), false);
+    assert('scoreMayChange: 採点済みで性別を変えると true', Courts.scoreMayChange(smScored, { isFemale: true }), true);
+    assert('scoreMayChange: 採点済みでも性別が同じなら false', Courts.scoreMayChange(smScored, { isFemale: false }), false);
+    assert('scoreMayChange: 採点済みで技を差し替えると true', Courts.scoreMayChange(smScored, { tech2: '水月' }), true);
+    assert('scoreMayChange: 採点済みで技を空にするのも true', Courts.scoreMayChange(smScored, { tech3: '' }), true);
+    assert('scoreMayChange: 採点済みでも同じ技なら false', Courts.scoreMayChange(smScored, { tech1: '真' }), false);
+    assert('scoreMayChange: 送っていない項目は変更とみなさない（1項目ずつ保存する PC の表）',
+      Courts.scoreMayChange(smScored, { name: 'う' }), false);
+    assert('scoreMayChange: 全項目を送っても変更が無ければ false（スマホの編集シート）',
+      Courts.scoreMayChange(smScored, { name: 'あ', court: 'A', isFemale: false, isNewFace: false,
+        tech1: '真', tech2: '連', tech3: '左' }), false);
+    assert('scoreMayChange: 技が空の採点済み選手に技を入れると true',
+      Courts.scoreMayChange({ score: 5, tech1: '' }, { tech1: '真' }), true);
+    assert('scoreMayChange: 補正点だけの採点済みでも拾う',
+      Courts.scoreMayChange({ adjust: [0, 3, 0], tech1: '真' }, { tech1: '連' }), true);
+    assert('scoreMayChange: player が無くても落ちない', Courts.scoreMayChange(null, { tech1: '真' }), false);
+    assert('scoreMayChange: data が無くても落ちない', Courts.scoreMayChange(smScored, null), false);
+
+    assert('scoreChangeConfirmMessage: 得点を含む文言',
+      Courts.scoreChangeConfirmMessage(smScored),
+      'この選手は採点済みです（66点）。\n' +
+      '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
+      'このまま保存しますか？');
+    assert('scoreChangeConfirmMessage: 得点が無ければ 0点',
+      Courts.scoreChangeConfirmMessage({}).indexOf('（0点）') !== -1, true);
+
     var h2es = document.createElement('h2');
     h2es.textContent = 'status.js';
     results.appendChild(h2es);
