@@ -569,6 +569,74 @@ app.delete('/api/events/:id', (req, res) => {
   }
 });
 
+// POST /api/events/:id/copy : 大会をコピーして新しい大会を作る
+// 技と配点は必ず複製する。選手は withPlayers のときだけ、元の一巡目の行だけを複製し、
+// 得点・結果・備考・補正・確定は落とす（来年の同じ大会を作るための機能）。
+// 元の大会は読むだけなのでロックガードは掛けない（アーカイブ済みからもコピーできる）。
+// 新しい ID の新規作成なので、他端末との read-modify-write の競合は起きない。
+app.post('/api/events/:id/copy', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const srcPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(srcPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const body = req.body || {};
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length > 100) {
+      return res.status(400).json({ error: '大会名が不正です（1〜100文字）' });
+    }
+    const src = JSON.parse(fs.readFileSync(srcPath, 'utf-8'));
+    const now = new Date().toISOString();
+    const id = generateId();
+
+    let players = [];
+    if (body.withPlayers === true) {
+      const used = Object.create(null);
+      players = (Array.isArray(src.players) ? src.players : [])
+        .filter(p => p && typeof p === 'object' && !Array.isArray(p) && EventStatus.roundOf(p) === 1)
+        .map(p => {
+          let newId = generateId();
+          while (used[newId]) newId = generateId();
+          used[newId] = true;
+          return {
+            id: newId,
+            name: typeof p.name === 'string' ? p.name : '',
+            order: typeof p.order === 'string' ? p.order : '',
+            tech1: typeof p.tech1 === 'string' ? p.tech1 : '',
+            tech2: typeof p.tech2 === 'string' ? p.tech2 : '',
+            tech3: typeof p.tech3 === 'string' ? p.tech3 : '',
+            score: 0,
+            isNewFace: p.isNewFace === true,
+            isFemale: p.isFemale === true,
+            result: '',
+            note: ''
+          };
+        });
+    }
+
+    // shareToken / live / createdAt / 履歴は引き継がない。status は必ず draft。
+    const event = {
+      id: id,
+      name: name,
+      date: typeof body.date === 'string' ? body.date.slice(0, 20) : '',
+      venue: typeof body.venue === 'string' ? body.venue.slice(0, 100) : '',
+      createdAt: now,
+      updatedAt: now,
+      status: 'draft',
+      // 雛形を使っている大会からコピーしても、コピー先には複製を持たせる
+      // （あとで雛形を変えてもコピー先の配点が動かないようにする）
+      techniques: cloneTechniques(effectiveTechniques(src)),
+      players: players
+    };
+    writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
+    res.status(201).json({ success: true, id: id, playerCount: players.length });
+  } catch (err) {
+    console.error('大会のコピーに失敗:', err);
+    res.status(500).json({ error: '大会のコピーに失敗しました' });
+  }
+});
+
 // POST /api/events/:id/status : 大会の状態を進める・戻す
 // 状態を変える唯一の経路（POST /api/events の body の status は無視される）。
 // クライアントは進む前に件数を数えて確認し、ここでは硬い条件だけを 409 で拒む。

@@ -1062,6 +1062,72 @@
       pOkLoaded.techniquesSource, 'event');
     await Api.deleteEvent(pOkEvent.id);
 
+    // ---- 12. 大会のコピー ----
+    var cpSrc = await Api.saveEvent({ name: 'コピー元', date: '2026-03-01', venue: '本部道場', players: [] });
+    await Api.saveEventTechniques(cpSrc.id, [{ name: 'コピー技', strikes: [7, null, null, null] }]);
+    var cpBulk = await Api.createPlayersBulk(cpSrc.id, {
+      court: 'A', isFemale: false, isNewFace: true, names: ['写 一郎', '写 二郎']
+    });
+    await Api.updatePlayerInfo(cpSrc.id, cpBulk.players[0].id, {
+      tech1: 'コピー技', score: 21, result: '11   ', note: 'メモ'
+    });
+    await Api.changeStatus(cpSrc.id, 'round1');
+    await Api.changeStatus(cpSrc.id, 'round1_done');
+    await Api.generateNextRound(cpSrc.id, true);   // 二巡目の行（コピーされないことの確認用）
+    await Api.createShareLink(cpSrc.id);
+
+    var cpRes = await Api.copyEvent(cpSrc.id,
+      { name: '第11回コピー先', date: '2027-03-01', venue: '東京体育館', withPlayers: true });
+    assert('copyEvent は新しい大会IDと人数を返す', [typeof cpRes.id, cpRes.playerCount], ['string', 2]);
+    assert('コピー先のIDは元と違う', cpRes.id !== cpSrc.id, true);
+
+    var cpNew = await Api.loadEvent(cpRes.id);
+    assert('コピー先の名前・日付・会場はダイアログの入力',
+      [cpNew.name, cpNew.date, cpNew.venue], ['第11回コピー先', '2027-03-01', '東京体育館']);
+    assert('コピー先は draft', cpNew.status, 'draft');
+    assert('技リストは同じ内容', cpNew.techniques, [{ name: 'コピー技', strikes: [7, null, null, null] }]);
+    await Api.saveEventTechniques(cpRes.id, [{ name: '書き換え技', strikes: [1, null, null, null] }]);
+    assert('技リストは別オブジェクト（コピー先を変えても元は変わらない）',
+      (await Api.loadEvent(cpSrc.id)).techniques, [{ name: 'コピー技', strikes: [7, null, null, null] }]);
+
+    assert('複製されるのは一巡目の行だけ', cpNew.players.length, 2);
+    assert('複製された行はすべて一巡目',
+      cpNew.players.filter(function(p) { return Courts.roundOf(p) !== 1; }).length, 0);
+    var cpP = cpNew.players.filter(function(p) { return p.name === '写 一郎'; })[0];
+    assert('名前・順番・技・新人・性別は引き継ぐ',
+      [cpP.name, cpP.order, cpP.tech1, cpP.isNewFace, cpP.isFemale],
+      ['写 一郎', 'A-男子-1-1', 'コピー技', true, false]);
+    assert('得点・結果・備考は消える', [cpP.score, cpP.result, cpP.note], [0, '', '']);
+    assert('選手IDは新しい', cpP.id !== cpBulk.players[0].id, true);
+    assert('複製した選手IDも有効なID', /^[A-Za-z0-9_-]{1,64}$/.test(cpP.id), true);
+    assert('sourcePlayerId は付けない', cpP.sourcePlayerId, undefined);
+    assert('shareToken は引き継がない', cpNew.shareToken, undefined);
+    assert('live は引き継がない', cpNew.live, undefined);
+    assert('コピー先の履歴は空', (await Api.loadHistory(cpRes.id)).entries.length, 0);
+
+    var cpNoP = await Api.copyEvent(cpSrc.id,
+      { name: '選手なしコピー', date: '2027-03-02', venue: '', withPlayers: false });
+    assert('withPlayers が false なら選手は0名', cpNoP.playerCount, 0);
+    assert('withPlayers が false でも技リストは複製する',
+      (await Api.loadEvent(cpNoP.id)).techniques, [{ name: 'コピー技', strikes: [7, null, null, null] }]);
+
+    assert('大会名が空なら 400 の理由を返す',
+      (await Api.copyEvent(cpSrc.id, { name: '  ' })).error, '大会名が不正です（1〜100文字）');
+    assert('存在しない大会のコピーは 404 の理由を返す',
+      (await Api.copyEvent('zzzzzzzznotexist', { name: 'x' })).error, '大会が見つかりません');
+
+    await Api.changeStatus(cpSrc.id, 'final');
+    await Api.changeStatus(cpSrc.id, 'archived');
+    var cpArch = await Api.copyEvent(cpSrc.id,
+      { name: 'アーカイブからコピー', date: '2027-03-03', venue: '', withPlayers: true });
+    assert('アーカイブ済みの大会からもコピーできる',
+      [typeof cpArch.id, cpArch.playerCount], ['string', 2]);
+
+    await Api.deleteEvent(cpSrc.id);
+    await Api.deleteEvent(cpRes.id);
+    await Api.deleteEvent(cpNoP.id);
+    await Api.deleteEvent(cpArch.id);
+
     // --- 大会のエクスポート（bundle。トラックB） ---
     var b2Event = await Api.saveEvent({ name: 'バンドルテスト', date: '2026-09-14', venue: '道場', players: [] });
     var b2Bulk = await Api.createPlayersBulk(b2Event.id, {

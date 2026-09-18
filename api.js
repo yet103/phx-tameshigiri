@@ -54,6 +54,26 @@ var Api = (function() {
     }
   }
 
+  async function copyEvent(eventId, data) {
+    // POST /api/events/:eventId/copy
+    // Body: { name, date, venue, withPlayers }
+    // 戻り値: { id, playerCount } | { error }（400/404: 理由をダイアログに出す） | null（通信失敗）
+    // 技と配点は必ず複製される。withPlayers が true のときだけ一巡目の選手も複製される
+    // （得点は消える）。作られる大会は必ず draft。
+    try {
+      var res = await fetch('/api/events/' + eventId + '/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) return { error: await readErrorMessage(res) };
+      var json = await res.json();
+      return { id: json.id, playerCount: json.playerCount || 0 };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function changeStatus(eventId, to) {
     // POST /api/events/:eventId/status
     // Body: { to: 'round1' }
@@ -598,6 +618,7 @@ var Api = (function() {
     loadEvent: loadEvent,
     saveEvent: saveEvent,
     deleteEvent: deleteEvent,
+    copyEvent: copyEvent,
     changeStatus: changeStatus,
     updatePlayer: updatePlayer,
     createPlayer: createPlayer,
