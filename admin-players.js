@@ -466,6 +466,15 @@
       btnSaveClose.disabled = false;
       btnSaveNext.disabled = false;
       sheet.lock(false);
+      if (created && created.player === null) {
+        // 409（確定済みガードのみ）。シートは閉じない（入力を残す）
+        if (created.reason === 'locked') {
+          alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else {
+          alert(created.error);
+        }
+        return false;
+      }
       if (!created) {
         // 失敗してもシートは閉じない（入力を残す）
         alert('選手を追加できませんでした。\n入力内容と通信を確認してください。');

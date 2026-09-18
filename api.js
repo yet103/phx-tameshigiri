@@ -111,7 +111,9 @@ var Api = (function() {
   async function createPlayer(eventId, data) {
     // POST /api/events/:eventId/players
     // Body: { name, court, isFemale, isNewFace, tech1, tech2, tech3, round }
-    // 戻り値: 追加された player オブジェクト | null（400/404/通信失敗）
+    // 戻り値: 追加された player オブジェクト（成功）
+    //       | { player: null, reason, error }（409。確定済みガード（reason: 'locked'）しか無い）
+    //       | null（400/404/通信失敗）
     // order はサーバーが コート×性別×巡目 ごとに採番するので、送っても無視される。
     // round を省略すると 1（一巡目）。二巡目の行は generateNextRound が作る。
     // round は数値（1〜9）。文字列を送ると 400 になる。
@@ -122,7 +124,18 @@ var Api = (function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        if (res.status === 409) {
+          var conflict = null;
+          try { conflict = await res.json(); } catch (e) { /* JSON でない応答 */ }
+          return {
+            player: null,
+            reason: (conflict && conflict.reason) || '',
+            error: (conflict && conflict.error) || 'サーバーがエラーを返しました（409）'
+          };
+        }
+        return null;
+      }
       var json = await res.json();
       return json.player || null;
     } catch (e) {

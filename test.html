@@ -384,6 +384,11 @@
       [apiPatchLocked.ok, apiPatchLocked.status, apiPatchLocked.reason], [false, 409, 'locked']);
     assert('確定後の Api.updatePlayerInfo はエラー文言も返す', typeof apiPatchLocked.error, 'string');
 
+    var apiCreateLocked = await Api.createPlayer(lockEvent.id, { name: 'L3', court: 'A' });
+    assert('確定後の Api.createPlayer は reason:locked を返す',
+      [apiCreateLocked.player, apiCreateLocked.reason], [null, 'locked']);
+    assert('確定後の Api.createPlayer はエラー文言も返す', typeof apiCreateLocked.error, 'string');
+
     // 拒まない経路
     assert('確定後も GET は読める', (await Api.loadEvent(lockEvent.id)).status, 'final');
     assert('確定後も共有リンクは発行できる',
