@@ -226,8 +226,9 @@ test('共有リンク API は無認証で通る（存在しないトークンは
 
 test('運営用ページは無認証で 401 + WWW-Authenticate', async () => {
   await withServer(AUTH_DEV, async base => {
-    for (const p of ['/', '/index.html', '/admin.html', '/ranking.html', '/techniques.html',
-                     '/app.js', '/admin.js', '/style.css', '/test.html']) {
+    for (const p of ['/', '/index.html', '/scoring.html', '/admin.html', '/ranking.html', '/techniques.html',
+                     '/app.js', '/admin.js', '/style.css', '/test.html',
+                     '/home.js', '/home.css']) {
       const res = await get(base, p);
       assert.strictEqual(res.status, 401, p);
       assert.ok(/^Basic realm=/.test(res.headers.get('www-authenticate') || ''), p);
