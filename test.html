@@ -156,6 +156,18 @@
     var brNoCourt = await Api.createPlayersBulk(brEvent.id, { rows: [{ name: '行 八郎' }] });
     assert('bulk rows: コートが空でも行番号つきの 400', brNoCourt && brNoCourt.error, '1 行目: 不正なコート名です');
 
+    // isFemale / isNewFace は省略は許すが、真偽値でも undefined でもなければ行番号つきの 400
+    var brBadBool = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '行 九郎', court: 'A' }, { name: '行 十郎', court: 'A', isFemale: 'true' }]
+    });
+    assert('bulk rows: isFemale が真偽値でも undefined でもなければ 400',
+      brBadBool && brBadBool.error, '2 行目: 性別の指定が不正です');
+    var brBadBool2 = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '行 十一郎', court: 'A', isNewFace: 1 }]
+    });
+    assert('bulk rows: isNewFace が真偽値でも undefined でもなければ 400',
+      brBadBool2 && brBadBool2.error, '1 行目: 新人の指定が不正です');
+
     var brEmpty = await Api.createPlayersBulk(brEvent.id, { rows: [] });
     assert('bulk rows: 空の配列は 400', brEmpty && brEmpty.error, '登録する行がありません');
 

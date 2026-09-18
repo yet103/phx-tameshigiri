@@ -830,6 +830,14 @@ function bulkFromRows(req, res, rows) {
     if (!isValidCourt(court)) {
       return res.status(400).json({ error: at + '不正なコート名です' });
     }
+    // isFemale / isNewFace は省略（undefined）は許すが、それ以外は真偽値でなければ断る
+    // （文字列 'true' などを黙って false 扱いにすると、送り手が気付けない）。
+    if (row.isFemale !== undefined && typeof row.isFemale !== 'boolean') {
+      return res.status(400).json({ error: at + '性別の指定が不正です' });
+    }
+    if (row.isNewFace !== undefined && typeof row.isNewFace !== 'boolean') {
+      return res.status(400).json({ error: at + '新人の指定が不正です' });
+    }
     const techs = ['tech1', 'tech2', 'tech3'].map(k => (typeof row[k] === 'string' ? row[k].trim() : ''));
     for (let t = 0; t < techs.length; t++) {
       if (techs[t] && !known[techs[t]]) {
