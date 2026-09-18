@@ -27,6 +27,21 @@ var Api = (function() {
     }
   }
 
+  async function loadEventResult(id) {
+    // GET /api/events/:id （404 と通信断を区別する版）
+    // 既存の loadEvent は両方 null にする（呼び出し元が多いので戻り値は変えない）。
+    // 大会が消えたのか（404）通信の問題なのかで画面の案内を出し分けたい呼び出し元
+    // （desk.js / admin.js の大会読み込み）だけがこちらを使う。
+    // 戻り値: { ok: true, event } | { ok: false, status }（通信そのものの失敗は status: 0）
+    try {
+      var res = await fetch('/api/events/' + id);
+      if (!res.ok) return { ok: false, status: res.status };
+      return { ok: true, event: await res.json() };
+    } catch (e) {
+      return { ok: false, status: 0 };
+    }
+  }
+
   async function saveEvent(event) {
     // POST /api/events
     // Body: eventオブジェクト全体
@@ -648,6 +663,7 @@ var Api = (function() {
   return {
     listEvents: listEvents,
     loadEvent: loadEvent,
+    loadEventResult: loadEventResult,
     saveEvent: saveEvent,
     updateEventInfo: updateEventInfo,
     deleteEvent: deleteEvent,

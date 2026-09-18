@@ -78,6 +78,12 @@ var Admin = (function() {
     } catch (e) {}
   }
 
+  // 大会が消えている（404）ときに控えを残さない。残すと次回起動時に
+  // 存在しない大会を読み直そうとして、また同じ案内を出すだけになる。
+  function clearLast() {
+    try { localStorage.removeItem(LAST_KEY); } catch (e) {}
+  }
+
   // --- 遷移 ---
 
   function navigate(tab, eventId) {
@@ -137,13 +143,19 @@ var Admin = (function() {
     loading.textContent = '読み込み中…';
     content.appendChild(loading);
 
-    var ev = await Api.loadEvent(selectedEventId);
+    var evResult = await Api.loadEventResult(selectedEventId);
     if (seq !== renderSeq) return;   // 追い越された
-    if (!ev) {
-      alert('大会データを取得できませんでした。通信を確認してください。');
+    if (!evResult.ok) {
+      if (evResult.status === 404) {
+        alert('この大会は削除されています');
+        clearLast();
+      } else {
+        alert('大会データを取得できませんでした。通信を確認してください。');
+      }
       redirect('events');
       return;
     }
+    var ev = evResult.event;
     saveLast();
     setTitle(ev.name || '試し斬り 運営');
     renderTab(seq, {
@@ -156,12 +168,19 @@ var Admin = (function() {
   async function reloadEvent() {
     if (currentTab === 'events' || !selectedEventId) return;
     var seq = ++renderSeq;
-    var ev = await Api.loadEvent(selectedEventId);
+    var evResult = await Api.loadEventResult(selectedEventId);
     if (seq !== renderSeq) return;
-    if (!ev) {
-      alert('大会データを取得できませんでした。通信を確認してください。');
+    if (!evResult.ok) {
+      if (evResult.status === 404) {
+        alert('この大会は削除されています');
+        clearLast();
+        redirect('events');
+      } else {
+        alert('大会データを取得できませんでした。通信を確認してください。');
+      }
       return;
     }
+    var ev = evResult.event;
     setTitle(ev.name || '試し斬り 運営');
     renderTab(seq, {
       eventId: selectedEventId, event: ev, players: ev.players || [],
