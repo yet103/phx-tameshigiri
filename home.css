@@ -57,7 +57,11 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px
 .home-entry.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .home-entry-main { font-size: 16px; font-weight: bold; }
 .home-entry-sub { font-size: 12px; color: var(--text-muted); }
-.home-entry.primary .home-entry-sub { color: var(--band-muted); }
+/* accent-text は同じ primary の本文（home-entry-main）用に元から用意された
+   「accent の上で読める色」。band-muted は帯（黒に近い --band-bg）の上で読める
+   前提の色なので、ダークテーマでは accent（金地）の上に乗ると読みにくくなっていた。
+   本文と同じ accent-text を使い、不透明度だけ落として副題らしく弱める。 */
+.home-entry.primary .home-entry-sub { color: var(--accent-text); opacity: 0.8; }
 
 /* ===== 進行中の大会 ===== */
 .home-event-list { display: flex; flex-direction: column; gap: 8px; }
@@ -77,23 +81,31 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px
 .home-badge.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
 .home-note { color: var(--text-muted); font-size: 13px; }
 
-/* ===== 全体の流れの図（help.css の .diagram と同じ作り）=====
-   図の文字サイズは viewBox の単位。375px のスマホでは図が 343px まで縮む
-   （＝約 0.95 倍）ので、実際に 14px を割らないよう 16 単位を下限にする。 */
-.diagram {
-  background: var(--card-bg); border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px; margin: 14px 0;
+/* ===== 全体の流れの帯 =====
+   help.html の縦長の図は使わず、desk.js の上部の段階表示と同じ調子で
+   横一列のコンパクトな帯にする（指揮官の決定）。ラベルは EventStatus.LABELS を
+   そのまま使うので文言の二重定義がない。375px では折り返して 2〜3 段になる。 */
+.home-flow-band { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
+.home-flow-step {
+  flex: 1 1 96px; min-width: 96px;
+  padding: 8px 6px;
+  background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px;
+  text-align: center;
 }
-.diagram svg { display: block; width: 100%; height: auto; max-width: 480px; margin: 0 auto; }
-.diagram .d-box { fill: var(--bg-secondary); stroke: var(--border); stroke-width: 1; }
-.diagram .d-box-key { fill: var(--band-bg); stroke: var(--gold); stroke-width: 2; }
-.diagram .d-title { fill: var(--text); font-family: var(--mincho); font-size: 18px; font-weight: bold; }
-.diagram .d-title-key { fill: var(--gold-light); font-family: var(--mincho); font-size: 18px; font-weight: bold; }
-.diagram .d-sub { fill: var(--text-muted); font-size: 16px; }
-.diagram .d-sub-key { fill: var(--band-muted); font-size: 16px; }
-.diagram .d-line { stroke: var(--gold-deep); stroke-width: 2; fill: none; }
-.diagram .d-arrow { fill: var(--gold-deep); }
-.diagram .d-legend { fill: var(--text); font-size: 16px; }
+/* 最終結果の段だけ黒金で強調する（help.html の d-box-key と同じ意図） */
+.home-flow-step.key { background: var(--band-bg); border-color: var(--gold); border-width: 2px; }
+.home-flow-num {
+  display: inline-block; width: 18px; height: 18px; line-height: 18px;
+  border-radius: 50%; background: var(--gold-deep); color: var(--band-text);
+  font-size: 11px; font-weight: bold; margin-bottom: 4px;
+}
+.home-flow-step.key .home-flow-num { background: var(--gold); color: var(--band-bg); }
+.home-flow-label {
+  font-family: var(--mincho); font-size: 13px; font-weight: bold; color: var(--text); line-height: 1.3;
+}
+.home-flow-step.key .home-flow-label { color: var(--gold-light); }
+.home-flow-caption { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.3; }
+.home-flow-step.key .home-flow-caption { color: var(--band-muted); }
 
 /* 2 列に置けるだけの幅があるときだけ入口ボタンを並べる */
 @media (min-width: 620px) {

@@ -61,6 +61,53 @@ var Home = (function() {
 
   // --- 描画 ---
 
+  // 「全体の流れ」の帯に添える一言。ラベル自体は EventStatus.LABELS から取るので
+  // ここでは文言を二重定義しない（一言は EventStatus には無い情報なのでここだけに持つ）。
+  var FLOW_CAPTIONS = {
+    draft: '大会を作る・選手登録',
+    round1: 'コート端末で採点',
+    round1_done: '二巡目を生成・技入力',
+    round2: 'コート端末で採点',
+    round2_done: '順位を確認',
+    final: '発表・共有',
+    archived: '保管'
+  };
+
+  // 「全体の流れ」= 7段階を横一列の帯で出す（desk.js の上部の段階表示と同じ調子）。
+  // 状態そのものは変わらない静的な内容なので、DOMContentLoaded で一度だけ描く。
+  function renderFlow() {
+    var band = document.getElementById('homeFlowBand');
+    if (!band) return;
+    band.innerHTML = '';
+    band.setAttribute('role', 'list');
+    band.setAttribute('aria-label', '大会の状態は ' +
+      EventStatus.STATES.map(function(s) { return EventStatus.LABELS[s]; }).join(' → ') + ' の順に進む');
+
+    EventStatus.STATES.forEach(function(s, i) {
+      var step = document.createElement('div');
+      step.className = 'home-flow-step' + (s === 'final' ? ' key' : '');
+      step.setAttribute('role', 'listitem');
+
+      var num = document.createElement('span');
+      num.className = 'home-flow-num';
+      num.setAttribute('aria-hidden', 'true');
+      num.textContent = String(i + 1);
+
+      var label = document.createElement('div');
+      label.className = 'home-flow-label';
+      label.textContent = EventStatus.LABELS[s];
+
+      var caption = document.createElement('div');
+      caption.className = 'home-flow-caption';
+      caption.textContent = FLOW_CAPTIONS[s] || '';
+
+      step.appendChild(num);
+      step.appendChild(label);
+      step.appendChild(caption);
+      band.appendChild(step);
+    });
+  }
+
   function applyTheme(theme) {
     document.body.setAttribute('data-theme', theme);
     document.getElementById('btnTheme').textContent = theme === 'dark' ? '☀' : '🌙';
@@ -109,6 +156,7 @@ var Home = (function() {
     });
     document.getElementById('btnMode').addEventListener('click', onModeClick);
     applyMode();
+    renderFlow();
   }
 
   document.addEventListener('DOMContentLoaded', init);
