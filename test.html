@@ -416,6 +416,12 @@
     assert('確定後の一括登録は 409 locked',
       await writeResult(lockBase + '/players/bulk', 'POST', { court: 'A', names: ['L3'] }),
       { status: 409, reason: 'locked' });
+    var lockCountBefore = (await Api.loadEvent(lockEvent.id)).players.length;
+    assert('確定後の一括登録（行形式）も 409 locked',
+      await writeResult(lockBase + '/players/bulk', 'POST', { rows: [{ name: 'L3', court: 'A' }] }),
+      { status: 409, reason: 'locked' });
+    assert('確定後の一括登録（行形式）は 1 人も増やさない',
+      (await Api.loadEvent(lockEvent.id)).players.length, lockCountBefore);
     assert('確定後の PATCH は 409 locked',
       await writeResult(lockBase + '/players/' + lockP.id, 'PATCH', { name: 'X' }),
       { status: 409, reason: 'locked' });
