@@ -23,7 +23,8 @@
     btnImport.addEventListener('click', function() {
       // 選択〜取り込み完了まで二重送信を防ぐ
       btnImport.disabled = true;
-      Storage.pickJsonFile(importBundleText, function() { btnImport.disabled = false; });
+      Storage.pickJsonFile(function(text) { return importBundleText(text, ctx); },
+        function() { btnImport.disabled = false; });
     });
     head.appendChild(btnImport);
 
@@ -80,7 +81,7 @@
       noneActive.textContent = '進行中・準備中の大会はありません。';
       body.appendChild(noneActive);
     } else {
-      body.appendChild(buildTable(active));
+      body.appendChild(buildTable(active, ctx));
     }
 
     if (archived.length > 0) {
@@ -92,19 +93,19 @@
         sum.textContent = (det.open ? '▾ ' : '▸ ') + 'アーカイブ（' + archived.length + ' 件）';
       });
       det.appendChild(sum);
-      det.appendChild(buildTable(archived));
+      det.appendChild(buildTable(archived, ctx));
       body.appendChild(det);
     }
   }
 
-  function buildTable(list) {
+  function buildTable(list, ctx) {
     var table = document.createElement('table');
     table.className = 'desk-table';
     table.innerHTML =
       '<thead><tr><th>大会名</th><th>日付</th><th>会場</th><th>人数</th>' +
       '<th>状態</th><th>更新</th><th></th></tr></thead>';
     var tbody = document.createElement('tbody');
-    list.forEach(function(ev) { tbody.appendChild(buildRow(ev)); });
+    list.forEach(function(ev) { tbody.appendChild(buildRow(ev, ctx)); });
     table.appendChild(tbody);
     return table;
   }
@@ -128,7 +129,7 @@
     return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hh + ':' + mi;
   }
 
-  function buildRow(ev) {
+  function buildRow(ev, ctx) {
     var st = EventStatus.of(ev);
     var tr = document.createElement('tr');
 
@@ -156,7 +157,7 @@
 
     var tdAct = document.createElement('td');
     tdAct.className = 'act';
-    tdAct.appendChild(buildRowMenu(ev, st));
+    tdAct.appendChild(buildRowMenu(ev, st, ctx));
     tr.appendChild(tdAct);
     return tr;
   }
@@ -185,7 +186,7 @@
     return b;
   }
 
-  function buildRowMenu(ev, st) {
+  function buildRowMenu(ev, st, ctx) {
     bindOutsideClickOnce();
     var menu = document.createElement('details');
     menu.className = 'desk-menu';
@@ -199,17 +200,23 @@
 
     body.appendChild(menuItem(menu, '開く', function() { Desk.navigate('players', ev.id); }));
     body.appendChild(menuItem(menu, '📄 コピーして作成', function() { openCopyDialog(ev); }));
-    body.appendChild(menuItem(menu, '💾 ファイルに保存', function() { onSaveFile(ev); }));
+    body.appendChild(menuItem(menu, '💾 ファイルに保存', function() { onSaveFile(ev, ctx); }));
     // アーカイブは「最終結果」まで進んだ大会だけ（遷移表にない組み合わせはサーバーが拒む）
     if (st === 'final') {
-      body.appendChild(menuItem(menu, '📥 アーカイブ', function() { onArchive(ev); }));
+      body.appendChild(menuItem(menu, '📥 アーカイブ', function() { onArchive(ev, ctx); }));
     }
-    body.appendChild(menuItem(menu, '🗑 削除', function() { onDelete(ev); }));
+    body.appendChild(menuItem(menu, '🗑 削除', function() { onDelete(ev, ctx); }));
     return menu;
   }
 
-  async function onSaveFile(ev) {
+  // 以下の4つ（onSaveFile / onDelete / onArchive / importBundleText）は await をまたぐ。
+  // その間に区画や大会を切り替えられていたら、古い一覧の ctx で Desk.navigate /
+  // Desk.toast を呼んで新しい画面を横から動かさない（desk-setup.js と同じ作法）。
+  // 失敗時の alert も、もう見ていない画面の話なので同様に抑止する。
+
+  async function onSaveFile(ev, ctx) {
     var json = await Api.exportBundle(ev.id);
+    if (ctx.isStale()) return;
     // json: 成功時は文字列、サーバーがエラーを返したときは {error}、通信失敗は null
     if (typeof json !== 'string') {
       alert(json && json.error
@@ -223,12 +230,13 @@
     Desk.toast('ファイルに保存しました');
   }
 
-  async function onDelete(ev) {
+  async function onDelete(ev, ctx) {
     if (!confirm('大会「' + (ev.name || '(名称未設定)') + '」を削除します。\n' +
         '選手データも一緒に消えます。よろしいですか？')) {
       return;
     }
     var ok = await Api.deleteEvent(ev.id);
+    if (ctx.isStale()) return;
     if (!ok) {
       alert('大会の削除に失敗しました。');
       return;
@@ -352,10 +360,11 @@
 
   // --- アーカイブ ---
 
-  async function onArchive(ev) {
+  async function onArchive(ev, ctx) {
     // 確認文言はスマホ運営と共通（courts.js）
     if (!confirm(Courts.statusConfirmMessage('final', 'archived', null))) return;
     var res = await Api.changeStatus(ev.id, 'archived');
+    if (ctx.isStale()) return;
     if (!res) {
       alert('アーカイブできませんでした。通信を確認してください。');
       return;
@@ -371,7 +380,7 @@
   // --- 取り込み ---
   // 検証（format / version）は Storage.checkBundle。スマホ運営（admin-events.js）と同じ流れ。
 
-  async function importBundleText(text) {
+  async function importBundleText(text, ctx) {
     var bundle;
     try {
       bundle = JSON.parse(text);
@@ -387,6 +396,7 @@
 
     // 取り込みは常に新しい大会として追加される。同名・同日があれば先に断りを入れる。
     var existing = await Api.listEvents();
+    if (ctx.isStale()) return;
     if (Array.isArray(existing)) {
       var dup = existing.filter(function(e) {
         return String(e.name || '').trim() === String(name).trim() &&
@@ -399,6 +409,7 @@
     }
 
     var result = await Api.importBundle(bundle);
+    if (ctx.isStale()) return;
     if (!result) {
       alert('取り込みに失敗しました。通信を確認してください。');
       return;
