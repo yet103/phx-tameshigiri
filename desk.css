@@ -281,3 +281,60 @@ a { color: var(--accent); }
   }
   .desk-head, .desk-body { display: none; }
 }
+
+/* ===== 試合の区画（desk-match.js。計画5） ===== */
+.desk-match-courts {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px; margin-bottom: 28px;
+}
+.desk-match-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px;
+}
+.desk-match-court { font-size: 16px; font-weight: bold; }
+.desk-match-progress { font-size: 13px; color: var(--text-muted); }
+.desk-match-progress.done { color: var(--cell-success-text); font-weight: bold; }
+/* いま採点中の選手。待機中は帯を消して控えめにする（配信ボードと同じ言い回し） */
+.desk-match-live { font-size: 13px; padding: 4px 8px; border-radius: 4px; background: var(--row-selected); }
+.desk-match-live.idle { background: transparent; color: var(--text-muted); padding-left: 0; }
+.desk-match-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.desk-match-actions .desk-btn { min-height: 32px; padding: 0 10px; font-size: 13px; }
+
+/* 二巡目の帯（生成・全員にコピー・件数） */
+.desk-match-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.desk-match-count { font-size: 13px; color: var(--cell-fail-text); }
+.desk-match-count.done { color: var(--cell-success-text); font-weight: bold; }
+
+/* 二巡目の表。技のセレクトは空のとき赤枠にして未入力を目立たせる */
+.desk-match-table select { min-width: 130px; min-height: 30px; }
+.desk-match-table select.empty { border-color: var(--btn-fail); }
+.desk-match-table td.copy { text-align: center; }
+.desk-match-table td.copy .desk-btn { min-height: 30px; padding: 0 10px; font-size: 12px; }
+
+/* ===== 結果の区画（desk-results.js。計画5） ===== */
+.desk-results-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.desk-results-cols {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start;
+}
+/* 1024〜1199px では3列だと氏名が折り返すので2列に落とす（1280px では3列） */
+@media (max-width: 1199px) {
+  .desk-results-cols { grid-template-columns: repeat(2, 1fr); }
+}
+.desk-results-col {
+  padding: 12px 14px; background: var(--card-bg);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.desk-results-col h3 {
+  font-size: 15px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.desk-results-list { list-style: none; }
+.desk-results-list li {
+  display: flex; align-items: baseline; gap: 8px; padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.desk-results-list li:last-child { border-bottom: none; }
+.desk-results-rank { width: 2.4em; text-align: right; color: var(--text-muted); }
+.desk-results-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.desk-results-score { font-weight: bold; color: var(--score-color); }
+.desk-results-board { margin-top: 28px; }
+.desk-results-boardlist { display: flex; gap: 8px; flex-wrap: wrap; }
