@@ -85,7 +85,7 @@ main { padding: 8px 12px 16px; }
   overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch;
 }
 .court-chip {
-  flex: 0 0 auto; min-height: 44px; padding: 0 14px; border-radius: 22px;
+  flex: 0 0 auto; min-height: 44px; padding: 0 14px; border-radius: 4px;
   border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text);
 }
 .court-chip.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -110,7 +110,7 @@ main { padding: 8px 12px 16px; }
    絞り込みは 3 段（コート／性別・巡目・新人・技未入力／名前検索）。
    表は 1 行 1 段で折り返さず、幅を超えたら .players-table-wrap の中だけ横に流す。
    名前列は左に固定して、横スクロール中も誰の行か分かるようにする（採点表の技名列と同じ手法）。 */
-.chip-sm { min-height: 32px; padding: 0 10px; border-radius: 16px; font-size: 13px; }
+.chip-sm { min-height: 32px; padding: 0 10px; border-radius: 4px; font-size: 13px; }
 .players-filters { gap: 10px; }
 .chip-group { display: inline-flex; gap: 4px; flex: 0 0 auto; }
 .players-search { margin-bottom: 10px; }
@@ -195,7 +195,7 @@ main { padding: 8px 12px 16px; }
 /* 技チップ */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
-  min-height: 44px; padding: 0 14px; border-radius: 22px;
+  min-height: 44px; padding: 0 14px; border-radius: 4px;
   background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent);
 }
 .chip.empty { background: var(--bg-secondary); color: var(--text-muted); border-color: var(--border); }
