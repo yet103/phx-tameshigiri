@@ -259,7 +259,10 @@ input[type="file"] { display: none; }
   border-bottom: 1px solid var(--border);
 }
 .status-banner.open { background: var(--bg-secondary); color: var(--text-muted); }
-.status-banner.closed { background: var(--warn); color: var(--banner-text); font-weight: bold; }
+/* --banner-text は常に白固定（他の用途＝濃い背景の上の白文字と共用）なので使わない。
+   --warn はライトで濃い茶、ダークで明るい金と明暗が逆転するため、
+   文字色には両テーマで --warn と反対側にある --bg（生成りの紙／黒）を使う。 */
+.status-banner.closed { background: var(--warn); color: var(--bg); font-weight: bold; }
 /* 採点できない状態。太刀のセルは押せなくし、全体を薄く見せる */
 body.scoring-locked .strike-cell { pointer-events: none; opacity: 0.55; }
 body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
