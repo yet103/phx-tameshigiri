@@ -487,6 +487,9 @@
     } else {
       Desk.toast(done + ' 名に一巡目の技をコピーしました');
     }
+    // reloadEvent が通信断で描き直せないことがあるので、分岐に置かず必ず戻す
+    // （成功時は直後の reloadEvent がボタンごと作り直すので無害。onGenerate と同じ作法）。
+    if (btn) btn.disabled = false;
     await Desk.reloadEvent();
   }
 
