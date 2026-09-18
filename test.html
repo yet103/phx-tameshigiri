@@ -1580,6 +1580,24 @@
     assert('calcTotalScore 負の補正で負になる', Scoring.calcTotalScore([{ techName: '夢想返し', values: ['','','',''], adjust: -4 }], false, -1), -5);
     assert('calcRowScore 太刀 + 補正', Scoring.calcRowScore('夢想返し', ['○','○','',''], 3, false), 21);
     assert('calcRowScore 補正が文字列でも 0 扱い', Scoring.calcRowScore('夢想返し', ['○','','',''], 'x', false), 13);
+
+    // failedAt: 最初の'×'の添字。無ければ-1（一つの形で途中失敗したら以降の太刀は無効）
+    assert('failedAt 途中に×', Scoring.failedAt(['○','×','○','']), 1);
+    assert('failedAt ×が無ければ-1', Scoring.failedAt(['○','○','','']), -1);
+    assert('failedAt 先頭が×', Scoring.failedAt(['×','○','○','○']), 0);
+
+    // effectiveValues: 最初の×より後ろを''にした複製
+    assert('effectiveValues ×より後ろを無効化', Scoring.effectiveValues(['○','×','○','○']), ['○','×','','']);
+    assert('effectiveValues ×が無ければそのまま', Scoring.effectiveValues(['○','○','','']), ['○','○','','']);
+
+    // calcRowScore: 途中失敗より後ろの太刀は数えない
+    assert('calcRowScore 破図味(男) 二ノ太刀で失敗→初太刀の配点＋補正点だけ',
+      Scoring.calcRowScore('破図味(男)', ['○','×','○','○'], 3, false), 23);
+    assert('calcRowScore 破図味(男) 初太刀で失敗→補正点だけ',
+      Scoring.calcRowScore('破図味(男)', ['×','○','○','○'], 3, false), 3);
+    // 三ノ太刀が null の技（夢想返し）: null列に×が入っていても最初の×の判定に含めない
+    assert('calcRowScore 夢想返し（三ノ太刀null）三ノ太刀の×は無視される',
+      Scoring.calcRowScore('夢想返し', ['○','○','×','○'], 0, false), 18);
     assert('normalizeAdjust 配列でなければ [0,0,0]', Scoring.normalizeAdjust(undefined), [0, 0, 0]);
     assert('normalizeAdjust 足りない要素は 0', Scoring.normalizeAdjust([1]), [1, 0, 0]);
     assert('normalizeAdjust 余分な要素は捨てる', Scoring.normalizeAdjust([1, 2, 3, 4]), [1, 2, 3]);

@@ -39,6 +39,25 @@ var Scoring = (function() {
     return 0;
   }
 
+  // 最初の '×' の添字。無ければ -1
+  function failedAt(values) {
+    var vals = values || [];
+    for (var i = 0; i < vals.length; i++) {
+      if (vals[i] === '×') return i;
+    }
+    return -1;
+  }
+
+  // 最初の '×' より後ろを '' にした複製（一つの形で途中失敗したら以降の太刀は無効）
+  function effectiveValues(values) {
+    var vals = (values || []).slice();
+    var idx = failedAt(vals);
+    if (idx === -1) return vals;
+    var out = vals.slice();
+    for (var i = idx + 1; i < out.length; i++) out[i] = '';
+    return out;
+  }
+
   // 補正点の配列を [n, n, n]（整数）に正規化する。配列でなければ [0, 0, 0]。
   function normalizeAdjust(adjust) {
     var out = [0, 0, 0];
@@ -56,10 +75,19 @@ var Scoring = (function() {
   }
 
   // 1行（1技）の得点 = 太刀の配点合計 + その技の補正点
+  // 一つの形で途中失敗したらそれ以降の太刀は無効（配点を入れない）。
+  // 配点が null の太刀（その技に無い太刀）は最初の×の判定にも含めない。
   function calcRowScore(techName, values, adjust, isFemale) {
+    var tech = findTechnique(techName, isFemale);
+    var raw = values || [];
+    var masked = [];
+    for (var i = 0; i < 4; i++) {
+      masked.push(tech && tech.strikes[i] === null ? '' : raw[i]);
+    }
+    var effective = effectiveValues(masked);
     var s = 0;
     for (var i = 0; i < 4; i++) {
-      s += calcStrikeScore(techName, i, (values || [])[i], isFemale);
+      s += calcStrikeScore(techName, i, effective[i], isFemale);
     }
     return s + toInt(adjust);
   }
@@ -107,12 +135,13 @@ var Scoring = (function() {
   }
 
   // 行データからresultエンコード文字列を生成。5文字目は常に空白（補正点は adjust に持つ）。
+  // 最初の×より後ろ（無効化された太刀）は空白で書く。
   function encodeResult(rows) {
     var str = '';
     for (var i = 0; i < rows.length; i++) {
-      var row = rows[i];
+      var values = effectiveValues(rows[i].values);
       for (var s = 0; s < 4; s++) {
-        str += row.values[s] === '○' ? '1' : row.values[s] === '×' ? '0' : ' ';
+        str += values[s] === '○' ? '1' : values[s] === '×' ? '0' : ' ';
       }
       str += ' ';
     }
@@ -125,6 +154,8 @@ var Scoring = (function() {
     calcStrikeScore: calcStrikeScore,
     calcRowScore: calcRowScore,
     calcTotalScore: calcTotalScore,
+    failedAt: failedAt,
+    effectiveValues: effectiveValues,
     normalizeAdjust: normalizeAdjust,
     decodeResult: decodeResult,
     encodeResult: encodeResult,
