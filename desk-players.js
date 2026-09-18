@@ -89,6 +89,7 @@
       btnPaste.addEventListener('click', function() { openPasteDialog(ctx); });
       head.appendChild(btnPaste);
     }
+    head.appendChild(buildHeadMenu(ctx, locked));
     container.appendChild(head);
 
     if (locked) {
@@ -248,7 +249,10 @@
     tr.appendChild(techCell(ctx, p, locked, 2));
     tr.appendChild(techCell(ctx, p, locked, 3));
     tr.appendChild(cell(String(p.score || 0), 'num col-score'));
-    tr.appendChild(cell('', 'act'));
+    var tdAct = document.createElement('td');
+    tdAct.className = 'act';
+    if (!locked) tdAct.appendChild(buildRowMenu(ctx, p));
+    tr.appendChild(tdAct);
     return tr;
   }
 
@@ -820,6 +824,159 @@
       dialog.close();
       Desk.reloadEvent();
     });
+  }
+
+  // --- 「⋯」メニュー（行の削除・CSV 取り込み） ---
+
+  // details/summary の外側をクリックしたら閉じる。document への登録は 1 回だけ
+  // （描画のたびにリスナーが積み重ならないように）。desk-events.js と同じ作り。
+  var outsideClickBound = false;
+  function bindOutsideClickOnce() {
+    if (outsideClickBound) return;
+    outsideClickBound = true;
+    document.addEventListener('click', function(e) {
+      var menus = document.querySelectorAll('.desk-menu[open]');
+      for (var i = 0; i < menus.length; i++) {
+        if (!menus[i].contains(e.target)) menus[i].open = false;
+      }
+    });
+  }
+
+  function menuItem(menu, label, onClick, disabledReason) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (disabledReason) {
+      b.disabled = true;
+      b.title = disabledReason;
+    } else {
+      b.addEventListener('click', function() {
+        menu.open = false;
+        onClick();
+      });
+    }
+    return b;
+  }
+
+  function buildMenu(label) {
+    bindOutsideClickOnce();
+    var menu = document.createElement('details');
+    menu.className = 'desk-menu';
+    var sum = document.createElement('summary');
+    sum.textContent = '⋯';
+    sum.setAttribute('aria-label', label);
+    menu.appendChild(sum);
+    var body = document.createElement('div');
+    body.className = 'desk-menu-body';
+    menu.appendChild(body);
+    return { el: menu, body: body };
+  }
+
+  function buildHeadMenu(ctx, locked) {
+    var menu = buildMenu('選手のメニュー');
+    menu.body.appendChild(menuItem(menu.el, '📄 CSV を取り込む', function() {
+      Storage.pickCsvFile(function(text) { return importCsvText(ctx, text); });
+    }, locked ? 'この大会は最終結果を確定済みです' : ''));
+    return menu.el;
+  }
+
+  function buildRowMenu(ctx, p) {
+    var menu = buildMenu((p.name || '') + ' の操作');
+    menu.body.appendChild(menuItem(menu.el, '🗑 削除', function() { onDelete(ctx, p); }));
+    return menu.el;
+  }
+
+  // 削除。採点済みは 409 で得点を返してくるので、もう一度確認して force で消す
+  // （admin-players.js の編集シートと同じ流れ・同じ文言）。
+  async function onDelete(ctx, p) {
+    // 一巡目の行だけ「二巡目の行は残ります」と断る（二巡目の行自体を消すときは不要）
+    var roundFragment = (Courts.roundOf(p) === 1) ? '二巡目の行は残ります。\n' : '';
+    if (!confirm(
+      '選手「' + (p.name || '') + '」（' + (p.order || '') + '）を削除します。\n' +
+      roundFragment +
+      'よろしいですか？'
+    )) return;
+
+    var res = await Api.deletePlayer(ctx.eventId, p.id, false);
+    if (ctx.isStale()) return;
+
+    if (res && res.blocked && res.reason === 'locked') {
+      alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+      return;
+    }
+    if (res && res.blocked) {
+      // 採点済みガード。得点を出してもう一度確認し、承諾したときだけ force。
+      var bp = res.player || { name: p.name, order: p.order, score: p.score };
+      if (!confirm(
+        '「' + bp.name + '」（' + bp.order + '）は採点済みです（' + bp.score + '点）。\n' +
+        '削除すると採点結果は戻せません。' + roundFragment + '\n' +
+        '本当に削除しますか？'
+      )) return;
+      res = await Api.deletePlayer(ctx.eventId, p.id, true);
+      if (ctx.isStale()) return;
+    }
+    if (res !== true) {
+      alert('選手の削除に失敗しました。');
+      return;
+    }
+    Desk.toast('削除しました');
+    await Desk.reloadEvent();
+  }
+
+  // CSV 取り込み（admin-players.js と同じ流れ）。
+  // 確認ダイアログをはさむので、書き込みの直前に必ず大会が同じか見る。
+  async function importCsvText(ctx, text) {
+    var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
+    var eventName = (ctx.event && ctx.event.name) || '';
+    var mode = 'replace';
+    if ((ctx.players || []).length > 0) {
+      mode = confirm(
+        '大会「' + eventName + '」に読み込みます。' +
+        '既存データをクリアして読み込みますか？（キャンセルで追記）'
+      ) ? 'replace' : 'append';
+      if (mode === 'append') {
+        if (!confirm(
+          '既存の ' + ctx.players.length + ' 名に追記します。' +
+          '同じ順番の選手がいると重複します。追記しますか？'
+        )) return;
+      }
+    }
+    if (Desk.currentEventId() !== eventId) {
+      alert('大会が切り替わったため、CSV の読み込みを中止しました。');
+      return;
+    }
+    var result = await Api.importCsv(eventId, text, mode);
+    if (Desk.currentEventId() !== eventId) return;
+    if (result && result.blocked && result.reason === 'locked') {
+      alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+      return;
+    }
+    if (result && result.blocked) {
+      if (!confirm(
+        '大会「' + eventName + '」\n' +
+        'この大会には採点済みの選手が少なくとも ' + result.scoredCount + ' 名います。\n' +
+        '他のコート端末による採点も含まれます。\n' +
+        '読み込みを続けると、これらの採点結果はすべて失われます。\n' +
+        '本当に続行しますか？'
+      )) return;
+      if (Desk.currentEventId() !== eventId) {
+        alert('大会が切り替わったため、CSV の読み込みを中止しました。');
+        return;
+      }
+      result = await Api.importCsv(eventId, text, mode, true);
+      if (Desk.currentEventId() !== eventId) return;
+    }
+    if (!result || !result.success) {
+      alert('インポートに失敗しました。' + (result && result.error ? '\n' + result.error : ''));
+      return;
+    }
+    Desk.toast(result.playerCount + '名を読み込みました');
+    // 履歴記録（server/data/history に残す。CSV の一括登録は履歴を辿れるようにする）
+    Api.addHistory(eventId, {
+      action: 'csv_import',
+      detail: result.playerCount + '名の選手データをインポート'
+    });
+    if (Desk.currentEventId() === eventId) Desk.reloadEvent();
   }
 
   Desk.registerTab('players', { render: render });
