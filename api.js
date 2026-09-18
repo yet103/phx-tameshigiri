@@ -212,9 +212,12 @@ var Api = (function() {
 
   async function createPlayersBulk(eventId, data) {
     // POST /api/events/:eventId/players/bulk
-    // Body: { court, isFemale, isNewFace, names: ['名前', ...] }
-    // 戻り値: { created, players } | { error } (400/404: 失敗理由を画面に出すため) | null（通信失敗）
-    // 1回の書き込みで コート×性別×一巡目 の続き番号を順に付ける。技は空で作る。
+    // Body: { court, isFemale, isNewFace, names: ['名前', ...] }（同じコート・性別でまとめて）
+    //     | { rows: [{ name, court, isFemale, isNewFace, tech1, tech2, tech3 }, ...] }（行ごとに違う）
+    // 戻り値: { created, players } | { error } (400/404/409: 失敗理由を画面に出すため) | null（通信失敗）
+    // 1回の書き込みで コート×性別×一巡目 の続き番号を順に付ける。
+    // rows 形式は全行を検証してから書くので、失敗したときは 1 人も登録されていない。
+    // rows の 400 は「3 行目: …」のように行番号つきの文言で返る。
     try {
       var res = await fetch('/api/events/' + eventId + '/players/bulk', {
         method: 'POST',
@@ -222,8 +225,9 @@ var Api = (function() {
         body: JSON.stringify(data)
       });
       if (!res.ok) {
-        var errJson = await res.json();
-        return { error: errJson.error };
+        var errJson = null;
+        try { errJson = await res.json(); } catch (e) { /* JSON でない応答 */ }
+        return { error: (errJson && errJson.error) || ('サーバーがエラーを返しました（' + res.status + '）') };
       }
       var json = await res.json();
       return { created: json.created || 0, players: json.players || [] };

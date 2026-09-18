@@ -104,6 +104,63 @@
     assert('bulk: 大会に4名入っている', bulkLoaded.players.length, 4);
     await Api.importCsv(testEventId, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n', 'replace');   // 後続のテストのため空に戻す
 
+    // ---- 一括登録の行形式（設計書 API「一括登録」・テスト 13。PC 運営の「貼り付けて追加」） ----
+    // 技名はその大会の「有効な技リスト」で照合されるので、実際の技リストから借りる
+    // （サーバーに独自の雛形が保存されている環境でも固定の技名に依存しない）。
+    var brEvent = await Api.saveEvent({ name: '行形式テスト', date: '2026-09-19', venue: '', players: [] });
+    var brLoaded = await Api.loadEvent(brEvent.id);
+    var brTech = brLoaded.techniques[0].name;
+    var brTech2 = brLoaded.techniques[1].name;
+
+    var br = await Api.createPlayersBulk(brEvent.id, { rows: [
+      { name: '行 一郎', court: 'A', isFemale: false, isNewFace: true, tech1: brTech, tech2: '', tech3: '' },
+      { name: ' 行 二郎 ', court: 'A', isFemale: false, isNewFace: false, tech1: brTech, tech2: brTech2, tech3: brTech },
+      { name: '行 花子', court: 'B', isFemale: true, isNewFace: false }
+    ] });
+    assert('bulk rows: 3 行が採番される', br.created, 3);
+    assert('bulk rows: コート×性別ごとに採番する',
+      br.players.map(function(p) { return p.order; }), ['A-男子-1-1', 'A-男子-1-2', 'B-女子-1-1']);
+    assert('bulk rows: 名前は trim する', br.players[1].name, '行 二郎');
+    assert('bulk rows: 技はそのまま入る',
+      [br.players[1].tech1, br.players[1].tech2, br.players[1].tech3], [brTech, brTech2, brTech]);
+    assert('bulk rows: 技を省いた行は空で作る',
+      [br.players[2].tech1, br.players[2].tech2, br.players[2].tech3], ['', '', '']);
+    assert('bulk rows: 性別・新人は行ごとに付く',
+      [br.players[0].isNewFace, br.players[1].isNewFace, br.players[2].isFemale], [true, false, true]);
+
+    var br2 = await Api.createPlayersBulk(brEvent.id, { rows: [{ name: '行 三郎', court: 'A' }] });
+    assert('bulk rows: 既存の続きから採番', br2.players[0].order, 'A-男子-1-3');
+
+    var brBadTech = await Api.createPlayersBulk(brEvent.id, { rows: [
+      { name: '行 四郎', court: 'A', tech1: brTech },
+      { name: '行 五郎', court: 'A', tech1: 'ありえない技' }
+    ] });
+    assert('bulk rows: 技リストに無い技名は行番号つきの 400',
+      brBadTech && brBadTech.error, '2 行目: 技「ありえない技」は技リストにありません');
+
+    var brNoName = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '行 六郎', court: 'A' }, { name: '  ', court: 'A' }]
+    });
+    assert('bulk rows: 名前が空なら行番号つきの 400', brNoName && brNoName.error, '2 行目: 選手名が必要です');
+
+    var brBadCourt = await Api.createPlayersBulk(brEvent.id, { rows: [{ name: '行 七郎', court: 'A-1' }] });
+    assert('bulk rows: 不正なコートは行番号つきの 400', brBadCourt && brBadCourt.error, '1 行目: 不正なコート名です');
+
+    var brNoCourt = await Api.createPlayersBulk(brEvent.id, { rows: [{ name: '行 八郎' }] });
+    assert('bulk rows: コートが空でも行番号つきの 400', brNoCourt && brNoCourt.error, '1 行目: 不正なコート名です');
+
+    var brEmpty = await Api.createPlayersBulk(brEvent.id, { rows: [] });
+    assert('bulk rows: 空の配列は 400', brEmpty && brEmpty.error, '登録する行がありません');
+
+    var brMany = [];
+    for (var bri = 0; bri < 501; bri++) brMany.push({ name: '多' + bri, court: 'A' });
+    var brTooMany = await Api.createPlayersBulk(brEvent.id, { rows: brMany });
+    assert('bulk rows: 501 行は 400', brTooMany && brTooMany.error, '一度に登録できるのは500名までです');
+
+    var brAfter = await Api.loadEvent(brEvent.id);
+    assert('bulk rows: 1 行でも不正なら 1 人も登録されない（4名のまま）', brAfter.players.length, 4);
+    await Api.deleteEvent(brEvent.id);
+
     // PATCH: 補正点・備考・確定・負の得点
     // 採点済みの選手を残すと後続の replace インポートが採点済みガードに引っかかるので、専用の大会で行う
     var padEvent = await Api.saveEvent({ name: '補正点テスト', date: '2026-09-13', venue: '', players: [] });

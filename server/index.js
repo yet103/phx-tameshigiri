@@ -789,13 +789,108 @@ app.post('/api/events/:id/players', (req, res) => {
   }
 });
 
-// POST /api/events/:id/players/bulk : 同じコート・性別・新人区分の選手をまとめて追加（一巡目、技は空）
-// 名前は1件ずつ trim して空を除く。コート・性別・巡目は全員共通なので nextOrderNumber は
+// 一括登録の行形式（PC 運営の「貼り付けて追加」）。
+// 行ごとにコート・性別・新人・技が違う。全行を検証してから 1 回だけ書き、
+// 1 行でも不正なら 1 人も登録しない（半分だけ登録された状態を運営に見せない）。
+// 技名はその大会の「有効な技リスト」（effectiveTechniques）にある名前だけを許す。
+// 採番は コート×性別 ごとに最大+1 を 1 回だけ求め、あとは連番で増やす
+// （行ごとに数え直すと件数の二乗のコストになる）。巡目は常に 1（二巡目は生成 API が作る）。
+function bulkFromRows(req, res, rows) {
+  if (rows.length === 0) {
+    return res.status(400).json({ error: '登録する行がありません' });
+  }
+  if (rows.length > 500) {
+    return res.status(400).json({ error: '一度に登録できるのは500名までです' });
+  }
+
+  const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+  if (!fs.existsSync(eventPath)) {
+    return res.status(404).json({ error: '大会が見つかりません' });
+  }
+  const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+  if (rejectIfLocked(res, event)) return;
+  if (!Array.isArray(event.players)) event.players = [];
+
+  const known = {};
+  effectiveTechniques(event).forEach(t => {
+    const n = (t && typeof t.name === 'string') ? t.name.trim() : '';
+    if (n) known[n] = true;
+  });
+
+  // 1. 全行の検証（ここでは何も書かない）
+  const checked = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || {};
+    const at = `${i + 1} 行目: `;
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (!name) {
+      return res.status(400).json({ error: at + '選手名が必要です' });
+    }
+    const court = typeof row.court === 'string' ? row.court.trim() : '';
+    if (!isValidCourt(court)) {
+      return res.status(400).json({ error: at + '不正なコート名です' });
+    }
+    const techs = ['tech1', 'tech2', 'tech3'].map(k => (typeof row[k] === 'string' ? row[k].trim() : ''));
+    for (let t = 0; t < techs.length; t++) {
+      if (techs[t] && !known[techs[t]]) {
+        return res.status(400).json({ error: at + `技「${techs[t]}」は技リストにありません` });
+      }
+    }
+    checked.push({
+      name: name,
+      court: court,
+      isFemale: row.isFemale === true,
+      isNewFace: row.isNewFace === true,
+      techs: techs
+    });
+  }
+
+  // 2. 採番して書く
+  const nextNo = {};
+  const created = checked.map(row => {
+    const gender = row.isFemale ? '女子' : '男子';
+    const key = bulkOrderKey(row.court, gender);
+    if (nextNo[key] === undefined) {
+      nextNo[key] = nextOrderNumber(event.players, row.court, gender, 1);
+    }
+    const n = nextNo[key]++;
+    return {
+      id: generateId(),
+      name: row.name,
+      order: buildOrder(row.court, row.isFemale, 1, n),
+      tech1: row.techs[0],
+      tech2: row.techs[1],
+      tech3: row.techs[2],
+      score: 0,
+      isNewFace: row.isNewFace,
+      isFemale: row.isFemale,
+      result: ''
+    };
+  });
+
+  event.players = event.players.concat(created);
+  event.updatedAt = new Date().toISOString();
+  writeJsonAtomic(eventPath, event);
+  res.status(201).json({ success: true, created: created.length, players: created });
+}
+
+// 採番の控えのキー。コート名に使えない文字（改行）で連結して、
+// 'A' + '男子' と 'A男' + '子' が同じキーにならないようにする。
+function bulkOrderKey(court, gender) {
+  return court + '\n' + gender;
+}
+
+// POST /api/events/:id/players/bulk : 選手をまとめて追加（一巡目）
+// 2 つの形を受ける。どちらか一方だけ。
+//   { court, isFemale, isNewFace, names: [...] } … 同じコート・性別・新人区分で名前だけ（スマホ運営）
+//   { rows: [{ name, court, isFemale, isNewFace, tech1, tech2, tech3 }, ...] } … 行ごとに違う（PC 運営の貼り付け）
+// names 形式: 名前は1件ずつ trim して空を除く。コート・性別・巡目は全員共通なので nextOrderNumber は
 // 最初に1回だけ求め、あとは連番で増やす（毎回 concat して数え直すと件数の二乗のコストになる）。
 app.post('/api/events/:id/players/bulk', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
     const body = req.body || {};
+    if (Array.isArray(body.rows)) return bulkFromRows(req, res, body.rows);
     const court = typeof body.court === 'string' ? body.court.trim() : '';
     if (!isValidCourt(court)) {
       return res.status(400).json({ error: '不正なコート名です' });
