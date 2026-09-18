@@ -426,22 +426,22 @@
     <h3>採点画面の見方</h3>
 
     <figure>
-      <img src="help/img/scoring_tablet.png" loading="lazy" alt="タブレットで開いた採点画面。上から、大会とコートの選択バー、選手名の帯、タイマー、採点表、全体補正点と備考、形成功・失敗・確定のボタンと合計、ツールバー、下部の選手一覧。">
+      <img src="help/img/scoring_tablet.png" loading="lazy" alt="タブレットで開いた採点画面。上から、大会とコートの選択バー、コートバッジを左端に置いた選手の帯（中央に順番と名前）、採点表、全体補正点と備考、タイマーと前の選手・形成功・失敗・確定・合計・次の選手をまとめた操作区画、ツールバー、下部の選手一覧。">
       <figcaption>
         <span class="cap-head">採点画面（タブレット。確定済みの選手）— 画面の上から順に</span>
         <ul>
           <li>①大会バー — 大会とコートを選びます。右の <span class="ui">● 保存済み</span> がサーバーへの保存の様子です。大会の作成と削除は運営画面にあります（バーの <span class="ui">大会の作成は運営画面で</span> のリンクから開けます）。選択肢にはアーカイブ済みの大会は出ず、採点できる大会が先頭に並びます。</li>
-          <li>②選手の帯 — コートのバッジ・順番・名前。<span class="ui">◀ 前の選手</span> <span class="ui">次の選手 ▶</span> で移ります。</li>
-          <li>③タイマー — <span class="ui">▶ 開始</span> <span class="ui">■ 停止</span> <span class="ui">↺ リセット</span>。5分から0へ向かって数えます。選手を切り替えると自動で <span class="ui">05:00</span> に戻ります。</li>
-          <li>④採点表 — 技名をタップするとその行が選ばれます（黒く反転します）。太刀のセルは押すたびに <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と変わります。灰色のセルは、その技で打たない太刀です。<span class="term">行がまるごと灰色で得点の欄も空のときは、その技名が技術リストに無い状態です</span>（配点を引けず0点のままになります）。§5 の「技が見つからない」を見てください。</li>
-          <li>⑤<span class="ui">補正点</span>・<span class="ui">得点</span> の列 — <span class="ui">補正点</span> はその技だけに効きます。マイナスも入れられます。<span class="ui">得点</span> はその行の合計で、こちらは自動です。</li>
-          <li>⑥<span class="ui">全体補正点</span>・<span class="ui">備考</span> — <span class="ui">全体補正点</span> は選手全体に効きます。<span class="ui">備考</span> は得点に影響しません（200文字まで）。</li>
-          <li>⑦<span class="ui">形成功</span> <span class="ui">失敗</span> <span class="ui">確定</span> と <span class="ui">合計</span> — <span class="ui">形成功</span> <span class="ui">失敗</span> はどちらも選択中の行にだけ効きます。<span class="ui">形成功</span> は打つ太刀を全部「成功」に、<span class="ui">失敗</span> は「未」のセルだけを「失敗」にします（すでに成功のセルは変えません）。<span class="ui">確定</span> を押すと <span class="ui">確定済み</span> になり、得点と合計が青くなります。得点に関わる編集をすると、自動で確定が外れます。</li>
-          <li>⑧ツールバー — <span class="ui">CSVエクスポート</span> で全選手の内訳を、<span class="ui">HTML保存</span> で成績表を保存できます。<span class="ui">🌙 ダーク</span> で暗い配色に切り替わります。</li>
-          <li>⑨選手一覧 — 行をタップするとその選手に切り替わります。見出しの <span class="ui">▾ 選手一覧</span> で開閉できます。</li>
+          <li>②選手の帯 — <span class="term">コートのバッジは帯の左端に小さく</span>付きます。中央に「男子 1巡目 1番」のような<span class="term">順番と選手名が並んで</span>出ます。前後の選手へのボタンはこの帯には無く、⑤の操作区画に移りました。</li>
+          <li>③採点表 — 技名をタップするとその行が選ばれます（黒く反転します）。太刀のセルは押すたびに <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と変わります。灰色のセルは、その技で打たない太刀です。<span class="term">行がまるごと灰色で得点の欄も空のときは、その技名が技術リストに無い状態です</span>（配点を引けず0点のままになります）。§5 の「技が見つからない」を見てください。<span class="ui">補正点</span> はその技だけに効き、マイナスも入れられます。<span class="ui">得点</span> はその行の合計で、こちらは自動です。</li>
+          <li>④<span class="ui">全体補正点</span>・<span class="ui">備考</span> — <span class="ui">全体補正点</span> は選手全体に効きます。<span class="ui">備考</span> は得点に影響しません（200文字まで）。</li>
+          <li>⑤操作区画 — <span class="term">1段目がタイマー</span>（<span class="ui">▶ 開始</span> <span class="ui">■ 停止</span> <span class="ui">↺ リセット</span>。5分から0へ向かって数え、選手を切り替えると自動で <span class="ui">05:00</span> に戻ります）、<span class="term">2段目が</span> <span class="ui">◀ 前の選手</span> <span class="ui">形成功</span> <span class="ui">失敗</span> <span class="ui">確定</span> <span class="ui">合計</span> <span class="ui">次の選手 ▶</span> です。<span class="ui">形成功</span> <span class="ui">失敗</span> はどちらも選択中の行にだけ効きます。<span class="ui">形成功</span> は打つ太刀を全部「成功」に、<span class="ui">失敗</span> は最初の「未」のセルだけを「失敗」にします（すでに成功・失敗のセルは変えません）。<span class="ui">確定</span> を押すと <span class="ui">確定済み</span> になり、得点と合計が青くなります。得点に関わる編集をすると、自動で確定が外れます。</li>
+          <li>⑥ツールバー — <span class="ui">CSVエクスポート</span> で全選手の内訳を、<span class="ui">HTML保存</span> で成績表を保存できます。<span class="ui">🌙 ダーク</span> で暗い配色に切り替わります。</li>
+          <li>⑦選手一覧 — 行をタップするとその選手に切り替わります。見出しの <span class="ui">▾ 選手一覧</span> で開閉できます。</li>
         </ul>
       </figcaption>
     </figure>
+
+    <p><span class="term">一つの形で途中失敗したら、それ以降の太刀は自動で無効になります。</span> 太刀を <span class="ui">失敗</span> にすると、同じ行のそれより後ろの太刀（配点のある太刀だけ）は押せなくなり、セルが灰色で「<span class="ui">—</span>」と表示されます。無効になった太刀は0点として合計されるので、その形は最初の失敗より前に成功した太刀の点数（と補正点）だけが入ります。失敗を <span class="ui">成功</span> や <span class="ui">未</span> に戻すと、後ろの太刀も元どおり押せる「未」に戻ります。<span class="ui">失敗</span> ボタンは行のいちばん最初の「未」を失敗にするので、押すと残りの太刀がまとめて無効になります。以前に採点した選手を開き直したときも同じ規則で表示されますが、確定し直すまでは保存済みの得点は変わりません。</p>
 
     <figure>
       <img src="help/img/scoring_tablet_unconfirmed.png" loading="lazy" alt="未確定の選手の採点画面。ボタンは「確定」のままで、得点と合計が金色。">
