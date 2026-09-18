@@ -202,6 +202,33 @@
     var events = await Api.listEvents();
     assert('listEvents は配列', Array.isArray(events), true);
 
+    // ---- 6 / 14. 大会の状態（status）の既定値と読み出し ----
+    var stdEvent = await Api.saveEvent({ name: '状態既定テスト', date: '2026-02-01', venue: '', players: [] });
+    assert('新規作成の大会は draft', (await Api.loadEvent(stdEvent.id)).status, 'draft');
+    // body の status は無視され、既存の値（ここでは draft）が引き継がれる
+    await Api.saveEvent({ id: stdEvent.id, name: '状態既定テスト', date: '2026-02-01', venue: '',
+      status: 'final', players: [] });
+    assert('POST /api/events の body の status は無視される',
+      (await Api.loadEvent(stdEvent.id)).status, 'draft');
+    var stdList = (await Api.listEvents()).filter(function(e) { return e.id === stdEvent.id; })[0];
+    assert('GET /api/events の各要素に status がある', stdList && stdList.status, 'draft');
+    await Api.deleteEvent(stdEvent.id);
+
+    // status を持たないファイル（この機能より前の大会・取り込んだ大会）は選手から推定する。
+    // POST /api/events/import は status を書かないので、取り込んだ大会で確かめる。
+    var derSrc = await Api.saveEvent({ name: '推定元テスト', date: '2026-02-01', venue: '', players: [] });
+    await Api.importCsv(derSrc.id,
+      '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
+      'D1,A-男子-1-1,真,,,30,,,1    \n' +
+      'D2,A-男子-1-2,真,,,0,,,\n', 'replace');
+    var derImported = await Api.importBundle(JSON.parse(await Api.exportBundle(derSrc.id)));
+    assert('status を持たない大会は選手から推定される（一部採点済み → round1）',
+      (await Api.loadEvent(derImported.id)).status, 'round1');
+    var derList = (await Api.listEvents()).filter(function(e) { return e.id === derImported.id; })[0];
+    assert('一覧でも推定値が返る', derList && derList.status, 'round1');
+    await Api.deleteEvent(derSrc.id);
+    await Api.deleteEvent(derImported.id);
+
     // 並行PATCHの回帰テスト
     // 書き込みハンドラが同期である限り、同時PATCHは取りこぼされない。
     // 将来ハンドラが async 化されるとこのテストが落ちる（不変条件の番人）。

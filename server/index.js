@@ -4,6 +4,9 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { createAuth, isPublicApi } = require('./auth');
 const { classify } = require('./static-policy');
+// 大会の状態。クライアント（<script src="status.js">）と同じファイルを読む。
+// 判定を2箇所に持たないため、状態に関わる分岐は必ずこのモジュールを通す。
+const EventStatus = require('../status.js');
 
 const app = express();
 // ルーティングを大文字小文字で区別する。既定の区別なしだと /API/events が
@@ -391,6 +394,8 @@ app.get('/api/events', (req, res) => {
         date: data.date,
         venue: data.venue,
         playerCount: Array.isArray(data.players) ? data.players.length : 0,
+        // ファイルに status が無ければ選手から推定する（ファイルには書かない）
+        status: EventStatus.of(data),
         updatedAt: data.updatedAt,
         createdAt: data.createdAt
       };
@@ -416,6 +421,8 @@ app.get('/api/events/:id', (req, res) => {
     // techniques を持たない大会（この機能より前に作られた大会）は雛形で動き続ける。
     data.techniquesSource = techniquesSourceOf(data);
     data.techniques = effectiveTechniques(data);
+    // 状態も応答にだけ足す。status を持たない大会は選手から推定した値を返す。
+    data.status = EventStatus.of(data);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -442,6 +449,20 @@ app.post('/api/events', (req, res) => {
     }
 
     const eventPath = path.join(EVENTS_DIR, `${event.id}.json`);
+    // status はこの経路では変えない。状態を変える経路は POST /api/events/:id/status だけ。
+    // body に status が入っていても捨て、既存の大会ならその値（無ければ推定値）を
+    // 引き継ぐ。新規なら draft。shareToken と同じ扱い。
+    delete event.status;
+    let carriedStatus = 'draft';
+    if (fs.existsSync(eventPath)) {
+      try {
+        const prevForStatus = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+        carriedStatus = EventStatus.of(prevForStatus);
+      } catch (e) {
+        // 壊れた既存ファイルは上書きを止めない（draft のまま）
+      }
+    }
+    event.status = carriedStatus;
     // 既存の shareToken を落とさない。落とすと links/<token>.json が孤児になり、
     // 連鎖削除も効かなくなる（消えた大会を指すトークンが生き残る）。
     if (!isValidId(event.shareToken) && fs.existsSync(eventPath)) {
