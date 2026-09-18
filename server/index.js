@@ -1402,6 +1402,16 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     if (rejectIfLocked(res, event)) return;
+    // 二巡目を作るのは「一巡目終了」のときだけ。運営者が一巡目の終了を宣言する前に
+    // 生成すると、あとから入る一巡目の得点が二巡目の並び順に反映されない。
+    const genStatus = EventStatus.of(event);
+    if (genStatus !== 'round1_done') {
+      return res.status(409).json({
+        error: '一巡目を終了してから生成してください',
+        reason: 'status',
+        status: genStatus
+      });
+    }
     const players = Array.isArray(event.players) ? event.players : [];
     const force = !!(req.body && req.body.force === true);
 

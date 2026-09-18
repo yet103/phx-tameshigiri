@@ -44,6 +44,13 @@
     h2.textContent = 'api.js';
     results.appendChild(h2);
 
+    // 二巡目の生成は状態が round1_done のときだけ通る。
+    // 生成を使うテストはこの補助で draft → round1 → round1_done と進めてから呼ぶ。
+    async function toRound1Done(eventId) {
+      await Api.changeStatus(eventId, 'round1');
+      await Api.changeStatus(eventId, 'round1_done');
+    }
+
     // 技術APIテスト
     var techData = await Api.loadTechniques();
     assert('loadTechniques は技術リストを返す', Array.isArray(techData.techniques), true);
@@ -526,6 +533,7 @@
                  'F2,A-女子-1-2,真,,,5,,○,1    \n' +
                  'M4,B-男子-1-1,真,,,40,,,1    \n';
     await Api.importCsv(genEvent.id, genCsv, 'replace');
+    await toRound1Done(genEvent.id);
     var beforeIds = (await Api.loadEvent(genEvent.id)).players.map(function(p) { return p.id; });
 
     var gen = await Api.generateNextRound(genEvent.id, false);
@@ -567,6 +575,7 @@
                  'S2,A-男子-1-2,真,,,0,,,\n' +
                  'S3,A-男子-1-3,真,,,0,,,\n';
     await Api.importCsv(unsEvent.id, unsCsv, 'replace');
+    await toRound1Done(unsEvent.id);
     var unscored = await Api.generateNextRound(unsEvent.id, false);
     assert('未採点があれば拒否される', unscored.reason, 'unscored');
     assert('未採点の人数を返す', unscored.unscoredCount, 2);
@@ -578,10 +587,21 @@
       ['S2', 'S3', 'S1']);
     await Api.deleteEvent(unsEvent.id);
 
-    // 一巡目が0名なら 400
+    // 選手0名の大会は round1 に進めないので、生成は状態で拒まれる
     var emptyEvent = await Api.saveEvent({ name: '空テスト', date: '2026-02-01', venue: '', players: [] });
-    assert('一巡目が0名なら null', await Api.generateNextRound(emptyEvent.id, false), null);
+    var emptyGen = await Api.generateNextRound(emptyEvent.id, false);
+    assert('準備中の大会の生成は状態で拒まれる', [emptyGen.blocked, emptyGen.reason], [true, 'status']);
     await Api.deleteEvent(emptyEvent.id);
+
+    // round1_done まで進めてから一巡目を全員消すと、400（一巡目の選手がいません）になる
+    var goneEvent = await Api.saveEvent({ name: '全消しテスト', date: '2026-02-01', venue: '', players: [] });
+    await Api.importCsv(goneEvent.id,
+      '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\nG1,A-男子-1-1,真,,,30,,,1    \n', 'replace');
+    await toRound1Done(goneEvent.id);
+    var goneP = (await Api.loadEvent(goneEvent.id)).players[0];
+    await Api.deletePlayer(goneEvent.id, goneP.id, true);
+    assert('一巡目が0名なら null', await Api.generateNextRound(goneEvent.id, false), null);
+    await Api.deleteEvent(goneEvent.id);
 
     // 生成済みの大会に一巡目を足して force すると差分だけ追加される
     var diffEvent = await Api.saveEvent({ name: '差分テスト', date: '2026-02-01', venue: '', players: [] });
@@ -589,6 +609,7 @@
                   'D1,A-男子-1-1,真,,,30,,,1    \n' +
                   'D2,A-男子-1-2,真,,,10,,,1    \n';
     await Api.importCsv(diffEvent.id, diffCsv, 'replace');
+    await toRound1Done(diffEvent.id);
     await Api.generateNextRound(diffEvent.id, false);
     var diffP3 = await Api.createPlayer(diffEvent.id, { name: 'D3', court: 'A', isFemale: false });
     await Api.updatePlayer(diffEvent.id, diffP3.id, { score: 20, result: '1    ' });
@@ -608,6 +629,7 @@
         { id: 'una1', name: 'U1', order: '', tech1: '', tech2: '', tech3: '', score: 30, isNewFace: false, isFemale: false, result: '1    ' },
         { id: 'una2', name: 'U2', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 20, isNewFace: false, isFemale: false, result: '1    ' }
       ] });
+    await toRound1Done(unaEvent.id);
     var unaGen = await Api.generateNextRound(unaEvent.id, false);
     assert('order 無しの選手は二巡目を作らない', unaGen.created, 1);
     assert('order 無しの選手数を返す', unaGen.unassignedCount, 1);
@@ -617,6 +639,24 @@
     await Api.deleteEvent(unaEvent.id);
 
     assert('存在しない大会の二巡目生成は null', await Api.generateNextRound('nosuchevent', false), null);
+
+    // ---- 11. 二巡目の生成は「一巡目終了」のときだけ ----
+    var stGenEvent = await Api.saveEvent({ name: '生成状態テスト', date: '2026-02-01', venue: '', players: [] });
+    await Api.importCsv(stGenEvent.id,
+      '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
+      'T1,A-男子-1-1,真,,,30,,,1    \n' +
+      'T2,A-男子-1-2,真,,,10,,,1    \n', 'replace');
+    var genDraft = await Api.generateNextRound(stGenEvent.id, false);
+    assert('準備中では二巡目を生成できない', [genDraft.blocked, genDraft.reason], [true, 'status']);
+    await Api.changeStatus(stGenEvent.id, 'round1');
+    var genRound1 = await Api.generateNextRound(stGenEvent.id, false);
+    assert('一巡目 進行中では二巡目を生成できない', [genRound1.blocked, genRound1.reason], [true, 'status']);
+    assert('生成を拒まれても選手は増えない',
+      (await Api.loadEvent(stGenEvent.id)).players.length, 2);
+    await Api.changeStatus(stGenEvent.id, 'round1_done');
+    assert('一巡目終了なら二巡目を生成できる',
+      (await Api.generateNextRound(stGenEvent.id, false)).created, 2);
+    await Api.deleteEvent(stGenEvent.id);
 
     // --- 順位データ ---
     var rankEvent = await Api.saveEvent({ name: '順位テスト', date: '2026-03-01', venue: '道場', players: [] });
@@ -1114,6 +1154,7 @@
       tech1: '往復技B', result: '11   ', adjust: [0, 1, 0], totalAdjust: -1,
       note: '二郎メモ', confirmed: false, score: 9
     });
+    await toRound1Done(rtEvent.id);
     var rtRound = await Api.generateNextRound(rtEvent.id);
     assert('往復テスト用に二巡目が生成される', rtRound && rtRound.created, 2);
     await Api.addHistory(rtEvent.id, { action: 'round2_generated', detail: '往復テスト' });
@@ -1150,7 +1191,9 @@
     assert('往復: 二巡目の二郎行が sourcePlayerId で取り込み後の二郎を指す', !!rtJiro2, true);
 
     var rtHist = await Api.loadHistory(rtImportRes.id);
-    assert('往復: 履歴の件数が復元される', rtHist.entries.length, 2);
+    // toRound1Done（draft → round1 → round1_done）で status_change が2件増えた分を足す
+    // （計画の Task 5 でこのテストに toRound1Done を挟むよう指示されたための調整）。
+    assert('往復: 履歴の件数が復元される', rtHist.entries.length, 4);
 
     await Api.deleteEvent(rtEvent.id);
     await Api.deleteEvent(rtImportRes.id);
