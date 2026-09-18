@@ -185,6 +185,7 @@ EventStatus.of(event)                 // event.status が有効ならそれ、�
 
 `from` は `EventStatus.of(event)`。成功時に `status` と `updatedAt` を書く。
 履歴（`server/data/history`）に `{ action: 'status_change', detail: '準備中 → 一巡目 進行中' }` をサーバーが追記する（クライアントの `addHistory` は使わない。遷移と履歴を1つの操作にする）。
+成功時に `live` を空にする（配信ボードが前の選手を映し続けないため）。
 
 ### ロックガード（`final` / `archived`）
 

@@ -609,6 +609,9 @@ app.post('/api/events/:id/status', (req, res) => {
 
     event.status = to;
     event.updatedAt = new Date().toISOString();
+    // 状態が変わったら live は空にする。前の状態で映していた選手を配信ボードが
+    // 映し続けないようにするため（次の putLive までの数秒は「待機中」になる）。
+    event.live = {};
     writeJsonAtomic(eventPath, event);
     appendHistory(req.params.id, {
       action: 'status_change',

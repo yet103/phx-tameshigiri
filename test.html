@@ -870,6 +870,13 @@
     var live400 = await Api.loadLive('../x');
     assert('loadLive: 不正なトークンは status 400', [live400.ok, live400.status], [false, 400]);
 
+    // 状態が変わったら live は空にする（配信ボードが前の選手を映し続けないため）。
+    await Api.putLive(liveEvent.id, 'A', { playerId: livePlayer.id, timer: { sec: 200, running: true } });
+    await Api.changeStatus(liveEvent.id, 'round1');
+    var liveAfterStatus = (await Api.loadLive(liveToken)).data;
+    assert('putLive のあと changeStatus すると live が空になる（配信ボードは待機中）',
+      Object.keys(liveAfterStatus.courts), []);
+
     await Api.deleteEvent(liveEvent.id);
 
     // --- 順位の細部と静的配信のガード ---
