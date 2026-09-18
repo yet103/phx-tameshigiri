@@ -544,6 +544,9 @@ var App = (function() {
       // adoptEvent がその値を新しい選手オブジェクトへ反映済みなので、一覧だけ描き直す。
       refreshPlayerList();
       updatePlayerList();
+      // 編集中でも、状態バナーとロックは最新に保つ（他端末が大会の状態を進めた場合に備える）。
+      renderStatusBanner();
+      applyScoringLock();
       return;
     }
     updatePlayerLabels(visiblePlayers[idx]);
