@@ -59,6 +59,12 @@ a { color: var(--accent); }
 .desk-btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
 .desk-btn.danger { background: var(--btn-fail); color: #fff; border-color: var(--btn-fail); }
 .desk-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* 小さめの二次ボタン（例: 段階表示の「二巡目なしで終了」）。主ボタンの隣に添える控えめな見た目。 */
+.desk-btn-sub {
+  min-height: 28px; padding: 0 10px; font-size: 12px;
+  background: transparent; color: var(--text-muted);
+}
+.desk-btn-sub:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
 
 /* ===== 本体（左の区画ナビ＋本文） ===== */
 .desk-body { display: grid; grid-template-columns: 180px 1fr; align-items: start; min-height: calc(100vh - 48px); }

@@ -287,11 +287,12 @@ var Desk = (function() {
         sep.textContent = '─';
         steps.appendChild(sep);
       }
+      var isCurrent = (s === st);
+      var isPast = (cur === -1) || (i < cur);   // 通過済み（archived のときは全段階）
       var el = document.createElement('span');
-      el.className = 'desk-stage-step' +
-        (s === st ? ' on' : '') +
-        ((cur === -1 || i < cur) ? ' done' : '');
-      el.textContent = (s === st ? '●' : '○') + EventStatus.LABELS[s];
+      el.className = 'desk-stage-step' + (isCurrent ? ' on' : '') + (isPast ? ' done' : '');
+      // 通過済みと現在は塗り（●）、未到達は空（○）
+      el.textContent = (isCurrent || isPast ? '●' : '○') + EventStatus.LABELS[s];
       steps.appendChild(el);
     });
     wrap.appendChild(steps);
@@ -323,17 +324,6 @@ var Desk = (function() {
       actions.appendChild(btnBack);
     }
 
-    // 二巡目を行わずに最終結果へ（一巡目終了のときだけ）
-    if (st === 'round1_done') {
-      var btnSkip = document.createElement('button');
-      btnSkip.type = 'button';
-      btnSkip.className = 'desk-btn';
-      btnSkip.id = 'btnDeskSkipRound2';
-      btnSkip.textContent = '二巡目なしで終了';
-      btnSkip.addEventListener('click', function() { applyStatus(st, 'final'); });
-      actions.appendChild(btnSkip);
-    }
-
     var nx = EventStatus.next(st);
     if (nx) {
       var btnNext = document.createElement('button');
@@ -343,6 +333,17 @@ var Desk = (function() {
       btnNext.textContent = EventStatus.NEXT_LABELS[st] + ' ▶';
       btnNext.addEventListener('click', function() { applyStatus(st, nx); });
       actions.appendChild(btnNext);
+    }
+
+    // 二巡目を行わずに最終結果へ（一巡目終了のときだけ）。「二巡目を開始」の右に小さく出す。
+    if (st === 'round1_done') {
+      var btnSkip = document.createElement('button');
+      btnSkip.type = 'button';
+      btnSkip.className = 'desk-btn desk-btn-sub';
+      btnSkip.id = 'btnDeskSkipRound2';
+      btnSkip.textContent = '二巡目なしで終了';
+      btnSkip.addEventListener('click', function() { applyStatus(st, 'final'); });
+      actions.appendChild(btnSkip);
     }
     wrap.appendChild(actions);
     return wrap;
