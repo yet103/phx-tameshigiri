@@ -57,10 +57,16 @@ input[type="file"] { display: none; }
 }
 .player-nav .order-label { font-size: 16px; font-weight: normal; color: var(--text-muted); white-space: nowrap; }
 .player-nav #playerNameLabel { font-size: 34px; line-height: 1.15; overflow-wrap: anywhere; }
-/* スマホ幅: 選手名だけの帯なので中央揃えのまま */
+/* スマホ幅: 3列グリッドだと中央列に押されてコートのバッジが縦に折れてしまうため、
+   採点画面は768px以上が前提とはいえ最低限崩れないよう、素直な縦積みに戻す。 */
 @media (max-width: 767px) {
-  .player-nav { row-gap: 8px; }
-  .player-nav .court-label { font-size: 20px; padding: 2px 8px; }
+  .player-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    row-gap: 4px;
+  }
+  .player-nav .court-label { justify-self: auto; font-size: 20px; padding: 2px 8px; }
   .player-nav #playerNameLabel { font-size: 28px; }
 }
 
