@@ -149,3 +149,65 @@
 | D | 採点画面のボタン配置とスクリーンショット | `scoring.html` `style.css` `help.html`（採点画面の節）`help/img/` |
 
 B と C は `desk-players.js` `courts.js` `test.html` が重なるので、**C を先に終えてから B**、または同じ担当者が C → B の順に行う。A と D は独立。`help.html` は A・C・D が触るので、A を先に終えてから C・D が追記する。
+
+---
+
+## 6. 運営画面のトーンを採点画面に揃える（追加要望）
+
+「運営画面のトンマナが貧相。採点画面と同じような色味や装飾に。」への対応。`style.css` の「大会トーン（ポスター準拠）」節と同じ語彙を `desk.css`（PC 運営）と `admin.css`（スマホ運営）に当てる。色は `theme.css` の変数だけを使い、新しい変数は作らない。作業面（表の中身・入力欄）はテーマの色のまま、**帯・見出し・区切り・主ボタンを黒地に金**にする。
+
+| 要素 | 採点画面の作法 | PC 運営 `desk.css` | スマホ運営 `admin.css` |
+|---|---|---|---|
+| 上部バー | `--band-bg` に `--band-text`、下線 `1px solid --gold`、タイトルは `--mincho` で `--gold-light` | `.desk-top` に下線と `letter-spacing: .04em` | `.topbar` を `--accent` から `--band-bg` に、下線 `--gold`、タイトルを `--mincho` `--gold-light` |
+| 大会名の見出し | 選手名バーと同じ: `--mincho`、`letter-spacing: .04em`、下線 `2px solid --gold` | `.desk-head` を `--band-bg` に、`.desk-head-name` を `--mincho` `--gold-light` 20px、`.desk-head-meta` を `--band-muted`、下線 `2px solid --gold` | 大会名は上部バーに出ているので変更なし |
+| 段階表示 | コートのラベルと同じ金のグラデーション | 現在の段階 `.desk-stage-step.on` を `linear-gradient(180deg, --gold-light, --gold-deep)` の丸い帯に `--band-bg` の文字。通過済みは `--gold-light`、未到達は `--band-muted`。区切りの線も `--gold-deep` | `.round-stage`（進行タブの段階表示）に同じ帯 |
+| 左の区画ナビ | ページリンクと同じ: 黒地に `--gold-light` | `.desk-nav` を `--band-bg`、項目は `--band-text`、選択中は `--band-bg-2` に左 3px の `--gold` の縦線と `--gold-light` の文字、`--mincho` | 下タブ `.tabbar` を `--band-bg`、選択中は `--gold-light` に上 2px の `--gold` 線 |
+| 主ボタン（次へ進む・試合開始・作成・保存） | 前後の選手ボタン: `--band-bg-2` に `--gold-light`、枠 `1px solid --gold` | `.desk-btn.primary` をこれに。通常の `.desk-btn` は枠を `--gold-deep` に | `.btn.primary` と `.round-gen` を同じに |
+| 表の見出し | 採点表: `--band-bg` に `--gold-light`、枠 `--gold`、`--mincho` | `.desk-table th`（大会一覧・選手表・二巡目の表）に同じ | `.players-table th`（選手タブの表）に同じ |
+| 区画の見出し `h2` | 順位表の見出し: `--mincho` | `.desk-section-head h2` を `--mincho`、下に `1px solid --gold` の細い線 | `.section-head h2` を `--mincho` |
+| カード（コート別・順位の列） | 操作区画: 枠 `--gold` | `.desk-match-card` `.desk-results-col` の枠を `--gold-deep`、見出し帯を `--band-bg` に `--gold-light` | 結果タブの部門見出しを同じ帯に |
+| ダイアログ | 保存失敗バナーの作法 | `.desk-dialog` の見出しを `--band-bg` に `--gold-light` `--mincho`、枠 `--gold` | `.sheet-head` を同じに |
+| トースト | 保存済み表示: `--band-ok` | `.desk-toast` を `--band-bg` に `--band-ok` の文字、枠 `--gold-deep` | `#toast` を同じに |
+| フォーカス | タイマー表示の金の内枠 | 入力欄の `:focus` を `box-shadow: 0 0 0 2px var(--gold) inset` | 同じ |
+
+- ライト／ダークの両方で読めること。帯の中はテーマに依らず黒金なので、文字は必ず `--band-*` `--gold-*` から取る
+- 1024px 未満の案内、1280px の横幅、既存のスクリーンショット（ヘルプ）は据え置き（画像の差し替えは次回）
+- トップ `index.html` はすでに黒金なので変更なし。`techniques.html` `ranking.html` は今回は対象外
+
+---
+
+## 7. 一つの形で途中失敗したら以降の太刀は無効（追加要望）
+
+「一つの形で途中失敗したらそれ以降の太刀は無効にする」への対応。**最初の × より後ろの太刀は無効**とし、点を入れない。
+
+### 規則（`scoring.js` の純粋関数）
+
+```javascript
+Scoring.failedAt(values)                 // 最初の '×' の添字。無ければ -1
+Scoring.effectiveValues(values)          // 最初の '×' より後ろを '' にした複製（無効化）
+Scoring.calcRowScore(tech, values, adjust, isFemale)   // effectiveValues を通してから合計する（既存の呼び出し元は変更不要）
+```
+
+- 配点が `null` の太刀（その技に無い太刀）は数えない。最初の × の判定にも含めない
+- `encodeResult` は無効化した値（後ろが空白）を書く。`decodeResult` は読んだ値をそのまま返し、`calcRowScore` と画面が無効化する
+- 配信ボード（`board.js`）は `calcRowScore` を使っているので同じ計算になる。サーバーの順位（`computeRanking`）は保存済みの `score` を使うので、この変更で過去の順位は動かない
+
+### 採点画面（`app.js` / `style.css`）
+
+- 太刀を × にしたら、その行の後ろのセル（配点のある太刀）を **無効表示**（`.strike-cell.voided`: 灰色の背景 `--cell-disabled`、文字「—」、押せない）にし、`dataset.value` を `''` に戻す
+- × を ○ や未に戻したら、後ろのセルを押せる状態（未）に戻す
+- 「形成功」は今までどおり全部 ○。「失敗」は最初の未（配点のある太刀）を × にする（残りは自動で無効になる）。行に未が無ければ何もしない
+- 行を描くとき（`renderScoreGrid`）も同じ規則で無効表示にする。**過去に採点済みで × の後に ○ が入っている行は、無効表示になり行の得点が減って見えるが、保存済みの `score` は確定し直すまで変えない**（`gridEdited` が立つまで保存しない既存の作法のまま）
+- 履歴の `detail` に「（以降の太刀は無効）」を足す
+
+### テスト（`test.html`）
+
+- `failedAt`: `['○','×','○','']` → 1、`['○','○','','']` → -1、`['×','○','○','○']` → 0
+- `effectiveValues`: `['○','×','○','○']` → `['○','×','','']`
+- `calcRowScore`: 破図味(男) で `['○','×','○','○']` が初太刀の配点＋補正点だけになる。`['×','○','○','○']` が補正点だけ。三ノ太刀が `null` の技で `['○','○','×','○']` の扱い
+- 既存の `calcRowScore` テストは値が変わらない（× の後ろが ○ の既存テストがあれば期待値を規則に合わせる）
+
+### 手動確認
+
+- 二ノ太刀を × にすると三・四が「—」になり押せない。× を ○ に戻すと押せる。「失敗」で最初の未が × になり残りが「—」。合計が規則どおり。確定 → 別の選手 → 戻ると同じ表示
+- 配信ボード（`board.html`）の行の得点が採点画面と一致する
