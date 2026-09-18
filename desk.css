@@ -128,7 +128,9 @@ a { color: var(--accent); }
    なる。border-collapse: collapse は既定の border-spacing（列の間の隙間）を
    消して幅の計算を列幅の合計どおりにする。 */
 .desk-players-table { table-layout: fixed; width: 1022px; border-collapse: collapse; }
-.desk-players-table th, .desk-players-table td { padding: 2px 6px; vertical-align: middle; }
+.desk-players-table th, .desk-players-table td { padding: 2px 6px; vertical-align: middle; text-align: center; }
+/* 上の .desk-table td.num は右寄せ。選手表だけ中央に戻す（同じ詳細度なので後ろのこれが勝つ） */
+.desk-players-table td.num { text-align: center; }
 .desk-players-table tbody tr { height: 34px; }
 .desk-players-table th.col-name, .desk-players-table td.col-name { position: sticky; left: 0; z-index: 1; }
 .desk-players-table th.col-name { background: var(--bg-header); }
@@ -146,9 +148,11 @@ a { color: var(--accent); }
 
 /* セルの入力。ふだんは枠を見せず、触ったときだけ枠を出す（表が線だらけにならない）。 */
 .desk-cell-input, .desk-cell-select {
-  width: 100%; min-height: 28px; padding: 2px 4px;
+  width: 100%; min-height: 28px; padding: 2px 4px; text-align: center;
   background: transparent; color: inherit; border: 1px solid transparent; border-radius: 3px;
 }
+/* セレクトは閉じているときの表示行にも中央を掛ける（text-align だけでは効かない） */
+.desk-cell-select { text-align-last: center; }
 .desk-cell-input:hover:not(:disabled), .desk-cell-select:hover:not(:disabled) { border-color: var(--border); }
 .desk-cell-input:focus, .desk-cell-select:focus { border-color: var(--accent); background: var(--bg); outline: none; }
 .desk-cell-input:disabled, .desk-cell-select:disabled { opacity: .55; cursor: not-allowed; }

@@ -137,7 +137,7 @@ main { padding: 8px 12px 16px; }
   width: 100%; white-space: nowrap; font-size: 14px;
 }
 .players-table th, .players-table td {
-  height: 44px; padding: 0 6px; text-align: left; vertical-align: middle;
+  height: 44px; padding: 0 6px; text-align: center; vertical-align: middle;
   border-bottom: 1px solid var(--border);
 }
 .players-table th { font-size: 12px; font-weight: normal; color: var(--text-muted); background: var(--bg-header); }
@@ -147,7 +147,7 @@ main { padding: 8px 12px 16px; }
   font-weight: bold; box-shadow: 2px 0 0 var(--border);
 }
 .players-table th.col-name { z-index: 2; }
-.players-table .col-score { text-align: right; font-weight: bold; color: var(--score-color); }
+.players-table .col-score { text-align: center; font-weight: bold; color: var(--score-color); }
 .players-table td.muted { color: var(--text-muted); font-weight: normal; }
 .players-table tbody tr { cursor: pointer; }
 .players-table tbody tr:active td { background: var(--bg-secondary); }

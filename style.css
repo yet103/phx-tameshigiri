@@ -389,9 +389,10 @@ body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
   cursor: pointer;
   white-space: nowrap;
   height: 44px;
+  text-align: center;
 }
 .player-list-table td:last-child {
-  text-align: right;
+  text-align: center;
   font-weight: bold;
   color: var(--score-color);
 }
