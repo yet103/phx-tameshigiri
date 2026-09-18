@@ -13,7 +13,8 @@
   <h1 class="help-title">マニュアル</h1>
   <p class="help-subtitle">運営者・審判のための、大会当日の手引き</p>
   <nav class="page-links" aria-label="画面の切り替え">
-    <a href="index.html">採点</a>
+    <a href="index.html">トップ</a>
+    <a href="scoring.html">採点</a>
     <a href="admin.html">運営</a>
     <a href="techniques.html">技術リスト編集</a>
     <a href="ranking.html">順位表示</a>
@@ -40,6 +41,12 @@
   <section class="help-section" id="flow">
     <h2>0. 全体の流れ</h2>
 
+    <h3>トップページ（入口）</h3>
+    <p>アドレスをそのまま開く（末尾に何も付けない）と <span class="term">トップページ</span>（<code>index.html</code>）が出ます。アプリの説明と、全体の流れ、進行中の大会の一覧が並んでいます。</p>
+    <p>ここから <span class="ui">運営画面を開く</span>・<span class="ui">採点画面（コート端末）</span>・<span class="ui">順位表示</span>・<span class="ui">ヘルプ</span> へ行けます。進行中の大会の行を押すと、その大会の運営画面が直接開きます。</p>
+    <p>右上の <span class="ui">🖥</span> / <span class="ui">📱</span> は、<span class="ui">運営画面を開く</span> の行き先を PC 用（<code>desk.html</code>）とスマホ用（<code>admin.html</code>）で切り替えるボタンです。押した端末に控えられるので、次に開いたときも同じほうが出ます。</p>
+    <div class="note">以前のアドレス（採点画面が <code>index.html</code> だった頃のブックマーク）を開くと、自動で <code>scoring.html</code> に移ります。コートのタブレットのブックマークは貼り替えなくて構いません。</div>
+
     <p>大会は、大会を作るところから発表までを一本の流れで進めます。</p>
     <p><span class="term">一巡目</span>＝全員が1回ずつ斬る回です。<span class="term">二巡目</span>＝同じ選手がもう1回斬る回です。得点は一巡目と二巡目を合わせた合計で競います。</p>
 
@@ -56,7 +63,7 @@
     <div class="note">二巡目を行わない大会は、<span class="ui">一巡目終了</span> の ⋯ メニューから <span class="ui">二巡目なしで終了</span> で <span class="ui">最終結果</span> へ進めます。どの状態からも ⋯ メニューの <span class="ui">戻す</span> で1つ前に戻せます。</div>
 
     <div class="diagram">
-      <svg viewBox="0 0 360 698" role="img" aria-label="大会を作る、選手を登録、一巡目の採点、二巡目を生成して技を入力、二巡目の採点、結果の確認、発表・共有、という順に進む流れ図。端末の役割は、運営者のスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク、配信PC（OBS）が配信用ボード。">
+      <svg viewBox="0 0 360 698" role="img" aria-label="大会を作る、選手を登録、一巡目の採点、二巡目を生成して技を入力、二巡目の採点、結果の確認、発表・共有、という順に進む流れ図。端末の役割は、運営者の PC とスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク、配信PC（OBS）が配信用ボード。">
         <defs>
           <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
@@ -114,20 +121,22 @@
         <line class="d-line" x1="10" y1="524" x2="350" y2="524"/>
         <text class="d-title" x="10" y="546">端末の役割</text>
 
-        <text class="d-legend" x="10"  y="576" font-weight="bold">運営者のスマホ</text>
+        <text class="d-legend" x="10"  y="576" font-weight="bold">運営者の PC</text>
         <text class="d-sub"    x="10"  y="595">運営画面</text>
-        <text class="d-legend" x="190" y="576" font-weight="bold">コートのタブレット</text>
-        <text class="d-sub"    x="190" y="595">採点画面（A・B）</text>
-        <text class="d-legend" x="10"  y="624" font-weight="bold">会場の大画面</text>
-        <text class="d-sub"    x="10"  y="643">発表モード</text>
-        <text class="d-legend" x="190" y="624" font-weight="bold">参加者のスマホ</text>
-        <text class="d-sub"    x="190" y="643">共有リンク</text>
-        <text class="d-legend" x="10"  y="672" font-weight="bold">配信 PC（OBS）</text>
-        <text class="d-sub"    x="10"  y="691">配信用ボード</text>
+        <text class="d-legend" x="190" y="576" font-weight="bold">運営者のスマホ</text>
+        <text class="d-sub"    x="190" y="595">運営画面</text>
+        <text class="d-legend" x="10"  y="624" font-weight="bold">コートのタブレット</text>
+        <text class="d-sub"    x="10"  y="643">採点画面（A・B）</text>
+        <text class="d-legend" x="190" y="624" font-weight="bold">会場の大画面</text>
+        <text class="d-sub"    x="190" y="643">発表モード</text>
+        <text class="d-legend" x="10"  y="672" font-weight="bold">参加者のスマホ</text>
+        <text class="d-sub"    x="10"  y="691">共有リンク</text>
+        <text class="d-legend" x="190" y="672" font-weight="bold">配信 PC（OBS）</text>
+        <text class="d-sub"    x="190" y="691">配信用ボード</text>
       </svg>
     </div>
 
-    <p>大会のデータはサーバーに1つだけあります。運営者のスマホも、各コートのタブレットも、同じ大会を読み書きします。</p>
+    <p>大会のデータはサーバーに1つだけあります。運営者の PC もスマホも、各コートのタブレットも、同じ大会を読み書きします。</p>
     <p>図の各段は、上の状態の 2〜5 にあたります。<span class="term">運営画面で状態を進めないと、コートの端末は採点できません</span>。</p>
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
   </section>
@@ -351,7 +360,7 @@
 
     <h3>コートの端末で採点画面を開く</h3>
     <p>運営画面の <span class="ui">進行</span> タブで、そのコートのチップ（<span class="ui">A コート</span> や <span class="ui">B コート</span>）を押してから <span class="ui">採点画面へ</span> を押します。絞り込み中のコートのまま採点画面が開きます。</p>
-    <p>開いた採点画面の URL には大会とコートが入っています（<code>#event/大会ID/コート</code>）。この URL のおかげで、当日はタブを閉じたり端末を再起動したりしても、同じ大会・同じコートに戻れます。</p>
+    <p>開いた採点画面の URL には大会とコートが入っています（<code>scoring.html#event/大会ID/コート</code>）。この URL のおかげで、当日はタブを閉じたり端末を再起動したりしても、同じ大会・同じコートに戻れます。</p>
     <div class="note">URL は大会ごとに違います。次の大会では URL も変わるので、運営画面の <span class="ui">採点画面へ</span> から開き直してください。</div>
 
     <h3>採点画面の見方</h3>
