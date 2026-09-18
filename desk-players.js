@@ -82,6 +82,12 @@
       btnAdd.textContent = '＋ 行を追加';
       btnAdd.addEventListener('click', function() { startDraft(ctx); });
       head.appendChild(btnAdd);
+      var btnPaste = document.createElement('button');
+      btnPaste.type = 'button';
+      btnPaste.className = 'desk-btn';
+      btnPaste.textContent = '📋 貼り付けて追加';
+      btnPaste.addEventListener('click', function() { openPasteDialog(ctx); });
+      head.appendChild(btnPaste);
     }
     container.appendChild(head);
 
@@ -696,6 +702,124 @@
     });
 
     return tr;
+  }
+
+  // --- 「📋 貼り付けて追加」（Excel からの一括登録） ---
+
+  // 1 行の下見（プレビュー）。取り込めない行は赤く、技リストに無い技名も赤くする。
+  function pasteLine(row) {
+    var div = document.createElement('div');
+    div.className = 'desk-paste-line' + (row.ok ? '' : ' bad');
+    var head = document.createElement('span');
+    head.textContent = row.line + ': ' + row.name + '　' + row.court + '　' +
+      (row.isFemale ? '女子' : '男子') + (row.isNewFace ? '　新人' : '') + '　';
+    div.appendChild(head);
+    row.techs.forEach(function(t, i) {
+      var span = document.createElement('span');
+      span.textContent = (i > 0 ? '・' : '') + (t || '—');
+      if (t && row.badTechs.indexOf(t) !== -1) span.className = 'desk-paste-bad';
+      div.appendChild(span);
+    });
+    if (!row.ok) {
+      var why = document.createElement('span');
+      why.textContent = '　← ' + row.error;
+      div.appendChild(why);
+    }
+    return div;
+  }
+
+  function openPasteDialog(ctx) {
+    var body = document.createElement('div');
+
+    var note = document.createElement('p');
+    note.className = 'desk-note';
+    note.textContent = 'Excel の範囲をそのまま貼り付けられます。列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 の順' +
+      '（タブ区切りかカンマ区切り）。1 行目が「名前」で始まるときは見出しとして読み飛ばします。' +
+      '性別は「女子」「女」「F」が女子、それ以外は男子。新人は「新人」「○」「1」「true」。' +
+      '技はこの大会の技リストにある名前だけです。';
+    body.appendChild(note);
+
+    var ta = document.createElement('textarea');
+    ta.className = 'desk-paste';
+    ta.setAttribute('aria-label', '貼り付ける選手の一覧');
+    ta.placeholder = '山田 太郎\tA\t男子\t新人\t…\n佐藤 花子\tA\t女子\t\t…';
+    body.appendChild(ta);
+
+    var summary = document.createElement('p');
+    summary.className = 'desk-paste-count';
+    body.appendChild(summary);
+
+    var preview = document.createElement('div');
+    preview.className = 'desk-paste-preview';
+    body.appendChild(preview);
+
+    var btnAdd = document.createElement('button');
+    btnAdd.type = 'button';
+    btnAdd.className = 'desk-btn primary';
+    btnAdd.textContent = '登録';
+
+    var dialog = Desk.openDialog('貼り付けて追加', body, [btnAdd]);
+    var okRows = [];
+    var ngCount = 0;
+
+    function update() {
+      var parsed = Courts.parsePasteRows(ta.value, ctx.techniques || []);
+      okRows = parsed.rows.filter(function(r) { return r.ok; });
+      ngCount = parsed.rows.length - okRows.length;
+      summary.textContent = okRows.length + ' 人を登録します' +
+        (ngCount > 0 ? '（取り込めない行が ' + ngCount + ' 行あります）' : '');
+      summary.className = 'desk-paste-count' + (ngCount > 0 ? ' desk-paste-bad' : '');
+      preview.innerHTML = '';
+      parsed.rows.forEach(function(r) { preview.appendChild(pasteLine(r)); });
+      btnAdd.disabled = okRows.length === 0;
+    }
+    ta.addEventListener('input', update);
+    update();
+    ta.focus();
+
+    btnAdd.addEventListener('click', async function() {
+      if (okRows.length === 0) return;
+      if (okRows.length > 500) {
+        alert('一度に登録できるのは 500 人までです（いまは ' + okRows.length + ' 人）。分けて貼り付けてください。');
+        return;
+      }
+      var rows = okRows.map(function(r) {
+        return {
+          name: r.name, court: r.court, isFemale: r.isFemale, isNewFace: r.isNewFace,
+          tech1: r.techs[0], tech2: r.techs[1], tech3: r.techs[2]
+        };
+      });
+      if (!confirm(rows.length + ' 人を登録します。よろしいですか？' +
+          (ngCount > 0 ? '\n取り込めない ' + ngCount + ' 行は登録しません。' : ''))) {
+        return;
+      }
+      var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
+      // 確認ダイアログの後・API 呼び出しの前で、大会が切り替わっていないか再確認する
+      // （admin-players.js の一括登録と同じ規約。古い ctx の大会に書き込まない）。
+      if (Desk.currentEventId() !== eventId) {
+        alert('大会が切り替わったため、登録を中止しました。');
+        return;
+      }
+      btnAdd.disabled = true;
+      dialog.lock(true);
+      var res = await Api.createPlayersBulk(eventId, { rows: rows });
+      if (Desk.currentEventId() !== eventId) return;   // 大会が切り替わっていたら画面に触らない
+      btnAdd.disabled = false;
+      dialog.lock(false);
+      if (!res || res.error) {
+        // 失敗してもダイアログは閉じない（貼り付けた内容を残す）
+        alert('登録できませんでした。\n' + ((res && res.error) || '入力内容と通信を確認してください。'));
+        return;
+      }
+      Desk.toast(res.created + ' 人を登録しました');
+      // 履歴（CSV 取り込み・スマホの一括登録と同じ形で残す）
+      Api.addHistory(eventId, {
+        action: 'bulk_add',
+        detail: res.created + '名の選手を一括登録'
+      });
+      dialog.close();
+      Desk.reloadEvent();
+    });
   }
 
   Desk.registerTab('players', { render: render });
