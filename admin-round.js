@@ -18,11 +18,6 @@ var AdminRound = (function() {
   var listEl = null;
   var outsideClickBound = false;  // '⋯' メニューの外側タップ検知は document に1回だけ付ける
 
-  // 技が3つ揃っていない行を「未入力」と数える（一巡目のデータは常に3つ入っている）
-  function isTechIncomplete(p) {
-    return !p.tech1 || !p.tech2 || !p.tech3;
-  }
-
   function roundOne(players) {
     return (players || []).filter(function(p) { return Courts.roundOf(p) === 1; });
   }
@@ -47,64 +42,14 @@ var AdminRound = (function() {
   }
 
   // --- 段階表示と遷移 ---
-
-  // 「採点済み n / N」。進行中はその巡目、一巡目終了は二巡目の人数と技の入力状況、
-  // 準備中は一巡目の人数、二巡目終了以降は数を出さない（設計書「上部の段階表示」）。
-  function stageCountText(st, players) {
-    var r = EventStatus.scoringRound(st);
-    if (r) {
-      var rows = (players || []).filter(function(p) { return Courts.roundOf(p) === r; });
-      return '採点済み ' + rows.filter(Courts.isScored).length + ' / ' + rows.length;
-    }
-    if (st === 'round1_done') {
-      var r2 = roundTwo(players);
-      return '二巡目 ' + r2.length + '名　技 未入力 ' + r2.filter(isTechIncomplete).length;
-    }
-    if (st === 'draft') {
-      return '一巡目 ' + roundOne(players).length + '名';
-    }
-    return '';
-  }
-
-  // 設計書「確認と拒否」の表の確認文言。承諾したときだけ遷移する。
-  function advanceMessage(from, to, players) {
-    if (from === 'draft' && to === 'round1') {
-      var r1 = roundOne(players);
-      return '一巡目 ' + r1.length + '名。技が未入力の選手が ' +
-        r1.filter(isTechIncomplete).length + '名います。\n試合を開始しますか？';
-    }
-    if (from === 'round1' && to === 'round1_done') {
-      var a = roundOne(players);
-      return '一巡目の未採点が ' + a.filter(function(p) { return !Courts.isScored(p); }).length +
-        '名います。\n一巡目を終了しますか？';
-    }
-    if (from === 'round1_done' && to === 'round2') {
-      var b = roundTwo(players);
-      return '二巡目 ' + b.length + '名。技が未入力の選手が ' +
-        b.filter(isTechIncomplete).length + '名います。\n二巡目を開始しますか？';
-    }
-    if (from === 'round1_done' && to === 'final') {
-      return '二巡目を行わずに最終結果にします。\nよろしいですか？';
-    }
-    if (from === 'round2' && to === 'round2_done') {
-      var c = roundTwo(players);
-      return '二巡目の未採点が ' + c.filter(function(p) { return !Courts.isScored(p); }).length +
-        '名います。\n二巡目を終了しますか？';
-    }
-    if (to === 'final') {
-      return '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？';
-    }
-    if (to === 'archived') {
-      return '一覧のアーカイブ欄に移り、採点画面の選択肢から消えます。\nアーカイブしますか？';
-    }
-    return EventStatus.LABELS[to] + 'に戻します。よろしいですか？';
-  }
+  // 件数・確認文言は courts.js（Courts.stageCountText / Courts.statusConfirmMessage。
+  // PC 運営の上部と共用）にある。
 
   // 状態を変える。失敗の理由はサーバーの文言をそのまま出す。
   // transition の 409 は他の端末が先に進めていた場合なので、画面を読み直す。
   async function applyStatus(from, to) {
     var ctx = CTX;
-    if (!confirm(advanceMessage(from, to, ctx.players))) return;
+    if (!confirm(Courts.statusConfirmMessage(from, to, ctx.players))) return;
     var res = await Api.changeStatus(ctx.eventId, to);
     if (ctx.isStale()) return;   // 通信中に大会やタブを切り替えられた
     if (!res) {
@@ -180,7 +125,7 @@ var AdminRound = (function() {
     var stat = document.createElement('div');
     stat.className = 'round-stat';
     stat.id = 'roundScoredStat';
-    stat.textContent = stageCountText(st, players);
+    stat.textContent = Courts.stageCountText(st, players);
     head.appendChild(stat);
     var genBtn = document.createElement('button');
     genBtn.type = 'button';
@@ -248,7 +193,7 @@ var AdminRound = (function() {
   function updateCounter() {
     if (!counterEl) return;
     var rows = visibleRows();
-    var n = rows.filter(isTechIncomplete).length;
+    var n = rows.filter(Courts.isTechIncomplete).length;
     var prefix = '';
     if (currentCourt) {
       // 未分類はそのままの表記。それ以外は「A コート」のように「コート」を付ける。
@@ -520,7 +465,6 @@ var AdminRound = (function() {
   Admin.registerTab('round', { render: render });
 
   return {
-    render: render,
-    isTechIncomplete: isTechIncomplete
+    render: render
   };
 })();

@@ -189,6 +189,74 @@ var Courts = (function() {
     return '二巡目を生成しました（' + created + '名）' + note;
   }
 
+  // ---- 大会の状態の段階表示（PC 運営の上部と スマホ運営の進行タブで共用） ----
+  // EventStatus（status.js）は呼び出し時に参照する。この 3 つを使うページは
+  // courts.js と status.js の両方を読むこと。
+
+  // 技が3つ揃っていない行を「未入力」と数える（一巡目のデータは常に3つ入っている）。
+  function isTechIncomplete(p) {
+    return !p || !p.tech1 || !p.tech2 || !p.tech3;
+  }
+
+  // 段階表示に添える件数。
+  //   進行中（round1 / round2）→ その巡目の「採点済み n / N」
+  //   draft                    → これから採点する一巡目の人数と技未入力の件数
+  //   round1_done              → これから採点する二巡目の人数と技未入力の件数
+  //   round2_done 以降         → 出さない（数えるものが無い）
+  function stageCountText(status, players) {
+    var list = players || [];
+    var r = EventStatus.scoringRound(status);
+    if (r) {
+      var rows = list.filter(function(p) { return roundOf(p) === r; });
+      return '採点済み ' + rows.filter(isScored).length + ' / ' + rows.length;
+    }
+    if (status === 'draft') {
+      var r1 = list.filter(function(p) { return roundOf(p) === 1; });
+      return '一巡目 ' + r1.length + '名　技 未入力 ' + r1.filter(isTechIncomplete).length;
+    }
+    if (status === 'round1_done') {
+      var r2 = list.filter(function(p) { return roundOf(p) === 2; });
+      return '二巡目 ' + r2.length + '名　技 未入力 ' + r2.filter(isTechIncomplete).length;
+    }
+    return '';
+  }
+
+  // 状態を変える前の確認文言（設計書「確認と拒否」の表）。承諾したときだけ遷移する。
+  // サーバーは硬い条件（選手0名・二巡目0件・遷移表にない組み合わせ）だけを 409 で拒むので、
+  // 件数の警告はここで出す。
+  function statusConfirmMessage(from, to, players) {
+    var list = players || [];
+    function round(n) { return list.filter(function(p) { return roundOf(p) === n; }); }
+    if (from === 'draft' && to === 'round1') {
+      var r1 = round(1);
+      return '一巡目 ' + r1.length + '名。技が未入力の選手が ' +
+        r1.filter(isTechIncomplete).length + '名います。\n試合を開始しますか？';
+    }
+    if (from === 'round1' && to === 'round1_done') {
+      return '一巡目の未採点が ' + round(1).filter(function(p) { return !isScored(p); }).length +
+        '名います。\n一巡目を終了しますか？';
+    }
+    if (from === 'round1_done' && to === 'round2') {
+      var r2 = round(2);
+      return '二巡目 ' + r2.length + '名。技が未入力の選手が ' +
+        r2.filter(isTechIncomplete).length + '名います。\n二巡目を開始しますか？';
+    }
+    if (from === 'round1_done' && to === 'final') {
+      return '二巡目を行わずに最終結果にします。\nよろしいですか？';
+    }
+    if (from === 'round2' && to === 'round2_done') {
+      return '二巡目の未採点が ' + round(2).filter(function(p) { return !isScored(p); }).length +
+        '名います。\n二巡目を終了しますか？';
+    }
+    if (to === 'final') {
+      return '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？';
+    }
+    if (to === 'archived') {
+      return '一覧のアーカイブ欄に移り、採点画面の選択肢から消えます。\nアーカイブしますか？';
+    }
+    return EventStatus.LABELS[to] + 'に戻します。よろしいですか？';
+  }
+
   return {
     UNASSIGNED: UNASSIGNED,
     courtOf: courtOf,
@@ -207,6 +275,9 @@ var Courts = (function() {
     defaultSort: defaultSort,
     sortBy: sortBy,
     nextRoundConflictMessage: nextRoundConflictMessage,
-    nextRoundResultMessage: nextRoundResultMessage
+    nextRoundResultMessage: nextRoundResultMessage,
+    isTechIncomplete: isTechIncomplete,
+    stageCountText: stageCountText,
+    statusConfirmMessage: statusConfirmMessage
   };
 })();

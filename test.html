@@ -1522,6 +1522,58 @@
     assert('sortBy: sort が無ければ order 昇順', ordersOf(Courts.sortBy(sPlayers, null)), ['A-男子-1-2', 'A-男子-1-10', 'B-男子-1-1']);
     assert('sortBy: 元配列を変えない', ordersOf(sPlayers), ['A-男子-1-10', 'A-男子-1-2', 'B-男子-1-1']);
 
+    // ---- 段階表示の件数と遷移の確認文言（PC 運営と スマホ運営で共用） ----
+    var tcP = [
+      { order: 'A-男子-1-1', tech1: '真', tech2: '', tech3: '', score: 10 },  // 一巡目・採点済み・技未入力
+      { order: 'A-男子-1-2', tech1: '真', tech2: '連', tech3: '左' },         // 一巡目・未採点・技あり
+      { order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '' }                // 二巡目・未採点・技未入力
+    ];
+
+    assert('isTechIncomplete: 3つ揃っていれば false', Courts.isTechIncomplete(tcP[1]), false);
+    assert('isTechIncomplete: 1つでも空なら true', Courts.isTechIncomplete(tcP[0]), true);
+    assert('isTechIncomplete: 全部空なら true', Courts.isTechIncomplete(tcP[2]), true);
+    assert('isTechIncomplete: null でも落ちない', Courts.isTechIncomplete(null), true);
+
+    assert('stageCountText: draft は一巡目の人数と技未入力',
+      Courts.stageCountText('draft', tcP), '一巡目 2名　技 未入力 1');
+    assert('stageCountText: round1 は一巡目の採点済み',
+      Courts.stageCountText('round1', tcP), '採点済み 1 / 2');
+    assert('stageCountText: round1_done は二巡目の人数と技未入力',
+      Courts.stageCountText('round1_done', tcP), '二巡目 1名　技 未入力 1');
+    assert('stageCountText: round2 は二巡目の採点済み',
+      Courts.stageCountText('round2', tcP), '採点済み 0 / 1');
+    assert('stageCountText: round2_done 以降は出さない',
+      [Courts.stageCountText('round2_done', tcP), Courts.stageCountText('final', tcP),
+       Courts.stageCountText('archived', tcP)], ['', '', '']);
+    assert('stageCountText: players が無くても落ちない',
+      Courts.stageCountText('round1', null), '採点済み 0 / 0');
+
+    assert('statusConfirmMessage: draft → round1',
+      Courts.statusConfirmMessage('draft', 'round1', tcP),
+      '一巡目 2名。技が未入力の選手が 1名います。\n試合を開始しますか？');
+    assert('statusConfirmMessage: round1 → round1_done',
+      Courts.statusConfirmMessage('round1', 'round1_done', tcP),
+      '一巡目の未採点が 1名います。\n一巡目を終了しますか？');
+    assert('statusConfirmMessage: round1_done → round2',
+      Courts.statusConfirmMessage('round1_done', 'round2', tcP),
+      '二巡目 1名。技が未入力の選手が 1名います。\n二巡目を開始しますか？');
+    assert('statusConfirmMessage: round1_done → final（二巡目なしで終了）',
+      Courts.statusConfirmMessage('round1_done', 'final', tcP),
+      '二巡目を行わずに最終結果にします。\nよろしいですか？');
+    assert('statusConfirmMessage: round2 → round2_done',
+      Courts.statusConfirmMessage('round2', 'round2_done', tcP),
+      '二巡目の未採点が 1名います。\n二巡目を終了しますか？');
+    assert('statusConfirmMessage: round2_done → final',
+      Courts.statusConfirmMessage('round2_done', 'final', tcP),
+      '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？');
+    assert('statusConfirmMessage: final → archived',
+      Courts.statusConfirmMessage('final', 'archived', tcP),
+      '一覧のアーカイブ欄に移り、採点画面の選択肢から消えます。\nアーカイブしますか？');
+    assert('statusConfirmMessage: 戻すときは行き先のラベル',
+      Courts.statusConfirmMessage('round1', 'draft', tcP), '準備中に戻します。よろしいですか？');
+    assert('statusConfirmMessage: final から round1_done に戻す',
+      Courts.statusConfirmMessage('final', 'round1_done', tcP), '一巡目終了に戻します。よろしいですか？');
+
     var h2es = document.createElement('h2');
     h2es.textContent = 'status.js';
     results.appendChild(h2es);
