@@ -515,6 +515,26 @@ var Desk = (function() {
     return w;
   }
 
+  // URL などをクリップボードへ写す。試合の区画（採点画面の URL）と
+  // 結果の区画（共有リンク・配信ボード）が使う。
+  // navigator.clipboard は HTTPS か localhost でしか使えず、権限が無い環境もあるので、
+  // 失敗したら prompt に落として手で写せるようにする
+  // （スマホ運営の admin-results.js「共有リンクをコピー」と同じ作法）。
+  // 戻り値: クリップボードに入ったら true、prompt に落ちたら false。
+  async function copyText(text, okMessage) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast(okMessage || 'コピーしました');
+        return true;
+      } catch (e) {
+        // 権限が無い・HTTPS でない等。下の prompt に落とす
+      }
+    }
+    window.prompt('このURLをコピーしてください', text);
+    return false;
+  }
+
   // --- テーマとモード ---
 
   function applyTheme(theme) {
@@ -562,6 +582,7 @@ var Desk = (function() {
     toast: toast,
     openDialog: openDialog,
     closeAllDialogs: closeAllDialogs,
+    copyText: copyText,
     scoringHref: scoringHref,
     openScoring: openScoring
   };
