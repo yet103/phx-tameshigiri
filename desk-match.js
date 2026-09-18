@@ -233,18 +233,12 @@
       btnGen.addEventListener('click', function() { onGenerate(ctx); });
       bar.appendChild(btnGen);
 
-      var targets = Courts.techCopyTargets(ctx.players);
       var btnAll = document.createElement('button');
       btnAll.type = 'button';
       btnAll.className = 'desk-btn';
       btnAll.id = 'btnMatchCopyAll';
-      btnAll.textContent = '全員に一巡目と同じ技をコピー（' + targets.length + ' 名）';
-      if (targets.length === 0) {
-        btnAll.disabled = true;
-        btnAll.title = '技が空で未採点の二巡目の行がありません';
-      } else {
-        btnAll.addEventListener('click', function() { onCopyAll(ctx, targets); });
-      }
+      btnAll.addEventListener('click', function() { onCopyAll(ctx); });
+      setCopyAllButton(btnAll, ctx);
       bar.appendChild(btnAll);
     }
 
@@ -422,15 +416,28 @@
     return true;
   }
 
-  // 帯の「二巡目 N名　技 未入力 n」を数え直す（表全体を描き直さずに済ませる）。
-  // 「全員にコピー」のボタンの件数は reloadEvent で作り直すので、ここでは触らない。
+  // 「全員に一巡目と同じ技をコピー」ボタンの表示（件数と disabled）を作り直す。
+  // 対象は描画時に固定すると、手で入れた技を後から一括コピーで上書きしてしまうので、
+  // 呼ぶたびに Courts.techCopyTargets(ctx.players) を数え直す。
+  function setCopyAllButton(btn, ctx) {
+    var targets = Courts.techCopyTargets(ctx.players);
+    btn.textContent = '全員に一巡目と同じ技をコピー（' + targets.length + ' 名）';
+    btn.disabled = targets.length === 0;
+    btn.title = targets.length === 0 ? '技が空で未採点の二巡目の行がありません' : '';
+  }
+
+  // 帯の「二巡目 N名　技 未入力 n」と「全員にコピー」ボタンの件数を数え直す
+  // （表全体を描き直さずに済ませる）。
   function updateCount(ctx) {
     var el = document.getElementById('matchRound2Count');
-    if (!el) return;
-    var rows = roundTwo(ctx.players);
-    var n = rows.filter(Courts.isTechIncomplete).length;
-    el.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + n;
-    el.className = 'desk-match-count' + (n === 0 ? ' done' : '');
+    if (el) {
+      var rows = roundTwo(ctx.players);
+      var n = rows.filter(Courts.isTechIncomplete).length;
+      el.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + n;
+      el.className = 'desk-match-count' + (n === 0 ? ' done' : '');
+    }
+    var btnAll = document.getElementById('btnMatchCopyAll');
+    if (btnAll) setCopyAllButton(btnAll, ctx);
   }
 
   function onTechChange(p, selects, ctx, tr) {
@@ -445,10 +452,13 @@
   }
 
   // 「全員に一巡目と同じ技をコピー」。対象は Courts.techCopyTargets（技が3枠とも空で
-  // 未採点、かつコピー元の一巡目の行に技がある二巡目の行）。1件ずつ PATCH を送り、
-  // 失敗したらそこで止める（locked や通信断は次の行でも同じように失敗するため、
-  // 同じ alert を人数分出さない）。最後に大会を読み直して表と件数を作り直す。
-  async function onCopyAll(ctx, targets) {
+  // 未採点、かつコピー元の一巡目の行に技がある二巡目の行）。確認の直前に数え直す
+  // （ボタンの描画後に手で技を入れた行を、古い対象一覧で上書きしないため）。
+  // 1件ずつ PATCH を送り、失敗したらそこで止める（locked や通信断は次の行でも
+  // 同じように失敗するため、同じ alert を人数分出さない）。
+  // 最後に大会を読み直して表と件数を作り直す。
+  async function onCopyAll(ctx) {
+    var targets = Courts.techCopyTargets(ctx.players);
     if (targets.length === 0) return;
     if (!confirm('技が空の ' + targets.length + ' 名に、一巡目と同じ技をコピーします。\n' +
         'よろしいですか？')) return;
