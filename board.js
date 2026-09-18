@@ -50,7 +50,7 @@ var Board = (function() {
     var names = [p.tech1, p.tech2, p.tech3].filter(Boolean);
     var decoded = Scoring.decodeResult(String(p.result || ''), names.length, p.adjust);
     return names.map(function(name, i) {
-      return { techName: name, values: decoded[i].values, adjust: decoded[i].adjust };
+      return { techName: name, values: Scoring.effectiveValues(decoded[i].values), adjust: decoded[i].adjust };
     });
   }
 
