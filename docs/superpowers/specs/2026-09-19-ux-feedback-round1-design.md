@@ -115,6 +115,10 @@
 - `.action-bar` の並び: `btnPrev` / `btnAllSuccess` / `btnAllFail` / `btnConfirm` / `totalScoreDisplay` / `btnNext`。前後の選手は `.nav-btn` の見た目のまま
 - 768px で 1 段に収まる幅にする（各ボタン 44px 以上。合計の表示は今の大きさを保つ）。収まらなければ前後の選手ボタンの文言を「◀ 前」「次 ▶」に短くする
 - `.player-nav` は選手名だけになるので中央揃え、文字を少し大きく
+- **選手名バーの並び（追加要望）**: 「Aコート」が目立ちすぎる。次の 3 列にする
+  - 左端: コートのラベル（`.court-label`）。金のグラデーションは残すが小さく（フォント 13px 程度、余白を詰める）、バーの左端に置く
+  - 中央: 「男子 1巡目 1番」（`.order-label`）を **16px 程度に少し大きく**して名前の **左** に横並び、その右に選手名（`--mincho`、今の大きさ）。この 2 つの組が **画面の中央** に来るように、`.player-nav` を `grid-template-columns: 1fr auto 1fr` にして左列にコート、中央列に組、右列は空
+  - 右端: 空（中央を保つためのバランス用）
 - キーボードやタイマーの動作、`app.js` の `getElementById` は id が同じなので変更不要。`style.css` の `.player-nav .nav-btn` のセレクタは `.action-bar .nav-btn` に直す
 - スマホ幅は対象外（採点画面は 768px 以上の前提のまま）
 - ヘルプ `help.html` の「採点画面の見方」の説明とスクリーンショット（`help/img/` の採点画面の画像）を新しい配置で撮り直す。撮り方は前回と同じ CDP（`Emulation.setDeviceMetricsOverride` で幅 768 または 1024、`Page.captureScreenshot`）。画像の差し替えは同じファイル名で上書き

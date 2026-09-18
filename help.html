@@ -156,7 +156,7 @@
     <ol>
       <li>左の区画で <span class="ui">大会一覧</span> を選ぶ。</li>
       <li>右上の <span class="ui">＋ 新規作成</span> を押す。</li>
-      <li><span class="ui">大会名</span>・<span class="ui">日付</span>・<span class="ui">会場</span> を入れて <span class="ui">作成</span>。<span class="ui">選手</span> の区画が開きます。</li>
+      <li><span class="ui">大会名</span>・<span class="ui">日付</span>・<span class="ui">会場</span> を入れて <span class="ui">作成</span>。<span class="ui">選手登録</span> の区画が開きます。</li>
     </ol>
     <p><span class="term">スマホ用（<code>admin.html</code>）</span>:</p>
     <ol>
@@ -200,16 +200,16 @@
     <ol>
       <li>持ち出す側の運営画面で、大会タブの行の <span class="ui">⋯</span> → <span class="ui">💾 ファイルに保存</span> を押す。<code>tameshigiri_日付_大会名.json</code> が保存されます。</li>
       <li>取り込む側の運営画面で、大会タブの見出しの <span class="ui">📂 取り込む</span> を押し、そのファイルを選ぶ。</li>
-      <li><span class="msg">大会を取り込みました（n 名）</span> と出て、選手タブが開きます。</li>
+      <li><span class="msg">大会を取り込みました（n 名）</span> と出て、選手登録タブが開きます。</li>
     </ol>
     <div class="note">取り込みは<span class="term">いつも新しい大会として追加</span>されます。同じ名前の大会があっても上書きされません。同じ名前と日付の大会が既にあるときは <span class="msg">同じ名前と日付の大会が既にあります。別の大会として追加しますか？</span> と確認が出ます。共有リンクと配信用ボードのアドレスは持ち込まれないので、取り込んだ側で作り直してください（§4）。</div>
 
     <h3>選手を登録する</h3>
-    <p>タブで <span class="ui">選手</span> を選びます。登録のしかたは3通りあります。</p>
+    <p>タブで <span class="ui">選手登録</span> を選びます。登録のしかたは3通りあります。</p>
 
     <figure class="shot-mobile">
-      <img src="help/img/admin_players.png" loading="lazy" alt="選手タブ。絞り込みのチップと検索欄、選手の表、右下の赤い「＋」ボタン。">
-      <figcaption>選手タブ。1人1行の表で、左から巡目・コート・性別・番号・名前・技①②③・新人・得点です。表は横にスクロールでき、名前の列は左に残ります。右下の赤い <span class="ui">＋</span> が1人ずつの追加、右上の <span class="ui">⋯</span> がまとめての登録です。</figcaption>
+      <img src="help/img/admin_players.png" loading="lazy" alt="選手登録タブ。絞り込みのチップと検索欄、選手の表、右下の赤い「＋」ボタン。">
+      <figcaption>選手登録タブ。1人1行の表で、左から巡目・コート・性別・番号・名前・技①②③・新人・得点です。表は横にスクロールでき、名前の列は左に残ります。右下の赤い <span class="ui">＋</span> が1人ずつの追加、右上の <span class="ui">⋯</span> がまとめての登録です。</figcaption>
     </figure>
 
     <h3>（a）1人ずつ登録する</h3>
@@ -235,11 +235,11 @@
       <li><span class="ui">名前（1行に1人）</span> の欄に名簿を貼り付けます。下に人数が出ます。</li>
       <li><span class="ui">登録</span> を押すと <span class="msg">A コート 男子 4 人を登録します。よろしいですか？</span> と確認が出ます。<span class="ui">OK</span> でまとめて入ります。</li>
     </ul>
-    <div class="note">技はこの方法では入りません。あとから選手タブで1人ずつ入れてください。コートや性別が違う人は、条件ごとに分けて登録します。</div>
+    <div class="note">技はこの方法では入りません。あとから選手登録タブで1人ずつ入れてください。コートや性別が違う人は、条件ごとに分けて登録します。</div>
 
     <figure class="shot-mobile">
-      <img src="help/img/admin_players_menu.png" loading="lazy" alt="選手タブの「⋯」メニュー。「複数人をまとめて登録」と「CSVインポート」の2項目。">
-      <figcaption>選手タブの <span class="ui">⋯</span> メニュー。</figcaption>
+      <img src="help/img/admin_players_menu.png" loading="lazy" alt="選手登録タブの「⋯」メニュー。「複数人をまとめて登録」と「CSVインポート」の2項目。">
+      <figcaption>選手登録タブの <span class="ui">⋯</span> メニュー。</figcaption>
     </figure>
 
     <figure class="shot-mobile">
@@ -268,10 +268,10 @@
     <div class="note">当日はできるだけ追記を選んでください。クリアして入れ直すと選手の ID が変わるため、その前に採点していたコートの端末で「保存できなかった採点が n 件あります」が出ることがあります（§5 を見てください）。</div>
 
     <h3>（d）PC の表に打ち込む・Excel から貼り付ける</h3>
-    <p>PC 用の運営画面（<code>desk.html</code>）の <span class="ui">選手</span> の区画は、1人1行の<span class="term">編集できる表</span>です。名前・コート・性別・新人・技1〜3のセルをその場で直せます。直したセルから離れる（Tab や Enter、ほかの場所をクリック）と、その項目だけが保存されます。</p>
+    <p>PC 用の運営画面（<code>desk.html</code>）の <span class="ui">選手登録</span> の区画は、1人1行の<span class="term">編集できる表</span>です。名前・コート・性別・新人・技1〜3のセルをその場で直せます。直したセルから離れる（Tab や Enter、ほかの場所をクリック）と、その項目だけが保存されます。</p>
     <ul>
       <li><span class="ui">＋ 行を追加</span> で末尾に空の行が増えます。名前を入れて確定すると登録されます。コート・性別・新人は1つ上の行と同じものが入ります。</li>
-      <li>表の上の絞り込みと並べ替えは、スマホの選手タブと同じです。</li>
+      <li>表の上の絞り込みと並べ替えは、スマホの選手登録タブと同じです。</li>
       <li>行の <span class="ui">⋯</span> から削除できます。採点済みの選手を消すときは確認が出ます。</li>
     </ul>
     <p>Excel の名簿からまとめて入れるときは <span class="ui">📋 貼り付けて追加</span> です。</p>
@@ -313,7 +313,7 @@
     <div class="note">絞り込みと並べ替えは、選手を追加・編集しても保たれます。別の大会を開くか、ページを読み直すと元（全コート・男女・全巡・No 昇順）に戻ります。</div>
 
     <h3>選手を直す・消す</h3>
-    <p>選手タブの行をタップすると <span class="ui">選手を編集</span> のシートが開きます。名前・コート・性別・新人・技を直して <span class="ui">保存</span> を押します。</p>
+    <p>選手登録タブの行をタップすると <span class="ui">選手を編集</span> のシートが開きます。名前・コート・性別・新人・技を直して <span class="ui">保存</span> を押します。</p>
     <ul>
       <li>採点済みの選手の性別や技を変えると <span class="msg">この選手は採点済みです（n点）。得点が変わる可能性があります。採点画面でこの選手を開き直してください。</span> と確認が出ます。得点はサーバーでは計算し直されないので、採点画面で開き直してください。</li>
       <li>同じシートの <span class="ui">この選手を削除</span> で消せます。一巡目の選手を消すときは <span class="msg">二巡目の行は残ります。</span> と断りが出ます。</li>
@@ -396,21 +396,21 @@
     </div>
 
     <h3>当日の流れ（8つのボタン）</h3>
-    <p>当日は運営画面の上に出ている <span class="ui">次へ進む</span> のボタンを、順に押していくだけです。PC 用では左の区画の <span class="ui">試合</span> を開いて進めます（スマホ用では <span class="ui">進行</span> タブです）。</p>
+    <p>当日は運営画面の上に出ている <span class="ui">次へ進む</span> のボタンを、順に押していくだけです。PC 用では左の区画の <span class="ui">試合進行</span> を開いて進めます（スマホ用では <span class="ui">試合進行</span> タブです）。</p>
     <ol>
       <li><span class="ui">試合開始 ▶</span> — <span class="msg">一巡目 n名。技が未入力の選手が m名います。試合を開始しますか？</span> の確認で <span class="ui">OK</span>。<span class="ui">一巡目 進行中</span> になり、採点画面が別のウィンドウで開きます。</li>
-      <li><span class="term">コート別の状況を見る</span> — <span class="ui">試合</span> の区画に、コートごとのカードが並びます（下の節）。</li>
+      <li><span class="term">コート別の状況を見る</span> — <span class="ui">試合進行</span> の区画に、コートごとのカードが並びます（下の節）。</li>
       <li><span class="ui">一巡目を終了 ▶</span> — 全コートの採点が済んだら押します。ここで初めて <span class="ui">二巡目を生成</span> が押せます。</li>
       <li><span class="ui">二巡目を生成</span> — 全コート分の二巡目の行ができます。</li>
       <li><span class="term">技を入れる</span> — できた表で、行ごとに技1〜3を選びます（下の節）。</li>
       <li><span class="ui">二巡目を開始 ▶</span> — <span class="ui">二巡目 進行中</span> になります。コートの端末で大会を選び直すと二巡目の選手が出ます。</li>
-      <li><span class="ui">二巡目を終了 ▶</span> — <span class="ui">結果</span> の区画で順位を確かめます。</li>
+      <li><span class="ui">二巡目を終了 ▶</span> — <span class="ui">結果確認</span> の区画で順位を確かめます。</li>
       <li><span class="ui">最終結果を確定 ▶</span> — 得点・選手・技を編集できなくなります。そのあと <span class="ui">アーカイブ ▶</span> で片づけます。</li>
     </ol>
     <div class="note">押し間違えても <span class="ui">◀ …に戻す</span>（PC 用は上部、スマホ用は ⋯ メニュー）で1つ前に戻せます。<span class="ui">最終結果</span> のあとも戻せば編集できます。二巡目を行わない大会は <span class="ui">一巡目終了</span> のときの <span class="ui">二巡目なしで終了</span> で <span class="ui">最終結果</span> へ進めます。</div>
 
-    <h3>コート別の状況を見る（PC 用の「試合」）</h3>
-    <p>PC 用の <span class="ui">試合</span> の区画には、コートごとにカードが1枚ずつ並びます。</p>
+    <h3>コート別の状況を見る（PC 用の「試合進行」）</h3>
+    <p>PC 用の <span class="ui">試合進行</span> の区画には、コートごとにカードが1枚ずつ並びます。</p>
     <ul>
       <li><span class="ui">A コート</span> — コートの名前。</li>
       <li><span class="ui">採点済み 5 / 8</span> — いま採点している巡目の進み具合。全員終わると緑になります。</li>
@@ -478,21 +478,21 @@
     </ul>
     <div class="note">技を直せるのは <span class="ui">一巡目終了</span> のときだけです。<span class="ui">二巡目を開始</span> のあとは表が読み取り専用になります。直したいときは <span class="ui">◀ 一巡目終了 に戻す</span> で戻してください。採点済みの選手の技を変えるときは <span class="msg">この選手は採点済みです（n点）。…</span> の確認が出ます。</div>
     <p>技が入ると、各コートの採点画面の選手一覧に二巡目の選手が並びます。</p>
-    <p>スマホ用の <span class="ui">進行</span> タブでも同じことができます。こちらは1人1枚のカードで、<span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> の枠をタップして技を選びます。</p>
+    <p>スマホ用の <span class="ui">試合進行</span> タブでも同じことができます。こちらは1人1枚のカードで、<span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> の枠をタップして技を選びます。</p>
 
     <h3>二巡目の並び順</h3>
     <p>二巡目の番号は、<span class="term">同じコート・同じ性別の中で、一巡目の得点が低い人から</span> 1番・2番…と付きます。男子と女子は別々に数えます（例: <span class="ui">A-男子-2-1</span> は A コートの男子で一巡目がいちばん低かった人）。一巡目とは出番の順が変わるので、番号を読み上げるときは気をつけてください。</p>
-    <p>並び方は画面で違います。コートの端末の<span class="term">選手一覧では二巡目の女子が先</span>に並び、<span class="term">運営画面の進行タブ・選手タブ・PC の試合では男子が先</span>に並びます。どちらも中身は同じで、出番はコートの端末の選手一覧の順です。</p>
+    <p>並び方は画面で違います。コートの端末の<span class="term">選手一覧では二巡目の女子が先</span>に並び、<span class="term">運営画面の試合進行タブ・選手登録タブ・PC の試合進行では男子が先</span>に並びます。どちらも中身は同じで、出番はコートの端末の選手一覧の順です。</p>
     <div class="note">未採点が残ったまま <span class="ui">二巡目を生成</span> を押すと <span class="msg">未採点が n 名います。このまま生成すると、あとから入る一巡目の得点は二巡目の並び順に反映されません。</span> と確認が出ます。並び順を正しくするため、全員の採点が終わってから押してください。</div>
-    <p>コートが決まっていない選手の二巡目は作れません。生成のあとのトーストに <span class="msg">（コート未設定の n 名は作っていません）</span> と出ます。選手タブでコートを設定してから、もう一度生成してください。</p>
+    <p>コートが決まっていない選手の二巡目は作れません。生成のあとのトーストに <span class="msg">（コート未設定の n 名は作っていません）</span> と出ます。選手登録タブでコートを設定してから、もう一度生成してください。</p>
 
     <figure class="shot-mobile">
-      <img src="help/img/admin_round.png" loading="lazy" alt="運営画面の進行タブ。一巡目の採点済み数、「二巡目を生成」「採点画面へ」、コート絞り込み、二巡目の選手と技の枠。">
-      <figcaption>進行タブ。<span class="ui">二巡目 8名　技 未入力 8</span> の行で、技がまだの人数が分かります。右上の <span class="ui">一巡目 30</span> はその選手の一巡目の得点です。</figcaption>
+      <img src="help/img/admin_round.png" loading="lazy" alt="運営画面の試合進行タブ。一巡目の採点済み数、「二巡目を生成」「採点画面へ」、コート絞り込み、二巡目の選手と技の枠。">
+      <figcaption>試合進行タブ。<span class="ui">二巡目 8名　技 未入力 8</span> の行で、技がまだの人数が分かります。右上の <span class="ui">一巡目 30</span> はその選手の一巡目の得点です。</figcaption>
     </figure>
 
     <figure class="shot-mobile">
-      <img src="help/img/admin_round_court_b.png" loading="lazy" alt="進行タブでBコートに絞り込んだ状態。Bコートの選手だけが並び、技が入った枠は黒くなっている。">
+      <img src="help/img/admin_round_court_b.png" loading="lazy" alt="試合進行タブでBコートに絞り込んだ状態。Bコートの選手だけが並び、技が入った枠は黒くなっている。">
       <figcaption><span class="ui">B コート</span> のチップで絞り込んだところ。技が入った枠は黒くなり、技名が出ます。この状態で <span class="ui">採点画面へ</span> を押すと、B コートの採点画面が開きます。</figcaption>
     </figure>
 
@@ -547,16 +547,16 @@
 
     <h3>確認する場所</h3>
     <ul>
-      <li><span class="term">PC 用運営画面の「結果」</span> — <span class="ui">一般男子</span> <span class="ui">新人</span> <span class="ui">一般女子</span> の3部門が横に3列で並びます。<span class="ui">↻ 最新に更新</span> でサーバーの最新の順位を読み直します。</li>
-      <li><span class="term">スマホ用運営画面の結果タブ</span> — 同じ内容が縦に並びます。<span class="ui">最新に更新</span> で読み直します。</li>
+      <li><span class="term">PC 用運営画面の「結果確認」</span> — <span class="ui">一般男子</span> <span class="ui">新人</span> <span class="ui">一般女子</span> の3部門が横に3列で並びます。<span class="ui">↻ 最新に更新</span> でサーバーの最新の順位を読み直します。</li>
+      <li><span class="term">スマホ用運営画面の結果確認タブ</span> — 同じ内容が縦に並びます。<span class="ui">最新に更新</span> で読み直します。</li>
       <li><span class="term">順位表示ページ</span>（<code>ranking.html</code>） — 大会を選んで <span class="ui">大会データを読み込む</span>。<span class="ui">HTMLダウンロード</span> で1枚の成績表として保存できます。</li>
-      <li><span class="term">運営画面の「試合」／進行タブ</span> — <span class="ui">⋯</span> → <span class="ui">CSVエクスポート</span> で全選手の内訳を保存できます。</li>
+      <li><span class="term">運営画面の「試合進行」タブ</span> — <span class="ui">⋯</span> → <span class="ui">CSVエクスポート</span> で全選手の内訳を保存できます。</li>
       <li><span class="term">採点画面</span> — <span class="ui">CSVエクスポート</span> で全選手の内訳を、<span class="ui">HTML保存</span> で成績表を保存できます。</li>
     </ul>
 
     <figure class="shot-mobile">
-      <img src="help/img/admin_results.png" loading="lazy" alt="運営画面の結果タブ。「最新に更新」「発表モードで開く」「共有リンクをコピー」のボタンと、一般男子・新人・一般女子の順位。">
-      <figcaption>結果タブ。部門は <span class="ui">一般男子</span> → <span class="ui">新人</span> → <span class="ui">一般女子</span> の順に出ます。新人の選手は両方に出ています。</figcaption>
+      <img src="help/img/admin_results.png" loading="lazy" alt="運営画面の結果確認タブ。「最新に更新」「発表モードで開く」「共有リンクをコピー」のボタンと、一般男子・新人・一般女子の順位。">
+      <figcaption>結果確認タブ。部門は <span class="ui">一般男子</span> → <span class="ui">新人</span> → <span class="ui">一般女子</span> の順に出ます。新人の選手は両方に出ています。</figcaption>
     </figure>
 
     <figure class="shot-mobile">
@@ -570,10 +570,10 @@
   <section class="help-section" id="publish">
     <h2>4. サイト掲載（共有・発表）</h2>
 
-    <p>順位の見せ方は2通りあります。どちらも運営画面の <span class="ui">結果</span> タブから始めます。</p>
+    <p>順位の見せ方は2通りあります。どちらも運営画面の <span class="ui">結果確認</span> タブから始めます。</p>
 
     <div class="diagram">
-      <svg viewBox="0 0 360 215" role="img" aria-label="運営画面の結果タブから、共有リンクをコピーすると参加者のスマホへ、発表モードで開くと会場の大画面へ、という流れ図。">
+      <svg viewBox="0 0 360 215" role="img" aria-label="運営画面の結果確認タブから、共有リンクをコピーすると参加者のスマホへ、発表モードで開くと会場の大画面へ、という流れ図。">
         <defs>
           <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
@@ -582,7 +582,7 @@
 
         <g transform="translate(10,6)">
           <rect class="d-box-key" width="340" height="58" rx="8"/>
-          <text class="d-title-key" x="170" y="26" text-anchor="middle">結果タブ（運営画面）</text>
+          <text class="d-title-key" x="170" y="26" text-anchor="middle">結果確認タブ（運営画面）</text>
           <text class="d-sub-key"   x="170" y="47" text-anchor="middle">最新に更新 で順位を作る</text>
         </g>
 
@@ -606,7 +606,7 @@
 
     <h3>参加者に配る（共有リンク）</h3>
     <ol>
-      <li>運営画面の <span class="ui">結果</span>（PC 用）または結果タブ（スマホ用）で <span class="ui">🔗 共有リンクをコピー</span> を押す。</li>
+      <li>運営画面の <span class="ui">結果確認</span>（PC 用）または結果確認タブ（スマホ用）で <span class="ui">🔗 共有リンクをコピー</span> を押す。</li>
       <li><span class="msg">共有リンクをコピーしました</span>（スマホ用は <span class="msg">リンクをコピーしました</span>）と出たら、その URL を配ります（コピーできない環境では、URL がそのまま表示されます）。</li>
     </ol>
     <ul>
@@ -621,7 +621,7 @@
     </figure>
 
     <h3>会場の大画面で見せる（発表モード）</h3>
-    <p>結果タブで <span class="ui">発表モードで開く</span> を押すと、新しいタブで発表モードが開きます。会場のプロジェクターやテレビにつないだ端末で押してください。</p>
+    <p>結果確認タブで <span class="ui">発表モードで開く</span> を押すと、新しいタブで発表モードが開きます。会場のプロジェクターやテレビにつないだ端末で押してください。</p>
     <p>上に <span class="ui">掲示</span> <span class="ui">発表</span> <span class="ui">更新</span> <span class="ui">全画面</span> のボタンがあります。</p>
 
     <h3>掲示</h3>
@@ -654,7 +654,7 @@
     <p>コートで今どの選手を採点しているかを、配信の画面にそのまま映せます。A コート・B コートで1つずつ、<span class="term">配信用ボード</span>というページを OBS の <span class="ui">ブラウザソース</span> として並べます。見るだけのページなので、配信 PC から採点が書き換わることはありません。</p>
 
     <ol>
-      <li>PC 用運営画面の <span class="ui">結果</span> を開き、下の <span class="ui">配信用ボード</span> でコートのボタン（<span class="ui">📺 A コートの URL をコピー</span>）を押します。そのコートのアドレス（<code>board.html#（トークン）/A</code>）がそのまま写ります。</li>
+      <li>PC 用運営画面の <span class="ui">結果確認</span> を開き、下の <span class="ui">配信用ボード</span> でコートのボタン（<span class="ui">📺 A コートの URL をコピー</span>）を押します。そのコートのアドレス（<code>board.html#（トークン）/A</code>）がそのまま写ります。</li>
       <li>スマホ用の運営画面しか使えないときは、<span class="ui">共有リンクをコピー</span> で取った <code>share.html#（トークン）</code> の <code>share.html</code> を <code>board.html</code> に書き換え、末尾に <code>/A</code> を足します（例: <code>board.html#O7KVvuj-/A</code>）。B コートは末尾を <code>/B</code> にします。コート名は運営画面で付けたものをそのまま書きます。</li>
       <li>OBS で <span class="ui">ソース</span> の <span class="ui">＋</span> から <span class="ui">ブラウザ</span> を選び、<span class="ui">URL</span> にそのアドレスを入れます。<span class="ui">幅</span> 960・<span class="ui">高さ</span> 540（大きく映すなら 1920・1080）にします。</li>
       <li>A と B の2つを作って画面に並べます。</li>
@@ -689,7 +689,7 @@
     <h2>5. 困ったとき</h2>
 
     <h3>「技が未入力です。運営画面の進行タブで技を入力してください。」と出る</h3>
-    <p>その選手にまだ技が入っていません。運営画面の <span class="ui">進行</span> タブでその選手の <span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> をタップして技を入れてください。<span class="ui">一巡目と同じ技をコピー</span> でもかまいません。</p>
+    <p>その選手にまだ技が入っていません。運営画面の <span class="ui">試合進行</span> タブでその選手の <span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> をタップして技を入れてください。<span class="ui">一巡目と同じ技をコピー</span> でもかまいません。</p>
 
     <h3>「内訳を復元できません（技の数が変わっています）。」と出る</h3>
     <p>採点したあとで技の数が変わった選手です。前の内訳はもう表に戻せません。その場で採点し直してください。</p>
@@ -706,7 +706,7 @@
     <p>閉じてしまっても、同じ端末の同じブラウザで採点画面を開き直せば <span class="msg">前回未送信の採点 n 件を送信します。</span> と出て送り直せます。ただし別の端末からは送れないので、できるだけ <span class="ui">● 保存済み</span> になってから閉じてください。</p>
 
     <h3>「保存できなかった採点が n 件あります」と出る</h3>
-    <p>送ろうとした選手が、サーバーの名簿からいなくなっています。名簿を <span class="term">クリアして読み込む</span> で入れ直した直後や、その選手を選手タブで削除したあとに起きます。入れ直すと選手の ID が変わるため、その前に採点していた分は送り先を失います。</p>
+    <p>送ろうとした選手が、サーバーの名簿からいなくなっています。名簿を <span class="term">クリアして読み込む</span> で入れ直した直後や、その選手を選手登録タブで削除したあとに起きます。入れ直すと選手の ID が変わるため、その前に採点していた分は送り先を失います。</p>
     <p>ダイアログに選手 ID と点数が並びます。該当する選手を採点画面で開き、採点を確認して入力し直してください。</p>
 
     <h3>技が見つからない</h3>
@@ -715,12 +715,12 @@
     <p>対処は2つあります。</p>
     <ol>
       <li>使っていない行の技名と配点を書き換えて <span class="ui">保存</span> する。</li>
-      <li>選手の技を、リストにある名前に直す。運営画面の選手タブで選手をタップ → <span class="ui">選手を編集</span> のシートで技の枠から選び直します。</li>
+      <li>選手の技を、リストにある名前に直す。運営画面の選手登録タブで選手をタップ → <span class="ui">選手を編集</span> のシートで技の枠から選び直します。</li>
     </ol>
     <p>技名は完全に一致したものを探します。前後に空白が入っていると別の技として扱われ、配点が0になります。</p>
 
     <h3>二巡目を生成できない</h3>
-    <p>一巡目の選手が1人も登録されていないか、通信が切れています。選手タブと端末の通信を確かめてください。コートが決まっていない選手の扱いは §2「二巡目の並び順」を見てください（その選手の二巡目は作られず、トーストに人数が出ます）。</p>
+    <p>一巡目の選手が1人も登録されていないか、通信が切れています。選手登録タブと端末の通信を確かめてください。コートが決まっていない選手の扱いは §2「二巡目の並び順」を見てください（その選手の二巡目は作られず、トーストに人数が出ます）。</p>
 
     <h3>大会のファイルを取り込めない</h3>
     <ul>
