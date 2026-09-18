@@ -355,16 +355,9 @@ var App = (function() {
     for (var i = 0; i < ordered.length; i++) {
       select.appendChild(eventOption(ordered[i]));
     }
-    // 前回選択していた大会があれば再選択。一覧から外れている（アーカイブされた）
-    // ときは選択肢を足して残す。黙って別の大会に切り替わるのを防ぐ。
-    if (currentEvent) {
-      var found = false;
-      for (var j = 0; j < ordered.length; j++) {
-        if (ordered[j].id === currentEvent.id) { found = true; break; }
-      }
-      if (!found) select.appendChild(eventOption(currentEvent));
-      select.value = currentEvent.id;
-    }
+    // refreshEventList は init からしか呼ばれず、その時点では currentEvent はまだ無い
+    // （大会を選ぶのはこのあとの Route.restore / onEventSelect）。一覧から外れている
+    // 大会（アーカイブなど）を選んだときの選択肢の救済は onEventSelect 側でやる。
   }
 
   function eventOption(ev) {
@@ -372,6 +365,19 @@ var App = (function() {
     opt.value = ev.id;
     opt.textContent = (ev.name || '(名称未設定)') + '（' + EventStatus.LABELS[EventStatus.of(ev)] + '）';
     return opt;
+  }
+
+  // 選択肢（#eventSelect）に大会が無ければ足す。一覧から外れている大会
+  // （アーカイブされて #event/<id>/... で直接開いた場合など）を選んだときに使う。
+  // 黙って未選択に戻ったり、別の大会が選ばれているように見えたりするのを防ぐ。
+  function ensureEventOption(event) {
+    var select = document.getElementById('eventSelect');
+    var found = false;
+    for (var i = 0; i < select.options.length; i++) {
+      if (select.options[i].value === event.id) { found = true; break; }
+    }
+    if (!found) select.appendChild(eventOption(event));
+    select.value = event.id;
   }
 
   // 大会読み込みの再入ガード。
@@ -467,6 +473,7 @@ var App = (function() {
       return;
     }
     adoptEvent(loaded);
+    ensureEventOption(currentEvent);
     if (court !== undefined) currentCourt = court;
     refreshCourtList();
     applyCourtFilter();
