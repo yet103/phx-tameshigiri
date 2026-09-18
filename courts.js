@@ -154,6 +154,76 @@ var Courts = (function() {
     });
   }
 
+  // ---- 試合の区画（PC 運営 #match）の集計 ----
+  // 画面を持たない判定はここに置き、test.html で固定する
+  // （test.html は desk-match.js を読み込まないため）。
+  // EventStatus（status.js）は呼び出し時に参照する。この節を使うページは
+  // courts.js と status.js の両方を読むこと。
+
+  // コート別のカードで数える巡目。
+  //   一巡目 / 二巡目 進行中 → その巡目（EventStatus.scoringRound）
+  //   準備中                 → これから採点する一巡目
+  //   一巡目終了             → これから採点する二巡目
+  //   二巡目終了以降         → 二巡目の行があれば二巡目、無ければ一巡目
+  //                            （二巡目なしで終わった大会は一巡目の結果を見せる）
+  function progressRound(status, players) {
+    var r = EventStatus.scoringRound(status);
+    if (r) return r;
+    if (status === 'draft') return 1;
+    if (status === 'round1_done') return 2;
+    var hasRound2 = (players || []).some(function(p) { return roundOf(p) === 2; });
+    return hasRound2 ? 2 : 1;
+  }
+
+  // コートごとの「採点済み n / N」。round の行だけを数える。
+  // 並びは listFrom と同じ（昇順、未分類は末尾）。
+  // その巡目の行が 1 つも無いコートも { total: 0, scored: 0 } で残す
+  // （二巡目を生成する前にコートのカードが消えてしまわないように）。
+  // 戻り値: [{ court, total, scored }]
+  function courtProgress(players, round) {
+    var list = players || [];
+    return listFrom(list).map(function(c) {
+      var rows = list.filter(function(p) {
+        return courtOf(p) === c && roundOf(p) === round;
+      });
+      return { court: c, total: rows.length, scored: rows.filter(isScored).length };
+    });
+  }
+
+  // そのコートでいま採点している選手の名前。live は大会 JSON の event.live
+  // （コート名をそのままキーに持つ）。サーバーが defineProperty で書き
+  // hasOwnProperty で読んでいるのと同じ理由で、ここでも hasOwnProperty で読む
+  // （'__proto__' や 'toString' というコート名でプロトタイプを拾わない）。
+  // ライブ状態が無い・選手が外れている・その選手がもう居ないときは空文字。
+  function livePlayerName(live, court, players) {
+    if (!live || typeof live !== 'object' || !court) return '';
+    if (!Object.prototype.hasOwnProperty.call(live, court)) return '';
+    var entry = live[court];
+    if (!entry || typeof entry !== 'object' || !entry.playerId) return '';
+    var found = (players || []).filter(function(p) { return p && p.id === entry.playerId; })[0];
+    if (!found) return '';
+    return found.name || '(名称未設定)';
+  }
+
+  // 「全員に一巡目と同じ技をコピー」の対象。次の4つを満たす二巡目の行だけ。
+  //   ・技が3枠とも空（hasNoTech）… 途中まで入れた行を一括で上書きしない
+  //   ・未採点              … 得点が変わる警告は行ごとのボタンで出す
+  //   ・sourcePlayerId が指す一巡目の行がまだある（CSV 由来の行は対象外）
+  //   ・その一巡目の行に技が入っている（空をコピーしても意味が無い）
+  // 並びは compareOrder（表と同じ）。戻り値: [{ player, source }]
+  function techCopyTargets(players) {
+    var list = players || [];
+    function sourceOf(p) {
+      if (!p || !p.sourcePlayerId) return null;
+      return list.filter(function(q) { return q && q.id === p.sourcePlayerId; })[0] || null;
+    }
+    return list
+      .filter(function(p) { return roundOf(p) === 2 && hasNoTech(p) && !isScored(p); })
+      .map(function(p) { return { player: p, source: sourceOf(p) }; })
+      .filter(function(x) { return x.source && !hasNoTech(x.source); })
+      .sort(function(a, b) { return compareOrder(a.player, b.player); });
+  }
+
   // 二巡目生成 API の 409 応答（reason: 'unscored' | 'exists'）を確認文言にする。
   // 採点画面（app.js）と運営画面（admin-round.js）で同じ文言を使う。
   // fixHint: コート未設定の選手をどこで直すかの案内（画面ごとに違う）
@@ -421,6 +491,10 @@ var Courts = (function() {
     applyFilter: applyFilter,
     defaultSort: defaultSort,
     sortBy: sortBy,
+    progressRound: progressRound,
+    courtProgress: courtProgress,
+    livePlayerName: livePlayerName,
+    techCopyTargets: techCopyTargets,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage,
     scoreMayChange: scoreMayChange,

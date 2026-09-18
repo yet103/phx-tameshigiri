@@ -1742,6 +1742,89 @@
     assert('sortBy: sort が無ければ order 昇順', ordersOf(Courts.sortBy(sPlayers, null)), ['A-男子-1-2', 'A-男子-1-10', 'B-男子-1-1']);
     assert('sortBy: 元配列を変えない', ordersOf(sPlayers), ['A-男子-1-10', 'A-男子-1-2', 'B-男子-1-1']);
 
+    // ---- 試合の区画（PC 運営 #match）の集計 ----
+    // p1 は一巡目・採点済み、p5 は二巡目・採点済み。p4 は二巡目で技が空、
+    // p6 は二巡目で技が途中まで入っている。
+    var mcP = [
+      { id: 'p1', order: 'A-男子-1-1', name: '山田', tech1: '真', tech2: '連', tech3: '左', score: 10 },
+      { id: 'p2', order: 'A-男子-1-2', name: '佐藤', tech1: '真', tech2: '連', tech3: '左' },
+      { id: 'p3', order: 'B-女子-1-1', name: '鈴木', tech1: '真', tech2: '連', tech3: '左' },
+      { id: 'p4', order: 'A-男子-2-1', name: '佐藤', sourcePlayerId: 'p2' },
+      { id: 'p5', order: 'A-男子-2-2', name: '山田', sourcePlayerId: 'p1', score: 5 },
+      { id: 'p6', order: 'B-女子-2-1', name: '鈴木', sourcePlayerId: 'p3', tech1: '真', tech2: '', tech3: '' }
+    ];
+
+    assert('progressRound: 一巡目 進行中は一巡目', Courts.progressRound('round1', mcP), 1);
+    assert('progressRound: 二巡目 進行中は二巡目', Courts.progressRound('round2', mcP), 2);
+    assert('progressRound: 準備中はこれから採点する一巡目', Courts.progressRound('draft', mcP), 1);
+    assert('progressRound: 一巡目終了はこれから採点する二巡目', Courts.progressRound('round1_done', mcP), 2);
+    assert('progressRound: 二巡目終了は二巡目の行があれば二巡目', Courts.progressRound('round2_done', mcP), 2);
+    assert('progressRound: 二巡目の行が無ければ一巡目',
+      Courts.progressRound('final', [{ order: 'A-男子-1-1' }]), 1);
+    assert('progressRound: players が無くても落ちない', Courts.progressRound('archived', null), 1);
+
+    assert('courtProgress: 一巡目のコート別集計',
+      Courts.courtProgress(mcP, 1),
+      [{ court: 'A', total: 2, scored: 1 }, { court: 'B', total: 1, scored: 0 }]);
+    assert('courtProgress: 二巡目のコート別集計',
+      Courts.courtProgress(mcP, 2),
+      [{ court: 'A', total: 2, scored: 1 }, { court: 'B', total: 1, scored: 0 }]);
+    assert('courtProgress: その巡目の行が無いコートも 0 / 0 で出す（生成前にカードを消さない）',
+      Courts.courtProgress([{ order: 'A-男子-1-1' }, { order: 'B-男子-1-1' }], 2),
+      [{ court: 'A', total: 0, scored: 0 }, { court: 'B', total: 0, scored: 0 }]);
+    assert('courtProgress: 未分類は末尾',
+      Courts.courtProgress([{ order: '' }, { order: 'A-男子-1-1' }], 1).map(function(x) { return x.court; }),
+      ['A', '未分類']);
+    assert('courtProgress: players が無ければ空', Courts.courtProgress(null, 1), []);
+
+    var mcLive = { A: { playerId: 'p1', timer: { sec: 300, running: false } }, B: { playerId: null } };
+    assert('livePlayerName: live の playerId から名前を引く', Courts.livePlayerName(mcLive, 'A', mcP), '山田');
+    assert('livePlayerName: 選手が外れているコートは空文字', Courts.livePlayerName(mcLive, 'B', mcP), '');
+    assert('livePlayerName: ライブ状態の無いコートは空文字', Courts.livePlayerName(mcLive, 'C', mcP), '');
+    assert('livePlayerName: live が無くても落ちない', Courts.livePlayerName(null, 'A', mcP), '');
+    assert('livePlayerName: コート名が空でも落ちない', Courts.livePlayerName(mcLive, '', mcP), '');
+    assert('livePlayerName: 消えた選手の ID は空文字',
+      Courts.livePlayerName({ A: { playerId: 'zzz' } }, 'A', mcP), '');
+    assert('livePlayerName: 名前の無い選手は (名称未設定)',
+      Courts.livePlayerName({ A: { playerId: 'p9' } }, 'A', [{ id: 'p9', name: '' }]), '(名称未設定)');
+    assert('livePlayerName: プロトタイプのキーを拾わない',
+      Courts.livePlayerName({}, 'toString', mcP), '');
+
+    assert('techCopyTargets: 技が空の二巡目の行を一巡目の行と組にして返す',
+      Courts.techCopyTargets(mcP).map(function(t) { return [t.player.id, t.source.id]; }),
+      [['p4', 'p2']]);
+    assert('techCopyTargets: 途中まで入れた行は対象にしない（上書きしない）',
+      Courts.techCopyTargets([
+        { id: 'a', order: 'A-男子-2-1', tech1: '真', sourcePlayerId: 'b' },
+        { id: 'b', order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左' }
+      ]).length, 0);
+    assert('techCopyTargets: 採点済みの行は対象にしない（行ごとのボタンで確認してから）',
+      Courts.techCopyTargets([
+        { id: 'a', order: 'A-男子-2-1', score: 3, sourcePlayerId: 'b' },
+        { id: 'b', order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左' }
+      ]).length, 0);
+    assert('techCopyTargets: 一巡目の行が消えていたら対象にしない',
+      Courts.techCopyTargets([{ id: 'a', order: 'A-男子-2-1', sourcePlayerId: 'zzz' }]).length, 0);
+    assert('techCopyTargets: sourcePlayerId が無い（CSV 由来の）行は対象にしない',
+      Courts.techCopyTargets([{ id: 'a', order: 'A-男子-2-1' }]).length, 0);
+    assert('techCopyTargets: 一巡目の行の技も空なら対象にしない',
+      Courts.techCopyTargets([
+        { id: 'a', order: 'A-男子-2-1', sourcePlayerId: 'b' },
+        { id: 'b', order: 'A-男子-1-1' }
+      ]).length, 0);
+    assert('techCopyTargets: 一巡目の行は対象にしない',
+      Courts.techCopyTargets([
+        { id: 'a', order: 'A-男子-1-1', sourcePlayerId: 'b' },
+        { id: 'b', order: 'A-男子-1-2', tech1: '真', tech2: '連', tech3: '左' }
+      ]).length, 0);
+    assert('techCopyTargets: 並びは No. 順（10 が 2 より後）',
+      Courts.techCopyTargets([
+        { id: 'y', order: 'A-男子-2-10', sourcePlayerId: 's' },
+        { id: 'x', order: 'A-男子-2-2', sourcePlayerId: 's' },
+        { id: 's', order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左' }
+      ]).map(function(t) { return t.player.id; }), ['x', 'y']);
+    assert('techCopyTargets: players が無ければ空', Courts.techCopyTargets(null), []);
+
     // ---- 段階表示の件数と遷移の確認文言（PC 運営と スマホ運営で共用） ----
     var tcP = [
       { order: 'A-男子-1-1', tech1: '真', tech2: '', tech3: '', score: 10 },  // 一巡目・採点済み・技未入力
