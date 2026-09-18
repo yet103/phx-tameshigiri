@@ -44,8 +44,9 @@ input[type="text"], input[type="date"], textarea {
   display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px;
   background: var(--accent); color: var(--accent-text);
 }
+/* ボタンが 3 つ（🌙 🖥 ⋯）並ぶので、最小幅を 0 にして大会名を省略できるようにする */
 #topTitle {
-  flex: 1; font-weight: bold;
+  flex: 1; min-width: 0; font-weight: bold;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* テーマ切替と⋯メニューで共用するトップバーのアイコンボタン */

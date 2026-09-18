@@ -460,6 +460,15 @@ var Admin = (function() {
     });
     document.getElementById('btnAdminMenu').addEventListener('click', openAdminMenu);
 
+    // PC 運営へ。いま見ているタブに対応するハッシュを持っていく（storage.js の対応表）。
+    var btnPc = document.getElementById('btnPc');
+    if (btnPc) {
+      btnPc.addEventListener('click', function() {
+        Storage.saveMode('pc');
+        location.href = Storage.modeHref(location.hash, 'pc');
+      });
+    }
+
     var btns = document.querySelectorAll('.tabbar button');
     for (var i = 0; i < btns.length; i++) {
       btns[i].addEventListener('click', function() {
