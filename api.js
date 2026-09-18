@@ -54,6 +54,39 @@ var Api = (function() {
     }
   }
 
+  async function changeStatus(eventId, to) {
+    // POST /api/events/:eventId/status
+    // Body: { to: 'round1' }
+    // 戻り値: { ok: true, status: 新しい状態 }
+    //       | { ok: false, status: HTTPステータス, reason, error }（400 / 404 / 409）
+    //       | null（通信そのものの失敗）
+    // 409 の reason は 'transition' | 'empty' | 'no_round2'。画面はこれで
+    // 「読み直す」「先に生成する」などの次の行動を出し分けるので、error だけでなく
+    // reason も返す（他の API と違って ok:false に理由を載せるのはこのため）。
+    try {
+      var res = await fetch('/api/events/' + eventId + '/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: to })
+      });
+      if (!res.ok) {
+        var errJson = null;
+        try { errJson = await res.json(); } catch (e) { /* JSON でない応答 */ }
+        return {
+          ok: false,
+          status: res.status,
+          reason: (errJson && errJson.reason) || '',
+          error: (errJson && errJson.error) ||
+                 ('サーバーがエラーを返しました（' + res.status + '）')
+        };
+      }
+      var json = await res.json();
+      return { ok: true, status: json.status };
+    } catch (e) {
+      return null;
+    }
+  }
+
   // --- Players ---
   async function updatePlayer(eventId, playerId, data) {
     // PATCH /api/events/:eventId/players/:playerId
@@ -522,6 +555,7 @@ var Api = (function() {
     loadEvent: loadEvent,
     saveEvent: saveEvent,
     deleteEvent: deleteEvent,
+    changeStatus: changeStatus,
     updatePlayer: updatePlayer,
     createPlayer: createPlayer,
     createPlayersBulk: createPlayersBulk,

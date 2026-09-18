@@ -229,6 +229,47 @@
     await Api.deleteEvent(derSrc.id);
     await Api.deleteEvent(derImported.id);
 
+    // ---- 7 / 8 / 9. 状態の遷移 API ----
+    var stEvent = await Api.saveEvent({ name: '遷移テスト', date: '2026-02-01', venue: '', players: [] });
+
+    var stEmpty = await Api.changeStatus(stEvent.id, 'round1');
+    assert('選手0名の draft → round1 は 409 empty',
+      [stEmpty.ok, stEmpty.status, stEmpty.reason], [false, 409, 'empty']);
+    assert('409 empty は理由の文言を返す', stEmpty.error, '一巡目の選手がいません');
+
+    await Api.createPlayer(stEvent.id, { name: 'S1', court: 'A' });
+    var stSkip = await Api.changeStatus(stEvent.id, 'round2');
+    assert('draft → round2 は 409 transition',
+      [stSkip.ok, stSkip.status, stSkip.reason], [false, 409, 'transition']);
+    assert('409 transition は理由の文言を返す', stSkip.error, 'この状態からは進めません');
+
+    var stOk = await Api.changeStatus(stEvent.id, 'round1');
+    assert('draft → round1 は通る', [stOk.ok, stOk.status], [true, 'round1']);
+    assert('遷移後の GET に新しい status が入る', (await Api.loadEvent(stEvent.id)).status, 'round1');
+
+    var stHist = await Api.loadHistory(stEvent.id);
+    var stLast = stHist.entries[stHist.entries.length - 1];
+    assert('遷移がサーバー側で履歴に残る', [stLast.action, stLast.detail],
+      ['status_change', '準備中 → 一巡目 進行中']);
+    assert('遷移の履歴に時刻が付く', typeof stLast.timestamp, 'string');
+
+    await Api.changeStatus(stEvent.id, 'round1_done');
+    var stNoR2 = await Api.changeStatus(stEvent.id, 'round2');
+    assert('二巡目が0件なら round1_done → round2 は 409 no_round2',
+      [stNoR2.ok, stNoR2.status, stNoR2.reason], [false, 409, 'no_round2']);
+    assert('409 no_round2 は理由の文言を返す', stNoR2.error, '二巡目が生成されていません');
+
+    var stFinal = await Api.changeStatus(stEvent.id, 'final');
+    assert('二巡目なしで round1_done → final に進める', [stFinal.ok, stFinal.status], [true, 'final']);
+    var stBack = await Api.changeStatus(stEvent.id, 'round1_done');
+    assert('final から round1_done に戻せる（二巡目が無いとき）',
+      [stBack.ok, stBack.status], [true, 'round1_done']);
+
+    var stBad = await Api.changeStatus(stEvent.id, 'nosuchstate');
+    assert('STATES に無い状態は 400', [stBad.ok, stBad.status], [false, 400]);
+    assert('存在しない大会の遷移は 404', (await Api.changeStatus('nosuchevent', 'round1')).status, 404);
+    await Api.deleteEvent(stEvent.id);
+
     // 並行PATCHの回帰テスト
     // 書き込みハンドラが同期である限り、同時PATCHは取りこぼされない。
     // 将来ハンドラが async 化されるとこのテストが落ちる（不変条件の番人）。

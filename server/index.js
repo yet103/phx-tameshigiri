@@ -267,6 +267,25 @@ function writeJsonAtomic(filePath, data) {
   fs.renameSync(tmp, filePath); // 同一ファイルシステム上なのでアトミック
 }
 
+// 履歴（server/data/history/<id>.json）に1件追記する。
+// クライアントの Api.addHistory（POST /api/events/:id/history）と同じ形で書く。
+// 状態の遷移は「状態を書く」と「履歴に残す」を1つの操作にしたいので、
+// クライアントに addHistory を呼ばせず、サーバーがここで積む。
+function appendHistory(eventId, entry) {
+  const historyPath = path.join(HISTORY_DIR, `${eventId}.json`);
+  let data = { eventId: eventId, entries: [] };
+  if (fs.existsSync(historyPath)) {
+    try {
+      data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+    } catch (e) {
+      data = { eventId: eventId, entries: [] };   // 壊れた履歴で遷移を止めない
+    }
+  }
+  if (!Array.isArray(data.entries)) data.entries = [];
+  data.entries.push(Object.assign({}, entry, { timestamp: new Date().toISOString() }));
+  writeJsonAtomic(historyPath, data);
+}
+
 // 順位の集計。順位ロジックの唯一の実装。
 // 行ごとに isFemale で男女に振り分け、isNewFace なら新人にも入れる。
 // 氏名で合算する（一巡目＋二巡目）。得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
@@ -544,6 +563,56 @@ app.delete('/api/events/:id', (req, res) => {
   }
 });
 
+// POST /api/events/:id/status : 大会の状態を進める・戻す
+// 状態を変える唯一の経路（POST /api/events の body の status は無視される）。
+// クライアントは進む前に件数を数えて確認し、ここでは硬い条件だけを 409 で拒む。
+// ロックガードは掛けない（final / archived から戻す・アーカイブするための経路）。
+app.post('/api/events/:id/status', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const to = (req.body || {}).to;
+    if (typeof to !== 'string' || EventStatus.STATES.indexOf(to) === -1) {
+      return res.status(400).json({ error: '不正な状態です' });
+    }
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    const from = EventStatus.of(event);
+    if (!EventStatus.canTransition(from, to)) {
+      return res.status(409).json({
+        error: 'この状態からは進めません',
+        reason: 'transition',
+        from: from,
+        to: to
+      });
+    }
+
+    const players = Array.isArray(event.players) ? event.players : [];
+    // 一巡目の選手が1人もいなければ試合は始められない
+    if (from === 'draft' && to === 'round1' &&
+        players.filter(p => roundOf(p) === 1).length === 0) {
+      return res.status(409).json({ error: '一巡目の選手がいません', reason: 'empty' });
+    }
+    // 二巡目の行が無ければ二巡目は始められない（先に生成する）
+    if (from === 'round1_done' && to === 'round2' &&
+        players.filter(p => roundOf(p) === 2).length === 0) {
+      return res.status(409).json({ error: '二巡目が生成されていません', reason: 'no_round2' });
+    }
+
+    event.status = to;
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    appendHistory(req.params.id, {
+      action: 'status_change',
+      detail: EventStatus.LABELS[from] + ' → ' + EventStatus.LABELS[to]
+    });
+    res.json({ success: true, status: to });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── Player API ──
 
