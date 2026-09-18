@@ -1727,6 +1727,22 @@
     assert('applyFilter: filter が無ければ全件', Courts.applyFilter(fPlayers, null).length, 5);
     assert('applyFilter: 元配列を変えない', ordersOf(fPlayers), ['A-男子-1-1', 'A-男子-1-2', 'A-女子-1-1', 'B-男子-1-1', 'A-男子-2-1']);
 
+    // filter.court は配列でも受ける（PC の見出しフィルタは複数コートを選べる）。
+    // 文字列は後方互換（スマホの選手登録タブはコートのチップが 1 つだけなので文字列のまま）。
+    assert('applyFilter: コートの配列で複数コートが残る',
+      ordersOf(Courts.applyFilter(fPlayers, withFilter({ court: ['A', 'B'] }))),
+      ['A-男子-1-1', 'A-男子-1-2', 'A-女子-1-1', 'B-男子-1-1', 'A-男子-2-1']);
+    assert('applyFilter: コートの配列が 1 つなら文字列と同じ',
+      ordersOf(Courts.applyFilter(fPlayers, withFilter({ court: ['B'] }))), ['B-男子-1-1']);
+    assert('applyFilter: コートの空配列は全件',
+      Courts.applyFilter(fPlayers, withFilter({ court: [] })).length, 5);
+    assert('applyFilter: 配列に無いコートを指定すると 0 件',
+      Courts.applyFilter(fPlayers, withFilter({ court: ['Z'] })).length, 0);
+    assert('applyFilter: コートの配列も他の条件と AND',
+      ordersOf(Courts.applyFilter(fPlayers, withFilter({ court: ['A', 'B'], sex: '女子' }))), ['A-女子-1-1']);
+    assert('defaultFilter: court の既定は空文字のまま（配列にしない）',
+      Courts.defaultFilter().court, '');
+
     var sPlayers = [
       { order: 'A-男子-1-10', name: 'あ', score: 9 },
       { order: 'A-男子-1-2', name: 'い', score: 10 },

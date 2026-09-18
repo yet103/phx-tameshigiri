@@ -118,12 +118,24 @@ var Courts = (function() {
     return { court: '', sex: '', round: 0, newFace: false, noTech: false, query: '' };
   }
 
+  // コートの一致。filter.court は文字列（1 コート）でも配列（複数コート）でも受ける。
+  // '' と空配列は「すべて」。配列は PC の見出しフィルタのために後から足した形で、
+  // スマホの選手登録タブ（admin-players.js）は文字列のまま使い続ける（後方互換）。
+  function courtMatches(want, p) {
+    if (Array.isArray(want)) {
+      if (want.length === 0) return true;
+      return want.indexOf(courtOf(p)) !== -1;
+    }
+    if (!want) return true;
+    return courtOf(p) === want;
+  }
+
   // 絞り込み。すべての条件を AND で適用し、新しい配列を返す。
   function applyFilter(players, f) {
     f = f || defaultFilter();
     var q = normalizeName(f.query);
     return (players || []).filter(function(p) {
-      if (f.court && courtOf(p) !== f.court) return false;
+      if (!courtMatches(f.court, p)) return false;
       if (f.sex && sexOf(p) !== f.sex) return false;
       if (f.round && roundOf(p) !== f.round) return false;
       if (f.newFace && !p.isNewFace) return false;
