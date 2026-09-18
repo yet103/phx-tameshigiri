@@ -85,9 +85,11 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px
    help.html の縦長の図は使わず、desk.js の上部の段階表示と同じ調子で
    横一列のコンパクトな帯にする（指揮官の決定）。ラベルは EventStatus.LABELS を
    そのまま使うので文言の二重定義がない。375px では折り返して 2〜3 段になる。 */
-.home-flow-band { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
+.home-flow-band {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px;
+  margin: 14px 0;
+}
 .home-flow-step {
-  flex: 1 1 96px; min-width: 96px;
   padding: 8px 6px;
   background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px;
   text-align: center;
