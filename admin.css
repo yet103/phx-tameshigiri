@@ -379,6 +379,8 @@ main { padding: 8px 12px 16px; }
 
 /* 選手タブの表の見出し */
 .players-table th { background: var(--band-bg); color: var(--gold-light); border-bottom: 1px solid var(--gold); font-family: var(--mincho); font-weight: normal; }
+/* 並べ替え中の見出し文字は帯の上でも読める金に */
+.players-table th .sort-btn.on { color: var(--gold); }
 
 /* 結果タブの部門見出し */
 .results-section h3 { background: var(--band-bg); color: var(--gold-light); padding: 4px 10px; border-radius: 4px; font-family: var(--mincho); }

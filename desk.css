@@ -418,6 +418,8 @@ a { color: var(--accent); }
 /* 表の見出し。大会一覧・選手表・二巡目の表はすべて .desk-table を共有 */
 .desk-table th { background: var(--band-bg); color: var(--gold-light); border-color: var(--gold); font-family: var(--mincho); }
 .desk-players-table th.col-name { background: var(--band-bg); }
+/* 並べ替え中・ホバーの見出し文字は帯の上でも読める金に */
+.desk-table th .sort-btn.on, .desk-table th .sort-btn:hover { color: var(--gold); }
 
 /* 区画の見出し */
 .desk-section-head h2 { font-family: var(--mincho); padding-bottom: 3px; border-bottom: 1px solid var(--gold); }
