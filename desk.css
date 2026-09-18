@@ -305,9 +305,11 @@ a { color: var(--accent); }
 .desk-match-count { font-size: 13px; color: var(--cell-fail-text); }
 .desk-match-count.done { color: var(--cell-success-text); font-weight: bold; }
 
-/* 二巡目の表。技のセレクトは空のとき赤枠にして未入力を目立たせる */
+/* 二巡目の表。技のセレクトは空のとき赤枠にして未入力を目立たせる。
+   --btn-fail はダークで読みにくいので枠色は --cell-fail-text を使う
+   （「技 未入力 n」の .desk-match-count や desk-paste-bad と同じ変数）。 */
 .desk-match-table select { min-width: 130px; min-height: 30px; }
-.desk-match-table select.empty { border-color: var(--btn-fail); }
+.desk-match-table select.empty { border-color: var(--cell-fail-text); }
 .desk-match-table td.copy { text-align: center; }
 .desk-match-table td.copy .desk-btn { min-height: 30px; padding: 0 10px; font-size: 12px; }
 
