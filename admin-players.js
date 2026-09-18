@@ -715,52 +715,14 @@
 
     btnCsv.addEventListener('click', function() {
       sheet.close();
-      pickCsv(ctx);
+      // ファイル選択は storage.js（PC 運営の選手表と共通）。admin.html には file input を置かない。
+      Storage.pickCsvFile(function(text) { return importCsvText(ctx, text); });
     });
 
     btnBulk.addEventListener('click', function() {
       sheet.close();
       openBulkSheet(ctx);
     });
-  }
-
-  // admin.html には file input を置かない（DOM は計画3との契約）。その場で作って捨てる。
-  function pickCsv(ctx) {
-    var input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-
-    var removed = false;
-    function cleanup() {
-      if (removed) return;
-      removed = true;
-      window.removeEventListener('focus', onFocus);
-      if (input.parentNode) input.parentNode.removeChild(input);
-    }
-    // ファイル選択ダイアログをキャンセルすると change は発火しない。
-    // cancel イベントが取れる環境ではそれで、取れない環境（フォールバック）では
-    // ダイアログを閉じてウィンドウに戻ってきた最初の focus で片付ける。
-    // change が先に来た場合はそちらの removeChild が先に効き、cleanup は何もしない。
-    function onFocus() {
-      // change がこの同じ tick で来ることがある（フォーカスが先に戻る環境）。
-      // ここで即 cleanup すると、その change を取りこぼす。
-      setTimeout(cleanup, 0);
-    }
-    input.addEventListener('cancel', cleanup);
-    window.addEventListener('focus', onFocus);
-
-    input.addEventListener('change', function(e) {
-      var file = e.target.files[0];
-      if (file) {
-        var reader = new FileReader();
-        reader.onload = function(ev) { importCsvText(ctx, ev.target.result); };
-        reader.readAsText(file, 'UTF-8');
-      }
-      cleanup();
-    });
-    input.click();
   }
 
   async function importCsvText(ctx, text) {

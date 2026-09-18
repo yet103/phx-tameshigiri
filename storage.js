@@ -96,15 +96,16 @@ var Storage = (function() {
 
   // --- 大会ファイルの取り込み（PC 運営 desk-events.js とスマホ運営 admin-events.js で共用）---
 
-  // ファイル選択ダイアログを出し、選ばれた JSON ファイルの中身（文字列）を onText に渡す。
+  // ファイル選択ダイアログを出し、選ばれたファイルの中身（UTF-8 の文字列）を onText に渡す。
+  // accept は <input type="file"> の accept 属性（'.json,application/json' など）。
   // onText は Promise を返してもよい（取り込みの完了まで onDone を待たせる）。
   // onDone は選択〜取り込みが終わった時点（成功・失敗・キャンセルのどれでも）で一度だけ
-  // 呼ぶ。呼び出し元はこれでボタンの disabled を戻す。
+  // 呼ぶ。呼び出し元はこれでボタンの disabled を戻す。省略してもよい。
   // ページに <input type="file"> を置かずに済ませるため、その場で作って捨てる。
-  function pickJsonFile(onText, onDone) {
+  function pickTextFile(accept, onText, onDone) {
     var input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,application/json';
+    input.accept = accept;
     input.style.display = 'none';
     document.body.appendChild(input);
 
@@ -161,6 +162,16 @@ var Storage = (function() {
       cleanup();
     });
     input.click();
+  }
+
+  // 大会のエクスポートファイル（JSON）を選ぶ。desk-events.js / admin-events.js が使う。
+  function pickJsonFile(onText, onDone) {
+    pickTextFile('.json,application/json', onText, onDone);
+  }
+
+  // 選手の CSV を選ぶ。desk-players.js / admin-players.js の「CSV 取り込み」が使う。
+  function pickCsvFile(onText, onDone) {
+    pickTextFile('.csv,text/csv', onText, onDone);
   }
 
   // 取り込むファイルがこのアプリのエクスポートかどうか。
@@ -257,6 +268,8 @@ var Storage = (function() {
     adminHref: adminHref,
     todayLocal: todayLocal,
     pickJsonFile: pickJsonFile,
+    pickTextFile: pickTextFile,
+    pickCsvFile: pickCsvFile,
     checkBundle: checkBundle,
     downloadText: downloadText,
     downloadCsv: downloadCsv,
