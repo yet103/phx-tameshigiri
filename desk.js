@@ -13,9 +13,9 @@ var Desk = (function() {
     { tab: 'events',     label: '大会一覧' },
     { tab: 'setup',      label: '基本情報' },
     { tab: 'techniques', label: '技と配点' },
-    { tab: 'players',    label: '選手' },
-    { tab: 'match',      label: '試合' },
-    { tab: 'results',    label: '結果' }
+    { tab: 'players',    label: '選手登録' },
+    { tab: 'match',      label: '試合進行' },
+    { tab: 'results',    label: '結果確認' }
   ];
   var TABS = NAV.map(function(n) { return n.tab; });
 

@@ -1,4 +1,4 @@
-// 結果タブ：サーバーの順位（computeRanking）を描き、発表・共有の入口を置く
+// 結果確認タブ：サーバーの順位（computeRanking）を描き、発表・共有の入口を置く
 var AdminResults = (function() {
 
   var CATEGORIES = [

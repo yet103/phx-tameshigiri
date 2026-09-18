@@ -1,4 +1,4 @@
-// 選手タブ（#players/<大会ID>）。選手の一覧・追加・編集・削除。
+// 選手登録タブ（#players/<大会ID>）。選手の一覧・追加・編集・削除。
 (function() {
   // 絞り込みと並べ替えの状態。形は Courts.defaultFilter() / Courts.defaultSort()。
   // 大会が変われば既定に戻す。選手の追加・編集後の再描画（Admin.reloadEvent）では保つ。
@@ -11,7 +11,7 @@
   var techOwner = null;
 
   // 絞り込み（Courts.applyFilter）と並べ替え（Courts.sortBy）は courts.js の純粋関数。
-  // 並び順の既定は巡目 → コート → 性別 → 番号（進行タブ admin-round.js と同じ compareOrder）。
+  // 並び順の既定は巡目 → コート → 性別 → 番号（試合進行タブ admin-round.js と同じ compareOrder）。
 
   function adoptTechniques(ctx) {
     techOwner = ctx.eventId;
@@ -39,7 +39,7 @@
     var head = document.createElement('div');
     head.className = 'section-head';
     var h2 = document.createElement('h2');
-    h2.textContent = '選手 ' + ctx.players.length + '名';
+    h2.textContent = '選手登録 ' + ctx.players.length + '名';
     var spacer = document.createElement('div');
     spacer.className = 'spacer';
     var btnMenu = document.createElement('button');

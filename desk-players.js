@@ -1,5 +1,5 @@
 // 選手の区画（#players/<id>）。編集できる表。
-// 絞り込み・並べ替えはスマホ運営の選手タブと同じ純粋関数（Courts.applyFilter / Courts.sortBy）。
+// 絞り込み・並べ替えはスマホ運営の選手登録タブと同じ純粋関数（Courts.applyFilter / Courts.sortBy）。
 // 帯は PC 幅なので 1 段に並べる（スマホの admin-players.js は 3 段）。
 // セルの編集・行の追加・貼り付け・削除はこのあとのタスクで足す。
 (function() {
@@ -66,7 +66,7 @@
     var head = document.createElement('div');
     head.className = 'desk-section-head';
     var h2 = document.createElement('h2');
-    h2.textContent = '選手';
+    h2.textContent = '選手登録';
     var spacer = document.createElement('div');
     spacer.className = 'spacer';
     var count = document.createElement('span');
@@ -100,7 +100,7 @@
     }
 
     // 帯。チップは押すたびに作り直すが、検索の入力欄は作り直さない
-    // （入力中の文字と IME の変換を保つ。スマホの選手タブと同じ理由）。
+    // （入力中の文字と IME の変換を保つ。スマホの選手登録タブと同じ理由）。
     var bar = document.createElement('div');
     bar.className = 'desk-players-bar';
     var chips = document.createElement('div');

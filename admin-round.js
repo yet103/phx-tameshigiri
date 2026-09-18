@@ -1,4 +1,4 @@
-// 進行タブ：二巡目の生成と技の入力
+// 試合進行タブ：二巡目の生成と技の入力
 // 設計書の選択 A「一覧で埋めていく」。行タップで TechPicker のシートを開き、
 // シートを閉じたときに PATCH で保存する。
 var AdminRound = (function() {
@@ -67,7 +67,7 @@ var AdminRound = (function() {
     await Admin.reloadEvent();
   }
 
-  // 進行タブの先頭の段階表示。現在の状態と「次へ進む」。
+  // 試合進行タブの先頭の段階表示。現在の状態と「次へ進む」。
   // 件数は下の .round-stat（stageCountText）に出す。
   // 「戻す」と「二巡目なしで終了」は ⋯ メニュー（buildMenu）にある。
   function buildStage(st) {
@@ -384,7 +384,7 @@ var AdminRound = (function() {
         return;
       }
       // nextRoundConflictMessage は unscored / exists の文言しか持たない
-      if (!confirm(Courts.nextRoundConflictMessage(result, '選手タブでコートを設定してください'))) return;
+      if (!confirm(Courts.nextRoundConflictMessage(result, '選手登録タブでコートを設定してください'))) return;
       result = await Api.generateNextRound(eventId, true);
       if (ctx.isStale()) return;
       if (!result || result.blocked) {

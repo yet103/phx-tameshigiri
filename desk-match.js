@@ -25,7 +25,7 @@
     var head = document.createElement('div');
     head.className = 'desk-section-head';
     var h2 = document.createElement('h2');
-    h2.textContent = '試合';
+    h2.textContent = '試合進行';
     var spacer = document.createElement('div');
     spacer.className = 'spacer';
     head.appendChild(h2);
@@ -504,7 +504,7 @@
 
   // --- 二巡目の生成 ---
   // 番号規則はサーバーの生成 API が唯一の実装。クライアントは確認と再送だけを持つ。
-  // 確認文言・結果文言は courts.js（スマホ運営の進行タブと共通）。
+  // 確認文言・結果文言は courts.js（スマホ運営の試合進行タブと共通）。
   async function onGenerate(ctx) {
     var src = (ctx.players || []).filter(function(p) { return Courts.roundOf(p) === 1; });
     var scored = src.filter(Courts.isScored).length;
@@ -531,7 +531,7 @@
         return;
       }
       // nextRoundConflictMessage は unscored / exists の文言しか持たない
-      if (!confirm(Courts.nextRoundConflictMessage(result, '「選手」の区画でコートを設定してください'))) return;
+      if (!confirm(Courts.nextRoundConflictMessage(result, '「選手登録」の区画でコートを設定してください'))) return;
       if (btn) btn.disabled = true;
       result = await Api.generateNextRound(ctx.eventId, true);
       if (ctx.isStale()) return;

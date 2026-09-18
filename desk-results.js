@@ -1,5 +1,5 @@
 // 結果の区画（#results/<id>）。順位・発表モード・共有リンク・配信ボード。
-// スマホ運営の結果タブ（admin-results.js）と同じ内容を PC 幅で3列に並べる。
+// スマホ運営の結果確認タブ（admin-results.js）と同じ内容を PC 幅で3列に並べる。
 // 順位はサーバーが計算したもの（GET /api/events/:id/ranking）をそのまま描く。
 // 共有トークンは Api.createShareLink（冪等。既にあれば同じものが返る）。
 (function() {
@@ -15,7 +15,7 @@
     var head = document.createElement('div');
     head.className = 'desk-section-head';
     var h2 = document.createElement('h2');
-    h2.textContent = '結果';
+    h2.textContent = '結果確認';
     head.appendChild(h2);
     container.appendChild(head);
 
