@@ -18,7 +18,7 @@ const PROTECTED_FILES = new Set([
   'index.html', 'admin.html', 'ranking.html', 'techniques.html',
   'style.css', 'admin.css',
   'app.js', 'admin.js', 'admin-events.js', 'admin-players.js', 'admin-round.js', 'admin-results.js',
-  'courts.js', 'data.js', 'outbox.js', 'route.js', 'storage.js', 'techpicker.js'
+  'courts.js', 'data.js', 'outbox.js', 'route.js', 'status.js', 'storage.js', 'techpicker.js'
 ]);
 // 開発時だけ配信する（認証必須）。本番から破壊的テストページを消す
 const DEV_ONLY_PROTECTED_FILES = new Set(['test.html']);
