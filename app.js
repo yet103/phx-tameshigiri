@@ -738,7 +738,9 @@ var App = (function() {
 
   // 一つの形で途中失敗したら、それ以降の太刀（配点のある太刀）を無効表示にする。
   // 最初の×より前・×が無い行はここで押せる状態（未・成功・失敗）に戻す。
-  // 戻り値: この行に無効表示のセルが残っている（できた）かどうか
+  // 戻り値: この呼び出しで新しく無効になったセルがあるかどうか。
+  // 既に無効表示だったセルを塗り直しただけ（例: 失敗点より前のセルを触っただけ）では
+  // true にしない。履歴の「（以降の太刀は無効）」をその操作でだけ足すため。
   function applyVoiding(tr) {
     var idx = Scoring.failedAt(rowValues(tr));
     var voided = false;
@@ -746,11 +748,12 @@ var App = (function() {
       var cell = tr.querySelector('[data-strike="' + s + '"]');
       if (!cell || cell.classList.contains('disabled')) continue;
       if (idx !== -1 && s > idx) {
+        var wasVoided = cell.classList.contains('voided');
         cell.dataset.value = '';
         cell.classList.remove('success', 'fail', 'empty');
         cell.classList.add('voided');
         cell.textContent = '—';
-        voided = true;
+        if (!wasVoided) voided = true;
       } else if (cell.classList.contains('voided')) {
         cell.classList.remove('voided');
         setCellDisplay(cell, cell.dataset.value || '');
