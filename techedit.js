@@ -260,9 +260,11 @@ var TechEdit = (function() {
     btnCopy.addEventListener('click', openCopySheet);
 
     btnSave.addEventListener('click', async function() {
+      var seq = loadSeq;   // 対象や画面が切り替えられていないかを await のたびに確かめる
       var techs = collectTechs();
       if (!targetId) {
         var r0 = await Api.saveTechniques(techs);
+        if (seq !== loadSeq) return;
         if (!r0) { alert('保存に失敗しました。通信を確認してください。'); return; }
         if (!r0.success) { alert(r0.error || '保存に失敗しました。'); return; }
         dirty = false;
@@ -271,6 +273,7 @@ var TechEdit = (function() {
         return;
       }
       var r = await Api.saveEventTechniques(targetId, techs);
+      if (seq !== loadSeq) return;
       if (!r) { alert('保存に失敗しました。通信を確認してください。'); return; }
       if (!r.success) { alert(r.error || '保存に失敗しました。'); return; }
       dirty = false;
@@ -281,14 +284,17 @@ var TechEdit = (function() {
     });
 
     btnReset.addEventListener('click', async function() {
+      var seq = loadSeq;   // 対象や画面が切り替えられていないかを await のたびに確かめる
       if (!targetId) {
         if (!confirm('デフォルト設定に戻します。よろしいですか？')) return;
         var ok = await Api.resetTechniques();
+        if (seq !== loadSeq) return;
         if (!ok) { alert('リセットに失敗しました。'); return; }
         // リセット自体は成功しているので、再取得に失敗しても表は出す。
         // ただしその場合に表示できるのは端末側の既定値であって、
         // サーバーが実際に採点で使う値ではない。黙って同じ顔をさせない。
         var td = await Api.loadTechniques();
+        if (seq !== loadSeq) return;
         if (td) {
           renderTable(td.techniques);
           alert('デフォルトに戻しました。');
@@ -302,8 +308,10 @@ var TechEdit = (function() {
       }
       if (!confirm('この大会の技リストを雛形（新規大会の初期値）で置き換えます。\nよろしいですか？')) return;
       var okEv = await Api.resetEventTechniques(targetId);
+      if (seq !== loadSeq) return;
       if (!okEv) { alert('リセットに失敗しました。'); return; }
       var data = await Api.loadEventTechniques(targetId);
+      if (seq !== loadSeq) return;
       if (!data) {
         alert('雛形に戻しました。\nただし最新の技リストを取得できませんでした。再読み込みしてください。');
         return;
