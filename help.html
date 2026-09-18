@@ -43,6 +43,18 @@
     <p>大会は、大会を作るところから発表までを一本の流れで進めます。</p>
     <p><span class="term">一巡目</span>＝全員が1回ずつ斬る回です。<span class="term">二巡目</span>＝同じ選手がもう1回斬る回です。得点は一巡目と二巡目を合わせた合計で競います。</p>
 
+    <p>大会には <span class="term">状態</span> があります。運営者が <span class="ui">次へ進む</span> のボタンで1段ずつ進め、自動では変わりません。</p>
+    <ol class="status-steps">
+      <li><span class="ui">準備中</span> — 技と配点・選手を自由に入れられます。採点はまだできません。</li>
+      <li><span class="ui">一巡目 進行中</span> — コートの端末で一巡目を採点します。</li>
+      <li><span class="ui">一巡目終了</span> — 二巡目を作り、技を入れます。</li>
+      <li><span class="ui">二巡目 進行中</span> — コートの端末で二巡目を採点します。</li>
+      <li><span class="ui">二巡目終了</span> — 順位を確かめます。直したいことがあれば1つ前に戻せます。</li>
+      <li><span class="ui">最終結果</span> — 得点・選手・技を編集できなくなります。発表・共有・ファイル保存はできます。</li>
+      <li><span class="ui">アーカイブ</span> — 見るだけ。大会一覧の「アーカイブ」欄に移り、採点画面の選択肢から消えます。</li>
+    </ol>
+    <div class="note">二巡目を行わない大会は、<span class="ui">一巡目終了</span> の ⋯ メニューから <span class="ui">二巡目なしで終了</span> で <span class="ui">最終結果</span> へ進めます。どの状態からも ⋯ メニューの <span class="ui">戻す</span> で1つ前に戻せます。</div>
+
     <div class="diagram">
       <svg viewBox="0 0 360 698" role="img" aria-label="大会を作る、選手を登録、一巡目の採点、二巡目を生成して技を入力、二巡目の採点、結果の確認、発表・共有、という順に進む流れ図。端末の役割は、運営者のスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク、配信PC（OBS）が配信用ボード。">
         <defs>
@@ -116,6 +128,7 @@
     </div>
 
     <p>大会のデータはサーバーに1つだけあります。運営者のスマホも、各コートのタブレットも、同じ大会を読み書きします。</p>
+    <p>図の各段は、上の状態の 2〜5 にあたります。<span class="term">運営画面で状態を進めないと、コートの端末は採点できません</span>。</p>
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
   </section>
 
@@ -325,6 +338,17 @@
       </svg>
     </div>
 
+    <h3>試合を開始する</h3>
+    <p>選手の登録が済んだら、運営画面の <span class="ui">進行</span> タブを開きます。いちばん上に <span class="ui">現在の状態: 準備中</span> と <span class="ui">試合開始 ▶</span> のボタンが出ています。</p>
+    <ol>
+      <li><span class="ui">試合開始 ▶</span> を押す。<span class="msg">一巡目 n名。技が未入力の選手が m名います。試合を開始しますか？</span> の確認で <span class="ui">OK</span> を押すと <span class="ui">一巡目 進行中</span> になります。</li>
+      <li>コートの端末で大会を選び直すと、採点できるようになります。</li>
+      <li>一巡目が終わったら <span class="ui">一巡目を終了 ▶</span> を押します。ここで初めて <span class="ui">二巡目を生成</span> が押せるようになります。</li>
+      <li>二巡目の技を入れ終えたら <span class="ui">二巡目を開始 ▶</span>。コートの端末で大会を選び直すと二巡目の選手が出ます。</li>
+      <li>二巡目が終わったら <span class="ui">二巡目を終了 ▶</span>、順位を確かめてから <span class="ui">最終結果を確定 ▶</span>。</li>
+    </ol>
+    <div class="note">押し間違えても ⋯ メニューの <span class="ui">戻す</span> で1つ前に戻せます。<span class="ui">最終結果</span> のあとも <span class="ui">戻す</span> で編集に戻れます。</div>
+
     <h3>コートの端末で採点画面を開く</h3>
     <p>運営画面の <span class="ui">進行</span> タブで、そのコートのチップ（<span class="ui">A コート</span> や <span class="ui">B コート</span>）を押してから <span class="ui">採点画面へ</span> を押します。絞り込み中のコートのまま採点画面が開きます。</p>
     <p>開いた採点画面の URL には大会とコートが入っています（<code>#event/大会ID/コート</code>）。この URL のおかげで、当日はタブを閉じたり端末を再起動したりしても、同じ大会・同じコートに戻れます。</p>
@@ -337,7 +361,7 @@
       <figcaption>
         <span class="cap-head">採点画面（タブレット。確定済みの選手）— 画面の上から順に</span>
         <ul>
-          <li>①大会バー — 大会とコートを選びます。右の <span class="ui">● 保存済み</span> がサーバーへの保存の様子です。同じバーの <span class="ui">大会削除</span> は確認1回で消えるので、押し間違えに注意してください。</li>
+          <li>①大会バー — 大会とコートを選びます。右の <span class="ui">● 保存済み</span> がサーバーへの保存の様子です。大会の作成と削除は運営画面にあります（バーの <span class="ui">大会の作成は運営画面で</span> のリンクから開けます）。選択肢にはアーカイブ済みの大会は出ず、採点できる大会が先頭に並びます。</li>
           <li>②選手の帯 — コートのバッジ・順番・名前。<span class="ui">◀ 前の選手</span> <span class="ui">次の選手 ▶</span> で移ります。</li>
           <li>③タイマー — <span class="ui">▶ 開始</span> <span class="ui">■ 停止</span> <span class="ui">↺ リセット</span>。5分から0へ向かって数えます。選手を切り替えると自動で <span class="ui">05:00</span> に戻ります。</li>
           <li>④採点表 — 技名をタップするとその行が選ばれます（黒く反転します）。太刀のセルは押すたびに <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と変わります。灰色のセルは、その技で打たない太刀です。<span class="term">行がまるごと灰色で得点の欄も空のときは、その技名が技術リストに無い状態です</span>（配点を引けず0点のままになります）。§5 の「技が見つからない」を見てください。</li>
@@ -360,10 +384,20 @@
       <figcaption>スマホ幅でも同じ採点画面が使えます。項目が縦に積まれるだけで、操作は同じです。</figcaption>
     </figure>
 
+    <h3>採点画面の状態バナー</h3>
+    <p>採点画面では、大会を選ぶバーのすぐ下に今の状態が出ます。</p>
+    <ul>
+      <li><span class="ui">一巡目 進行中</span> / <span class="ui">二巡目 進行中</span> — 採点できます。選手一覧にはその巡目の選手だけが並びます。</li>
+      <li><span class="msg">この大会は「準備中」です。運営画面で「試合開始」を押すと採点できます。</span> — 運営画面で状態を進めてから、<span class="term">この画面で大会を選び直して</span>ください。</li>
+      <li><span class="msg">この大会は「最終結果」です。得点は編集できません。運営画面で「戻す」を押すと編集できます。</span> — 確定後は、サーバーが得点の保存そのものを断ります。</li>
+    </ul>
+    <p>採点できない状態のときは <span class="ui">確定</span> <span class="ui">形成功</span> <span class="ui">失敗</span> と得点・補正点・備考の入力が無効になります。前後の選手の移動・タイマー・<span class="ui">CSVエクスポート</span>・<span class="ui">HTML保存</span> は使えます。</p>
+    <div class="note">状態は端末どうしで自動には伝わりません。運営者が状態を変えたら、コートの端末では<span class="term">大会を選び直して</span>ください（選手を足したときと同じです）。</div>
+
     <h3>二巡目に進む</h3>
-    <p>一巡目が終わったら、運営画面の <span class="ui">進行</span> タブで二巡目を作ります。</p>
+    <p>一巡目が終わったら、運営画面の <span class="ui">進行</span> タブで <span class="ui">一巡目を終了 ▶</span> を押してから二巡目を作ります。<span class="term">状態が <span class="ui">一巡目終了</span> でないと <span class="ui">二巡目を生成</span> は押せません</span>（ボタンが灰色のままです）。</p>
     <ol>
-      <li>上に <span class="ui">一巡目 採点済み 8 / 8</span> のように進み具合が出ます。全員終わっているか確かめます。</li>
+      <li>上に <span class="ui">採点済み 8 / 8</span> のように進み具合が出ます。全員終わっているか確かめてから <span class="ui">一巡目を終了 ▶</span> を押します。</li>
       <li><span class="ui">二巡目を生成</span> を押す。<span class="msg">一巡目 採点済み x / y。全コート分の二巡目を作ります（採点画面にも反映されます）。よろしいですか？</span> の確認で <span class="ui">OK</span> を押すと、全コート分の二巡目の行ができます。</li>
       <li>行ごとに <span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> をタップして技を入れます。赤い枠はまだ空という意味です。3つ入れるのが基本です。</li>
       <li>一巡目と同じ技でよければ <span class="ui">一巡目と同じ技をコピー</span> を押すだけで済みます。</li>
