@@ -1877,9 +1877,16 @@
     assert('parsePasteRows: 閉じ忘れの引用符は ok:false で理由を返す',
       pRows('"庚 七郎,B').map(function(r) { return [r.ok, r.error]; }),
       [[false, '引用符が閉じていません']]);
-    assert('parsePasteRows: タブ区切りに引用符が含まれても名前の一部として扱う',
-      pBrief('山田"太郎\tA\t\t\t\t\t'),
-      ['1|山田"太郎|A|false|false|//|true|']);
+    // 裸の " はタブ区切りでもカンマ区切りと同じ規則で断る（列がずれて黙って登録されるより安全）
+    assert('parsePasteRows: タブ区切りでも裸の引用符は閉じていないとして断る',
+      pRows('山田"太郎\tA\t\t\t\t\t').map(function(r) { return [r.ok, r.error]; }),
+      [[false, '引用符が閉じていません']]);
+    assert('parsePasteRows: タブ区切りでも Excel の引用符付きセルを 1 列として読む',
+      pBrief('"山田\t太郎"\tA\t\t\t\t\t'),
+      ['1|山田\t太郎|A|false|false|//|true|']);
+    assert('parsePasteRows: タブ区切りで引用符が閉じていなければ断る',
+      pRows('"山田\tA').map(function(r) { return [r.ok, r.error]; }),
+      [[false, '引用符が閉じていません']]);
 
     // ---- 採点済みの選手の性別・技を変えたときの警告（PC 運営とスマホ運営で共用） ----
     // 技の差し替えは result 文字列の長さを変えないので採点画面が気付けない。必ず断る。

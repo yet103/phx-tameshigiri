@@ -704,6 +704,9 @@
       // reloadEvent は必ず renderSeq を上げるので、ここでは ctx.isStale() ではなく
       // 「大会が変わったか」で見る（貼り付け・CSV と同じ規約）。
       if (Desk.currentEventId() !== eventId) return;
+      // reloadEvent が取得に失敗すると再描画されず、登録済みの名前が入った行が
+      // 無効のまま残る（実ブラウザでは Esc も届かない）。登録自体は済んでいるので畳む。
+      if (tr.isConnected) { cancelDraft(); return; }
       var next = view && view.wrap.querySelector('.desk-draft-row input[type="text"]');
       if (next) next.focus();
     }

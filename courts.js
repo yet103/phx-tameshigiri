@@ -352,13 +352,12 @@ var Courts = (function() {
       if (!line.trim()) return;   // 空行は飛ばす（行番号は元のまま）
       var quoteError = '';
       var rawCols;
-      if (line.indexOf('\t') >= 0) {
-        rawCols = line.split('\t');
-      } else {
-        var split = splitDelimited(line, ',');
-        rawCols = split.fields;
-        quoteError = split.error;
-      }
+      // Excel はセルにタブ・改行・" が含まれると TSV でも引用符で括るので、
+      // タブ区切りでもカンマ区切りと同じ規則で切る（列がずれて黙って登録されるより、
+      // 閉じていない引用符で断るほうが安全）。
+      var split = splitDelimited(line, line.indexOf('\t') >= 0 ? '\t' : ',');
+      rawCols = split.fields;
+      quoteError = split.error;
       var cols = rawCols.map(function(s) { return String(s).trim(); });
       if (!seenFirst) {
         seenFirst = true;
