@@ -19,6 +19,10 @@ var Desk = (function() {
   ];
   var TABS = NAV.map(function(n) { return n.tab; });
 
+  // 上部に並べる段階。archived は並べない（アーカイブは final の「次へ進む」で、
+  // 戻すときは prev が final を返す）。
+  var STAGE_STEPS = ['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final'];
+
   var defs = {};
   var activeDef = null;    // いま描いている区画（DOM から外す前に destroy を呼ぶ）
   var main = null, head = null, nav = null;
@@ -246,6 +250,109 @@ var Desk = (function() {
     line.appendChild(name);
     line.appendChild(meta);
     head.appendChild(line);
+    head.appendChild(buildStage(EventStatus.of(event), event.players || []));
+  }
+
+  // 段階の帯。現在の状態を強調し、通過した状態を塗る。右に「戻す」「次へ進む」。
+  function buildStage(st, players) {
+    var wrap = document.createElement('div');
+    wrap.className = 'desk-stage';
+
+    var steps = document.createElement('div');
+    steps.className = 'desk-stage-steps';
+    var cur = STAGE_STEPS.indexOf(st);   // archived は -1（全部を通過済みとして塗る）
+    STAGE_STEPS.forEach(function(s, i) {
+      if (i > 0) {
+        var sep = document.createElement('span');
+        sep.className = 'desk-stage-sep';
+        sep.textContent = '─';
+        steps.appendChild(sep);
+      }
+      var el = document.createElement('span');
+      el.className = 'desk-stage-step' +
+        (s === st ? ' on' : '') +
+        ((cur === -1 || i < cur) ? ' done' : '');
+      el.textContent = (s === st ? '●' : '○') + EventStatus.LABELS[s];
+      steps.appendChild(el);
+    });
+    wrap.appendChild(steps);
+
+    if (st === 'archived') {
+      var badge = document.createElement('span');
+      badge.className = 'desk-stage-archived';
+      badge.textContent = EventStatus.LABELS.archived;
+      wrap.appendChild(badge);
+    }
+
+    var count = document.createElement('span');
+    count.className = 'desk-stage-count';
+    count.id = 'deskStageCount';
+    count.textContent = Courts.stageCountText(st, players);
+    wrap.appendChild(count);
+
+    var actions = document.createElement('div');
+    actions.className = 'desk-stage-actions';
+
+    var back = EventStatus.prev(st, players);
+    if (back) {
+      var btnBack = document.createElement('button');
+      btnBack.type = 'button';
+      btnBack.className = 'desk-btn';
+      btnBack.id = 'btnDeskBack';
+      btnBack.textContent = '◀ ' + EventStatus.LABELS[back] + ' に戻す';
+      btnBack.addEventListener('click', function() { applyStatus(st, back); });
+      actions.appendChild(btnBack);
+    }
+
+    // 二巡目を行わずに最終結果へ（一巡目終了のときだけ）
+    if (st === 'round1_done') {
+      var btnSkip = document.createElement('button');
+      btnSkip.type = 'button';
+      btnSkip.className = 'desk-btn';
+      btnSkip.id = 'btnDeskSkipRound2';
+      btnSkip.textContent = '二巡目なしで終了';
+      btnSkip.addEventListener('click', function() { applyStatus(st, 'final'); });
+      actions.appendChild(btnSkip);
+    }
+
+    var nx = EventStatus.next(st);
+    if (nx) {
+      var btnNext = document.createElement('button');
+      btnNext.type = 'button';
+      btnNext.className = 'desk-btn primary';
+      btnNext.id = 'btnDeskNext';
+      btnNext.textContent = EventStatus.NEXT_LABELS[st] + ' ▶';
+      btnNext.addEventListener('click', function() { applyStatus(st, nx); });
+      actions.appendChild(btnNext);
+    }
+    wrap.appendChild(actions);
+    return wrap;
+  }
+
+  // 状態を変える。確認文言は courts.js（スマホ運営と共通）。
+  // 失敗の理由はサーバーの文言をそのまま出し、読み直す
+  // （transition の 409 は他の端末が先に進めていた場合）。
+  async function applyStatus(from, to) {
+    var eventId = selectedEventId;
+    var players = (currentEvent && currentEvent.players) || [];
+    if (!eventId) return;
+    if (!confirm(Courts.statusConfirmMessage(from, to, players))) return;
+    var seq = renderSeq;
+    var res = await Api.changeStatus(eventId, to);
+    if (seq !== renderSeq || selectedEventId !== eventId) return;   // 通信中に画面を離れた
+    if (!res) {
+      alert('状態を変えられませんでした。通信を確認してください。');
+      return;
+    }
+    if (!res.ok) {
+      alert(res.error);
+      await reloadEvent();   // 他の端末が先に進めていた可能性がある
+      return;
+    }
+    toast(EventStatus.LABELS[to] + ' にしました');
+    // 試合開始に成功したら、コート端末で使う採点画面を別ウィンドウで開く
+    if (from === 'draft' && to === 'round1') openScoring(eventId, '');
+    await reloadEvent();
   }
 
   function renderNav() {
