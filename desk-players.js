@@ -889,41 +889,51 @@
     return menu.el;
   }
 
+  // 削除の二重実行ガード。confirm() が開いている間やサーバーとの通信中に、
+  // 別の行やもう一度同じ行から重ねて呼ばれても弾く（画面全体で 1 件ずつ）。
+  var deleteBusy = false;
+
   // 削除。採点済みは 409 で得点を返してくるので、もう一度確認して force で消す
   // （admin-players.js の編集シートと同じ流れ・同じ文言）。
   async function onDelete(ctx, p) {
-    // 一巡目の行だけ「二巡目の行は残ります」と断る（二巡目の行自体を消すときは不要）
-    var roundFragment = (Courts.roundOf(p) === 1) ? '二巡目の行は残ります。\n' : '';
-    if (!confirm(
-      '選手「' + (p.name || '') + '」（' + (p.order || '') + '）を削除します。\n' +
-      roundFragment +
-      'よろしいですか？'
-    )) return;
-
-    var res = await Api.deletePlayer(ctx.eventId, p.id, false);
-    if (ctx.isStale()) return;
-
-    if (res && res.blocked && res.reason === 'locked') {
-      alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
-      return;
-    }
-    if (res && res.blocked) {
-      // 採点済みガード。得点を出してもう一度確認し、承諾したときだけ force。
-      var bp = res.player || { name: p.name, order: p.order, score: p.score };
+    if (deleteBusy) return;
+    deleteBusy = true;
+    try {
+      // 一巡目の行だけ「二巡目の行は残ります」と断る（二巡目の行自体を消すときは不要）
+      var roundFragment = (Courts.roundOf(p) === 1) ? '二巡目の行は残ります。\n' : '';
       if (!confirm(
-        '「' + bp.name + '」（' + bp.order + '）は採点済みです（' + bp.score + '点）。\n' +
-        '削除すると採点結果は戻せません。' + roundFragment + '\n' +
-        '本当に削除しますか？'
+        '選手「' + (p.name || '') + '」（' + (p.order || '') + '）を削除します。\n' +
+        roundFragment +
+        'よろしいですか？'
       )) return;
-      res = await Api.deletePlayer(ctx.eventId, p.id, true);
+
+      var res = await Api.deletePlayer(ctx.eventId, p.id, false);
       if (ctx.isStale()) return;
+
+      if (res && res.blocked && res.reason === 'locked') {
+        alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        return;
+      }
+      if (res && res.blocked) {
+        // 採点済みガード。得点を出してもう一度確認し、承諾したときだけ force。
+        var bp = res.player || { name: p.name, order: p.order, score: p.score };
+        if (!confirm(
+          '「' + bp.name + '」（' + bp.order + '）は採点済みです（' + bp.score + '点）。\n' +
+          '削除すると採点結果は戻せません。' + roundFragment + '\n' +
+          '本当に削除しますか？'
+        )) return;
+        res = await Api.deletePlayer(ctx.eventId, p.id, true);
+        if (ctx.isStale()) return;
+      }
+      if (res !== true) {
+        alert('選手の削除に失敗しました。');
+        return;
+      }
+      Desk.toast('削除しました');
+      await Desk.reloadEvent();
+    } finally {
+      deleteBusy = false;
     }
-    if (res !== true) {
-      alert('選手の削除に失敗しました。');
-      return;
-    }
-    Desk.toast('削除しました');
-    await Desk.reloadEvent();
   }
 
   // CSV 取り込み（admin-players.js と同じ流れ）。
