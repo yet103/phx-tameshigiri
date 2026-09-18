@@ -226,6 +226,10 @@
     bindPopoverCloseOnce();
     var box = document.createElement('div');
     box.className = 'desk-filter-pop';
+    // 中のボタン（「すべて選択」など）を押すと中身が作り直され、click が document まで
+    // 泡立つ頃には押した要素が DOM から外れていて「外側クリック」に誤判定される。
+    // ここで止めて外側クリック扱いにしない。
+    box.addEventListener('click', function(e) { e.stopPropagation(); });
     document.body.appendChild(box);
     popover = { el: box, btn: btn, col: col };
     rebuildPopover();
