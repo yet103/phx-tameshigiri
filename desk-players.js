@@ -655,9 +655,10 @@
       if (busy) return;
       var name = input.value.trim();
       if (!name) { cancelDraft(); return; }
+      var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する（貼り付け・CSV と同じ規約）
       busy = true;
       setDisabled(true);
-      var created = await Api.createPlayer(ctx.eventId, {
+      var created = await Api.createPlayer(eventId, {
         name: name, court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace,
         tech1: d.tech1, tech2: d.tech2, tech3: d.tech3, round: 1
       });
@@ -681,7 +682,9 @@
       // 続けて打ち込めるよう、同じコート・性別・新人でもう 1 行出す
       draft = { court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace };
       await Desk.reloadEvent();
-      if (ctx.isStale()) return;
+      // reloadEvent は必ず renderSeq を上げるので、ここでは ctx.isStale() ではなく
+      // 「大会が変わったか」で見る（貼り付け・CSV と同じ規約）。
+      if (Desk.currentEventId() !== eventId) return;
       var next = view && view.wrap.querySelector('.desk-draft-row input[type="text"]');
       if (next) next.focus();
     }
