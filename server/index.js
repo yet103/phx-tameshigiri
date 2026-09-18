@@ -286,6 +286,20 @@ function appendHistory(eventId, entry) {
   writeJsonAtomic(historyPath, data);
 }
 
+// final / archived の大会への書き込みを拒む。
+// 拒んだら 409 を返して true。呼び出し側は必ず `if (rejectIfLocked(res, event)) return;` の形で使う。
+// 見た目の制限だけにしないため、画面側の無効化とは別にサーバーでも止める。
+function rejectIfLocked(res, event) {
+  const st = EventStatus.of(event);
+  if (!EventStatus.isLocked(st)) return false;
+  res.status(409).json({
+    error: 'この大会は最終結果を確定済みです',
+    reason: 'locked',
+    status: st
+  });
+  return true;
+}
+
 // 順位の集計。順位ロジックの唯一の実装。
 // 行ごとに isFemale で男女に振り分け、isNewFace なら新人にも入れる。
 // 氏名で合算する（一巡目＋二巡目）。得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
@@ -476,6 +490,8 @@ app.post('/api/events', (req, res) => {
     if (fs.existsSync(eventPath)) {
       try {
         const prevForStatus = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+        // 確定済みの大会を丸ごと上書きさせない（得点・選手・技が消える）
+        if (rejectIfLocked(res, prevForStatus)) return;
         carriedStatus = EventStatus.of(prevForStatus);
       } catch (e) {
         // 壊れた既存ファイルは上書きを止めない（draft のまま）
@@ -642,6 +658,7 @@ app.post('/api/events/:id/players', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     if (!Array.isArray(event.players)) event.players = [];
 
     const isFemale = body.isFemale === true;
@@ -699,6 +716,7 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     if (!Array.isArray(event.players)) event.players = [];
 
     const isFemale = body.isFemale === true;
@@ -748,6 +766,7 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     if (!Array.isArray(event.players)) event.players = [];
     const playerIndex = event.players.findIndex(p => p && p.id === req.params.playerId);
 
@@ -837,6 +856,7 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     const players = Array.isArray(event.players) ? event.players : [];
     const idx = players.findIndex(p => p && p.id === req.params.playerId);
     if (idx === -1) {
@@ -874,6 +894,7 @@ app.post('/api/events/:id/import', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     const { csvText, mode, force } = req.body;
 
     // replace は players 配列を丸ごと置換するため、採点済みデータがあると
@@ -1084,6 +1105,7 @@ app.put('/api/events/:id/techniques', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     event.techniques = cloneTechniques(body.techniques);
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
@@ -1103,6 +1125,7 @@ app.delete('/api/events/:id/techniques', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     event.techniques = cloneTechniques(readTechniques().techniques);
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
@@ -1378,6 +1401,7 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     const players = Array.isArray(event.players) ? event.players : [];
     const force = !!(req.body && req.body.force === true);
 
@@ -1519,6 +1543,7 @@ app.put('/api/events/:id/live/:court', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
     const body = req.body || {};
 
     let playerId = null;

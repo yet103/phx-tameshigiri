@@ -270,6 +270,89 @@
     assert('存在しない大会の遷移は 404', (await Api.changeStatus('nosuchevent', 'round1')).status, 404);
     await Api.deleteEvent(stEvent.id);
 
+    // ---- 10. ロックガード（final / archived は書き込めない） ----
+    // Api の関数はステータスコードを丸めるものがあるので、ここは直接 fetch して
+    // 「409 かつ reason: locked」を確かめる。
+    async function writeResult(url, method, body) {
+      var res = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body)
+      });
+      var json = null;
+      try { json = await res.json(); } catch (e) { /* 本文が JSON でなくてもよい */ }
+      return { status: res.status, reason: (json && json.reason) || '' };
+    }
+
+    var lockEvent = await Api.saveEvent({ name: 'ロックテスト', date: '2026-02-01', venue: '', players: [] });
+    await Api.importCsv(lockEvent.id,
+      '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
+      'L1,A-男子-1-1,真,,,30,,,1    \n' +
+      'L2,A-男子-1-2,真,,,10,,,1    \n', 'replace');
+    await Api.changeStatus(lockEvent.id, 'round1');
+    await Api.changeStatus(lockEvent.id, 'round1_done');
+    await Api.generateNextRound(lockEvent.id, false);
+    await Api.changeStatus(lockEvent.id, 'round2');
+    await Api.changeStatus(lockEvent.id, 'round2_done');
+    assert('round2_done → final に進める',
+      (await Api.changeStatus(lockEvent.id, 'final')).status, 'final');
+
+    var lockP = (await Api.loadEvent(lockEvent.id)).players[0];
+    var lockBase = '/api/events/' + lockEvent.id;
+    assert('確定後の大会上書きは 409 locked',
+      await writeResult('/api/events', 'POST', { id: lockEvent.id, name: 'ロックテスト', players: [] }),
+      { status: 409, reason: 'locked' });
+    assert('確定後の選手追加は 409 locked',
+      await writeResult(lockBase + '/players', 'POST', { name: 'L3', court: 'A' }),
+      { status: 409, reason: 'locked' });
+    assert('確定後の一括登録は 409 locked',
+      await writeResult(lockBase + '/players/bulk', 'POST', { court: 'A', names: ['L3'] }),
+      { status: 409, reason: 'locked' });
+    assert('確定後の PATCH は 409 locked',
+      await writeResult(lockBase + '/players/' + lockP.id, 'PATCH', { name: 'X' }),
+      { status: 409, reason: 'locked' });
+    assert('確定後の選手削除は 409 locked',
+      await writeResult(lockBase + '/players/' + lockP.id + '?force=1', 'DELETE'),
+      { status: 409, reason: 'locked' });
+    assert('確定後の CSV 取り込みは 409 locked',
+      await writeResult(lockBase + '/import', 'POST', { csvText: '選手名\n', mode: 'append' }),
+      { status: 409, reason: 'locked' });
+    assert('確定後の技の PUT は 409 locked',
+      await writeResult(lockBase + '/techniques', 'PUT',
+        { techniques: [{ name: '真', strikes: [1, null, null, null] }] }),
+      { status: 409, reason: 'locked' });
+    assert('確定後の技の DELETE は 409 locked',
+      await writeResult(lockBase + '/techniques', 'DELETE'),
+      { status: 409, reason: 'locked' });
+    assert('確定後の二巡目生成は 409 locked',
+      await writeResult(lockBase + '/rounds/2/generate', 'POST', { force: true }),
+      { status: 409, reason: 'locked' });
+    assert('確定後の putLive は 409 locked',
+      await writeResult(lockBase + '/live/A', 'PUT', { playerId: lockP.id }),
+      { status: 409, reason: 'locked' });
+
+    // 拒まない経路
+    assert('確定後も GET は読める', (await Api.loadEvent(lockEvent.id)).status, 'final');
+    assert('確定後も共有リンクは発行できる',
+      !!(await Api.createShareLink(lockEvent.id)).token, true);
+
+    // 戻すと編集できる
+    var lockBack = await Api.changeStatus(lockEvent.id, 'round2_done');
+    assert('final から round2_done に戻せる（二巡目があるとき）',
+      [lockBack.ok, lockBack.status], [true, 'round2_done']);
+    assert('戻したあとは PATCH が通る',
+      (await Api.updatePlayerInfo(lockEvent.id, lockP.id, { name: 'L1改' })).ok, true);
+
+    // アーカイブも同じく書けない
+    await Api.changeStatus(lockEvent.id, 'final');
+    await Api.changeStatus(lockEvent.id, 'archived');
+    assert('アーカイブ中の PATCH は 409 locked',
+      await writeResult(lockBase + '/players/' + lockP.id, 'PATCH', { name: 'Y' }),
+      { status: 409, reason: 'locked' });
+    assert('アーカイブから final に戻せる',
+      (await Api.changeStatus(lockEvent.id, 'final')).status, 'final');
+    assert('確定済みでも大会そのものは削除できる', await Api.deleteEvent(lockEvent.id), true);
+
     // 並行PATCHの回帰テスト
     // 書き込みハンドラが同期である限り、同時PATCHは取りこぼされない。
     // 将来ハンドラが async 化されるとこのテストが落ちる（不変条件の番人）。
