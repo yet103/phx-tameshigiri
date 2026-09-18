@@ -123,8 +123,12 @@ a { color: var(--accent); }
 .desk-players-search { width: 200px; margin-left: auto; }
 
 /* 1280px では横スクロールしない幅に収める。窓が狭いときだけ表の枠が横に流れ、
-   名前の列は左に固定して誰の行か分かるようにする（採点表の固定列と同じ手法）。 */
-.desk-players-wrap { overflow-x: auto; }
+   名前の列は左に固定して誰の行か分かるようにする（採点表の固定列と同じ手法）。
+   overflow-x: auto だけを指定すると、overflow-y は既定の visible のままではなく
+   auto に計算されてしまい（CSS の仕様）、末尾の行の「⋯」メニューが表の枠の下で
+   縦にも切られる（確認で見つかった）。padding-bottom でメニューの実高さ（46px。
+   下の .desk-menu-body 参照）ぶん枠を伸ばし、開いても縦に切られないようにする。 */
+.desk-players-wrap { overflow-x: auto; padding-bottom: 46px; }
 /* table-layout: fixed は表そのものに幅が無いと列幅を「比率」としてしか使わず、
    窓を狭めても列が縮むだけでスクロールが起きない（確認で見つかった）。
    列幅の合計（994px）を表の width にして初めて、狭いときに表の枠だけが
