@@ -546,8 +546,12 @@
   }
 
   function startDraft(ctx) {
-    draft = draftSeed(ctx);
-    redrawTable();
+    // 既に下書き行があるなら作り直さず、その行の名前欄にフォーカスを戻すだけ
+    // （連打で下書きの入力途中の値やコート・性別・新人の選択を捨てないため）。
+    if (!draft) {
+      draft = draftSeed(ctx);
+      redrawTable();
+    }
     var input = view && view.wrap.querySelector('.desk-draft-row input[type="text"]');
     if (input) input.focus();
   }
