@@ -110,7 +110,9 @@ var AdminRound = (function() {
     }
     if (!res.ok) {
       alert(res.error);
-      await Admin.reloadEvent();   // 他の端末が先に進めていた可能性がある
+      // 読み直すのは他の端末が先に進めていた場合（transition）だけ。
+      // empty / no_round2 はこちらの入力不足であり、読み直しても状態は変わらない。
+      if (res.reason === 'transition') await Admin.reloadEvent();
       return;
     }
     Admin.toast(EventStatus.LABELS[to] + ' にしました');
