@@ -95,6 +95,8 @@
       renderTable(wrap, ctx);
     }
     function applyQuery() {
+      // Chromium は変換確定で compositionend と input の両方が来るので、同じ文字列なら描き直さない
+      if (input.value === filter.query) return;
       filter.query = input.value;
       renderTable(wrap, ctx);
     }
