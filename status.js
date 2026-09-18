@@ -46,6 +46,8 @@
   // そこで order の解析と採点済み判定をここに複製する。両者が一致することは
   // test.html の「derive の巡目判定が Courts.roundOf と一致する」で固定する。
   // courts.js の roundOf / isScored を変えたら、必ずここも同じに変えること。
+  // server/index.js はこのモジュールを require できる（CommonJS）ので、
+  // 自前実装を持たずここの roundOf / isScored をそのまま使う。
   var ORDER_PATTERN = /^([^-]+)-(男子|女子)-(\d+)-(\d+)$/;
 
   function roundOf(player) {
@@ -153,8 +155,9 @@
     isLocked: isLocked,
     derive: derive,
     of: of,
-    // courts.js との一致をテストで固定するためだけに出す（画面からは使わない）
-    _roundOf: roundOf,
-    _isScored: isScored
+    // server/index.js が自前実装の代わりに使う。courts.js との一致は
+    // test.html の「derive の巡目判定が Courts.roundOf と一致する」で固定する。
+    roundOf: roundOf,
+    isScored: isScored
   };
 });

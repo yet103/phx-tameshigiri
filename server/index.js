@@ -183,18 +183,10 @@ function escapeCSV(field) {
   return str;
 }
 
-// 採点済みかどうかの判定。クライアント側の同じ実装は courts.js の Courts.isScored。
-// result は 1=○, 0=×, 空白=未入力 でエンコードされているため、
-// 0 か 1 を含んでいれば何らかの採点が入っている。
-// 補正点（技ごと・全体）が 0 以外のときも採点済みとみなす
-// （負の補正で score が 0 以下になっても拾えるように、score > 0 だけに頼らない）。
-function isScored(player) {
-  if (!player) return false;
-  if (typeof player.score === 'number' && player.score > 0) return true;
-  if (/[01]/.test(player.result || '')) return true;
-  if (Array.isArray(player.adjust) && player.adjust.some(n => Number(n))) return true;
-  return !!Number(player.totalAdjust);
-}
+// 採点済みかどうかの判定・巡目（order の第3セグメント）の判定は EventStatus.isScored /
+// EventStatus.roundOf を使う（status.js に一本化。以前はここに自前実装を持っていたが、
+// status.js の derive も同じ規則を持つ必要があり、判定を2箇所に持たない）。
+// クライアント側の同じ実装は courts.js の Courts.isScored / Courts.roundOf。
 
 // ── order（コート-性別-巡目-番号）の解析と組み立て ──
 // クライアント側の対応実装は courts.js（Courts.courtOf / Courts.roundOf）。
@@ -212,13 +204,6 @@ function parseOrder(order) {
     round: parseInt(m[3], 10),
     number: parseInt(m[4], 10)
   };
-}
-
-// 巡目（order の第3セグメント）。解析できなければ 1（一巡目）とみなす。
-function roundOf(player) {
-  const order = (player && typeof player.order === 'string') ? player.order : '';
-  const m = order.match(ORDER_PATTERN);
-  return m ? parseInt(m[3], 10) : 1;
 }
 
 // コート名（order の先頭セグメント）。Courts.courtOf と同じ規則。
@@ -613,12 +598,12 @@ app.post('/api/events/:id/status', (req, res) => {
     const players = Array.isArray(event.players) ? event.players : [];
     // 一巡目の選手が1人もいなければ試合は始められない
     if (from === 'draft' && to === 'round1' &&
-        players.filter(p => roundOf(p) === 1).length === 0) {
+        players.filter(p => EventStatus.roundOf(p) === 1).length === 0) {
       return res.status(409).json({ error: '一巡目の選手がいません', reason: 'empty' });
     }
     // 二巡目の行が無ければ二巡目は始められない（先に生成する）
     if (from === 'round1_done' && to === 'round2' &&
-        players.filter(p => roundOf(p) === 2).length === 0) {
+        players.filter(p => EventStatus.roundOf(p) === 2).length === 0) {
       return res.status(409).json({ error: '二巡目が生成されていません', reason: 'no_round2' });
     }
 
@@ -816,7 +801,7 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
         court = cur ? cur.court : '';
       }
       // round を省略したときは現在の order の巡目を据え置く（一巡目扱いにしない）。
-      const round = body.round !== undefined ? body.round : roundOf(player);
+      const round = body.round !== undefined ? body.round : EventStatus.roundOf(player);
       if (!Number.isInteger(round) || round < 1 || round > 9) {
         return res.status(400).json({ error: '不正な巡目です' });
       }
@@ -869,7 +854,7 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
     }
 
     const target = players[idx];
-    if (isScored(target) && req.query.force !== '1') {
+    if (EventStatus.isScored(target) && req.query.force !== '1') {
       return res.status(409).json({
         error: '採点済みの選手です',
         player: {
@@ -905,7 +890,7 @@ app.post('/api/events/:id/import', (req, res) => {
     // replace は players 配列を丸ごと置換するため、採点済みデータがあると
     // 他コートの採点まで消える。件数を返して拒否し、明示的な force のときだけ通す。
     if (mode === 'replace' && force !== true) {
-      const scoredCount = (event.players || []).filter(isScored).length;
+      const scoredCount = (event.players || []).filter(EventStatus.isScored).length;
       if (scoredCount > 0) {
         return res.status(409).json({
           error: '採点済みのデータがあります',
@@ -1420,18 +1405,18 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
     const players = Array.isArray(event.players) ? event.players : [];
     const force = !!(req.body && req.body.force === true);
 
-    const round1Candidates = players.filter(p => p && roundOf(p) === 1);
+    const round1Candidates = players.filter(p => p && EventStatus.roundOf(p) === 1);
     const src = round1Candidates.filter(p => parseOrder(p && p.order) !== null);
     const unassignedCount = round1Candidates.length - src.length;
     if (src.length === 0) {
       return res.status(400).json({ error: '一巡目の選手がいません' });
     }
 
-    const existing = players.filter(p => p && roundOf(p) === 2);
+    const existing = players.filter(p => p && EventStatus.roundOf(p) === 2);
     // sourcePlayerId を持たない二巡目行（CSV経由）は force で作り直すと重複するため件数を返す。
     const untrackedCount = existing.filter(p => !p.sourcePlayerId).length;
 
-    const unscored = src.filter(p => !isScored(p));
+    const unscored = src.filter(p => !EventStatus.isScored(p));
     if (unscored.length > 0 && !force) {
       return res.status(409).json({
         error: '一巡目に未採点の選手がいます',

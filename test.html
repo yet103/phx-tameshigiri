@@ -1599,10 +1599,10 @@
     // derive は Courts に依存できない（サーバーは courts.js を読めない）ので同じ規則を2箇所に持つ。
     // 同じ入力で結果が一致することをここで固定する。
     assert('derive の巡目判定が Courts.roundOf と一致する',
-      CMP_PLAYERS.map(function(p) { return EventStatus._roundOf(p); }),
+      CMP_PLAYERS.map(function(p) { return EventStatus.roundOf(p); }),
       CMP_PLAYERS.map(function(p) { return Courts.roundOf(p); }));
     assert('derive の採点済み判定が Courts.isScored と一致する',
-      CMP_PLAYERS.map(function(p) { return EventStatus._isScored(p); }),
+      CMP_PLAYERS.map(function(p) { return EventStatus.isScored(p); }),
       CMP_PLAYERS.map(function(p) { return Courts.isScored(p); }));
 
     // ---- 5. of / isScoringOpen / scoringRound / isLocked / ラベル ----
