@@ -80,8 +80,7 @@ var Home = (function() {
     if (!band) return;
     band.innerHTML = '';
     band.setAttribute('role', 'list');
-    band.setAttribute('aria-label', '大会の状態は ' +
-      EventStatus.STATES.map(function(s) { return EventStatus.LABELS[s]; }).join(' → ') + ' の順に進む');
+    band.setAttribute('aria-label', '大会の状態（7段階）');
 
     EventStatus.STATES.forEach(function(s, i) {
       var step = document.createElement('div');
