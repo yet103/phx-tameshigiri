@@ -241,6 +241,26 @@ input[type="file"] { display: none; }
 .toolbar button.active { background: var(--accent); color: var(--accent-text); }
 .toolbar .theme-btn { margin-left: auto; }
 
+/* ===== 大会バーの運営画面リンク・状態バナー =====
+   大会の作成と削除は運営画面だけに置く（コート端末から全コートのデータを消せないようにする）。
+   状態バナーは大会バーのすぐ下で「いま採点できるか」を言葉で出す。 */
+.event-admin-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--band-muted);
+  font-size: 13px;
+  text-decoration: underline;
+}
+.status-banner {
+  padding: 8px 12px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.status-banner.open { background: var(--bg-secondary); color: var(--text-muted); }
+.status-banner.closed { background: var(--warn); color: var(--banner-text); font-weight: bold; }
+
 /* ===== ページリンクバー ===== */
 .page-links {
   display: flex;

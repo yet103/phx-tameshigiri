@@ -189,33 +189,6 @@ var App = (function() {
       applyCourtFilter();
       if (currentEvent) Route.set(currentEvent.id, currentCourt);
     });
-    document.getElementById('btnNewEvent').addEventListener('click', function() {
-      document.getElementById('newEventModal').style.display = 'flex';
-      document.getElementById('newEventName').value = '';
-      document.getElementById('newEventDate').value = new Date().toISOString().split('T')[0];
-      document.getElementById('newEventVenue').value = '';
-      document.getElementById('newEventName').focus();
-    });
-    document.getElementById('btnCancelNewEvent').addEventListener('click', function() {
-      document.getElementById('newEventModal').style.display = 'none';
-    });
-    document.getElementById('btnCreateEvent').addEventListener('click', async function() {
-      var name = document.getElementById('newEventName').value.trim();
-      if (!name) { alert('大会名を入力してください。'); return; }
-      var created = await createEvent(
-        name,
-        document.getElementById('newEventDate').value,
-        document.getElementById('newEventVenue').value.trim()
-      );
-      // 失敗したらモーダルは開いたままにして、入力内容を残す
-      if (created) {
-        document.getElementById('newEventModal').style.display = 'none';
-      }
-    });
-    document.getElementById('btnDeleteEvent').addEventListener('click', function() {
-      onDeleteEvent();
-    });
-
     document.getElementById('btnRetrySave').addEventListener('click', function() {
       Outbox.flushNow();
     });
@@ -415,36 +388,8 @@ var App = (function() {
     updateTechniquesLink(currentEvent.id);
   }
 
-  // 戻り値: 作成できたら true。呼び出し元はこれを見てモーダルを閉じるか決める
-  // （失敗して閉じてしまうと、入力し直しになる）
-  async function createEvent(name, date, venue) {
-    var event = {
-      name: name,
-      date: date,
-      venue: venue,
-      players: []
-    };
-    var result = await Api.saveEvent(event);
-    if (!result || !result.id) {
-      alert('大会の作成に失敗しました。');
-      return false;
-    }
-    await refreshEventList();
-    document.getElementById('eventSelect').value = result.id;
-    currentCourt = '';
-    await onEventSelect(result.id, '');
-    return true;
-  }
-
-  async function onDeleteEvent() {
-    if (!currentEvent) return;
-    if (!confirm('大会「' + currentEvent.name + '」を削除します。よろしいですか？')) return;
-    var ok = await Api.deleteEvent(currentEvent.id);
-    if (!ok) { alert('大会の削除に失敗しました。'); return; }
-    await refreshEventList();
-    document.getElementById('eventSelect').value = '';
-    await onEventSelect('');
-  }
+  // 大会の作成・削除は運営画面（admin.html#events）にある。
+  // コート端末から全コート分のデータを消せる操作を置かないため、この画面からは外した。
 
   // --- 選手切り替え ---
   function movePlayer(delta) {

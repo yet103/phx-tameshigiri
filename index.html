@@ -7,12 +7,6 @@
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="style.css">
   <style>
-    .modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000; }
-    .modal { background:var(--bg,#fff); padding:24px; border-radius:8px; min-width:320px; }
-    .modal h3 { margin-top:0; }
-    .modal label { display:block; margin-bottom:12px; }
-    .modal input { display:block; width:100%; padding:8px; margin-top:4px; box-sizing:border-box; }
-    .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
     /* 色（黒金の帯）は style.css の「大会トーン」節が当てる。ここはレイアウトだけ */
     .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--gold); flex-wrap:wrap; }
     .event-bar select { padding:4px 8px; }
@@ -39,29 +33,17 @@
     <select id="courtSelect">
       <option value="">全コート</option>
     </select>
-    <button id="btnNewEvent">＋ 新規大会</button>
-    <button id="btnDeleteEvent">大会削除</button>
+    <a class="event-admin-link" id="linkEventAdmin" href="admin.html#events">大会の作成は運営画面で</a>
     <span class="save-status" id="saveStatus">● 保存済み</span>
   </div>
+
+  <!-- 状態バナー（app.js の renderStatusBanner が中身を入れる） -->
+  <div class="status-banner" id="statusBanner" hidden></div>
 
   <!-- 保存失敗バナー -->
   <div class="save-banner" id="saveBanner" style="display:none">
     <span id="saveBannerText">⚠ サーバーに保存できていません</span>
     <button id="btnRetrySave">今すぐ再試行</button>
-  </div>
-
-  <!-- 大会作成モーダル -->
-  <div class="modal-overlay" id="newEventModal" style="display:none">
-    <div class="modal">
-      <h3>新規大会作成</h3>
-      <label>大会名<input type="text" id="newEventName"></label>
-      <label>日付<input type="date" id="newEventDate"></label>
-      <label>会場<input type="text" id="newEventVenue"></label>
-      <div class="modal-actions">
-        <button id="btnCreateEvent">作成</button>
-        <button id="btnCancelNewEvent">キャンセル</button>
-      </div>
-    </div>
   </div>
 
   <!-- 選手ナビゲーション -->
