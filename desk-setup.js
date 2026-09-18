@@ -1,8 +1,9 @@
 // 基本情報の区画（#setup/<id>）。大会名・日付・会場の編集と、コート一覧の確認。
 // コートは選手の order から決まるので、ここでは読み取りだけ（変えるのは「選手」の区画）。
-// 保存は POST /api/events（Api.saveEvent）で大会ファイルを丸ごと書き直す既存の作法。
-// 画面が持っている古い選手データでコート端末の採点を巻き戻さないよう、
-// 送る直前に大会を読み直して、名前・日付・会場だけ差し替えてから送る。
+// 保存は PATCH /api/events/:id（Api.updateEventInfo）で名前・日付・会場だけを送る。
+// 大会ファイルを丸ごと送り直す Api.saveEvent は使わない。GET の応答（techniques を
+// effectiveTechniques で埋めたもの）をそのまま送り返すと、techniques を持たない大会
+// （この機能より前に作られた雛形運用の大会）が自前の技リストを持つ大会に変わってしまう。
 (function() {
   var fieldSeq = 0;
 
@@ -74,25 +75,17 @@
       var name = inName.value.trim();
       if (!name) { alert('大会名を入力してください。'); return; }
       btnSave.disabled = true;
-      var fresh = await Api.loadEvent(ctx.eventId);
+      var result = await Api.updateEventInfo(ctx.eventId, {
+        name: name, date: inDate.value, venue: inVenue.value.trim()
+      });
       if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
-      if (!fresh) {
-        btnSave.disabled = false;
-        alert('保存できませんでした。通信を確認してください。');
-        return;
-      }
-      fresh.name = name;
-      fresh.date = inDate.value;
-      fresh.venue = inVenue.value.trim();
-      // GET の応答にだけ付く値は送り返さない（サーバーも捨てるが、送らないほうが意図が明確）
-      delete fresh.techniquesSource;
-      delete fresh.status;
-      var result = await Api.saveEvent(fresh);
-      if (ctx.isStale()) return;
       btnSave.disabled = false;
-      if (!result || !result.id) {
-        // saveEvent は 409（確定済み）も null にする。他の端末が先に確定した場合もここへ来る。
-        alert('保存できませんでした。\n通信を確認するか、大会が「最終結果」になっていないか確かめてください。');
+      if (!result || !result.ok) {
+        if (result && result.reason === 'locked') {
+          alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else {
+          alert((result && result.error) || '保存できませんでした。通信を確認してください。');
+        }
         return;
       }
       Desk.toast('基本情報を保存しました');

@@ -386,6 +386,7 @@ app.use(express.json({ limit: '50mb' }));
 //
 // 対象:
 //   POST   /api/events
+//   PATCH  /api/events/:id
 //   DELETE /api/events/:id
 //   POST   /api/events/:id/players
 //   PATCH  /api/events/:id/players/:playerId
@@ -532,6 +533,46 @@ app.post('/api/events', (req, res) => {
 
     writeJsonAtomic(eventPath, event);
     res.json({ success: true, id: event.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/events/:id : 基本情報（名前・日付・会場）だけを更新する
+// POST /api/events は大会ファイルを丸ごと送り直す作法で、GET の応答（techniques を
+// effectiveTechniques で埋めたもの）をそのまま送り返すと、techniques を持たない大会
+// （この機能より前に作られた雛形運用の大会）が自前の技リストを持つ大会に変わってしまう。
+// 基本情報の保存はこの経路だけを使い、name / date / venue 以外（techniques / players /
+// status / shareToken / live）には一切触れない。
+app.patch('/api/events/:id', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
+    const body = req.body || {};
+
+    // name は必須ではない（送られてきたときだけ検証して差し替える）
+    if (body.name !== undefined) {
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!name || name.length > 100) {
+        return res.status(400).json({ error: '大会名が不正です（1〜100文字）' });
+      }
+      event.name = name;
+    }
+    // 長さの上限は POST /api/events/:id/copy と同じ
+    if (typeof body.date === 'string') event.date = body.date.slice(0, 20);
+    if (typeof body.venue === 'string') event.venue = body.venue.slice(0, 100);
+
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({
+      success: true,
+      event: { id: event.id, name: event.name, date: event.date, venue: event.venue, updatedAt: event.updatedAt }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -341,6 +341,9 @@
     assert('確定後の PATCH は 409 locked',
       await writeResult(lockBase + '/players/' + lockP.id, 'PATCH', { name: 'X' }),
       { status: 409, reason: 'locked' });
+    assert('確定後の PATCH /api/events/:id（基本情報）は 409 locked',
+      await writeResult(lockBase, 'PATCH', { name: 'X' }),
+      { status: 409, reason: 'locked' });
     assert('確定後の選手削除は 409 locked',
       await writeResult(lockBase + '/players/' + lockP.id + '?force=1', 'DELETE'),
       { status: 409, reason: 'locked' });
@@ -410,6 +413,73 @@
     assert('アーカイブから final に戻せる',
       (await Api.changeStatus(lockEvent.id, 'final')).status, 'final');
     assert('確定済みでも大会そのものは削除できる', await Api.deleteEvent(lockEvent.id), true);
+
+    // ---- 基本情報の更新 PATCH /api/events/:id（Api.updateEventInfo） ----
+    // 大会ファイルを丸ごと送り直す saveEvent と違い、name / date / venue だけを書き換える。
+    var uiEvent = await Api.saveEvent({ name: '基本情報更新テスト', date: '2026-04-01', venue: '元の会場', players: [] });
+    await Api.createPlayer(uiEvent.id, { name: 'U1', court: 'A' });
+    var uiBefore = await Api.loadEvent(uiEvent.id);
+    var uiRes = await Api.updateEventInfo(uiEvent.id, { name: '基本情報更新テスト改', date: '2026-04-02', venue: '新しい会場' });
+    assert('updateEventInfo は成功する', uiRes && uiRes.ok, true);
+    var uiAfter = await Api.loadEvent(uiEvent.id);
+    assert('updateEventInfo で name/date/venue が変わる',
+      [uiAfter.name, uiAfter.date, uiAfter.venue],
+      ['基本情報更新テスト改', '2026-04-02', '新しい会場']);
+    assert('updateEventInfo は players に触れない', uiAfter.players, uiBefore.players);
+    assert('updateEventInfo は techniques に触れない（内容が一致）', uiAfter.techniques, uiBefore.techniques);
+    assert('updateEventInfo は techniquesSource を変えない', uiAfter.techniquesSource, uiBefore.techniquesSource);
+
+    var uiEmpty = await Api.updateEventInfo(uiEvent.id, { name: '   ' });
+    assert('name が空文字の updateEventInfo は 400', [uiEmpty.ok, uiEmpty.status], [false, 400]);
+    assert('大会名は変わらない（400 で拒否）',
+      (await Api.loadEvent(uiEvent.id)).name, '基本情報更新テスト改');
+
+    var uiNoName = await Api.updateEventInfo(uiEvent.id, { venue: '会場だけ更新' });
+    assert('name を省略した updateEventInfo は name を変えない',
+      (await Api.loadEvent(uiEvent.id)).name, '基本情報更新テスト改');
+    assert('name を省略しても venue は更新される', uiNoName.ok, true);
+
+    // final の大会は 409 locked（writeResult の一覧テストと重複するが、Api.updateEventInfo
+    // 経由でも reason を運ぶことをここで固定する）
+    await Api.changeStatus(uiEvent.id, 'round1');
+    await Api.changeStatus(uiEvent.id, 'round1_done');
+    await Api.changeStatus(uiEvent.id, 'final');
+    var uiLocked = await Api.updateEventInfo(uiEvent.id, { name: 'ロック中' });
+    assert('final の大会への updateEventInfo は 409 locked',
+      [uiLocked.ok, uiLocked.status, uiLocked.reason], [false, 409, 'locked']);
+    await Api.changeStatus(uiEvent.id, 'round1_done');   // 後片付けのため戻す
+    await Api.deleteEvent(uiEvent.id);
+
+    assert('存在しない大会への updateEventInfo は 404',
+      (await Api.updateEventInfo('nosuchevent', { name: 'x' })).status, 404);
+
+    // techniques を持たない大会（この機能より前に作られた雛形運用の大会）に
+    // updateEventInfo しても techniquesSource が 'template' のままであることを確かめたい。
+    // POST /api/events/import はいつも techniques を複製して持たせるため、この状態の大会は
+    // test.html からは作れない（2026-09-14-event-techniques-and-bundle-design.md に既述）。
+    // ローカルの開発用データ（server/data は .gitignore 対象）に固定 ID のフィクスチャを
+    // 1つだけ置いており、あればそれで確認する。無い環境ではスキップする
+    // （本物の大会「第10回全日本試し斬り大会」「名古屋城決戦」は同じ状態を持つが、
+    //  絶対に書き込みで確かめない）。
+    var tmplId = 'test-tmpl-notech';
+    var tmplBefore = await Api.loadEvent(tmplId);
+    if (!tmplBefore) {
+      var tmplSkip = document.createElement('div');
+      tmplSkip.textContent = '… テスト用フィクスチャ（' + tmplId + '）が無いため、techniquesSource: template の updateEventInfo テストをスキップ';
+      results.appendChild(tmplSkip);
+    } else {
+      assert('フィクスチャは techniquesSource: template', tmplBefore.techniquesSource, 'template');
+      var tmplRes = await Api.updateEventInfo(tmplId, {
+        name: tmplBefore.name, date: tmplBefore.date, venue: 'PATCHテスト会場'
+      });
+      assert('techniques 無し大会への updateEventInfo は成功する', tmplRes && tmplRes.ok, true);
+      var tmplAfter = await Api.loadEvent(tmplId);
+      assert('PATCH 後も techniquesSource は template のまま', tmplAfter.techniquesSource, 'template');
+      assert('PATCH 後も players は変わらない', tmplAfter.players, tmplBefore.players);
+      assert('PATCH で venue が更新される', tmplAfter.venue, 'PATCHテスト会場');
+      // 元に戻す（再実行しても差分が積み上がらないように）
+      await Api.updateEventInfo(tmplId, { name: tmplBefore.name, date: tmplBefore.date, venue: tmplBefore.venue });
+    }
 
     // 並行PATCHの回帰テスト
     // 書き込みハンドラが同期である限り、同時PATCHは取りこぼされない。

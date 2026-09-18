@@ -198,6 +198,19 @@ EventStatus.of(event)                 // event.status が有効ならそれ、�
 
 `POST /api/events` の body に `status` が入っていても**無視し、既存の値を引き継ぐ**（`shareToken` と同じ扱い）。新規作成時は `draft`。状態を変える経路は遷移 API だけにする。
 
+### 基本情報の更新 `PATCH /api/events/:id`（新規）
+
+```
+リクエスト: { "name": "第11回…", "date": "2027-09-05", "venue": "東京体育館" }
+200:        { "success": true, "event": { "id", "name", "date", "venue", "updatedAt" } }
+400:        name が空 / 1〜100文字でない
+404:        大会なし
+409:        { "error": "この大会は最終結果を確定済みです", "reason": "locked", "status": "final" }
+```
+
+body の allowlist は `name`（trim 後 1〜100 文字。送らなければ変えない）、`date`（文字列。長さの上限は `POST /api/events/:id/copy` と同じ）、`venue`（同上）だけ。それ以外のキーは無視する。
+`techniques` `status` `players` `shareToken` `live` には一切触れない（大会ファイルを丸ごと送り直す `POST /api/events` と違い、`techniques` を持たない大会の技リストを固定してしまわない）。ロックガードは他の書き込み系 API と同じ。
+
 ### 二巡目生成の前提
 
 `POST /api/events/:id/rounds/2/generate` は状態が `round1_done` のときだけ通す。それ以外は 409 `{ "error": "一巡目を終了してから生成してください", "reason": "status", "status": "round1" }`。
@@ -319,7 +332,7 @@ createPlayersBulk(eventId, data) // 既存。data.rows があれば行形式で�
 新規作成はダイアログ（名前・日付・会場）。作成後は `#players/<id>`。
 コピーはダイアログ（名前は「元の名前（コピー）」を初期値、日付は今日、会場は元の値、「選手も複製する（得点は消す）」チェック）。作成後は `#players/<id>`。
 
-**基本情報 `#setup/<id>`**: 名前・日付・会場の入力と「保存」（`Api.saveEvent` に `players` を含めた現在の大会を渡す既存の作法。`status` は body に入れても無視される）。コートの一覧は `Courts.listFrom(players)` を読み取り専用で出す（コートは選手のコートから決まる、と注記）。ロック中は入力を無効にする。
+**基本情報 `#setup/<id>`**: 名前・日付・会場の入力と「保存」（`PATCH /api/events/:id` で名前・日付・会場だけを更新する。全体上書き（`Api.saveEvent`）は使わない。`techniques` を持たない大会に `GET` の応答をそのまま送り返すと、その大会が自前の技リストを持つ扱いに変わってしまうため）。コートの一覧は `Courts.listFrom(players)` を読み取り専用で出す（コートは選手のコートから決まる、と注記）。ロック中は入力を無効にする。
 
 **技と配点 `#techniques/<id>`**: `techniques.html` の編集部分を `techedit.js` に切り出し、`TechEdit.mount(container, eventId, { onSaved })` で埋め込む。`techniques.html` も同じモジュールを使うように差し替える（見た目と動きは変えない）。ロック中は保存を無効にする。
 

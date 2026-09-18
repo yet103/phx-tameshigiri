@@ -44,6 +44,38 @@ var Api = (function() {
     }
   }
 
+  async function updateEventInfo(eventId, data) {
+    // PATCH /api/events/:eventId （基本情報の保存専用。name / date / venue だけを送る）
+    // 大会ファイルを丸ごと送り直す saveEvent と違い、techniques / players / status には
+    // 一切触れない（techniques を持たない大会の技リストを固定してしまわないため）。
+    // 戻り値: { ok: true, event: { id, name, date, venue, updatedAt } }
+    //       | { ok: false, status: HTTPステータス, reason, error }（400 / 404 / 409。
+    //         409 の reason は 'locked'）
+    //       | null（通信そのものの失敗）
+    try {
+      var res = await fetch('/api/events/' + eventId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) {
+        var errJson = null;
+        try { errJson = await res.json(); } catch (e) { /* JSON でない応答 */ }
+        return {
+          ok: false,
+          status: res.status,
+          reason: (errJson && errJson.reason) || '',
+          error: (errJson && errJson.error) ||
+                 ('サーバーがエラーを返しました（' + res.status + '）')
+        };
+      }
+      var json = await res.json();
+      return { ok: true, event: json.event || null };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function deleteEvent(id) {
     // DELETE /api/events/:id
     try {
@@ -617,6 +649,7 @@ var Api = (function() {
     listEvents: listEvents,
     loadEvent: loadEvent,
     saveEvent: saveEvent,
+    updateEventInfo: updateEventInfo,
     deleteEvent: deleteEvent,
     copyEvent: copyEvent,
     changeStatus: changeStatus,
