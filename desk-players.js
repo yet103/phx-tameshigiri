@@ -191,7 +191,7 @@
       closePopover();
     });
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape' && popover) { e.preventDefault(); closePopover(); }
+      if (e.key === 'Escape' && popover) { e.preventDefault(); closePopover(true); }
     });
     // 表や窓が動くと ▼ の位置がずれるので閉じる（中身のスクロールでは閉じない）
     window.addEventListener('scroll', function(e) {
@@ -203,19 +203,21 @@
     window.addEventListener('hashchange', function() { closePopover(); });
   }
 
-  function closePopover() {
+  // refocus を true にしたときだけ ▼ にフォーカスを戻す（Esc と ▼ の再クリック）。
+  // 外側クリックで戻すと、その直後のセルのクリックが 1 回無効になる（フォーカスの奪い合い）ので戻さない。
+  function closePopover(refocus) {
     if (!popover) return;
     var btn = popover.btn;
     if (popover.el.parentNode) popover.el.parentNode.removeChild(popover.el);
     popover = null;
     if (btn && btn.isConnected) {
       btn.setAttribute('aria-expanded', 'false');
-      btn.focus();
+      if (refocus) btn.focus();
     }
   }
 
   function togglePopover(btn, col) {
-    if (popover && popover.btn === btn) { closePopover(); return; }
+    if (popover && popover.btn === btn) { closePopover(true); return; }
     openPopover(btn, col);
   }
 
@@ -397,7 +399,7 @@
     input.addEventListener('compositionend', applyQuery);
     // Esc はブラウザの既定（入力欄を空にする）ではなくポップオーバーを閉じるほうに使う
     input.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') { e.preventDefault(); closePopover(); }
+      if (e.key === 'Escape') { e.preventDefault(); closePopover(true); }
     });
     box.appendChild(input);
     return box;
