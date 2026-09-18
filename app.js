@@ -62,6 +62,10 @@ var App = (function() {
     await refreshEventList();
     bindEvents();
 
+    // 運営画面リンクの行き先（PC / スマホ）は端末のモードだけで決まるので、
+    // 大会を選ぶ前でも正しいページを指しておく（HTML の初期値は admin.html 固定のため）。
+    updateAdminLink('');
+
     // 選択状態を復帰する（URLハッシュ → localStorage の順）
     var restored = Route.restore();
     if (restored && restored.eventId) {
@@ -439,9 +443,12 @@ var App = (function() {
   function updateAdminLink(eventId) {
     var link = document.getElementById('linkAdmin');
     if (!link) return;   // このリンクを持たないページから呼ばれても落ちないように
-    link.href = eventId
-      ? 'admin.html#players/' + encodeURIComponent(eventId)
-      : 'admin.html';
+    // 行き先（PC の desk.html / スマホの admin.html）は端末のモードで決まる。
+    // 組み立ては storage.js に任せる（採点画面はページ名を知らない）。
+    link.href = Storage.adminHref(eventId ? '#players/' + encodeURIComponent(eventId) : '#events');
+
+    var eventLink = document.getElementById('linkEventAdmin');
+    if (eventLink) eventLink.href = Storage.adminHref('#events');
   }
 
   // 上部リンクの「技術リスト編集」。選択中の大会があればその大会の技リストを開く

@@ -496,13 +496,12 @@ var Desk = (function() {
   }
 
   // 採点画面のハッシュ（route.js の Route.build と同じ形。desk.html は route.js を読まない）。
-  // ★計画3で採点画面を scoring.html に改名する。そのときここの 'index.html' を
-  //   'scoring.html' に直すこと。PC 運営で採点画面の URL を知っているのはこの関数だけ。
+  // PC 運営で採点画面の URL を知っているのはこの関数だけ。
   function scoringHref(eventId, court) {
-    if (!eventId) return 'index.html';
+    if (!eventId) return 'scoring.html';
     var hash = '#event/' + encodeURIComponent(eventId);
     if (court) hash += '/' + encodeURIComponent(court);
-    return 'index.html' + hash;
+    return 'scoring.html' + hash;
   }
 
   // 採点画面を別ウィンドウで開く。コートごとに窓の名前を変え、同じコートは同じ窓を使い回す。

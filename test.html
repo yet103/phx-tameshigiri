@@ -24,6 +24,7 @@
 <script src="techpicker.js"></script>
 <script src="admin.js"></script>
 <script src="home.js"></script>
+<script src="desk.js"></script>
 <script src="present.js"></script>
 <script src="board.js"></script>
 <script>
@@ -2108,13 +2109,26 @@
     results.appendChild(h2a);
 
     assert('scoringHref: 大会とコート',
-      Admin.scoringHref('abc', 'A'), 'index.html#event/abc/A');
+      Admin.scoringHref('abc', 'A'), 'scoring.html#event/abc/A');
     assert('scoringHref: コート無し',
-      Admin.scoringHref('abc', ''), 'index.html#event/abc');
+      Admin.scoringHref('abc', ''), 'scoring.html#event/abc');
     assert('scoringHref: 大会IDが無ければハッシュ無し',
-      Admin.scoringHref('', 'A'), 'index.html');
+      Admin.scoringHref('', 'A'), 'scoring.html');
     assert('scoringHref: 未分類とスペースをエンコードする',
-      Admin.scoringHref('a b', '未分類'), 'index.html#event/a%20b/' + encodeURIComponent('未分類'));
+      Admin.scoringHref('a b', '未分類'), 'scoring.html#event/a%20b/' + encodeURIComponent('未分類'));
+
+    var h2d = document.createElement('h2');
+    h2d.textContent = 'desk.js';
+    results.appendChild(h2d);
+
+    assert('scoringHref: PC 運営も同じ URL を組む',
+      Desk.scoringHref('abc', 'A'), 'scoring.html#event/abc/A');
+    assert('scoringHref: PC 運営もコート無しに対応する',
+      Desk.scoringHref('abc', ''), 'scoring.html#event/abc');
+    assert('scoringHref: PC 運営も大会IDが無ければハッシュ無し',
+      Desk.scoringHref('', 'A'), 'scoring.html');
+    assert('scoringHref: PC 運営も未分類とスペースをエンコードする',
+      Desk.scoringHref('a b', '未分類'), 'scoring.html#event/a%20b/' + encodeURIComponent('未分類'));
 
     var h2home = document.createElement('h2');
     h2home.textContent = 'home.js';

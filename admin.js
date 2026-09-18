@@ -346,13 +346,13 @@ var Admin = (function() {
   }
 
   // 採点画面のハッシュ（route.js の Route.build と同じ形。admin.html は route.js を読まない）。
-  // eventId が空なら大会選択前なのでハッシュ無しの 'index.html' を返す
+  // eventId が空なら大会選択前なのでハッシュ無しの 'scoring.html' を返す
   // （採点画面側で tmg_last の控えから開かせるため）。
   function scoringHref(eventId, court) {
-    if (!eventId) return 'index.html';
+    if (!eventId) return 'scoring.html';
     var hash = '#event/' + encodeURIComponent(eventId);
     if (court) hash += '/' + encodeURIComponent(court);
-    return 'index.html' + hash;
+    return 'scoring.html' + hash;
   }
 
   // 運営画面から他の画面へ戻る導線（下タブは運営画面内のタブなので、ページ間の移動はここに置く）
