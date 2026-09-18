@@ -649,6 +649,13 @@
     tr.appendChild(cell('', 'act'));
 
     var busy = false;
+    // create() が成功した後の印。busy=false から Desk.reloadEvent() の完了までの間に
+    // 入力が再有効化されている隙間があり、そこでもう一度 Enter を送ると同じ行から
+    // create() が二重に呼ばれて同名選手が2人登録される（確認で見つかった）。
+    // 成功経路では busy を戻さず入力も disabled のままにし、この行は reloadEvent が
+    // 作り直すのに任せる。done はその意図を先頭で弾くための明示の印（busy に頼り
+    // きらない）。失敗経路だけ busy を戻して入力を再有効化し、打ち直せるようにする。
+    var done = false;
     var composing = false;
 
     function setDisabled(flag) {
@@ -658,33 +665,39 @@
     }
 
     async function create() {
-      if (busy) return;
+      if (busy || done) return;
       var name = input.value.trim();
       if (!name) { cancelDraft(); return; }
       var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する（貼り付け・CSV と同じ規約）
       busy = true;
       setDisabled(true);
-      var created = await Api.createPlayer(eventId, {
+      var result = await Api.createPlayer(eventId, {
         name: name, court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace,
         tech1: d.tech1, tech2: d.tech2, tech3: d.tech3, round: 1
       });
       if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
-      busy = false;
-      setDisabled(false);
-      if (created && created.player === null) {
-        // 409（いまは確定済みガードだけ）。行は残す（入力を失わせない）
-        if (created.reason === 'locked') {
+      if (result && result.player === null) {
+        // 409（いまは確定済みガードだけ）。行は残す（入力を失わせない）。打ち直せるよう戻す。
+        busy = false;
+        setDisabled(false);
+        if (result.reason === 'locked') {
           alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
         } else {
-          alert(created.error);
+          alert(result.error);
         }
         return;
       }
-      if (!created) {
+      if (!result) {
+        // 通信失敗など。打ち直せるよう戻す。
+        busy = false;
+        setDisabled(false);
         alert('選手を追加できませんでした。\n入力内容と通信を確認してください。');
         return;
       }
-      Desk.toast(created.order + ' ' + created.name + ' を追加しました');
+      // 成功。busy はそのまま（true）、入力も disabled のままにして、
+      // この行からの再送・再描画までの隙間の二重送信を防ぐ。
+      done = true;
+      Desk.toast(result.order + ' ' + result.name + ' を追加しました');
       // 続けて打ち込めるよう、同じコート・性別・新人でもう 1 行出す
       draft = { court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace };
       await Desk.reloadEvent();
