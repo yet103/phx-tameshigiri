@@ -54,7 +54,8 @@
 - 新人は「新」列に「●」、それ以外は空
 - 得点は `p.score || 0` を表示（現状と同じ）。色は既存の `--score-color`
 - 行の高さは 44px 以上（タップ目標）
-- 行タップで既存の編集シート（`openEditSheet`）を開く。右下の「＋」も現状どおり
+- 行タップで既存の編集シート（`openEditSheet`）を開く（行は `tabindex=0` で Enter / Space でも開く）。右下の「＋」も現状どおり
+- 並べ替えできる見出し `<th>` には `aria-sort`（ascending / descending / none）を付ける
 - 大会に選手が 0 名なら現状の案内文（「選手がまだいません。…」）。
   選手はいるが条件に合う行が 0 件なら「条件に合う選手がいません。」
 
@@ -63,7 +64,8 @@
 - 1 段目：コートのチップ（既存 `Admin.renderCourtChips`）。「全コート」「A コート」「B コート」「未分類」
 - 2 段目：性別「男女／男子／女子」、巡目「全巡／1巡／2巡…」、トグル「新人」「技未入力」。
   横に並べ、375px に収まらなければその段だけ横スクロール（`.court-chips` と同じ `overflow-x: auto`）
-- 3 段目：名前検索の入力欄（`type="search"`、placeholder「名前で検索」）
+- 3 段目：名前検索の入力欄（`type="search"`、placeholder「名前で検索」）。チップを押しても入力欄は作り直さない（入力中の文字を保つ）。
+  IME 変換中（`input` の `isComposing`）は絞り込まず、`compositionend` でも絞り込む（`techpicker.js` の検索欄と同じ）
 - チップは高さ 32px の小型版（`.chip-sm`）。選択中は既存 `.court-chip.on` と同じ配色
 - 巡目チップの候補は、選手の `Courts.roundOf` の一意な値を昇順に並べたもの
   （二巡目未生成なら「全巡／1巡」だけ）
@@ -78,7 +80,8 @@
 
 - `court`：'' で全コート。`Courts.courtOf(p)` と一致
 - `sex`：'' | '男子' | '女子'。`Courts.sexOf(p)` と一致。`sexOf` は `order` の第 2 セグメントで
-  判定し、解析できなければ `p.isFemale`（選手データにも持っている）で補う
+  判定し、解析できなければ `p.isFemale`（選手データにも持っている）で補う。
+  巡目・番号が欠けた `A-女子-1` のような order でも第 2 セグメントがあれば使う（`orderKey` より緩い。絞り込み用なので拾える方を優先）
 - `round`：0 で全巡。`Courts.roundOf(p)` と一致
 - `newFace`：true なら `p.isNewFace` が真の行だけ
 - `noTech`：true なら `tech1/tech2/tech3` がすべて空の行だけ
@@ -115,10 +118,10 @@
 
 | ファイル | 変更 |
 |---|---|
-| `courts.js` | 純粋関数を追加：`Courts.normalizeName(s)`、`Courts.hasNoTech(p)`、`Courts.sexOf(p)`（'男子' \| '女子'）、`Courts.applyFilter(players, filter)`、`Courts.sortBy(players, sort)`（元配列を変更せず新しい配列を返す）、`Courts.defaultFilter()`、`Courts.defaultSort()` |
+| `courts.js` | 純粋関数を追加：`Courts.normalizeName(s)`、`Courts.hasNoTech(p)`、`Courts.sexOf(p)`（'男子' \| '女子'）、`Courts.roundsOf(players)`（巡目の一意な値を昇順で。巡目チップの候補）、既存の `orderKey(p)` を公開に加える（No 列の表示用）、`Courts.applyFilter(players, filter)`、`Courts.sortBy(players, sort)`（元配列を変更せず新しい配列を返す）、`Courts.defaultFilter()`、`Courts.defaultSort()` |
 | `admin-players.js` | `currentCourt` を `filter` / `sort` の 2 オブジェクトに置き換え。`renderList` を `<table>` 生成に書き換え（`buildRow` → `buildTr`）。チップ・検索欄・見出しタップの配線。`openMenu` / `openAddSheet` / `openEditSheet` / 一括登録は触らない |
-| `admin.js` | 汎用の `Admin.renderChips(container, items, current, onChange)` を追加（`items` は `{ value, label }` の配列）。`renderCourtChips` はこれを使う薄いラッパーにし、進行タブから見た挙動（クラス名・`dataset.court`・文言）は変えない |
-| `admin.css` | `.players-filters`（2 段目の帯）、`.chip-sm`（32px チップ）、`.players-search`、`.players-table-wrap`（横スクロール枠）、`.players-table`（nowrap・名前列 sticky・見出しの ▲▼・行 44px）を追加。既存の `.row` 系は進行タブが使うので残す |
+| `admin.js` | 汎用の `Admin.renderChips(container, items, current, onChange, small)` を追加（`items` は `{ value, label }` の配列。選択判定は `String(value) === String(current)`。`small` で 32px 版）。`renderCourtChips` はこれを使う薄いラッパーにし、進行タブから見た挙動（クラス名・文言・`onChange` の引数）は変えない。旧実装の `data-court` 属性は読む側がいないので付けない |
+| `admin.css` | `.players-filters`（2 段目の帯）、`.chip-sm`（32px チップ）、`.players-search`、`.players-table-wrap`（横スクロール枠）、`.chip-group`、`.players-table`（nowrap・名前列 sticky・行 44px）、`.sort-btn`（見出しの ▲▼ ボタン）を追加。既存の `.row` 系は大会タブ（`admin-events.js`）が使うので残す。選手カード専用だった `.row-badge` `.row-score` は消す |
 | `help.html` | 選手タブの説明と `help/img/admin_players.png` を表形式に差し替え。「絞り込み」「並べ替え」の短い段落を追加 |
 
 ## テスト
