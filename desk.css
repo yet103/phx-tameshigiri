@@ -420,6 +420,11 @@ a { color: var(--accent); }
 .desk-players-table th.col-name { background: var(--band-bg); }
 /* 並べ替え中・ホバーの見出し文字は帯の上でも読める金に */
 .desk-table th .sort-btn.on, .desk-table th .sort-btn:hover { color: var(--gold); }
+/* 絞り込み中の見出しは帯の上に重ねる濃淡（--row-selected はライトで沈むため --band-bg-2 を使う） */
+.desk-players-table th.filtered, .desk-players-table th.col-name.filtered { background: var(--band-bg-2); }
+/* 見出しの ▼ は帯の上で読める金に。絞り込み中はより濃い金 */
+.filter-btn { color: var(--gold-light); }
+.filter-btn.on { color: var(--gold); }
 
 /* 区画の見出し */
 .desk-section-head h2 { font-family: var(--mincho); padding-bottom: 3px; border-bottom: 1px solid var(--gold); }
