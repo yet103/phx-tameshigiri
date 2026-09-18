@@ -143,6 +143,69 @@ var Home = (function() {
     }
   }
 
+  // --- 進行中の大会 ---
+
+  // 読み込みの世代。あとから始めた読み込みが先に返ることがあるので、
+  // 古い応答では DOM に触らない（他の画面の renderSeq と同じ作法）。
+  var listSeq = 0;
+
+  async function loadEvents() {
+    var seq = ++listSeq;
+    var box = document.getElementById('homeEventList');
+    box.textContent = '読み込み中…';
+    var events = await Api.listEvents();
+    if (seq !== listSeq) return;
+    // Api.listEvents は通信に失敗すると null、大会が 0 件なら [] を返す。区別して出す。
+    if (events === null) {
+      renderNote(box, '大会の一覧を取得できませんでした。通信を確かめて、画面を読み込み直してください。');
+      return;
+    }
+    renderEvents(box, sortForHome(events));
+  }
+
+  function renderNote(box, text) {
+    box.innerHTML = '';
+    var p = document.createElement('p');
+    p.className = 'home-note';
+    p.textContent = text;
+    box.appendChild(p);
+  }
+
+  function renderEvents(box, list) {
+    if (list.length === 0) {
+      renderNote(box, '進行中の大会はありません。「運営画面を開く」から作成してください。');
+      return;
+    }
+    box.innerHTML = '';
+    list.forEach(function(ev) {
+      var status = EventStatus.of(ev);
+
+      // 行はリンクにする（中クリックで別タブに開ける。行き先はモードで変わるので
+      // data-event-id を持たせ、updateAdminLinks が href だけ作り直す）。
+      var a = document.createElement('a');
+      a.className = 'home-event';
+      a.setAttribute('data-event-id', ev.id);
+      a.href = Storage.adminHref('#players/' + encodeURIComponent(ev.id));
+
+      var name = document.createElement('span');
+      name.className = 'home-event-name';
+      name.textContent = ev.name || '(名称未設定)';
+
+      var meta = document.createElement('span');
+      meta.className = 'home-event-meta';
+      meta.textContent = (ev.date || '日付なし') + ' ・ ' + (ev.playerCount || 0) + '名';
+
+      var badge = document.createElement('span');
+      badge.className = 'home-badge' + (EventStatus.isScoringOpen(status) ? ' on' : '');
+      badge.textContent = EventStatus.LABELS[status];
+
+      a.appendChild(name);
+      a.appendChild(meta);
+      a.appendChild(badge);
+      box.appendChild(a);
+    });
+  }
+
   // --- 起動 ---
 
   function init() {
@@ -157,6 +220,7 @@ var Home = (function() {
     document.getElementById('btnMode').addEventListener('click', onModeClick);
     applyMode();
     renderFlow();
+    loadEvents().catch(function(e) { console.error(e); });
   }
 
   document.addEventListener('DOMContentLoaded', init);
