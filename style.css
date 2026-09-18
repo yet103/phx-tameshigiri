@@ -260,6 +260,9 @@ input[type="file"] { display: none; }
 }
 .status-banner.open { background: var(--bg-secondary); color: var(--text-muted); }
 .status-banner.closed { background: var(--warn); color: var(--banner-text); font-weight: bold; }
+/* 採点できない状態。太刀のセルは押せなくし、全体を薄く見せる */
+body.scoring-locked .strike-cell { pointer-events: none; opacity: 0.55; }
+body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
 
 /* ===== ページリンクバー ===== */
 .page-links {

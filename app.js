@@ -246,7 +246,7 @@ var App = (function() {
 
   // 絞り込みを適用して画面を作り直す
   function applyCourtFilter() {
-    visiblePlayers = Courts.filter(players, currentCourt);
+    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt));
     currentIndex = -1;
     if (visiblePlayers.length > 0) {
       selectPlayer(0);
@@ -264,6 +264,72 @@ var App = (function() {
       publishLive();
     }
     refreshPlayerList();
+    renderStatusBanner();
+    applyScoringLock();
+  }
+
+  // --- 大会の状態 ---
+  // 状態は大会を選んだときの値で判定する（ポーリングはしない設計）。
+  // 運営が状態を変えたら、コート端末は「大会を選び直す」運用。
+  // 既存の「選手を足したら選び直す」と同じ扱いで、help.html に書いてある。
+
+  function currentStatus() {
+    return currentEvent ? EventStatus.of(currentEvent) : null;
+  }
+
+  function scoringOpen() {
+    return !!currentEvent && EventStatus.isScoringOpen(currentStatus());
+  }
+
+  // 大会選択バーの下の状態バナー。採点できるかどうかと、できないときの次の手を出す。
+  function renderStatusBanner() {
+    var el = document.getElementById('statusBanner');
+    if (!el) return;
+    if (!currentEvent) { el.hidden = true; el.textContent = ''; return; }
+    var st = currentStatus();
+    el.hidden = false;
+    if (EventStatus.isScoringOpen(st)) {
+      el.className = 'status-banner open';
+      el.textContent = EventStatus.LABELS[st];
+      return;
+    }
+    el.className = 'status-banner closed';
+    if (EventStatus.isLocked(st)) {
+      el.textContent = 'この大会は「' + EventStatus.LABELS[st] + '」です。得点は編集できません。' +
+        '運営画面で「戻す」を押すと編集できます。';
+    } else if (EventStatus.isScoringOpen(EventStatus.next(st))) {
+      // draft → 試合開始、round1_done → 二巡目を開始。次へ進めば採点できる
+      el.textContent = 'この大会は「' + EventStatus.LABELS[st] + '」です。運営画面で「' +
+        EventStatus.NEXT_LABELS[st] + '」を押すと採点できます。';
+    } else {
+      // round2_done。次へ進むと確定してしまうので、戻す方を案内する
+      el.textContent = 'この大会は「' + EventStatus.LABELS[st] + '」です。' +
+        '運営画面で「戻す」を押すと採点に戻れます。';
+    }
+  }
+
+  // 採点できない状態のとき、得点に関わる操作を全部止める。
+  // 前後の選手の移動・タイマー・CSVエクスポート・HTML保存は使える（設計書「採点画面」）。
+  function applyScoringLock() {
+    var locked = !!currentEvent && !scoringOpen();
+    document.body.classList.toggle('scoring-locked', locked);
+    btnConfirm.disabled = locked;
+    document.getElementById('btnAllSuccess').disabled = locked;
+    document.getElementById('btnAllFail').disabled = locked;
+    if (locked) {
+      totalAdjustInput.disabled = true;
+      noteInput.disabled = true;
+    }
+    var inputs = scoreTableBody.querySelectorAll('.adjust-input');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = locked;
+  }
+
+  // 表示する選手。進行中ならその巡目だけに絞る（コートの絞り込みと併用）。
+  // 進行中でなければ全巡目を出す（見直し・確認のため）。
+  function filterForStatus(list) {
+    var round = currentEvent ? EventStatus.scoringRound(currentStatus()) : null;
+    if (!round) return list;
+    return list.filter(function(p) { return Courts.roundOf(p) === round; });
   }
 
   // --- 大会管理 ---
@@ -382,6 +448,8 @@ var App = (function() {
       refreshPlayerList();
       updateAdminLink('');
       updateTechniquesLink('');
+      renderStatusBanner();
+      applyScoringLock();
       // 大会を離れたら配点も雛形に戻す（次に選ぶ大会まで前の大会の配点を持ち越さない）。
       if (templateTechniques) Scoring.setTechniques(templateTechniques);
       return;
@@ -451,7 +519,7 @@ var App = (function() {
     var keepRow = selectedRow;
     adoptEvent(loaded);
     refreshCourtList();
-    visiblePlayers = Courts.filter(players, currentCourt);
+    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt));
     var idx = -1;
     for (var i = 0; i < visiblePlayers.length; i++) {
       if (visiblePlayers[i].id === currentId) { idx = i; break; }
@@ -474,6 +542,8 @@ var App = (function() {
     selectRow(keepRow);
     refreshPlayerList();
     updatePlayerList();
+    renderStatusBanner();
+    applyScoringLock();
   }
 
   function updatePlayerLabels(p) {
@@ -517,6 +587,7 @@ var App = (function() {
       totalAdjustInput.disabled = true;
       noteInput.disabled = true;
       applyConfirmedStyle(!!player.confirmed);
+      applyScoringLock();
       return;
     }
     totalAdjustInput.disabled = false;
@@ -556,6 +627,7 @@ var App = (function() {
       setTotalDisplay(player.score || 0);
     }
     applyConfirmedStyle(!!player.confirmed);
+    applyScoringLock();
   }
 
   function buildScoreRow(techName, isFemale, rowData, rowIndex) {
@@ -874,6 +946,7 @@ var App = (function() {
   var STRIKE_LABELS = ['初太刀', '二ノ太刀', '三ノ太刀', '四ノ太刀'];
 
   function onStrikeClick(e) {
+    if (!scoringOpen()) return;   // 採点できない状態（理由はバナーに出ている）
     var td = e.currentTarget;
     if (td.classList.contains('disabled')) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
