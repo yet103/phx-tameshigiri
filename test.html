@@ -1945,6 +1945,39 @@
     assert('parsePasteRows: 空文字は 0 行',
       Courts.parsePasteRows('   \n  ', pTech).rows.length, 0);
 
+    // ---- 貼り付けの不足列と既定コート（第 3 引数 defaults = { court }） ----
+    // 列が足りない行はエラーにせず、無い列は 性別＝男子・新人＝なし・技＝空 で読む。
+    // コートの列が空の行だけ defaults.court で補い、補った値にも同じ検証を掛ける。
+    // defaults を省いたときは従来どおり（上の既存テストがそれを固定している）。
+    function pRowsD(text, defaults) { return Courts.parsePasteRows(text, pTech, defaults).rows; }
+    function pBriefD(text, defaults) {
+      return pRowsD(text, defaults).map(function(r) {
+        return [r.line, r.name, r.court, r.isFemale, r.isNewFace, r.techs.join('/'), r.ok, r.error].join('|');
+      });
+    }
+
+    assert('parsePasteRows: defaults.court が名前だけの行を補う（男子・新人なし・技空）',
+      pBriefD('山田 太郎', { court: 'A' }), ['1|山田 太郎|A|false|false|//|true|']);
+    assert('parsePasteRows: defaults.court は空のコート列だけを補い、貼った値は上書きしない',
+      pBriefD('山田,B\n佐藤', { court: 'A' }),
+      ['1|山田|B|false|false|//|true|', '2|佐藤|A|false|false|//|true|']);
+    assert('parsePasteRows: courtFilled で補った行が分かる',
+      pRowsD('山田,B\n佐藤', { court: 'A' }).map(function(r) { return r.courtFilled; }), [false, true]);
+    assert('parsePasteRows: defaults が無ければ従来どおりコートがありません',
+      pRows('山田').map(function(r) { return [r.ok, r.error]; }), [[false, 'コートがありません']]);
+    assert('parsePasteRows: defaults.court が空文字なら従来どおりコートがありません',
+      pRowsD('山田', { court: '' }).map(function(r) { return [r.ok, r.error]; }), [[false, 'コートがありません']]);
+    assert('parsePasteRows: 補ったコート名にも検証が掛かる（- は使えない）',
+      pRowsD('山田', { court: 'A-1' }).map(function(r) { return [r.ok, r.error]; }),
+      [[false, 'コート名「A-1」は使えません']]);
+    assert('parsePasteRows: 補ったコートが未分類なら断る',
+      pRowsD('山田', { court: '未分類' }).map(function(r) { return r.ok; }), [false]);
+    assert('parsePasteRows: 名前が空の行は defaults があっても「名前がありません」のまま',
+      pRowsD(',A', { court: 'B' }).map(function(r) { return [r.ok, r.error]; }), [[false, '名前がありません']]);
+    assert('parsePasteRows: 全部の列を貼った行の courtFilled は false',
+      pRowsD('山田,A,女子,新人,四方,水月,', { court: 'B' }).map(function(r) { return [r.court, r.courtFilled]; }),
+      [['A', false]]);
+
     // ---- splitDelimited（RFC4180 の引用符の規則で 1 行を分割。server/index.js の parseCSV と同じ規則） ----
     assert('splitDelimited: 引用符内のカンマは区切らない',
       Courts.splitDelimited('a,"b,c",d', ','), { fields: ['a', 'b,c', 'd'], error: '' });

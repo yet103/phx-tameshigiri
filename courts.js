@@ -405,10 +405,14 @@ var Courts = (function() {
   //   name, court, isFemale, isNewFace,
   //   techs,     ['技1', '技2', '技3']（空の枠は ''）
   //   badTechs,  技リストに無い技名（画面で赤く示す）
+  //   courtFilled, コートの列が空で defaults.court から補った行か（画面が色を分ける）
   //   ok,        サーバーに送ってよい行か
   //   error      送れない理由（ok が true なら ''）
   // } ] }
-  function parsePasteRows(text, techniques) {
+  // defaults = { court } は「列が足りない行に使う既定値」。いまはコートだけ。
+  // 貼り付けダイアログの「コートが空の行に使うコート」を渡す。省略すると従来どおり
+  // （コートの列が空の行は「コートがありません」で断る）。
+  function parsePasteRows(text, techniques, defaults) {
     var known = Object.create(null);   // 技名が 'toString' などでも壊れないように（computeRanking と同じ）
     (techniques || []).forEach(function(t) {
       var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
@@ -434,7 +438,7 @@ var Courts = (function() {
         // Excel の1行目をそのまま貼れるように、「名前…」で始まる最初の行は見出しとみなす
         if (cols[0].indexOf('名前') === 0) { headerSkipped = true; return; }
       }
-      var row = parsePasteRow(cols, i + 1, known);
+      var row = parsePasteRow(cols, i + 1, known, defaults || {});
       if (quoteError) badRow(row, quoteError);   // 引用符の異常は他の理由より優先して断る
       rows.push(row);
     });
@@ -442,13 +446,20 @@ var Courts = (function() {
   }
 
   // 1 行分。不正でも例外は投げず、ok: false と理由を付けて返す（画面が行ごとに赤く示す）。
-  function parsePasteRow(cols, line, known) {
+  // 列が足りない行（名前だけ、名前とコートだけ、…）はエラーにしない。
+  // 無い列は 性別＝男子・新人＝なし・技＝空 として読み、コートだけ defaults.court で補う。
+  // 補った値にも下の検証（'-' を含まない・未分類でない・32文字以内）を掛ける
+  // （既定コートが不正なら、その行は貼った行と同じ理由で断る）。
+  function parsePasteRow(cols, line, known, defaults) {
     var techs = [cols[4] || '', cols[5] || '', cols[6] || ''];
     var badTechs = techs.filter(function(t) { return t && !known[t]; });
+    var pasted = cols[1] || '';
+    var fallback = (defaults && typeof defaults.court === 'string') ? defaults.court.trim() : '';
     var row = {
       line: line,
       name: cols[0] || '',
-      court: cols[1] || '',
+      court: pasted || fallback,
+      courtFilled: !pasted && !!fallback,
       isFemale: FEMALE_WORDS.indexOf(String(cols[2] || '').toLowerCase()) !== -1,
       isNewFace: NEWFACE_WORDS.indexOf(String(cols[3] || '').toLowerCase()) !== -1,
       techs: techs,
