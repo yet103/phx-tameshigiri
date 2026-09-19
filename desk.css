@@ -366,6 +366,10 @@ a { color: var(--accent); }
    （「技 未入力 n」の .desk-match-count や desk-paste-bad と同じ変数）。 */
 .desk-match-table select { min-width: 130px; min-height: 30px; }
 .desk-match-table select.empty { border-color: var(--cell-fail-text); }
+/* 同じ形の回数制限（設計書 2026-09-20-rules-alignment-design.md）。desk-players.js の
+   .desk-cell-bad と同じ色だが、この表のセレクトは .desk-cell-select を持たないため
+   ここで別に定義する（幅・パディングなど他の見た目は変えない）。 */
+.desk-match-table select.desk-cell-bad { border-color: var(--cell-fail-text); color: var(--cell-fail-text); font-weight: bold; }
 .desk-match-table td.copy { text-align: center; }
 .desk-match-table td.copy .desk-btn { min-height: 30px; padding: 0 10px; font-size: 12px; }
 

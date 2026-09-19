@@ -338,6 +338,9 @@
       tr.appendChild(td);
       selects.push(sel);
     });
+    // 空欄の赤枠に加えて、同じ形の回数制限の赤枠も塗る（3枠揃った時点で判定するので、
+    // ループの外でまとめて呼ぶ。設計書 2026-09-20-rules-alignment-design.md）。
+    updateTechMarks(selects, techniques, !!p.isFemale);
 
     var tdCopy = document.createElement('td');
     tdCopy.className = 'copy';
@@ -380,12 +383,24 @@
       sel.appendChild(o2);
     }
     sel.value = value || '';
-    markEmpty(sel);
     return sel;
   }
 
-  function markEmpty(sel) {
-    sel.className = sel.value ? '' : 'empty';
+  // 空欄（従来の赤枠）と、同じ形の回数制限（設計書 2026-09-20-rules-alignment-design.md）の
+  // 赤枠をまとめて塗り直す。duplicateForms は3枠揃った値で判定するので、必ず selects
+  // 全部（3つ）で呼ぶこと。desk-cell-bad は desk-players.js の技セルと同じクラスを流用する。
+  function updateTechMarks(selects, techniques, isFemale) {
+    var dup = Courts.duplicateForms(valuesOf(selects), techniques, isFemale);
+    selects.forEach(function(s) {
+      var bad = false;
+      if (s.value) {
+        var resolved = Courts.resolveTechnique(techniques, s.value, isFemale);
+        var display = resolved ? Courts.stripGenderSuffix(resolved.name) : '';
+        bad = !!display && dup.indexOf(display) !== -1;
+      }
+      s.className = (s.value ? '' : 'empty') + (bad ? ' desk-cell-bad' : '');
+      s.title = bad ? '同じ形は 1 回までです' : '';
+    });
   }
 
   function valuesOf(selects) {
@@ -421,13 +436,13 @@
     }
   }
 
-  function setValues(selects, arr) {
+  function setValues(selects, arr, techniques, isFemale) {
     selects.forEach(function(s, i) {
       removeStaleAdhocOptions(s, arr[i] || '');
       ensureOption(s, arr[i]);
       s.value = arr[i] || '';
-      markEmpty(s);
     });
+    updateTechMarks(selects, techniques, isFemale);
   }
 
   function setRowDisabled(selects, tr, flag) {
@@ -444,7 +459,7 @@
   async function saveTech(p, arr, selects, ctx, tr) {
     var patch = { tech1: arr[0], tech2: arr[1], tech3: arr[2] };
     if (Courts.scoreMayChange(p, patch) && !confirm(Courts.scoreChangeConfirmMessage(p))) {
-      setValues(selects, [p.tech1 || '', p.tech2 || '', p.tech3 || '']);
+      setValues(selects, [p.tech1 || '', p.tech2 || '', p.tech3 || ''], ctx.techniques, !!p.isFemale);
       return false;
     }
     setRowDisabled(selects, tr, true);
@@ -457,13 +472,13 @@
       } else {
         alert('技を保存できませんでした。通信を確認してもう一度お試しください。');
       }
-      setValues(selects, [p.tech1 || '', p.tech2 || '', p.tech3 || '']);
+      setValues(selects, [p.tech1 || '', p.tech2 || '', p.tech3 || ''], ctx.techniques, !!p.isFemale);
       return false;
     }
     p.tech1 = arr[0];
     p.tech2 = arr[1];
     p.tech3 = arr[2];
-    setValues(selects, arr);
+    setValues(selects, arr, ctx.techniques, !!p.isFemale);
     updateCount(ctx);
     return true;
   }
@@ -493,6 +508,9 @@
   }
 
   function onTechChange(p, selects, ctx, tr) {
+    // 保存の通信を待たず、選んだ時点で赤枠を塗る（設計書「選んだ時点で赤枠と件数で示す」）。
+    // 通信が失敗すれば saveTech の setValues が元の値へ塗り直す。
+    updateTechMarks(selects, ctx.techniques, !!p.isFemale);
     saveTech(p, valuesOf(selects), selects, ctx, tr);
   }
 

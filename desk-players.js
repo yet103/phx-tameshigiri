@@ -439,7 +439,10 @@
   }
 
   // 試合開始で止まる理由の見出し（Courts.startBlockers の kind と対応）。
-  var BLOCKER_LABELS = { bib: 'ゼッケン未入力', rank: '級位段位未入力', rental: 'レンタル不可の形' };
+  // repeat（同じ形の回数制限。設計書 2026-09-20-rules-alignment-design.md）は
+  // Courts.BLOCKER_LABELS の文言（「同じ形を2回以上選んでいる」）だと帯が長くなるので、
+  // ここだけ短い「同じ形 2 回」にする（あとに renderCount が人数を続ける）。
+  var BLOCKER_LABELS = { bib: 'ゼッケン未入力', rank: '級位段位未入力', rental: 'レンタル不可の形', repeat: '同じ形 2 回' };
 
   // 表の上の「表示 n / N 名」「ゼッケン未入力 n …」「絞り込みを解除」。
   // 件数は Courts.startBlockers をそのまま数えるので、「試合開始」で止まる条件と
@@ -738,10 +741,13 @@
     });
   }
 
-  // --- 赤枠（必須未入力・レンタルが選べない形） ---
+  // --- 赤枠（必須未入力・レンタルが選べない形・同じ形の回数制限） ---
   // 判定は Courts.startBlockers と同じ規則にする（表の上の件数と食い違わせない）。
   //   ゼッケン・級位段位 … 大会の settings で必須にしていて、一巡目の行が空のとき
-  //   技                 … レンタルの選手の tech1〜3 のうち、抜刀後の形でない技
+  //   技                 … レンタルの選手の tech1〜3 のうち、抜刀後の形でない技。
+  //                        または repeatable でない技が3枠のうち2回以上（巡目を問わない。
+  //                        Courts.duplicateForms は行の3枠だけを見るため。設計書
+  //                        2026-09-20-rules-alignment-design.md「同じ形の回数制限」）
   // 二巡目の行の必須は数えない（二巡目は一巡目の行から複製されるため）。
   function markRow(ctx, refs, p) {
     var settings = (ctx.event && ctx.event.settings) || {};
@@ -750,11 +756,16 @@
       settings.requireBib === true && firstRound && typeof p.bib !== 'number');
     setMark(refs.rankInput, 'desk-cell-required',
       settings.requireRank === true && firstRound && !String(p.rank || '').trim());
+    var isFemale = !!p.isFemale;
+    var dupForms = Courts.duplicateForms([p.tech1, p.tech2, p.tech3], ctx.techniques, isFemale);
     refs.techSelects.forEach(function(t) {
       var name = p['tech' + t.slot] || '';
-      setMark(t.sel, 'desk-cell-bad',
-        p.rental === true && !!name &&
-        !Courts.isDrawnTechnique(ctx.techniques, name, !!p.isFemale));
+      var rentalBad = p.rental === true && !!name && !Courts.isDrawnTechnique(ctx.techniques, name, isFemale);
+      var resolved = name ? Courts.resolveTechnique(ctx.techniques, name, isFemale) : null;
+      var display = resolved ? Courts.stripGenderSuffix(resolved.name) : '';
+      var repeatBad = !!display && dupForms.indexOf(display) !== -1;
+      setMark(t.sel, 'desk-cell-bad', rentalBad || repeatBad);
+      t.sel.title = repeatBad ? '同じ形は 1 回までです' : '';
     });
   }
 
