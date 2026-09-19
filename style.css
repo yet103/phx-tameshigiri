@@ -160,6 +160,12 @@ input[type="file"] { display: none; }
   background: var(--cell-fail);
   color: var(--cell-fail-text);
 }
+/* △（減点成功）。初太刀だけに出る。失敗ではないので voided にはしない。
+   --warn は帯・状態バナーで使っている黄土色で、○（成功）と見分けがつくようにする。 */
+.score-table td.strike-cell.reduced {
+  background: var(--warn);
+  color: var(--bg);
+}
 .score-table td.strike-cell.disabled {
   background: var(--cell-disabled);
   cursor: default;
@@ -197,6 +203,7 @@ input[type="file"] { display: none; }
 .score-table tr.selected td.tech-name { background: var(--accent); color: var(--accent-text); }
 .score-table tr.selected td.tech-name::before { color: var(--accent-text); }
 .score-table tr.selected td.strike-cell.success { background: var(--cell-success); }
+.score-table tr.selected td.strike-cell.reduced { background: var(--warn); }
 .score-table tr.selected td.strike-cell.fail { background: var(--cell-fail); }
 .score-table tr.selected td.strike-cell.disabled { background: var(--cell-disabled); }
 .score-table tr.selected td.strike-cell.voided { background: var(--cell-disabled); }

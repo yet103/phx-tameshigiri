@@ -733,8 +733,11 @@ var App = (function() {
   }
 
   function setCellDisplay(td, value) {
-    td.classList.remove('success', 'fail', 'empty');
+    td.classList.remove('success', 'fail', 'empty', 'reduced');
     if (value === '○') { td.textContent = '成功'; td.classList.add('success'); }
+    // △（減点成功）。抜刀していた初太刀の胸尽くしなど。失敗ではないので
+    // 後ろの太刀は無効にならない（Scoring.failedAt は '×' しか見ない）
+    else if (value === '△') { td.textContent = '減点'; td.classList.add('reduced'); }
     else if (value === '×') { td.textContent = '失敗'; td.classList.add('fail'); }
     else { td.textContent = '未'; td.classList.add('empty'); }
   }
@@ -1033,21 +1036,37 @@ var App = (function() {
 
     var tr = td.closest('tr');
     selectRow(parseInt(tr.dataset.row, 10));
+    var strikeIndex = parseInt(td.dataset.strike, 10);
+    var p = visiblePlayers[currentIndex];
+    var isFemale = p ? p.isFemale : false;
+    // △（減点成功）を出せるセルだけ 未→○→△→×→未 の順。それ以外は従来どおり
+    // 未→○→×→未（設計書 2026-09-20-rules-alignment-design.md）
+    var reducible = Scoring.canReduce(tr.dataset.tech, strikeIndex, isFemale);
     var current = td.dataset.value || '';
-    var next = current === '' ? '○' : current === '○' ? '×' : '';
+    var next;
+    if (reducible) {
+      next = current === '' ? '○' : current === '○' ? '△' : current === '△' ? '×' : '';
+    } else {
+      next = current === '' ? '○' : current === '○' ? '×' : '';
+    }
     td.dataset.value = next;
     setCellDisplay(td, next);
     var voided = applyVoiding(tr);
 
-    var p = visiblePlayers[currentIndex];
     gridEdited = true;
     unconfirmIfNeeded();
-    updateRowScore(tr, p ? p.isFemale : false);
+    updateRowScore(tr, isFemale);
     updateTotal();
     saveCurrentState();
 
-    var detail = STRIKE_LABELS[parseInt(td.dataset.strike, 10)] + ' → ' +
-              (next === '○' ? '成功' : next === '×' ? '失敗' : '未');
+    var detail;
+    if (next === '△') {
+      var reducedPts = Scoring.calcStrikeScore(tr.dataset.tech, strikeIndex, '△', isFemale);
+      detail = STRIKE_LABELS[strikeIndex] + ' → 減点成功（' + reducedPts + '点）';
+    } else {
+      detail = STRIKE_LABELS[strikeIndex] + ' → ' +
+                (next === '○' ? '成功' : next === '×' ? '失敗' : '未');
+    }
     if (voided) detail += '（以降の太刀は無効）';
     Api.addHistory(currentEvent.id, {
       action: 'score_update',
@@ -1056,7 +1075,7 @@ var App = (function() {
       // 同じ技を複数の枠に入れられるので、techName だけでは行を特定できない。
       // buildScoreRow が振った 0 始まりの行番号（tr.dataset.row）も残す。
       techRow: parseInt(tr.dataset.row, 10),
-      strike: parseInt(td.dataset.strike, 10),
+      strike: strikeIndex,
       value: next,
       detail: detail
     });
