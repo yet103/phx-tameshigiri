@@ -1231,7 +1231,8 @@
       });
       if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
       if (result && result.player === null) {
-        // 409（いまは確定済みガードだけ）。行は残す（入力を失わせない）。打ち直せるよう戻す。
+        // 409（確定済みガード（reason:'locked'）と、ゼッケン番号の重複（reason:'bib'）の
+        // どちらも通る）。行は残す（入力を失わせない）。打ち直せるよう戻す。
         busy = false;
         setDisabled(false);
         if (result.reason === 'locked') {

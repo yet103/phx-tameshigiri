@@ -574,7 +574,8 @@
       btnSaveNext.disabled = false;
       sheet.lock(false);
       if (created && created.player === null) {
-        // 409（確定済みガードのみ）。シートは閉じない（入力を残す）
+        // 409（確定済みガード（reason:'locked'）と、ゼッケン番号の重複（reason:'bib'）の
+        // どちらも通る）。シートは閉じない（入力を残す）
         if (created.reason === 'locked') {
           alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
         } else {
