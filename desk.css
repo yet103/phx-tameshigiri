@@ -126,12 +126,13 @@ a { color: var(--accent); }
 .desk-players-wrap { overflow-x: auto; padding-bottom: 46px; }
 /* table-layout: fixed は表そのものに幅が無いと列幅を「比率」としてしか使わず、
    窓を狭めても列が縮むだけでスクロールが起きない（確認で見つかった）。
-   列幅の合計（40+52+190+78+110+68+96+84+52+132*3+64+48 = 1278px）を表の width に
+   列幅の合計（36+44+160+60+84+46+80+64+44+106*3+52+40 = 1028px）を表の width に
    して初めて、狭いときに表の枠だけが横スクロールし、sticky の名前列が効くように
    なる。border-collapse: collapse は既定の border-spacing（列の間の隙間）を
-   消して幅の計算を列幅の合計どおりにする。
-   列を足したら必ずこの合計も直すこと（合わないと列がじわじわずれる）。 */
-.desk-players-table { table-layout: fixed; width: 1278px; border-collapse: collapse; }
+   消して幅の計算を列幅の合計どおりにする。1280px の窓の内側（.desk-players-wrap）に
+   収まるようレビューで詰めた数値（列を足したら必ずこの合計も直すこと。合わないと
+   列がじわじわずれる）。 */
+.desk-players-table { table-layout: fixed; width: 1028px; border-collapse: collapse; }
 .desk-players-table th, .desk-players-table td { padding: 2px 6px; vertical-align: middle; text-align: center; }
 /* 上の .desk-table td.num は右寄せ。選手表だけ中央に戻す（同じ詳細度なので後ろのこれが勝つ） */
 .desk-players-table td.num { text-align: center; }
@@ -140,19 +141,19 @@ a { color: var(--accent); }
 .desk-players-table th.col-name { background: var(--bg-header); }
 .desk-players-table td.col-name { background: var(--card-bg); }
 .desk-players-table tbody tr:hover td.col-name { background: var(--row-selected); }
-.desk-players-table .col-round { width: 40px; }
-.desk-players-table .col-no { width: 52px; }
-.desk-players-table .col-name { width: 190px; }
+.desk-players-table .col-round { width: 36px; }
+.desk-players-table .col-no { width: 44px; }
+.desk-players-table .col-name { width: 160px; }
 /* 選手の追加項目（ゼッケン・級位段位・真剣レンタル）。名前のすぐ右にまとめる。 */
-.desk-players-table .col-bib { width: 78px; }
-.desk-players-table .col-rank { width: 110px; }
-.desk-players-table .col-rental { width: 68px; text-align: center; }
-.desk-players-table .col-court { width: 96px; }
-.desk-players-table .col-sex { width: 84px; }
-.desk-players-table .col-new { width: 52px; text-align: center; }
-.desk-players-table .col-tech { width: 132px; }
-.desk-players-table .col-score { width: 64px; color: var(--score-color); font-weight: bold; }
-.desk-players-table th.act, .desk-players-table td.act { width: 48px; }
+.desk-players-table .col-bib { width: 60px; }
+.desk-players-table .col-rank { width: 84px; }
+.desk-players-table .col-rental { width: 46px; text-align: center; }
+.desk-players-table .col-court { width: 80px; }
+.desk-players-table .col-sex { width: 64px; }
+.desk-players-table .col-new { width: 44px; text-align: center; }
+.desk-players-table .col-tech { width: 106px; }
+.desk-players-table .col-score { width: 52px; color: var(--score-color); font-weight: bold; }
+.desk-players-table th.act, .desk-players-table td.act { width: 40px; }
 
 /* セルの入力。ふだんは枠を見せず、触ったときだけ枠を出す（表が線だらけにならない）。 */
 .desk-cell-input, .desk-cell-select {
