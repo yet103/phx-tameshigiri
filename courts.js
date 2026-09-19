@@ -484,6 +484,8 @@ var Courts = (function() {
   // 性別・新人の表記ゆれ。設計書「画面設計 > PC 運営 > 選手」の貼り付けの節のとおり。
   var FEMALE_WORDS = ['女子', '女', 'f'];
   var NEWFACE_WORDS = ['新人', '○', '〇', '1', 'true'];
+  // レンタル（真剣レンタル）は新人と同じ語に「レンタル」「あり」を足す（設計書「選手の追加項目」）。
+  var RENTAL_WORDS = NEWFACE_WORDS.concat(['レンタル', 'あり']);
 
   // 1 行を区切り文字で分割する（RFC4180 の引用符の規則）。'"' で囲まれた区間の区切り文字は
   // フィールドを割らず、'""' は '"' 1 文字になる。server/index.js の parseCSV と同じ文字単位の
@@ -518,16 +520,20 @@ var Courts = (function() {
   }
 
   // 貼り付けたテキストを 1 行 1 人に解析する。DOM には触らない（test.html で固定する）。
-  // 列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 の固定順。
+  // 列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 / ゼッケン / 級位段位 / レンタル の固定順
+  // （後ろの3列は無くてもよい。7列だけの行は従来どおり）。
   // タブが1つでもある行はタブ区切り（Excel からの貼り付け。区切り文字そのままで、
   // 引用符は特別扱いしない＝名前の一部）、無ければ splitDelimited でカンマ区切りとして切る。
-  // techniques はその大会の有効な技リスト（[{ name, strikes }]）。
+  // techniques はその大会の有効な技リスト（[{ name, strikes, drawn }]）。
   // 戻り値: { headerSkipped, rows: [ {
   //   line,      貼り付けた文字列の行番号（1 始まり。空行と見出しも数える）
   //   name, court, isFemale, isNewFace,
   //   techs,     ['技1', '技2', '技3']（空の枠は ''）
   //   badTechs,  技リストに無い技名（画面で赤く示す）
   //   courtFilled, コートの列が空で defaults.court から補った行か（画面が色を分ける）
+  //   bib,       ゼッケン番号（整数）。列が空か無ければ null。数字以外なら ok:false
+  //   rank,      級位・段位（列が無ければ ''）
+  //   rental,    真剣レンタル（列が無ければ false。新人と同じ語＋「レンタル」「あり」で真）
   //   ok,        サーバーに送ってよい行か
   //   error      送れない理由（ok が true なら ''）
   // } ] }
@@ -576,6 +582,16 @@ var Courts = (function() {
     var badTechs = techs.filter(function(t) { return t && !resolveTechnique(techniques, t, isFemale); });
     var pasted = cols[1] || '';
     var fallback = (defaults && typeof defaults.court === 'string') ? defaults.court.trim() : '';
+    // ゼッケン（8列目）は数字だけを整数として読む。空なら null（未設定）。
+    // 数字以外（小数点や文字が混ざる）は不正として、下でこの行を断る理由に使う。
+    var bibRaw = String(cols[7] || '').trim();
+    var bib = null;
+    var bibError = '';
+    if (bibRaw) {
+      if (/^\d+$/.test(bibRaw)) bib = parseInt(bibRaw, 10);
+      else bibError = 'ゼッケン番号は数字で';
+    }
+    var rental = RENTAL_WORDS.indexOf(String(cols[9] || '').toLowerCase()) !== -1;
     var row = {
       line: line,
       name: cols[0] || '',
@@ -585,6 +601,9 @@ var Courts = (function() {
       isNewFace: NEWFACE_WORDS.indexOf(String(cols[3] || '').toLowerCase()) !== -1,
       techs: techs,
       badTechs: badTechs,
+      bib: bib,
+      rank: cols[8] || '',
+      rental: rental,
       ok: true,
       error: ''
     };
@@ -596,6 +615,12 @@ var Courts = (function() {
     }
     if (badTechs.length > 0) {
       return badRow(row, '技「' + badTechs.join('」「') + '」は技リストにありません');
+    }
+    if (bibError) return badRow(row, bibError);
+    if (rental) {
+      // レンタルの選手には抜刀後の形（drawn）しか選べない。空の技枠は対象外。
+      var nonDrawn = techs.some(function(t) { return t && !isDrawnTechnique(techniques, t, isFemale); });
+      if (nonDrawn) return badRow(row, 'レンタルの選手は抜刀してからの形だけ選べます');
     }
     return row;
   }

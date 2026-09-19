@@ -2254,6 +2254,50 @@
       'ゼッケン番号が未入力: 1 名（山田 太郎）\nレンタルなのに抜刀してからの形以外の技を選んでいる: 1 名（鈴木 花子）');
     assert('blockerMessage: blockers が無くても落ちない', Courts.blockerMessage(null), '');
 
+    // parsePasteRows: 10列（名前,コート,性別,新人,技1,技2,技3,ゼッケン,級位段位,レンタル）
+    function pRows10(text, techniques, defaults) { return Courts.parsePasteRows(text, techniques || pTech, defaults).rows; }
+    function pBrief10(text, techniques, defaults) {
+      return pRows10(text, techniques, defaults).map(function(r) {
+        return [r.line, r.name, r.court, r.isFemale, r.isNewFace, r.techs.join('/'), r.bib, r.rank, r.rental, r.ok, r.error].join('|');
+      });
+    }
+    assert('parsePasteRows: 8〜10列目のゼッケン・級位段位・レンタルを読む',
+      pBrief10('山田 太郎,A,男子,,,,,12,初段,レンタル'),
+      ['1|山田 太郎|A|false|false|//|12|初段|true|true|']);
+    assert('parsePasteRows: 7列だけの行は従来どおり（bib=null, rank=\'\', rental=false）',
+      pBrief10('山田,A,男子,新人,四方,水月,'),
+      ['1|山田|A|false|true|四方/水月/|||false|true|']);
+    assert('parsePasteRows: ゼッケン・級位段位・レンタルの列が無い行は未設定',
+      pRows10('山田,A').map(function(r) { return [r.bib, r.rank, r.rental, r.ok]; }),
+      [[null, '', false, true]]);
+    assert('parsePasteRows: ゼッケンは整数に変換する（先頭の0も含めて）',
+      pRows10('山田,A,,,,,,007,,').map(function(r) { return r.bib; }), [7]);
+    assert('parsePasteRows: ゼッケンが数字以外なら ok:false',
+      pRows10('山田,A,,,,,,12a,,').map(function(r) { return [r.bib, r.ok, r.error]; }),
+      [[null, false, 'ゼッケン番号は数字で']]);
+    assert('parsePasteRows: ゼッケンが小数なら ok:false',
+      pRows10('山田,A,,,,,,1.5,,').map(function(r) { return [r.ok, r.error]; }),
+      [[false, 'ゼッケン番号は数字で']]);
+    assert('parsePasteRows: 級位段位はそのまま文字列で読む',
+      pRows10('山田,A,,,,,,,初段,').map(function(r) { return r.rank; }), ['初段']);
+    assert('parsePasteRows: レンタルは新人と同じ語に「レンタル」「あり」を足した語',
+      pRows10('あ,A,,,,,,,,新人\nい,A,,,,,,,,○\nう,A,,,,,,,,1\nえ,A,,,,,,,,true\nお,A,,,,,,,,レンタル\nか,A,,,,,,,,あり\nき,A,,,,,,,,')
+        .map(function(r) { return r.rental; }),
+      [true, true, true, true, true, true, false]);
+    var drawnTech = [{ name: '破図味(男)', drawn: true }, { name: '四方' }];
+    assert('parsePasteRows: レンタルの行に drawn でない技があれば ok:false',
+      pRows10('山田,A,男子,,四方,,,,,レンタル', drawnTech).map(function(r) { return [r.ok, r.error]; }),
+      [[false, 'レンタルの選手は抜刀してからの形だけ選べます']]);
+    assert('parsePasteRows: レンタルの行でも drawn の技だけなら ok:true',
+      pRows10('山田,A,男子,,破図味,,,,,レンタル', drawnTech).map(function(r) { return [r.ok, r.rental]; }),
+      [[true, true]]);
+    assert('parsePasteRows: レンタルでなければ drawn でない技でも通る',
+      pRows10('山田,A,男子,,四方,,,,,', drawnTech).map(function(r) { return r.ok; }),
+      [true]);
+    assert('parsePasteRows: bib が省略された defaults 呼び出し（第3引数はコート既定のみ）でも落ちない',
+      pRows10('山田', pTech, { court: 'A' }).map(function(r) { return [r.bib, r.rank, r.rental, r.ok]; }),
+      [[null, '', false, true]]);
+
     var h2es = document.createElement('h2');
     h2es.textContent = 'status.js';
     results.appendChild(h2es);
