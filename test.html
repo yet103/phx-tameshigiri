@@ -446,6 +446,24 @@
     assert('CSV取り込み: 重複・範囲外のゼッケンは未設定に落ちる、先着と正常な値は残る',
       csvBibDropPlayers.map(function(p) { return p.bib; }), [5, undefined, undefined, 6]);
     await Api.deleteEvent(csvExtEvent.id);
+
+    // レビュー修正【必ず直す】: 拡張CSVの二巡目の行（順番列の巡目で判定）は bib の重複判定の
+    // 対象外にして値をそのまま通す。エクスポート→取り込みの往復で二巡目の bib が残り、
+    // bibDropped が 0 件であることを確かめる（一巡目と同じ bib を持つのが正常な状態）。
+    var csvR2Event = await Api.saveEvent({ name: 'CSV二巡目往復テスト', date: '2026-09-19', venue: '', players: [] });
+    await Api.createPlayer(csvR2Event.id, { name: 'CSV往復 一郎', court: 'A', bib: 8 });
+    await toRound1Done(csvR2Event.id);
+    await Api.generateNextRound(csvR2Event.id, true);
+    var csvR2Csv = await Api.exportCsv(csvR2Event.id);
+    var csvR2Import = await Api.importCsv(csvR2Event.id, csvR2Csv, 'replace', true);
+    assert('CSV取り込み: 二巡目のある大会の往復で bibDropped は0件',
+      csvR2Import.bibDropped, { duplicate: 0, outOfRange: 0 });
+    var csvR2Players = (await Api.loadEvent(csvR2Event.id)).players;
+    var csvR2Round1 = csvR2Players.find(function(p) { return (p.order || '').indexOf('-1-') !== -1; });
+    var csvR2Round2 = csvR2Players.find(function(p) { return (p.order || '').indexOf('-2-') !== -1; });
+    assert('CSV取り込み: 往復後も一巡目・二巡目とも bib が残る',
+      [csvR2Round1 && csvR2Round1.bib, csvR2Round2 && csvR2Round2.bib], [8, 8]);
+    await Api.deleteEvent(csvR2Event.id);
     // ==== ここまで: 選手の追加項目 ====
 
     // PATCH: 補正点・備考・確定・負の得点

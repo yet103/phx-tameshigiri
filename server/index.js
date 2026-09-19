@@ -1490,9 +1490,22 @@ app.post('/api/events/:id/import', (req, res) => {
         p.rental = hasExtra ? truthy(row[extBase + 2]) : false;
         return { player: p, rawBib: hasExtra ? row[extBase] : undefined };
       }).filter(r => r.player.name !== ''); // 空行等を除外
-      const bibResult = resolveBibDrops(rows.map(r => r.rawBib), classifyBibCsv, existingBibsForImport);
+      // 拡張形式は「順番」列（p.order）から巡目が分かる。二巡目以降の行は一巡目の複製と
+      // 同じ bib を持つのが正常な状態なので、重複判定の対象外にして値をそのまま通す
+      // （レビュー修正。簡易7列形式は順番をサーバーが採番するので常に一巡目＝対象、
+      // ここでは触らない）。
+      const roundOfRow = rows.map(r => EventStatus.roundOf(r.player));
+      const round1RawBibs = rows.filter((r, i) => roundOfRow[i] === 1).map(r => r.rawBib);
+      const bibResult = resolveBibDrops(round1RawBibs, classifyBibCsv, existingBibsForImport);
+      let round1Cursor = 0;
       importedPlayers = rows.map((r, i) => {
-        if (bibResult.bibs[i] !== null) r.player.bib = bibResult.bibs[i];
+        if (roundOfRow[i] === 1) {
+          const v = bibResult.bibs[round1Cursor++];
+          if (v !== null) r.player.bib = v;
+        } else {
+          const v = classifyBibCsv(r.rawBib);
+          if (typeof v === 'number') r.player.bib = v;
+        }
         return r.player;
       });
       bibDropped = { duplicate: bibResult.duplicate, outOfRange: bibResult.outOfRange };
