@@ -1689,7 +1689,7 @@
     assert('sourcePlayerId は取り込み後のIDを指す', b3P2.sourcePlayerId, b3P1.id);
     assert('不正な選手IDは振り直す', b3P3.id === '../bad', false);
     assert('振り直した選手IDも有効なID', /^[A-Za-z0-9_-]{1,64}$/.test(b3P3.id), true);
-    assert('0と1と空白以外の result は空にする', b3P3.result, '');
+    assert('0と1と2と空白以外の result は空にする', b3P3.result, '');
     assert('"2"（△）を含む result は取り込み後も残る', b3P4.result, '2 10');
     assert('shareToken は取り込まない', b3Loaded.shareToken, undefined);
     assert('live は取り込まない', b3Loaded.live, undefined);
