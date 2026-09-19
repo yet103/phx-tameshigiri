@@ -50,13 +50,15 @@ function requireValidId(req, res) {
 }
 
 // デフォルト技術リスト
+// drawn/repeatable/reducedFirst の既定は data.js の TECHNIQUES と同じ
+// （設計書 2026-09-20-rules-alignment-design.md。test.html がサーバーの既定と data.js の一致を固定する）。
 const DEFAULT_TECHNIQUES = [
-  { name: "立位袈裟",    strikes: [1,  null, null, null] },
-  { name: "立位逆袈裟",  strikes: [2,  null, null, null] },
-  { name: "立位横一",    strikes: [8,  null, null, null] },
-  { name: "座位袈裟",    strikes: [3,  null, null, null] },
-  { name: "座位逆袈裟",  strikes: [4,  null, null, null] },
-  { name: "座位横一",    strikes: [10, null, null, null] },
+  { name: "立位袈裟",    strikes: [1,  null, null, null], drawn: true, repeatable: true },
+  { name: "立位逆袈裟",  strikes: [2,  null, null, null], drawn: true, repeatable: true },
+  { name: "立位横一",    strikes: [8,  null, null, null], drawn: true, repeatable: true },
+  { name: "座位袈裟",    strikes: [3,  null, null, null], drawn: true, repeatable: true },
+  { name: "座位逆袈裟",  strikes: [4,  null, null, null], drawn: true, repeatable: true },
+  { name: "座位横一",    strikes: [10, null, null, null], drawn: true, repeatable: true },
   { name: "基本一",      strikes: [15, 1,    null, null] },
   { name: "基本二",      strikes: [9,  1,    null, null] },
   { name: "真",          strikes: [11, 3,    null, null] },
@@ -64,8 +66,8 @@ const DEFAULT_TECHNIQUES = [
   { name: "左",          strikes: [18, 3,    null, null] },
   { name: "右",          strikes: [13, 3,    null, null] },
   { name: "捨",          strikes: [17, 3,    null, null] },
-  { name: "胸尽くし(男)", strikes: [11, 1,    null, null] },
-  { name: "胸尽くし(女)", strikes: [13, 1,    null, null] },
+  { name: "胸尽くし(男)", strikes: [11, 1,    null, null], reducedFirst: 4 },
+  { name: "胸尽くし(女)", strikes: [13, 1,    null, null], reducedFirst: 4 },
   { name: "円要",        strikes: [16, 1,    null, null] },
   { name: "両車",        strikes: [17, 5,    1,    null] },
   { name: "野送り",      strikes: [6,  null, null, null] },
@@ -88,18 +90,23 @@ const DEFAULT_TECHNIQUES = [
 // 技リストの複製と正規化。
 // 雛形（DEFAULT_TECHNIQUES / custom.json）をそのまま大会 JSON に入れると、
 // あとで雛形を変えたときに採点中の大会の配点まで動いたように見える。必ず複製して渡す。
-// 同時に { name, strikes, drawn } 以外のキーを落とす（保存する形はこの3つだけ）。
+// 同時に { name, strikes, drawn, repeatable, reducedFirst } 以外のキーを落とす（保存する形はこの5つだけ）。
 // drawn（抜刀後の形。既定 false）はレンタルの選手に出す技を絞り込むための印
 // （設計書「選手の追加項目」。courts.js の Courts.isDrawnTechnique と同じ規則）。
+// repeatable（同じ巡で何度でも選べるか。既定 false）・reducedFirst（減点成功△の初太刀の配点。既定 null）は
+// 設計書 2026-09-20-rules-alignment-design.md。
 function cloneTechniques(list) {
   return (Array.isArray(list) ? list : []).map(function(t) {
+    const rf = t && t.reducedFirst;
     return {
       name: (t && typeof t.name === 'string') ? t.name.trim() : '',
       strikes: [0, 1, 2, 3].map(function(i) {
         const v = (t && Array.isArray(t.strikes)) ? t.strikes[i] : null;
         return Number.isInteger(v) ? v : null;
       }),
-      drawn: !!(t && t.drawn === true)
+      drawn: !!(t && t.drawn === true),
+      repeatable: !!(t && t.repeatable === true),
+      reducedFirst: (Number.isInteger(rf) && rf >= 0 && rf <= 99) ? rf : null
     };
   });
 }
@@ -863,6 +870,14 @@ function resolveTechnique(techniques, name, isFemale) {
   return null;
 }
 
+// '破図味(男)' → '破図味'。courts.js の Courts.stripGenderSuffix と同じ規則
+// （bulk rows の重複エラー文言に出す表示名を、接尾辞なしに揃えるため）。
+function stripGenderSuffix(name) {
+  const s = String(name == null ? '' : name);
+  if (s.slice(-3) === '(男)' || s.slice(-3) === '(女)') return s.slice(0, -3);
+  return s;
+}
+
 // ── 選手の追加項目（ゼッケン番号・級位段位・真剣レンタル）の検証 ──
 // 設計書「選手の追加項目」。POST/PATCH の選手 API と bulk rows で共用する。
 const BIB_INVALID = 'ゼッケン番号は1〜9999の整数で指定してください';
@@ -1049,6 +1064,10 @@ function bulkFromRows(req, res, rows) {
     }
     const isFemale = row.isFemale === true;
     const techs = ['tech1', 'tech2', 'tech3'].map(k => (typeof row[k] === 'string' ? row[k].trim() : ''));
+    // 同じ形の重複（repeatable でない技だけ数える）。接尾辞は同じ形として数えるため
+    // stripGenderSuffix した表示名で数える（courts.js の Courts.duplicateForms と同じ規則）。
+    const formCounts = Object.create(null);
+    let dupForm = '';
     for (let t = 0; t < techs.length; t++) {
       if (!techs[t]) continue;
       const resolved = resolveTechnique(techList, techs[t], isFemale);
@@ -1061,6 +1080,14 @@ function bulkFromRows(req, res, rows) {
       if (rentalParsed.value && resolved.drawn !== true) {
         return res.status(400).json({ error: at + RENTAL_DRAWN_ONLY });
       }
+      if (resolved.repeatable !== true) {
+        const display = stripGenderSuffix(resolved.name);
+        formCounts[display] = (formCounts[display] || 0) + 1;
+        if (formCounts[display] >= 2 && !dupForm) dupForm = display;
+      }
+    }
+    if (dupForm) {
+      return res.status(400).json({ error: `${at}同じ形は 1 回までです（${dupForm}）` });
     }
     checked.push({
       name: name,
@@ -1609,6 +1636,18 @@ function validateTechniques(list) {
     // drawn（抜刀後の形）は省略可。省略時は cloneTechniques が false にする。
     if (t.drawn !== undefined && typeof t.drawn !== 'boolean') {
       return n + ' 行目の「抜刀後」の指定が不正です';
+    }
+    // repeatable（同じ巡で何度でも可）は省略可。省略時は cloneTechniques が false にする
+    // （設計書 2026-09-20-rules-alignment-design.md）。
+    if (t.repeatable !== undefined && typeof t.repeatable !== 'boolean') {
+      return n + ' 行目の「回数制限なし」の指定が不正です';
+    }
+    // reducedFirst（減点成功△の初太刀の配点）は省略・null か 0〜99 の整数。省略時は cloneTechniques が null にする。
+    if (t.reducedFirst !== undefined && t.reducedFirst !== null) {
+      const rf = t.reducedFirst;
+      if (!Number.isInteger(rf) || rf < 0 || rf > 99) {
+        return n + ' 行目の「減点初太刀」の配点が不正です（0〜99の整数か空）';
+      }
     }
   }
   return null;
