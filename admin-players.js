@@ -227,6 +227,26 @@
       td.textContent = text;
       if (cls) td.className = cls;
       tr.appendChild(td);
+      return td;
+    }
+    // 同じ形の回数制限（設計書 2026-09-20-rules-alignment-design.md）。技リストが
+    // 手元に無ければ判定できないので何も塗らない（保存は元々通す。表示だけの注記）。
+    var dupForms = hasTechniques(ctx)
+      ? Courts.duplicateForms([p.tech1, p.tech2, p.tech3], techCache, !!p.isFemale)
+      : [];
+    function isDupTech(name) {
+      if (!name || dupForms.length === 0) return false;
+      var resolved = Courts.resolveTechnique(techCache, name, !!p.isFemale);
+      var display = resolved ? Courts.stripGenderSuffix(resolved.name) : '';
+      return !!display && dupForms.indexOf(display) !== -1;
+    }
+    function techCell(name, cls) {
+      var td = cell(name || '—', cls);
+      if (isDupTech(name)) {
+        td.classList.add('tech-dup');
+        td.title = '同じ形は 1 回までです';
+      }
+      return td;
     }
     cell(String(Courts.roundOf(p)));
     cell(Courts.courtOf(p));
@@ -238,9 +258,9 @@
     cell(hasBib ? String(p.bib) : '—', hasBib ? '' : 'muted');
     // 3枠とも表示する（詰めると ['', '真', '真'] と ['真', '真', ''] が同じ見た目になり、
     // どの枠が空か運営が分からなくなる）。空き枠は「—」。3枠とも空なら技①に「未入力」。
-    cell(noTech ? '未入力' : (p.tech1 || '—'), noTech ? 'muted' : '');
-    cell(p.tech2 || '—');
-    cell(p.tech3 || '—');
+    techCell(noTech ? '未入力' : p.tech1, noTech ? 'muted' : '');
+    techCell(p.tech2);
+    techCell(p.tech3);
     cell(p.isNewFace ? '●' : '');
     cell(String(p.score || 0), 'col-score');
 
@@ -253,8 +273,10 @@
   }
 
   // コート・性別・新人の入力部品（1人ずつの追加・編集フォームと一括登録シートで共用）
+  // onSexChange は性別を切り替えるたびに呼ぶ（省略可）。buildPlayerForm が技の重複注記
+  // （同じ形は男女で配点が分かれる技があり、性別で解決先が変わる）を塗り直すのに使う。
   // 戻り値: { el, court(), isFemale(), isNewFace() }
-  function buildCommonFields(ctx, player) {
+  function buildCommonFields(ctx, player, onSexChange) {
     var el = document.createElement('div');
 
     // 既存のコート一覧（未分類はサーバーが受け付けないので候補に出さない）
@@ -337,6 +359,7 @@
         b.addEventListener('click', function() {
           isFemale = pair[1];
           renderSexSeg();
+          if (onSexChange) onSexChange();
         });
         segSex.appendChild(b);
       });
@@ -440,7 +463,7 @@
     fRank.appendChild(rankList);
     el.appendChild(fRank);
 
-    var common = buildCommonFields(ctx, player);
+    var common = buildCommonFields(ctx, player, function() { updateTechNote(); });
     el.appendChild(common.el);
 
     // 真剣レンタル。新人と同じトグル（.toggle）で、コート・性別・新人のすぐ下に置く。
@@ -469,7 +492,18 @@
     chips.className = 'chips';
     fTech.appendChild(lTech);
     fTech.appendChild(chips);
+    // 同じ形の回数制限の注記（設計書 2026-09-20-rules-alignment-design.md）。
+    // 保存は通す（PC の desk-players.js と同じ方針）ので赤枠ではなく文言だけ添える。
+    var techNote = document.createElement('p');
+    techNote.className = 'field-note tech-dup-note';
+    fTech.appendChild(techNote);
     el.appendChild(fTech);
+
+    function updateTechNote() {
+      if (!hasTechniques(ctx)) { techNote.textContent = ''; return; }
+      var dup = Courts.duplicateForms(TechPicker.toArray(techState), techCache, common.isFemale());
+      techNote.textContent = dup.length > 0 ? '同じ形は 1 回までです（' + dup[0] + '）' : '';
+    }
 
     function renderTechChips() {
       TechPicker.renderChips(chips, techState, function(index) {
@@ -498,6 +532,7 @@
           }
         });
       });
+      updateTechNote();
     }
     renderTechChips();
 

@@ -149,6 +149,9 @@ main { padding: 8px 12px 16px; }
 .players-table th.col-name { z-index: 2; }
 .players-table .col-score { text-align: center; font-weight: bold; color: var(--score-color); }
 .players-table td.muted { color: var(--text-muted); font-weight: normal; }
+/* 同じ形の回数制限（設計書 2026-09-20-rules-alignment-design.md）。保存は通すので
+   赤枠にはせず、PC の desk-cell-bad と同じ色の文字だけで注記する。 */
+.players-table td.tech-dup { color: var(--cell-fail-text); font-weight: bold; }
 .players-table tbody tr { cursor: pointer; }
 .players-table tbody tr:active td { background: var(--bg-secondary); }
 /* 見出しの並べ替えボタン。表の見出しの見た目のまま、タップ目標だけ 44px にする */
@@ -202,6 +205,12 @@ main { padding: 8px 12px 16px; }
 .toggle, .field > label.toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 15px; color: var(--text); margin: 0; }
 .toggle input { width: 22px; height: 22px; margin: 0; flex: 0 0 auto; }
 .bulk-count { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+/* フォーム部品の下に添える注記（既定は空なら何も出さない）。
+   同じ形の回数制限（設計書 2026-09-20-rules-alignment-design.md）はここに文言だけ出す
+   （保存は通すので赤枠にはしない）。 */
+.field-note { font-size: 12px; margin: 6px 0 0; }
+.field-note:empty { display: none; }
+.tech-dup-note { color: var(--cell-fail-text); font-weight: bold; }
 
 /* 技チップ */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }

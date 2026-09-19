@@ -231,6 +231,11 @@ var AdminRound = (function() {
     var chips = document.createElement('div');
     chips.className = 'round-chips chips chips-required';
     row.appendChild(chips);
+    // 同じ形の回数制限の注記（設計書 2026-09-20-rules-alignment-design.md）。
+    // 保存は通す（試合開始でだけ止める）ので、赤枠ではなく文言だけ添える。
+    var note = document.createElement('p');
+    note.className = 'field-note tech-dup-note';
+    row.appendChild(note);
     drawChips(p, row);
 
     var copy = document.createElement('button');
@@ -268,6 +273,17 @@ var AdminRound = (function() {
       TechPicker.fromArray([p.tech1, p.tech2, p.tech3]),
       function(slot) { openPicker(p, row, slot); }
     );
+    updateRepeatNote(p, row);
+  }
+
+  // 同じ形の回数制限の注記。技リストが手元に無ければ判定できないので何も出さない
+  // （設計書 2026-09-20-rules-alignment-design.md「同じ形の回数制限」）。
+  function updateRepeatNote(p, row) {
+    var note = row.querySelector('.tech-dup-note');
+    if (!note) return;
+    if (!techniques) { note.textContent = ''; return; }
+    var dup = Courts.duplicateForms([p.tech1, p.tech2, p.tech3], techniques, !!p.isFemale);
+    note.textContent = dup.length > 0 ? '同じ形は 1 回までです（' + dup[0] + '）' : '';
   }
 
   // --- 技の入力 ---
