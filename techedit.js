@@ -68,13 +68,21 @@ var TechEdit = (function() {
     table.className = 'tech-table';
     // 「抜刀後」＝ 抜刀してからの形。真剣レンタルの選手はこの形しか選べない
     // （設計書「選手の追加項目」の決定事項）。見出しだけでは意味が伝わらないので
-    // title を添える（スマホ幅では見出しを 12px に詰めるため、文字は増やさない）。
+    // title を添える。列幅は td:nth-child ではなく col-* の class で指定する
+    // （style.css / techniques.html。列の増減や並び替えに強くする）。
+    // スマホ幅では「回数制限なし」「減点初太刀」を「制限なし」「減点初」に詰める
+    // （col-label-full / col-label-short を CSS 側の @media で出し分ける）。
     table.innerHTML =
-      '<thead><tr><th>技名</th><th>初太刀</th><th>二ノ太刀</th><th>三ノ太刀</th><th>四ノ太刀</th>' +
-      '<th title="レンタルの選手が選べる形">抜刀後</th>' +
-      '<th title="同じ巡（一巡目・二巡目）で何度でも選べる">回数制限なし</th>' +
-      '<th title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点">減点初太刀</th></tr></thead>' +
-      '<tbody></tbody>';
+      '<thead><tr>' +
+      '<th class="col-name">技名</th>' +
+      '<th class="col-strike">初太刀</th><th class="col-strike">二ノ太刀</th>' +
+      '<th class="col-strike">三ノ太刀</th><th class="col-strike">四ノ太刀</th>' +
+      '<th class="col-drawn" title="レンタルの選手が選べる形">抜刀後</th>' +
+      '<th class="col-repeatable" title="同じ巡（一巡目・二巡目）で何度でも選べる">' +
+      '<span class="col-label-full">回数制限なし</span><span class="col-label-short">制限なし</span></th>' +
+      '<th class="col-reduced" title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点">' +
+      '<span class="col-label-full">減点初太刀</span><span class="col-label-short">減点初</span></th>' +
+      '</tr></thead><tbody></tbody>';
     var tbody = table.querySelector('tbody');
     scroll.appendChild(table);
     container.appendChild(scroll);
@@ -89,18 +97,18 @@ var TechEdit = (function() {
       (techs || []).forEach(function(t, i) {
         var tr = document.createElement('tr');
         tr.innerHTML =
-          '<td><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
+          '<td class="col-name"><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
           [0,1,2,3].map(function(s) {
             var v = (t.strikes[s] !== null && t.strikes[s] !== undefined) ? Storage.esc(String(t.strikes[s])) : '';
-            return '<td><input type="number" min="0" max="99" value="' + v +
+            return '<td class="col-strike"><input type="number" min="0" max="99" value="' + v +
               '" data-field="strike" data-idx="' + i + '" data-strike="' + s + '"></td>';
           }).join('') +
           // drawn / repeatable を持たない古い技リスト（data.js の既定値も持たない）は未チェックで出す
-          '<td><input type="checkbox" data-field="drawn" data-idx="' + i + '"' +
+          '<td class="col-drawn"><input type="checkbox" data-field="drawn" data-idx="' + i + '"' +
           (t.drawn === true ? ' checked' : '') + '></td>' +
-          '<td><input type="checkbox" data-field="repeatable" data-idx="' + i + '"' +
+          '<td class="col-repeatable"><input type="checkbox" data-field="repeatable" data-idx="' + i + '"' +
           (t.repeatable === true ? ' checked' : '') + '></td>' +
-          '<td><input type="number" min="0" max="99" data-field="reducedFirst" data-idx="' + i + '"' +
+          '<td class="col-reduced"><input type="number" min="0" max="99" data-field="reducedFirst" data-idx="' + i + '"' +
           ' title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点"' +
           ' value="' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '"></td>';
         tbody.appendChild(tr);

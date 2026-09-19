@@ -308,9 +308,12 @@ a { color: var(--accent); }
 .tech-table { border-collapse: collapse; width: 100%; background: var(--card-bg); }
 .tech-table th, .tech-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; }
 .tech-table th { background: var(--bg-header); font-size: 13px; }
-.tech-table td:first-child { text-align: left; }
+.tech-table td.col-name { text-align: left; }
 .tech-table input[type="text"], .tech-table input[type="number"] { width: 70px; min-height: 28px; text-align: center; }
-.tech-table td:first-child input[type="text"] { width: 180px; }
+.tech-table td.col-name input[type="text"] { width: 180px; }
+/* 「回数制限なし」「減点初太刀」の短縮表記（style.css/techniques.html のスマホ幅で使う）。
+   PC はいつも横幅があるので短縮しない。ここで隠さないと両方の span が並んで表示されてしまう。 */
+.tech-table .col-label-short { display: none; }
 .btn-neutral { min-height: 34px; padding: 0 14px; background: var(--btn-neutral); color: #fff; }
 .btn-fail { min-height: 34px; padding: 0 14px; background: var(--btn-fail); color: #fff; }
 .btn-neutral:disabled, .btn-fail:disabled { opacity: .5; cursor: not-allowed; }

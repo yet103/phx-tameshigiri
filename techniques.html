@@ -31,19 +31,19 @@
       display: block; width: 100%; min-height: 52px; text-align: left;
       padding: 0 12px; margin-bottom: 8px;
     }
-    /* 「抜刀後」「回数制限なし」「減点初太刀」列（techedit.js）。style.css の
-       .tech-table より後に読まれるので、同じ詳細度でもこちらが勝つ。
+    /* 「抜刀後」「回数制限なし」「減点初太刀」列（techedit.js が振る col-* class）。
+       style.css の .tech-table より後に読まれるので、同じ詳細度でもこちらが勝つ。
        375px では配点・チェック列を詰めて、.tech-scroll の横スクロールを
        できるだけ減らす（残っても .tech-scroll 内で見えればよい）。 */
-    .tech-table th:nth-child(6), .tech-table td:nth-child(6),
-    .tech-table th:nth-child(7), .tech-table td:nth-child(7) { width: 56px; }
-    .tech-table th:last-child, .tech-table td:last-child { width: 72px; }
+    .tech-table th.col-drawn, .tech-table td.col-drawn,
+    .tech-table th.col-repeatable, .tech-table td.col-repeatable { width: 56px; }
+    .tech-table th.col-reduced, .tech-table td.col-reduced { width: 72px; }
     .tech-table input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
     @media (max-width: 767px) {
       .tech-table input[type="number"] { width: 38px; }
-      .tech-table th:nth-child(6), .tech-table td:nth-child(6),
-      .tech-table th:nth-child(7), .tech-table td:nth-child(7) { width: 40px; font-size: 11px; }
-      .tech-table th:last-child, .tech-table td:last-child { width: 52px; }
+      .tech-table th.col-drawn, .tech-table td.col-drawn,
+      .tech-table th.col-repeatable, .tech-table td.col-repeatable { width: 40px; font-size: 11px; }
+      .tech-table th.col-reduced, .tech-table td.col-reduced { width: 52px; font-size: 11px; }
     }
   </style>
 </head>

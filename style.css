@@ -335,15 +335,21 @@ body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
 }
 .rank-table th { background: var(--bg-header); }
 
-/* ===== 技術リストテーブル（techniques.html） ===== */
-.tech-table { border-collapse: collapse; width: 100%; }
+/* ===== 技術リストテーブル（techniques.html） =====
+   列幅は td:nth-child ではなく techedit.js が振る col-* class で指定する
+   （列の増減・並び替えに強くする。指摘: 375px で技名列が nth-child の
+   width:100% に押し潰されていたのを直す）。
+   表自体は min-width: 100%; width: max-content にして、入りきらない分は
+   親の .tech-scroll（techniques.html 側で overflow-x: auto）内で
+   横スクロールさせる。ページ本体は横スクロールさせない。 */
+.tech-table { border-collapse: collapse; min-width: 100%; width: max-content; }
 .tech-table th, .tech-table td {
   border: 1px solid var(--border);
   padding: 6px 10px;
   text-align: center;
 }
-.tech-table th { background: var(--bg-header); }
-.tech-table td:first-child { text-align: left; }
+.tech-table th { background: var(--bg-header); white-space: nowrap; }
+.tech-table td.col-name { text-align: left; }
 .tech-table input[type="number"],
 .tech-table input[type="text"] {
   width: 60px;
@@ -354,16 +360,18 @@ body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
   border-radius: 3px;
   text-align: center;
 }
-.tech-table td:first-child input[type="text"] { width: 120px; }
-/* スマホ幅: 余白と入力幅を詰めて、横スクロールなしに四ノ太刀まで見せる。
-   375px（有効幅 351px）で 配点列 ≒53px × 4 ＋ 技名列 ≒139px。
-   見出しは 12px にして「四ノ太刀」が 1 行に収まるようにする。 */
+/* 技名の入力欄。立位逆袈裟（5文字）程度は詰めずに全部見えるだけの幅を確保する */
+.tech-table td.col-name input[type="text"] { width: 9em; min-width: 6em; }
+/* 「回数制限なし」「減点初太刀」の短縮表記（スマホ幅で入れ替える） */
+.tech-table .col-label-short { display: none; }
+/* スマホ幅: 表自体は縮めず、.tech-scroll 内の横スクロールに任せる。
+   ここでは見出しの読みやすさ（折り返し）と入力欄の詰めだけ行う。 */
 @media (max-width: 767px) {
-  .tech-table th, .tech-table td { padding: 3px 2px; }
-  .tech-table th { font-size: 12px; white-space: nowrap; }
+  .tech-table th, .tech-table td { padding: 3px 4px; }
+  .tech-table th { font-size: 12px; white-space: normal; }
   .tech-table input[type="number"] { width: 44px; }
-  .tech-table td:first-child { width: 100%; }   /* 残り幅を技名列に寄せる */
-  .tech-table td:first-child input[type="text"] { width: 100%; min-width: 0; }
+  .tech-table .col-label-full { display: none; }
+  .tech-table .col-label-short { display: inline; }
 }
 
 /* ===== 選手一覧（ページ下部・開閉） ===== */
