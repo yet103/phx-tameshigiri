@@ -145,6 +145,19 @@
     assert('bulk rows: 技名が toString でも技リストに無ければ 400',
       brProtoTech && brProtoTech.error, '1 行目: 技「toString」は技リストにありません');
 
+    // ---- 技名の性別による解決（設計書「技の選択肢を性別で絞る」テスト 4） ----
+    // 接尾辞なしの '破図味' は、行の isFemale で courts.js の resolveTechnique と同じ規則
+    // （完全一致 → 性別の接尾辞付き）で解決できれば通す。技リストに無い名前は従来どおり断る。
+    var brGenderOk = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '行 性別子', court: 'A', isFemale: true, tech1: '破図味' }]
+    });
+    assert('bulk rows: 接尾辞なしの技名が isFemale で解決できれば 201', brGenderOk && brGenderOk.created, 1);
+    var brGenderBad = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '行 性別丑', court: 'A', isFemale: true, tech1: '無い技' }]
+    });
+    assert('bulk rows: 技リストに無い名前は行番号つきの 400',
+      brGenderBad && brGenderBad.error, '1 行目: 技「無い技」は技リストにありません');
+
     var brNoName = await Api.createPlayersBulk(brEvent.id, {
       rows: [{ name: '行 六郎', court: 'A' }, { name: '  ', court: 'A' }]
     });
@@ -177,7 +190,7 @@
     assert('bulk rows: 501 行は 400', brTooMany && brTooMany.error, '一度に登録できるのは500名までです');
 
     var brAfter = await Api.loadEvent(brEvent.id);
-    assert('bulk rows: 1 行でも不正なら 1 人も登録されない（4名のまま）', brAfter.players.length, 4);
+    assert('bulk rows: 1 行でも不正なら 1 人も登録されない（5名のまま）', brAfter.players.length, 5);
     await Api.deleteEvent(brEvent.id);
 
     // PATCH: 補正点・備考・確定・負の得点

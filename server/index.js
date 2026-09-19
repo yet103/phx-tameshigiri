@@ -789,10 +789,29 @@ app.post('/api/events/:id/players', (req, res) => {
   }
 });
 
+// 技名の解決。courts.js の Courts.resolveTechnique と同じ規則（完全一致 → 性別の
+// 接尾辞付きで再検索。採点画面の Scoring.findTechnique とも同じ）。courts.js は
+// ブラウザ用の IIFE で require できないので、ここに同じ規則を自前で持つ
+// （status.js を EventStatus として require しているのとは事情が違う。courts.js は
+// UMD 包みでなく module.exports を持たない）。テストは test.html の Courts.resolveTechnique と
+// ここ（サーバーの bulk rows テスト）の両方で固定する。
+function resolveTechnique(techniques, name, isFemale) {
+  const list = techniques || [];
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] && list[i].name === name) return list[i];
+  }
+  const nameWithGender = name + (isFemale ? '(女)' : '(男)');
+  for (let j = 0; j < list.length; j++) {
+    if (list[j] && list[j].name === nameWithGender) return list[j];
+  }
+  return null;
+}
+
 // 一括登録の行形式（PC 運営の「貼り付けて追加」）。
 // 行ごとにコート・性別・新人・技が違う。全行を検証してから 1 回だけ書き、
 // 1 行でも不正なら 1 人も登録しない（半分だけ登録された状態を運営に見せない）。
-// 技名はその大会の「有効な技リスト」（effectiveTechniques）にある名前だけを許す。
+// 技名はその大会の「有効な技リスト」（effectiveTechniques）から、行の性別で resolveTechnique
+// して見つかる名前だけを許す（接尾辞なしの名前もその性別で解決できれば通す）。
 // 採番は コート×性別 ごとに最大+1 を 1 回だけ求め、あとは連番で増やす
 // （行ごとに数え直すと件数の二乗のコストになる）。巡目は常に 1（二巡目は生成 API が作る）。
 function bulkFromRows(req, res, rows) {
@@ -811,11 +830,7 @@ function bulkFromRows(req, res, rows) {
   if (rejectIfLocked(res, event)) return;
   if (!Array.isArray(event.players)) event.players = [];
 
-  const known = Object.create(null);   // 技名が 'toString' などでも壊れないように（computeRanking と同じ）
-  effectiveTechniques(event).forEach(t => {
-    const n = (t && typeof t.name === 'string') ? t.name.trim() : '';
-    if (n) known[n] = true;
-  });
+  const techList = effectiveTechniques(event);
 
   // 1. 全行の検証（ここでは何も書かない）
   const checked = [];
@@ -838,16 +853,17 @@ function bulkFromRows(req, res, rows) {
     if (row.isNewFace !== undefined && typeof row.isNewFace !== 'boolean') {
       return res.status(400).json({ error: at + '新人の指定が不正です' });
     }
+    const isFemale = row.isFemale === true;
     const techs = ['tech1', 'tech2', 'tech3'].map(k => (typeof row[k] === 'string' ? row[k].trim() : ''));
     for (let t = 0; t < techs.length; t++) {
-      if (techs[t] && !known[techs[t]]) {
+      if (techs[t] && !resolveTechnique(techList, techs[t], isFemale)) {
         return res.status(400).json({ error: at + `技「${techs[t]}」は技リストにありません` });
       }
     }
     checked.push({
       name: name,
       court: court,
-      isFemale: row.isFemale === true,
+      isFemale: isFemale,
       isNewFace: row.isNewFace === true,
       techs: techs
     });
