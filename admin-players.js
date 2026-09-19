@@ -363,9 +363,10 @@
   // --- フォーム部品（追加・編集で共用） ---
   // 戻り値: { el, read, reset }
   //   el    : シートの body に入れる DOM
-  //   read(): { name, court, isFemale, isNewFace, tech1, tech2, tech3 } | null
-  //           （不正なら alert を出して null）
-  //   reset(): 名前と技だけ空にする（コート・性別は保つ。受付を連続処理するため）
+  //   read(): { name, court, isFemale, isNewFace, bib, rank, rental, tech1, tech2, tech3 } | null
+  //           （不正なら alert を出して null。bib は数値か null）
+  //   reset(): 名前・ゼッケン・級位段位・技を空にする
+  //           （コート・性別・新人・レンタルは保つ。受付を連続処理するため）
   function buildPlayerForm(ctx, player) {
     var el = document.createElement('div');
 
@@ -385,8 +386,65 @@
     fName.appendChild(inName);
     el.appendChild(fName);
 
+    // ゼッケン番号（空は未設定。同じ大会の中では重複できず、サーバーが 409 で断る）。
+    // 一括登録（名前だけ）のシートには出さないので、共通部品ではなくここに置く。
+    var fBib = document.createElement('div');
+    fBib.className = 'field';
+    var lBib = document.createElement('label');
+    lBib.textContent = 'ゼッケン番号（1〜9999。空でも登録できます）';
+    var inBib = document.createElement('input');
+    inBib.type = 'number';
+    inBib.min = '1';
+    inBib.max = '9999';
+    inBib.step = '1';
+    inBib.inputMode = 'numeric';
+    inBib.value = (player && typeof player.bib === 'number') ? String(player.bib) : '';
+    fBib.appendChild(lBib);
+    fBib.appendChild(inBib);
+    el.appendChild(fBib);
+
+    // 級位・段位。候補は datalist で出すが、自由入力も受ける（20 文字まで）。
+    // datalist はこのシートと一緒に作って一緒に捨てるので、id が重なることはない。
+    var fRank = document.createElement('div');
+    fRank.className = 'field';
+    var lRank = document.createElement('label');
+    lRank.textContent = '級位・段位（候補から選ぶか、自由に書けます）';
+    var inRank = document.createElement('input');
+    inRank.type = 'text';
+    inRank.setAttribute('list', 'adminRankList');
+    inRank.value = (player && typeof player.rank === 'string') ? player.rank : '';
+    var rankList = document.createElement('datalist');
+    rankList.id = 'adminRankList';
+    ['無級', '十級', '九級', '八級', '七級', '六級', '五級', '四級', '三級', '二級', '一級',
+     '初段', '二段', '三段', '四段', '五段', '六段', '七段', '八段', '九段', '十段']
+      .forEach(function(r) {
+        var o = document.createElement('option');
+        o.value = r;
+        rankList.appendChild(o);
+      });
+    fRank.appendChild(lRank);
+    fRank.appendChild(inRank);
+    fRank.appendChild(rankList);
+    el.appendChild(fRank);
+
     var common = buildCommonFields(ctx, player);
     el.appendChild(common.el);
+
+    // 真剣レンタル。新人と同じトグル（.toggle）で、コート・性別・新人のすぐ下に置く。
+    // チェックすると、次に開く技ピッカーの候補が「抜刀後」の形だけになる（Task 13）。
+    var fRental = document.createElement('div');
+    fRental.className = 'field';
+    var togRental = document.createElement('label');
+    togRental.className = 'toggle';
+    var chkRental = document.createElement('input');
+    chkRental.type = 'checkbox';
+    chkRental.checked = player ? player.rental === true : false;
+    var txtRental = document.createElement('span');
+    txtRental.textContent = '真剣レンタル（抜刀後の形だけ選べます）';
+    togRental.appendChild(chkRental);
+    togRental.appendChild(txtRental);
+    fRental.appendChild(togRental);
+    el.appendChild(fRental);
 
     // 技
     var fTech = document.createElement('div');
@@ -432,12 +490,29 @@
       if (!name) { alert('名前を入力してください。'); return null; }
       var court = common.court();
       if (!court) { alert('コートを選んでください。「＋」で新しいコートを作れます。'); return null; }
+      // 数値入力でも貼り付けや環境によっては数字以外が残るので、自分でも見る。
+      // 空は未設定（bib: null）。サーバーは 1〜9999 の整数しか受けない。
+      var bibText = inBib.value.trim();
+      var bib = null;
+      if (bibText !== '') {
+        var n = parseInt(bibText, 10);
+        if (!/^[0-9]+$/.test(bibText) || n < 1 || n > 9999) {
+          alert('ゼッケン番号は 1〜9999 の整数で入力してください。');
+          return null;
+        }
+        bib = n;
+      }
+      var rank = inRank.value.trim();
+      if (rank.length > 20) { alert('級位・段位は 20 文字までです。'); return null; }
       var t = TechPicker.toArray(techState);
       return {
         name: name,
         court: court,
         isFemale: common.isFemale(),
         isNewFace: common.isNewFace(),
+        bib: bib,
+        rank: rank,
+        rental: chkRental.checked,
         tech1: t[0],
         tech2: t[1],
         tech3: t[2]
@@ -446,6 +521,10 @@
 
     function reset() {
       inName.value = '';
+      // ゼッケンは大会の中で重複できないので必ず消す。級位段位も人ごとに違う。
+      // コート・性別・新人・レンタルは受付が続くので残す（この関数の約束）。
+      inBib.value = '';
+      inRank.value = '';
       techState = [];
       renderTechChips();
       inName.focus();
