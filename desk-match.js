@@ -383,6 +383,9 @@
   // 初期値と同じ作法）。一巡目と同じ技をコピー」で入る値は性別で絞った候補に無いことがある
   // （接尾辞付きの旧データなど）。setValues はコピーと保存失敗時の巻き戻しの両方で使うので、
   // ここで足しておかないと値は正しく保存されているのに表示だけ空に見えてしまう。
+  // ここで足した option には dataset.adhoc を付けて、あとで removeStaleAdhocOptions が
+  // 「今の値でなくなった、その場しのぎの選択肢」だけを取り除けるようにする
+  // （例: 女子の行に (男) の技をコピー → 別の技に変え直しても、選択肢に (男) が残り続けない）。
   function ensureOption(sel, value) {
     if (!value) return;
     for (var i = 0; i < sel.options.length; i++) {
@@ -391,11 +394,23 @@
     var o = document.createElement('option');
     o.value = value;
     o.textContent = value + '（リストにありません）';
+    o.dataset.adhoc = '1';
     sel.appendChild(o);
+  }
+
+  // ensureOption が足した option のうち、これから設定する値と違うものを取り除く。
+  function removeStaleAdhocOptions(sel, keepValue) {
+    for (var i = sel.options.length - 1; i >= 0; i--) {
+      var o = sel.options[i];
+      if (o.dataset.adhoc === '1' && o.value !== keepValue) {
+        sel.removeChild(o);
+      }
+    }
   }
 
   function setValues(selects, arr) {
     selects.forEach(function(s, i) {
+      removeStaleAdhocOptions(s, arr[i] || '');
       ensureOption(s, arr[i]);
       s.value = arr[i] || '';
       markEmpty(s);
