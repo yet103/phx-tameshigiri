@@ -123,6 +123,9 @@ body.is-transparent { background: transparent; }
 /* 太刀のセル。採点画面（style.css）と同じ変数を使う */
 .board-table td.none { color: var(--text-muted); }
 .board-table td.success { background: var(--cell-success); color: var(--cell-success-text); font-weight: bold; }
+/* 減点成功（△）。失敗ではなく成功寄りと分かるよう --warn（黄土）で success と区別する
+   （設計書 2026-09-20-rules-alignment-design.md）。 */
+.board-table td.reduced { background: var(--warn); color: var(--bg); font-weight: bold; }
 .board-table td.fail { background: var(--cell-fail); color: var(--cell-fail-text); font-weight: bold; }
 .board-table td.na { background: var(--cell-disabled); color: var(--text-muted); }
 .board-table td.score { font-weight: bold; color: var(--score-color); }
