@@ -113,6 +113,9 @@ a { color: var(--accent); }
 /* 絞り込みは見出しの ▼ に寄せたので、表の上の帯は件数と「絞り込みを解除」だけ。 */
 .desk-players-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; min-height: 30px; }
 .desk-players-count { font-size: 13px; color: var(--text-muted); }
+/* 表の上の「ゼッケン未入力 n　級位段位未入力 n　レンタル不可の形 n」。
+   0 件の種類は出さないので、この帯が出ていること自体が「試合開始で止まる」印になる。 */
+.desk-players-blockers { font-size: 13px; color: var(--cell-fail-text); font-weight: bold; }
 
 /* 1280px では横スクロールしない幅に収める。窓が狭いときだけ表の枠が横に流れ、
    名前の列は左に固定して誰の行か分かるようにする（採点表の固定列と同じ手法）。
@@ -123,11 +126,12 @@ a { color: var(--accent); }
 .desk-players-wrap { overflow-x: auto; padding-bottom: 46px; }
 /* table-layout: fixed は表そのものに幅が無いと列幅を「比率」としてしか使わず、
    窓を狭めても列が縮むだけでスクロールが起きない（確認で見つかった）。
-   列幅の合計（40+52+190+96+84+52+132*3+64+48 = 1022px）を表の width にして
-   初めて、狭いときに表の枠だけが横スクロールし、sticky の名前列が効くように
+   列幅の合計（40+52+190+78+110+68+96+84+52+132*3+64+48 = 1278px）を表の width に
+   して初めて、狭いときに表の枠だけが横スクロールし、sticky の名前列が効くように
    なる。border-collapse: collapse は既定の border-spacing（列の間の隙間）を
-   消して幅の計算を列幅の合計どおりにする。 */
-.desk-players-table { table-layout: fixed; width: 1022px; border-collapse: collapse; }
+   消して幅の計算を列幅の合計どおりにする。
+   列を足したら必ずこの合計も直すこと（合わないと列がじわじわずれる）。 */
+.desk-players-table { table-layout: fixed; width: 1278px; border-collapse: collapse; }
 .desk-players-table th, .desk-players-table td { padding: 2px 6px; vertical-align: middle; text-align: center; }
 /* 上の .desk-table td.num は右寄せ。選手表だけ中央に戻す（同じ詳細度なので後ろのこれが勝つ） */
 .desk-players-table td.num { text-align: center; }
@@ -139,6 +143,10 @@ a { color: var(--accent); }
 .desk-players-table .col-round { width: 40px; }
 .desk-players-table .col-no { width: 52px; }
 .desk-players-table .col-name { width: 190px; }
+/* 選手の追加項目（ゼッケン・級位段位・真剣レンタル）。名前のすぐ右にまとめる。 */
+.desk-players-table .col-bib { width: 78px; }
+.desk-players-table .col-rank { width: 110px; }
+.desk-players-table .col-rental { width: 68px; text-align: center; }
 .desk-players-table .col-court { width: 96px; }
 .desk-players-table .col-sex { width: 84px; }
 .desk-players-table .col-new { width: 52px; text-align: center; }
@@ -159,6 +167,17 @@ a { color: var(--accent); }
 /* 保存の通信中 */
 .desk-cell-input.saving, .desk-cell-select.saving { border-color: var(--accent); opacity: .5; }
 .desk-cell-check { display: block; margin: 0 auto; width: 16px; height: 16px; }
+
+/* 必須なのに空のセル（点線）と、レンタルの選手が選べない形が入っているセル（実線＋赤字）。
+   --btn-fail（#b3261e 固定）はダークで読みにくいので --cell-fail-text を使う
+   （.desk-paste-bad や .desk-match-count と同じ変数）。ふだんの枠は透明なので、
+   触っていなくても赤枠だけは見える。 */
+.desk-cell-input.desk-cell-required, .desk-cell-select.desk-cell-required {
+  border-color: var(--cell-fail-text); border-style: dashed;
+}
+.desk-cell-input.desk-cell-bad, .desk-cell-select.desk-cell-bad {
+  border-color: var(--cell-fail-text); color: var(--cell-fail-text); font-weight: bold;
+}
 
 /* 「＋ 行を追加」の下書き行（まだサーバーに無い行） */
 .desk-draft-row td { background: var(--bg-header); }
