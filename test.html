@@ -63,9 +63,11 @@
       skip.textContent = '… カスタム技術が保存されているため、デフォルト一致チェックはスキップ';
       results.appendChild(skip);
     } else {
-      // サーバーのデフォルトが data.js と食い違うと採点が0点になるため厳密に比較する
+      // サーバーのデフォルトが data.js と食い違うと採点が0点になるため厳密に比較する。
+      // drawn（抜刀後の形。設計書「選手の追加項目」）は data.js には無い項目なので比較から外す。
       assert('サーバーのデフォルト技術数は data.js と一致', techData.techniques.length, TECHNIQUES.length);
-      assert('サーバーのデフォルト技術定義は data.js と一致', techData.techniques, TECHNIQUES);
+      assert('サーバーのデフォルト技術定義は data.js と一致',
+        techData.techniques.map(function(t) { return { name: t.name, strikes: t.strikes }; }), TECHNIQUES);
     }
 
     // 大会作成テスト
@@ -198,6 +200,204 @@
     assert('bulk rows: 1 行でも不正なら 1 人も登録されない（6名のまま）', brAfter.players.length, 6);
     await Api.deleteEvent(brEvent.id);
 
+    // ==== 選手の追加項目（ゼッケン番号・級位段位・真剣レンタルと形マスタの「抜刀後の形」）====
+    // 設計書 2026-09-19-player-extra-fields-design.md トラックA（サーバーと api.js）。
+    // 生の fetch で確かめる 400 は Api.createPlayer が 400/404 を null に丸めてしまうため。
+    function postPlayerRaw(eventId, body) {
+      return fetch('/api/events/' + eventId + '/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(function(res) {
+        return res.json().catch(function() { return null; }).then(function(json) {
+          return { status: res.status, json: json };
+        });
+      });
+    }
+
+    // ---- 1. POST /api/events/:id/players の bib/rank/rental ----
+    var pfEvent = await Api.saveEvent({ name: '追加項目テスト', date: '2026-09-19', venue: '', players: [] });
+    var pfP1 = await Api.createPlayer(pfEvent.id, { name: '追加 一郎', court: 'A', bib: 12 });
+    assert('createPlayer: bib が保存される', pfP1.bib, 12);
+    var pfP2 = await Api.createPlayer(pfEvent.id, { name: '追加 二郎', court: 'A', bib: 12 });
+    assert('createPlayer: 同じ bib は 409 reason:bib',
+      [pfP2 && pfP2.reason, pfP2 && pfP2.error],
+      ['bib', 'ゼッケン番号 12 は「追加 一郎」が使っています']);
+
+    var pfBibZero = await postPlayerRaw(pfEvent.id, { name: '追加 三郎', court: 'A', bib: 0 });
+    assert('createPlayer: bib 0 は 400', [pfBibZero.status, pfBibZero.json.error],
+      [400, 'ゼッケン番号は1〜9999の整数で指定してください']);
+    var pfBibStr = await postPlayerRaw(pfEvent.id, { name: '追加 三郎', court: 'A', bib: '12' });
+    assert('createPlayer: bib が文字列なら 400', pfBibStr.status, 400);
+    var pfBibFloat = await postPlayerRaw(pfEvent.id, { name: '追加 三郎', court: 'A', bib: 1.5 });
+    assert('createPlayer: bib が小数なら 400', pfBibFloat.status, 400);
+
+    var pfRankLong = await postPlayerRaw(pfEvent.id, { name: '追加 四郎', court: 'A', rank: new Array(22).join('あ') });
+    assert('createPlayer: rank 21文字は 400', [pfRankLong.status, pfRankLong.json.error],
+      [400, '級位・段位は20文字までの文字列で指定してください']);
+    var pfRentalBad = await postPlayerRaw(pfEvent.id, { name: '追加 五郎', court: 'A', rental: 'yes' });
+    assert('createPlayer: rental が真偽値でなければ 400', [pfRentalBad.status, pfRentalBad.json.error],
+      [400, '真剣レンタルの指定が不正です']);
+
+    var pfOk = await Api.createPlayer(pfEvent.id, { name: '追加 六郎', court: 'A', rank: '初段', rental: true });
+    assert('createPlayer: rank/rental が保存される', [pfOk.rank, pfOk.rental], ['初段', true]);
+    assert('createPlayer: bib を省略すればキーを持たない', pfOk.bib, undefined);
+
+    // PATCH: bib の重複・null での未設定・型検証
+    var pfPatchDup = await Api.updatePlayerInfo(pfEvent.id, pfOk.id, { bib: 12 });
+    assert('PATCH: 他の選手の bib と重複すれば 409 reason:bib',
+      [pfPatchDup.ok, pfPatchDup.reason, pfPatchDup.error],
+      [false, 'bib', 'ゼッケン番号 12 は「追加 一郎」が使っています']);
+    var pfPatchSet = await Api.updatePlayerInfo(pfEvent.id, pfOk.id, { bib: 34 });
+    assert('PATCH: 空いている bib は保存できる', pfPatchSet.player.bib, 34);
+    var pfPatchNull = await Api.updatePlayerInfo(pfEvent.id, pfOk.id, { bib: null });
+    assert('PATCH: bib:null で未設定に戻す（キーを持たない）', pfPatchNull.player.bib, undefined);
+    var pfPatchBad = await Api.updatePlayerInfo(pfEvent.id, pfOk.id, { bib: 1.5 });
+    assert('PATCH: 不正な bib は 400', pfPatchBad.status, 400);
+    var pfPatchRankBad = await Api.updatePlayerInfo(pfEvent.id, pfOk.id, { rank: new Array(22).join('あ') });
+    assert('PATCH: rank 21文字は 400', pfPatchRankBad.status, 400);
+    var pfPatchRentalBad = await Api.updatePlayerInfo(pfEvent.id, pfOk.id, { rental: 'yes' });
+    assert('PATCH: rental が真偽値でなければ 400', pfPatchRentalBad.status, 400);
+    await Api.deleteEvent(pfEvent.id);
+
+    // ---- 2. bulk rows の bib/rank/rental・レンタルの drawn 縛り ----
+    var pf2Event = await Api.saveEvent({ name: '一括登録追加項目テスト', date: '2026-09-19', venue: '', players: [] });
+    await Api.saveEventTechniques(pf2Event.id, [
+      { name: '抜刀技', strikes: [1, null, null, null], drawn: true },
+      { name: '立ち技', strikes: [1, null, null, null], drawn: false }
+    ]);
+
+    var pf2DupBib = await Api.createPlayersBulk(pf2Event.id, { rows: [
+      { name: '一括 一郎', court: 'A', bib: 5 },
+      { name: '一括 二郎', court: 'A', bib: 5 }
+    ] });
+    assert('bulk rows: 行同士の bib 重複は行番号つき 400',
+      pf2DupBib && pf2DupBib.error, '2 行目: ゼッケン番号 5 は「一括 一郎」が使っています');
+    var pf2AfterDup = await Api.loadEvent(pf2Event.id);
+    assert('bulk rows: bib 重複なら 1 人も増えない', pf2AfterDup.players.length, 0);
+
+    var pf2ExistBib = await Api.createPlayersBulk(pf2Event.id, { rows: [{ name: '一括 三郎', court: 'A', bib: 9 }] });
+    assert('bulk rows: bib 9 で1名登録', pf2ExistBib.created, 1);
+    var pf2ExistDup = await Api.createPlayersBulk(pf2Event.id, { rows: [{ name: '一括 四郎', court: 'A', bib: 9 }] });
+    assert('bulk rows: 既存の bib との重複も行番号つき 400',
+      pf2ExistDup && pf2ExistDup.error, '1 行目: ゼッケン番号 9 は「一括 三郎」が使っています');
+
+    var pf2RentalBad = await Api.createPlayersBulk(pf2Event.id, { rows: [
+      { name: '一括 五郎', court: 'A', rental: true, tech1: '立ち技' }
+    ] });
+    assert('bulk rows: レンタルの行に drawn でない技があれば 400',
+      pf2RentalBad && pf2RentalBad.error, '1 行目: レンタルの選手は抜刀してからの形だけ選べます');
+    var pf2RentalOk = await Api.createPlayersBulk(pf2Event.id, { rows: [
+      { name: '一括 六郎', court: 'A', rental: true, tech1: '抜刀技' }
+    ] });
+    assert('bulk rows: レンタルの行が drawn の技なら 201', pf2RentalOk && pf2RentalOk.created, 1);
+    assert('bulk rows: rental/rank が保存される',
+      [pf2RentalOk.players[0].rental, pf2RentalOk.players[0].rank], [true, '']);
+
+    var pf2RankBad = await Api.createPlayersBulk(pf2Event.id, { rows: [
+      { name: '一括 七郎', court: 'A', rank: new Array(22).join('あ') }
+    ] });
+    assert('bulk rows: rank 21文字は行番号つき 400',
+      pf2RankBad && pf2RankBad.error, '1 行目: 級位・段位は20文字までの文字列で指定してください');
+    var pf2RentalTypeBad = await Api.createPlayersBulk(pf2Event.id, { rows: [
+      { name: '一括 八郎', court: 'A', rental: 'yes' }
+    ] });
+    assert('bulk rows: rental が真偽値でなければ行番号つき 400',
+      pf2RentalTypeBad && pf2RentalTypeBad.error, '1 行目: 真剣レンタルの指定が不正です');
+    await Api.deleteEvent(pf2Event.id);
+
+    // ---- 3. 技マスタの drawn・大会の settings・コピー/バンドルの往復・二巡目複製 ----
+    var dtEvent = await Api.saveEvent({ name: '抜刀後テスト', date: '2026-09-19', venue: '', players: [] });
+    var dtBad = await Api.saveEventTechniques(dtEvent.id, [{ name: '不正', strikes: [1, null, null, null], drawn: 'x' }]);
+    assert('validateTechniques: drawn が真偽値でなければ 400', dtBad.error, '1 行目の「抜刀後」の指定が不正です');
+    var dtOk = await Api.saveEventTechniques(dtEvent.id, [
+      { name: '抜刀あり', strikes: [1, null, null, null], drawn: true },
+      { name: '抜刀なし', strikes: [1, null, null, null] }
+    ]);
+    assert('cloneTechniques: drawn を保存する', dtOk.techniques.map(function(t) { return t.drawn; }), [true, false]);
+    assert('cloneTechniques: drawn 省略時は false', (await Api.loadEvent(dtEvent.id)).techniques[1].drawn, false);
+    await Api.deleteEvent(dtEvent.id);
+
+    // settings（PATCH /api/events/:id）
+    var stEvent = await Api.saveEvent({ name: 'settingsテスト', date: '2026-09-19', venue: '', players: [] });
+    var stRes = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: true, requireRank: true, other: 'x' } });
+    assert('PATCH: settings の真偽値だけを保存する（他のキーは無視）',
+      stRes.event.settings, { requireBib: true, requireRank: true });
+    assert('PATCH: 保存した settings が大会に残る',
+      (await Api.loadEvent(stEvent.id)).settings, { requireBib: true, requireRank: true });
+    var stResBad = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: 'yes' } });
+    assert('PATCH: 真偽値でない値は false 扱い', stResBad.event.settings, { requireBib: false, requireRank: false });
+    await Api.deleteEvent(stEvent.id);
+
+    // コピー・バンドルの往復・二巡目複製（settings・drawn・bib・rank・rental）
+    var pcSrc = await Api.saveEvent({ name: '追加項目コピー元', date: '2026-09-19', venue: '', players: [] });
+    await Api.updateEventInfo(pcSrc.id, { settings: { requireBib: true, requireRank: false } });
+    await Api.saveEventTechniques(pcSrc.id, [{ name: 'コピー抜刀技', strikes: [1, null, null, null], drawn: true }]);
+    var pcBulk = await Api.createPlayersBulk(pcSrc.id, { rows: [
+      { name: '複製 一郎', court: 'A', bib: 21, rank: '弐段', rental: true, tech1: 'コピー抜刀技' }
+    ] });
+
+    var pcRes = await Api.copyEvent(pcSrc.id, { name: '追加項目コピー先', date: '2026-09-20', venue: '', withPlayers: true });
+    var pcNew = await Api.loadEvent(pcRes.id);
+    assert('copyEvent: settings を複製する', pcNew.settings, { requireBib: true, requireRank: false });
+    assert('copyEvent: techniques の drawn を複製する', pcNew.techniques[0].drawn, true);
+    assert('copyEvent: withPlayers で bib/rank/rental を複製する',
+      [pcNew.players[0].bib, pcNew.players[0].rank, pcNew.players[0].rental], [21, '弐段', true]);
+
+    await toRound1Done(pcSrc.id);
+    await Api.generateNextRound(pcSrc.id, true);   // 一巡目が未採点のまま force で生成する
+    var pcAfterGen = await Api.loadEvent(pcSrc.id);
+    var pcRound2Row = pcAfterGen.players.find(function(p) { return p.sourcePlayerId === pcBulk.players[0].id; });
+    assert('generateNextRound: 二巡目に bib/rank/rental を複製する',
+      [pcRound2Row.bib, pcRound2Row.rank, pcRound2Row.rental], [21, '弐段', true]);
+
+    var pcBundle = JSON.parse(await Api.exportBundle(pcSrc.id));
+    assert('bundle: settings を書き出す', pcBundle.event.settings, { requireBib: true, requireRank: false });
+    assert('bundle: 選手の bib/rank/rental を書き出す',
+      [pcBundle.event.players[0].bib, pcBundle.event.players[0].rank, pcBundle.event.players[0].rental],
+      [21, '弐段', true]);
+    var pcImportRes = await Api.importBundle(pcBundle);
+    var pcImported = await Api.loadEvent(pcImportRes.id);
+    assert('importBundle: settings を復元する', pcImported.settings, { requireBib: true, requireRank: false });
+    var pcImpP1 = pcImported.players.filter(function(p) { return p.name === '複製 一郎'; })[0];
+    assert('importBundle: bib/rank/rental を復元する', [pcImpP1.bib, pcImpP1.rank, pcImpP1.rental], [21, '弐段', true]);
+
+    await Api.deleteEvent(pcSrc.id);
+    await Api.deleteEvent(pcRes.id);
+    await Api.deleteEvent(pcImportRes.id);
+
+    // ---- CSV エクスポート・インポートの往復（ゼッケン・級位段位・レンタル） ----
+    var csvExtEvent = await Api.saveEvent({ name: 'CSV追加項目テスト', date: '2026-09-19', venue: '', players: [] });
+    await Api.createPlayer(csvExtEvent.id, { name: 'CSV 一郎', court: 'A', bib: 3, rank: '初段', rental: true });
+    var csvExtOut = await Api.exportCsv(csvExtEvent.id);
+    var csvExtHead = csvExtOut.replace(/^﻿/, '').split('\r\n')[0];
+    assert('export: ヘッダー末尾にゼッケン・級位段位・レンタル',
+      csvExtHead.split(',').slice(-3), ['ゼッケン', '級位段位', 'レンタル']);
+    var csvExtRow = csvExtOut.replace(/^﻿/, '').split('\r\n').filter(function(l) { return l.indexOf('CSV 一郎') === 0; })[0];
+    assert('export: ゼッケン・級位段位・レンタルの値', csvExtRow.split(',').slice(-3), ['3', '初段', '○']);
+
+    var csvSimpleExtra = '名前,コート,性別,技①,技②,技③,新人,ゼッケン,級位段位,レンタル\n' +
+      'CSV簡易 太郎,A,男,,,,,7,弐段,○';
+    await Api.importCsv(csvExtEvent.id, csvSimpleExtra, 'replace', true);
+    var csvSimpleImported = (await Api.loadEvent(csvExtEvent.id)).players[0];
+    assert('CSV簡易+3列: ゼッケン・級位段位・レンタルを読む',
+      [csvSimpleImported.bib, csvSimpleImported.rank, csvSimpleImported.rental], [7, '弐段', true]);
+
+    var csvExtendedExtra = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果,補正点1,補正点2,補正点3,全体補正,備考,確定,ゼッケン,級位段位,レンタル\n' +
+      'CSV拡張 花子,C-女子-1-1,,,,,,,,0,0,0,0,,,15,初段,';
+    await Api.importCsv(csvExtEvent.id, csvExtendedExtra, 'replace', true);
+    var csvExtendedImported = (await Api.loadEvent(csvExtEvent.id)).players[0];
+    assert('CSV拡張+3列: ゼッケン・級位段位・レンタルを読む',
+      [csvExtendedImported.bib, csvExtendedImported.rank, csvExtendedImported.rental], [15, '初段', false]);
+
+    var csvOldFormat = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n旧 太郎,A-男子-1-1,,,,,,,';
+    await Api.importCsv(csvExtEvent.id, csvOldFormat, 'replace', true);
+    var csvOldImported = (await Api.loadEvent(csvExtEvent.id)).players[0];
+    assert('CSV旧形式（列なし）: bib/rank/rental は既定値のまま読める',
+      [csvOldImported.bib, csvOldImported.rank, csvOldImported.rental], [undefined, '', false]);
+    await Api.deleteEvent(csvExtEvent.id);
+    // ==== ここまで: 選手の追加項目 ====
+
     // PATCH: 補正点・備考・確定・負の得点
     // 採点済みの選手を残すと後続の replace インポートが採点済みガードに引っかかるので、専用の大会で行う
     var padEvent = await Api.saveEvent({ name: '補正点テスト', date: '2026-09-13', venue: '', players: [] });
@@ -221,10 +421,12 @@
     assert('PATCH 真偽値でない confirmed は無視', badRes.player.confirmed, true);
     var csvOut = await Api.exportCsv(padEvent.id);
     var csvHead = csvOut.replace(/^\uFEFF/, '').split('\r\n')[0];
-    assert('export は15列', csvHead.split(',').length, 15);
-    assert('export のヘッダー末尾', csvHead.split(',').slice(9), ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定']);
+    assert('export は18列', csvHead.split(',').length, 18);
+    assert('export のヘッダー末尾', csvHead.split(',').slice(9),
+      ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定', 'ゼッケン', '級位段位', 'レンタル']);
     var csvRow = csvOut.replace(/^\uFEFF/, '').split('\r\n').filter(function(l) { return l.indexOf('補正 太郎') === 0; })[0];
-    assert('export に補正点・確定が出る', csvRow.split(',').slice(9), ['1', '-2', '0', '-3', '審判メモ', '○']);
+    assert('export に補正点・確定・追加項目（未設定）が出る', csvRow.split(',').slice(9),
+      ['1', '-2', '0', '-3', '審判メモ', '○', '', '', '']);
     var longNote = new Array(202).join('あ');   // 201文字
     var longRes = await Api.updatePlayerInfo(padEvent.id, padP.id, { note: longNote });
     assert('PATCH note は200文字で切る', longRes.player.note.length, 200);
@@ -1115,8 +1317,8 @@
     assert('loadEventTechniques は技リストを返す', Array.isArray(a2Got.techniques), true);
 
     var a2Techs = [
-      { name: '立位袈裟', strikes: [1, null, null, null] },
-      { name: '四方', strikes: [17, 5, 7, 3] }
+      { name: '立位袈裟', strikes: [1, null, null, null], drawn: false },
+      { name: '四方', strikes: [17, 5, 7, 3], drawn: false }
     ];
     var a2Put = await Api.saveEventTechniques(a2Event.id, a2Techs);
     assert('saveEventTechniques は保存した技リストを返す', a2Put.techniques, a2Techs);
@@ -1166,7 +1368,7 @@
 
     // --- 配信用ボードはその大会の技リストを返す ---
     var a3Event = await Api.saveEvent({ name: 'ボード技テスト', date: '2026-09-14', venue: '', players: [] });
-    await Api.saveEventTechniques(a3Event.id, [{ name: 'ボード専用技', strikes: [5, 2, null, null] }]);
+    await Api.saveEventTechniques(a3Event.id, [{ name: 'ボード専用技', strikes: [5, 2, null, null], drawn: false }]);
     var a3Bulk = await Api.createPlayersBulk(a3Event.id, {
       court: 'A', isFemale: false, isNewFace: false, names: ['ボード 甲']
     });
@@ -1174,7 +1376,7 @@
     var a3Token = (await Api.createShareLink(a3Event.id)).token;
     var a3Live = (await Api.loadLive(a3Token)).data;
     assert('loadLive はその大会の技リストを返す（雛形ではない）',
-      a3Live.techniques, [{ name: 'ボード専用技', strikes: [5, 2, null, null] }]);
+      a3Live.techniques, [{ name: 'ボード専用技', strikes: [5, 2, null, null], drawn: false }]);
     await Api.deleteEvent(a3Event.id);
 
     // --- validateTechniques の境界値 ---
@@ -1203,7 +1405,7 @@
       { name: '  余分キーテスト  ', strikes: [1, null, null, null], foo: 'bar', bar: 123 }
     ]);
     assert('余分なキーは落ちる・技名は trim される',
-      vExtra.techniques, [{ name: '余分キーテスト', strikes: [1, null, null, null] }]);
+      vExtra.techniques, [{ name: '余分キーテスト', strikes: [1, null, null, null], drawn: false }]);
 
     await Api.deleteEvent(vEvent.id);
 
@@ -1225,7 +1427,7 @@
       techniquesSource: 'event' });
     var pOkLoaded = await Api.loadEvent(pOkEvent.id);
     assert('POST /api/events: 妥当な techniques は保存され、余分なキーは落ちる',
-      pOkLoaded.techniques, [{ name: '同梱技', strikes: [3, null, null, null] }]);
+      pOkLoaded.techniques, [{ name: '同梱技', strikes: [3, null, null, null], drawn: false }]);
 
     // body に techniquesSource（GET 応答にだけ足す値）が混ざっていても保存を妨げない
     // （server/index.js が書き込み前に delete する。ファイルの中身は techniquesSourceOf が
@@ -1257,10 +1459,10 @@
     assert('コピー先の名前・日付・会場はダイアログの入力',
       [cpNew.name, cpNew.date, cpNew.venue], ['第11回コピー先', '2027-03-01', '東京体育館']);
     assert('コピー先は draft', cpNew.status, 'draft');
-    assert('技リストは同じ内容', cpNew.techniques, [{ name: 'コピー技', strikes: [7, null, null, null] }]);
+    assert('技リストは同じ内容', cpNew.techniques, [{ name: 'コピー技', strikes: [7, null, null, null], drawn: false }]);
     await Api.saveEventTechniques(cpRes.id, [{ name: '書き換え技', strikes: [1, null, null, null] }]);
     assert('技リストは別オブジェクト（コピー先を変えても元は変わらない）',
-      (await Api.loadEvent(cpSrc.id)).techniques, [{ name: 'コピー技', strikes: [7, null, null, null] }]);
+      (await Api.loadEvent(cpSrc.id)).techniques, [{ name: 'コピー技', strikes: [7, null, null, null], drawn: false }]);
 
     assert('複製されるのは一巡目の行だけ', cpNew.players.length, 2);
     assert('複製された行はすべて一巡目',
@@ -1281,7 +1483,7 @@
       { name: '選手なしコピー', date: '2027-03-02', venue: '', withPlayers: false });
     assert('withPlayers が false なら選手は0名', cpNoP.playerCount, 0);
     assert('withPlayers が false でも技リストは複製する',
-      (await Api.loadEvent(cpNoP.id)).techniques, [{ name: 'コピー技', strikes: [7, null, null, null] }]);
+      (await Api.loadEvent(cpNoP.id)).techniques, [{ name: 'コピー技', strikes: [7, null, null, null], drawn: false }]);
 
     assert('大会名が空なら 400 の理由を返す',
       (await Api.copyEvent(cpSrc.id, { name: '  ' })).error, '大会名が不正です（1〜100文字）');
@@ -1371,7 +1573,7 @@
     assert('大会名は trim される', b3Loaded.name, '取り込みテスト');
     assert('会場が復元される', b3Loaded.venue, '会場');
     assert('技リストが復元される', b3Loaded.techniques,
-      [{ name: '取込技', strikes: [9, null, null, null] }]);
+      [{ name: '取込技', strikes: [9, null, null, null], drawn: false }]);
     var b3P1 = b3Loaded.players[0], b3P2 = b3Loaded.players[1], b3P3 = b3Loaded.players[2];
     assert('選手の項目が復元される',
       [b3P1.name, b3P1.order, b3P1.tech1, b3P1.score, b3P1.isNewFace, b3P1.result,
@@ -1434,8 +1636,8 @@
     // --- bundle → import の往復（全項目・二巡目・履歴。レビュー指摘の追加テスト） ---
     var rtEvent = await Api.saveEvent({ name: '往復テスト', date: '2026-09-14', venue: '道場', players: [] });
     var rtTechList = [
-      { name: '往復技A', strikes: [10, null, null, null] },
-      { name: '往復技B', strikes: [5, 5, null, null] }
+      { name: '往復技A', strikes: [10, null, null, null], drawn: false },
+      { name: '往復技B', strikes: [5, 5, null, null], drawn: false }
     ];
     await Api.saveEventTechniques(rtEvent.id, rtTechList);
     var rtBulk = await Api.createPlayersBulk(rtEvent.id, {

@@ -31,6 +31,15 @@
       display: block; width: 100%; min-height: 52px; text-align: left;
       padding: 0 12px; margin-bottom: 8px;
     }
+    /* 「抜刀後」列（techedit.js）。style.css の .tech-table より後に読まれるので、
+       同じ詳細度でもこちらが勝つ。375px では配点の入力を少し詰めて、
+       6 列目まで .tech-scroll の横スクロールなしで見せる。 */
+    .tech-table th:last-child, .tech-table td:last-child { width: 56px; }
+    .tech-table input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+    @media (max-width: 767px) {
+      .tech-table input[type="number"] { width: 38px; }
+      .tech-table th:last-child, .tech-table td:last-child { width: 44px; }
+    }
   </style>
 </head>
 <body data-theme="light">

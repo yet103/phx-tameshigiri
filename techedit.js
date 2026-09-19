@@ -66,14 +66,21 @@ var TechEdit = (function() {
     scroll.className = 'tech-scroll';
     var table = document.createElement('table');
     table.className = 'tech-table';
+    // 「抜刀後」＝ 抜刀してからの形。真剣レンタルの選手はこの形しか選べない
+    // （設計書「選手の追加項目」の決定事項）。見出しだけでは意味が伝わらないので
+    // title を添える（スマホ幅では見出しを 12px に詰めるため、文字は増やさない）。
     table.innerHTML =
-      '<thead><tr><th>技名</th><th>初太刀</th><th>二ノ太刀</th><th>三ノ太刀</th><th>四ノ太刀</th></tr></thead>' +
+      '<thead><tr><th>技名</th><th>初太刀</th><th>二ノ太刀</th><th>三ノ太刀</th><th>四ノ太刀</th>' +
+      '<th title="レンタルの選手が選べる形">抜刀後</th></tr></thead>' +
       '<tbody></tbody>';
     var tbody = table.querySelector('tbody');
     scroll.appendChild(table);
     container.appendChild(scroll);
 
     tbody.addEventListener('input', function() { dirty = true; });
+    // チェックボックスは環境によって input が来ないことがあるので change も見る
+    // （dirty が立たないと、対象を切り替えるときの「破棄しますか？」が出なくなる）。
+    tbody.addEventListener('change', function() { dirty = true; });
 
     function renderTable(techs) {
       tbody.innerHTML = '';
@@ -85,7 +92,10 @@ var TechEdit = (function() {
             var v = (t.strikes[s] !== null && t.strikes[s] !== undefined) ? Storage.esc(String(t.strikes[s])) : '';
             return '<td><input type="number" min="0" max="99" value="' + v +
               '" data-field="strike" data-idx="' + i + '" data-strike="' + s + '"></td>';
-          }).join('');
+          }).join('') +
+          // drawn を持たない古い技リスト（data.js の既定値も持たない）は未チェックで出す
+          '<td><input type="checkbox" data-field="drawn" data-idx="' + i + '"' +
+          (t.drawn === true ? ' checked' : '') + '></td>';
         tbody.appendChild(tr);
       });
       dirty = false;
@@ -106,7 +116,8 @@ var TechEdit = (function() {
           var n = parseInt(v, 10);
           return isNaN(n) ? null : n;
         });
-        techs.push({ name: name, strikes: strikes });
+        var drawnEl = tr.querySelector('[data-field="drawn"]');
+        techs.push({ name: name, strikes: strikes, drawn: !!(drawnEl && drawnEl.checked) });
       });
       return techs;
     }
