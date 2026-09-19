@@ -68,6 +68,8 @@
       assert('サーバーのデフォルト技術数は data.js と一致', techData.techniques.length, TECHNIQUES.length);
       assert('サーバーのデフォルト技術定義は data.js と一致',
         techData.techniques.map(function(t) { return { name: t.name, strikes: t.strikes }; }), TECHNIQUES);
+      assert('既定の技はすべて drawn:false',
+        techData.techniques.every(function(t) { return t.drawn === false; }), true);
     }
 
     // 大会作成テスト
