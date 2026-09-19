@@ -1388,8 +1388,15 @@
       return selDefault.value === NEW_COURT ? '' : selDefault.value;
     }
 
+    // 既存（一巡目）の bib。貼り付けの重複検証に使う（設計書「選手の追加項目」レビュー修正）。
+    // 二巡目の複製は一巡目と同じ bib を持つのが正常なので数えない（findBibConflict と同じ理由）。
+    var existingBibs = (ctx.players || [])
+      .filter(function(p) { return Courts.roundOf(p) === 1 && Number.isInteger(p.bib); })
+      .map(function(p) { return p.bib; });
+
     function update() {
-      var parsed = Courts.parsePasteRows(ta.value, ctx.techniques || [], { court: defaultCourt() });
+      var parsed = Courts.parsePasteRows(ta.value, ctx.techniques || [],
+        { court: defaultCourt(), existingBibs: existingBibs });
       okRows = parsed.rows.filter(function(r) { return r.ok; });
       ngCount = parsed.rows.length - okRows.length;
       summary.textContent = okRows.length + ' 人を登録します' +

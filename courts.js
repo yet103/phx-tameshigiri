@@ -585,6 +585,19 @@ var Courts = (function() {
       if (quoteError) badRow(row, quoteError);   // 引用符の異常は他の理由より優先して断る
       rows.push(row);
     });
+    // 2周目: 行同士のゼッケン重複を見る（1周目は1行ずつしか見えないので、範囲外・既存との
+    // 重複はそこで断り、行同士の重複だけ全行が揃うここで断る）。先に出た行はそのまま、
+    // 2件目以降だけ ok:false にする（既に他の理由で ok:false の行はそのまま。二重に理由を
+    // 付けない）。
+    var seenBib = Object.create(null);
+    rows.forEach(function(row) {
+      if (!row.ok || row.bib === null) return;
+      if (Object.prototype.hasOwnProperty.call(seenBib, row.bib)) {
+        badRow(row, 'ゼッケン番号 ' + row.bib + ' は ' + seenBib[row.bib] + ' 行目と重複しています');
+      } else {
+        seenBib[row.bib] = row.line;
+      }
+    });
     return { headerSkipped: headerSkipped, rows: rows };
   }
 
@@ -602,14 +615,24 @@ var Courts = (function() {
     var badTechs = techs.filter(function(t) { return t && !resolveTechnique(techniques, t, isFemale); });
     var pasted = cols[1] || '';
     var fallback = (defaults && typeof defaults.court === 'string') ? defaults.court.trim() : '';
-    // ゼッケン（8列目）は数字だけを整数として読む。空なら null（未設定）。
-    // 数字以外（小数点や文字が混ざる）は不正として、下でこの行を断る理由に使う。
+    // ゼッケン（8列目）は 1〜9999 の整数だけを読む。空なら null（未設定）。
+    // 数字以外（小数点や文字が混ざる）・範囲外は不正として、下でこの行を断る理由に使う。
     var bibRaw = String(cols[7] || '').trim();
     var bib = null;
     var bibError = '';
     if (bibRaw) {
-      if (/^\d+$/.test(bibRaw)) bib = parseInt(bibRaw, 10);
-      else bibError = 'ゼッケン番号は数字で';
+      var bibNum = /^\d+$/.test(bibRaw) ? parseInt(bibRaw, 10) : NaN;
+      if (Number.isInteger(bibNum) && bibNum >= 1 && bibNum <= 9999) {
+        bib = bibNum;
+        // 既存の選手（一巡目）の bib との重複。defaults.existingBibs は
+        // desk-players.js の貼り付けダイアログが渡す（設計書「選手の追加項目」レビュー修正）。
+        var existingBibs = (defaults && Array.isArray(defaults.existingBibs)) ? defaults.existingBibs : [];
+        if (existingBibs.indexOf(bib) !== -1) {
+          bibError = 'ゼッケン番号 ' + bib + ' は登録済みです';
+        }
+      } else {
+        bibError = 'ゼッケン番号は 1〜9999 の整数で';
+      }
     }
     var rental = RENTAL_WORDS.indexOf(String(cols[9] || '').toLowerCase()) !== -1;
     var row = {

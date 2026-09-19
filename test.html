@@ -2550,10 +2550,29 @@
       pRows10('山田,A,,,,,,007,,').map(function(r) { return r.bib; }), [7]);
     assert('parsePasteRows: ゼッケンが数字以外なら ok:false',
       pRows10('山田,A,,,,,,12a,,').map(function(r) { return [r.bib, r.ok, r.error]; }),
-      [[null, false, 'ゼッケン番号は数字で']]);
+      [[null, false, 'ゼッケン番号は 1〜9999 の整数で']]);
     assert('parsePasteRows: ゼッケンが小数なら ok:false',
       pRows10('山田,A,,,,,,1.5,,').map(function(r) { return [r.ok, r.error]; }),
-      [[false, 'ゼッケン番号は数字で']]);
+      [[false, 'ゼッケン番号は 1〜9999 の整数で']]);
+    // レビュー修正: 範囲外（1〜9999 以外）は ok:false。行同士の重複は2周目で見る
+    // （先の行はそのまま、2件目以降だけ断る）。既存（defaults.existingBibs）との重複も断る。
+    assert('parsePasteRows: ゼッケンが範囲外（0）なら ok:false',
+      pRows10('山田,A,,,,,,0,,').map(function(r) { return [r.bib, r.ok, r.error]; }),
+      [[null, false, 'ゼッケン番号は 1〜9999 の整数で']]);
+    assert('parsePasteRows: ゼッケンが範囲外（10000）なら ok:false',
+      pRows10('山田,A,,,,,,10000,,').map(function(r) { return [r.bib, r.ok, r.error]; }),
+      [[null, false, 'ゼッケン番号は 1〜9999 の整数で']]);
+    assert('parsePasteRows: 行同士のゼッケン重複は2周目で ok:false（先の行はそのまま）',
+      pRows10('山田,A,,,,,,5,,\n佐藤,A,,,,,,6,,\n鈴木,A,,,,,,5,,')
+        .map(function(r) { return [r.bib, r.ok, r.error]; }),
+      [[5, true, ''], [6, true, ''],
+       [5, false, 'ゼッケン番号 5 は 1 行目と重複しています']]);
+    assert('parsePasteRows: defaults.existingBibs にある番号は ok:false',
+      pRows10('山田,A,,,,,,5,,', pTech, { existingBibs: [5] }).map(function(r) { return [r.bib, r.ok, r.error]; }),
+      [[5, false, 'ゼッケン番号 5 は登録済みです']]);
+    assert('parsePasteRows: existingBibs に無い番号はそのまま通る',
+      pRows10('山田,A,,,,,,6,,', pTech, { existingBibs: [5] }).map(function(r) { return [r.bib, r.ok]; }),
+      [[6, true]]);
     assert('parsePasteRows: 級位段位はそのまま文字列で読む',
       pRows10('山田,A,,,,,,,初段,').map(function(r) { return r.rank; }), ['初段']);
     assert('parsePasteRows: レンタルは新人と同じ語に「レンタル」「あり」を足した語',
