@@ -413,6 +413,13 @@ var Courts = (function() {
       });
     });
     if (rentalBad.length > 0) blockers.push({ kind: 'rental', players: rentalBad });
+    // 同じ形の回数制限（一巡目だけ見る。bib/rank と同じ理由。設計書 2026-09-20-rules-alignment-design.md）。
+    var repeatBad = list.filter(function(p) {
+      if (!p || roundOf(p) !== 1) return false;
+      var isFemale = sexOf(p) === '女子';
+      return duplicateForms([p.tech1, p.tech2, p.tech3], techniques, isFemale).length > 0;
+    });
+    if (repeatBad.length > 0) blockers.push({ kind: 'repeat', players: repeatBad });
     return blockers;
   }
 
@@ -420,7 +427,8 @@ var Courts = (function() {
   var BLOCKER_LABELS = {
     bib: 'ゼッケン番号が未入力',
     rank: '級位・段位が未入力',
-    rental: 'レンタルなのに抜刀してからの形以外の技を選んでいる'
+    rental: 'レンタルなのに抜刀してからの形以外の技を選んでいる',
+    repeat: '同じ形を 2 回以上選んでいる'
   };
   // alert に全員の名前を並べると長くなりすぎるので、先頭 BLOCKER_NAME_LIMIT 名までにして
   // 残りは件数だけ添える（レビュー修正）。
@@ -511,6 +519,24 @@ var Courts = (function() {
   function isDrawnTechnique(techniques, name, isFemale) {
     var t = resolveTechnique(techniques, name, isFemale);
     return !!(t && t.drawn);
+  }
+
+  // 3枠の技（['tech1','tech2','tech3']）のうち、repeatable でない技が2回以上ある名前の配列
+  // （表示名。接尾辞は同じ形として数える。resolveTechnique で解決できない技は数えない）。
+  // 重複が無ければ []（設計書 2026-09-20-rules-alignment-design.md「同じ形の回数制限」）。
+  function duplicateForms(techs, techniques, isFemale) {
+    var counts = Object.create(null);   // 表示名が '__proto__' などでも壊れないように
+    var order = [];
+    (techs || []).forEach(function(name) {
+      var n = String(name == null ? '' : name).trim();
+      if (!n) return;
+      var resolved = resolveTechnique(techniques, n, isFemale);
+      if (!resolved || resolved.repeatable === true) return;
+      var display = stripGenderSuffix(resolved.name);
+      if (!Object.prototype.hasOwnProperty.call(counts, display)) { counts[display] = 0; order.push(display); }
+      counts[display]++;
+    });
+    return order.filter(function(name) { return counts[name] >= 2; });
   }
 
   // ---- 貼り付けによる一括登録の解析（PC 運営 desk-players.js の「📋 貼り付けて追加」） ----
@@ -673,6 +699,11 @@ var Courts = (function() {
     if (badTechs.length > 0) {
       return badRow(row, '技「' + badTechs.join('」「') + '」は技リストにありません');
     }
+    // 同じ形の回数制限（repeatable でない技が2回以上あれば断る。設計書 2026-09-20-rules-alignment-design.md）。
+    var dupForms = duplicateForms(techs, techniques, isFemale);
+    if (dupForms.length > 0) {
+      return badRow(row, '同じ形は 1 回までです（' + dupForms[0] + '）');
+    }
     if (bibError) return badRow(row, bibError);
     if (row.rank.length > 20) return badRow(row, '級位・段位は 20 文字までです。');
     if (rental) {
@@ -725,6 +756,7 @@ var Courts = (function() {
     stripGenderSuffix: stripGenderSuffix,
     resolveTechnique: resolveTechnique,
     techniqueOptions: techniqueOptions,
-    isDrawnTechnique: isDrawnTechnique
+    isDrawnTechnique: isDrawnTechnique,
+    duplicateForms: duplicateForms
   };
 })();

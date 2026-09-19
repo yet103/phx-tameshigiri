@@ -2534,6 +2534,21 @@
     assert('scoreChangeConfirmMessage: 得点が無ければ 0点',
       Courts.scoreChangeConfirmMessage({}).indexOf('（0点）') !== -1, true);
 
+    // ---- duplicateForms: 同じ巡の3枠のうち repeatable でない同じ形（設計書 2026-09-20-rules-alignment-design.md） ----
+    // TECHNIQUES（data.js）の 破図味(男)(女) は repeatable:false、立位袈裟は repeatable:true。
+    assert('duplicateForms: repeatable でない技が2回以上あれば重複',
+      Courts.duplicateForms(['破図味', '破図味', '四方'], TECHNIQUES, false), ['破図味']);
+    assert('duplicateForms: repeatable な技は2回あっても重複にしない',
+      Courts.duplicateForms(['立位袈裟', '立位袈裟', ''], TECHNIQUES, false), []);
+    assert('duplicateForms: 接尾辞違いは同じ形として数える',
+      Courts.duplicateForms(['破図味', '破図味(男)', ''], TECHNIQUES, false), ['破図味']);
+    assert('duplicateForms: 空配列は重複なし', Courts.duplicateForms(['', '', ''], TECHNIQUES, false), []);
+    assert('duplicateForms: techs が無くても落ちない', Courts.duplicateForms(null, TECHNIQUES, false), []);
+    assert('duplicateForms: 技リストが無くても落ちない（解決できない技は数えない）',
+      Courts.duplicateForms(['破図味', '破図味', ''], null, false), []);
+    assert('duplicateForms: isFemale で性別接尾辞を解決する',
+      Courts.duplicateForms(['破図味', '破図味(女)', ''], TECHNIQUES, true), ['破図味']);
+
     // ---- 選手の追加項目（ゼッケン・級位段位・真剣レンタル）（設計書 2026-09-19-player-extra-fields-design.md トラックB） ----
     // techniqueOptions の第3引数 rental。drawn の技だけを出す（性別とAND）。
     var RENTAL_TECH = [
@@ -2606,6 +2621,33 @@
     assert('startBlockers: settings が無くても落ちない（bib/rankは拾わない）',
       Courts.startBlockers({}, sbPlayers), []);
 
+    // startBlockers: 'repeat'（同じ形を2回以上選んでいる。設計書 2026-09-20-rules-alignment-design.md）
+    var repeatTechList = [{ name: '破図味(男)', repeatable: false }, { name: '立位袈裟', repeatable: true }];
+    var repeatPlayers = [
+      { id: 'p1', order: 'A-男子-1-1', name: '重複太郎', tech1: '破図味', tech2: '破図味', tech3: '' },
+      { id: 'p2', order: 'A-男子-1-2', name: '通常次郎', tech1: '立位袈裟', tech2: '立位袈裟', tech3: '' },
+      { id: 'p3', order: 'A-男子-2-1', name: '二巡目三郎', tech1: '破図味', tech2: '破図味', tech3: '' }
+    ];
+    assert('startBlockers: duplicateForms が空でない一巡目の選手だけ repeat に拾う',
+      Courts.startBlockers({ settings: {}, techniques: repeatTechList }, repeatPlayers)
+        .filter(function(b) { return b.kind === 'repeat'; })[0].players.map(function(p) { return p.id; }),
+      ['p1']);
+    assert('startBlockers: repeatable な技を2枠選んでも repeat は拾わない',
+      Courts.startBlockers({ settings: {}, techniques: repeatTechList }, repeatPlayers)
+        .some(function(b) { return b.kind === 'repeat' && b.players.some(function(p) { return p.id === 'p2'; }); }),
+      false);
+    assert('startBlockers: 二巡目の重複は拾わない（一巡目だけ見る）',
+      Courts.startBlockers({ settings: {}, techniques: repeatTechList }, repeatPlayers)
+        .some(function(b) { return b.kind === 'repeat' && b.players.some(function(p) { return p.id === 'p3'; }); }),
+      false);
+    assert('startBlockers: repeat は bib→rank→rental の後に返す',
+      Courts.startBlockers({ settings: { requireBib: true, requireRank: true }, techniques: repeatTechList }, [
+        { id: 'y', order: 'A-男子-1-1', name: 'わい', bib: null, rank: '', rental: false, tech1: '破図味', tech2: '破図味', tech3: '' }
+      ]).map(function(b) { return b.kind; }),
+      ['bib', 'rank', 'repeat']);
+    assert('startBlockers: techniques が無くても repeat 判定で落ちない',
+      Courts.startBlockers({ settings: {} }, repeatPlayers).length >= 0, true);
+
     // blockerMessage: alert の文言を改行で連ねる
     assert('blockerMessage: 空配列は空文字', Courts.blockerMessage([]), '');
     assert('blockerMessage: ゼッケンの文言',
@@ -2617,6 +2659,9 @@
     assert('blockerMessage: レンタルの文言',
       Courts.blockerMessage([{ kind: 'rental', players: [{ name: '鈴木 花子' }] }]),
       'レンタルなのに抜刀してからの形以外の技を選んでいる: 1 名（鈴木 花子）');
+    assert('blockerMessage: 同じ形の重複（repeat）の文言',
+      Courts.blockerMessage([{ kind: 'repeat', players: [{ name: '重複 太郎' }] }]),
+      '同じ形を 2 回以上選んでいる: 1 名（重複 太郎）');
     assert('blockerMessage: 複数種類の連結（改行区切り）',
       Courts.blockerMessage([
         { kind: 'bib', players: [{ name: '山田 太郎' }] },
@@ -2712,6 +2757,18 @@
     assert('parsePasteRows: bib が省略された defaults 呼び出し（第3引数はコート既定のみ）でも落ちない',
       pRows10('山田', pTech, { court: 'A' }).map(function(r) { return [r.bib, r.rank, r.rental, r.ok]; }),
       [[null, '', false, true]]);
+
+    // parsePasteRows: 同じ形の回数制限（設計書 2026-09-20-rules-alignment-design.md）
+    var dupFormTech = [{ name: '破図味(男)' }, { name: '立位袈裟', repeatable: true }, { name: '四方' }];
+    assert('parsePasteRows: repeatable でない同じ技が2枠にあれば ok:false（破図味）',
+      pRows10('山田,A,男子,,破図味,破図味,四方,,,', dupFormTech).map(function(r) { return [r.ok, r.error]; }),
+      [[false, '同じ形は 1 回までです（破図味）']]);
+    assert('parsePasteRows: repeatable な技は2枠にあっても ok:true',
+      pRows10('山田,A,男子,,立位袈裟,立位袈裟,,,,', dupFormTech).map(function(r) { return r.ok; }),
+      [true]);
+    assert('parsePasteRows: 同じ技が1枠だけなら ok:true',
+      pRows10('山田,A,男子,,破図味,四方,,,,', dupFormTech).map(function(r) { return r.ok; }),
+      [true]);
 
     var h2es = document.createElement('h2');
     h2es.textContent = 'status.js';
