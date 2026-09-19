@@ -1911,9 +1911,9 @@ app.post('/api/events/import', (req, res) => {
         score: Number.isFinite(p.score) ? p.score : 0,
         isNewFace: p.isNewFace === true,
         isFemale: p.isFemale === true,
-        // 結果は 1=○, 0=×, 空白=未入力 のエンコード。それ以外が混じっていたら捨てる
+        // 結果は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード。それ以外が混じっていたら捨てる
         // （採点画面の decodeResult が読めない文字列を保存しない）。
-        result: (typeof p.result === 'string' && p.result.length <= 100 && /^[01 ]*$/.test(p.result))
+        result: (typeof p.result === 'string' && p.result.length <= 100 && /^[012 ]*$/.test(p.result))
           ? p.result : '',
         rank: typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : '',
         rental: p.rental === true

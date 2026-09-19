@@ -1663,20 +1663,23 @@
           { id: 'p2', name: '取込 甲', order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '',
             score: 0, isNewFace: true, isFemale: false, result: '', sourcePlayerId: 'p1' },
           { id: '../bad', name: '取込 乙', order: 'A-男子-1-2', tech1: '', tech2: '', tech3: '',
-            score: 0, isNewFace: false, isFemale: false, result: 'xx' }
+            score: 0, isNewFace: false, isFemale: false, result: 'xx' },
+          { id: 'p4', name: '取込 丙', order: 'A-男子-1-3', tech1: '', tech2: '', tech3: '',
+            score: 0, isNewFace: false, isFemale: false, result: '2 10' }
         ]
       },
       history: [{ action: 'imported', detail: '取り込み履歴' }]
     };
     var b3Res = await Api.importBundle(b3Bundle);
-    assert('importBundle は成功と人数を返す', [b3Res.success, b3Res.playerCount], [true, 3]);
+    assert('importBundle は成功と人数を返す', [b3Res.success, b3Res.playerCount], [true, 4]);
     assert('取り込んだ大会のIDは元と違う', b3Res.id !== 'sourceevent1', true);
     var b3Loaded = await Api.loadEvent(b3Res.id);
     assert('大会名は trim される', b3Loaded.name, '取り込みテスト');
     assert('会場が復元される', b3Loaded.venue, '会場');
     assert('技リストが復元される', b3Loaded.techniques,
       [{ name: '取込技', strikes: [9, null, null, null], drawn: false, repeatable: false, reducedFirst: null }]);
-    var b3P1 = b3Loaded.players[0], b3P2 = b3Loaded.players[1], b3P3 = b3Loaded.players[2];
+    var b3P1 = b3Loaded.players[0], b3P2 = b3Loaded.players[1], b3P3 = b3Loaded.players[2],
+        b3P4 = b3Loaded.players[3];
     assert('選手の項目が復元される',
       [b3P1.name, b3P1.order, b3P1.tech1, b3P1.score, b3P1.isNewFace, b3P1.result,
        b3P1.adjust, b3P1.totalAdjust, b3P1.note, b3P1.confirmed],
@@ -1687,6 +1690,7 @@
     assert('不正な選手IDは振り直す', b3P3.id === '../bad', false);
     assert('振り直した選手IDも有効なID', /^[A-Za-z0-9_-]{1,64}$/.test(b3P3.id), true);
     assert('0と1と空白以外の result は空にする', b3P3.result, '');
+    assert('"2"（△）を含む result は取り込み後も残る', b3P4.result, '2 10');
     assert('shareToken は取り込まない', b3Loaded.shareToken, undefined);
     assert('live は取り込まない', b3Loaded.live, undefined);
     assert('createdAt は取り込み時刻で付け直す', b3Loaded.createdAt === '2020-01-01T00:00:00.000Z', false);
