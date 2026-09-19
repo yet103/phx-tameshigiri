@@ -151,6 +151,9 @@
     { label: '性' },
     { key: 'order', label: 'No' },
     { key: 'name', label: '名前', cls: 'col-name' },
+    // ゼッケンは名前のすぐ右（col-name は sticky なので、その右に足すぶんには
+    // 左端の固定に影響しない）。級位段位とレンタルは行のシートで見る。
+    { label: 'ゼッケン' },
     { label: '技①' },
     { label: '技②' },
     { label: '技③' },
@@ -230,6 +233,9 @@
     cell(Courts.sexOf(p) === '女子' ? '女' : '男');
     cell(key.no ? String(key.no) : '');
     cell(p.name || '', 'col-name');
+    // ゼッケンは未設定なら「—」を薄く出す（0 と空欄を見間違えないように）
+    var hasBib = (typeof p.bib === 'number');
+    cell(hasBib ? String(p.bib) : '—', hasBib ? '' : 'muted');
     // 3枠とも表示する（詰めると ['', '真', '真'] と ['真', '真', ''] が同じ見た目になり、
     // どの枠が空か運営が分からなくなる）。空き枠は「—」。3枠とも空なら技①に「未入力」。
     cell(noTech ? '未入力' : (p.tech1 || '—'), noTech ? 'muted' : '');
