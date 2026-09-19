@@ -56,10 +56,12 @@
     return m ? parseInt(m[3], 10) : 1;
   }
 
+  // result の '2' は △（減点成功）。成功の一種なので採点済みに含める
+  // （設計書 2026-09-20-rules-alignment-design.md）。courts.js の Courts.isScored と同じ規則。
   function isScored(player) {
     if (!player) return false;
     if (typeof player.score === 'number' && player.score > 0) return true;
-    if (/[01]/.test(player.result || '')) return true;
+    if (/[012]/.test(player.result || '')) return true;
     if (Array.isArray(player.adjust)) {
       for (var i = 0; i < player.adjust.length; i++) {
         if (Number(player.adjust[i])) return true;

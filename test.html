@@ -2045,6 +2045,9 @@
     assert('isScored: 全体補正点が入っていれば採点済み', Courts.isScored({ score: 0, result: '', totalAdjust: 1 }), true);
     assert('isScored: 補正点が全部 0 なら未採点', Courts.isScored({ score: 0, result: '', adjust: [0, 0, 0], totalAdjust: 0 }), false);
     assert('isScored: 負の合計でも result があれば採点済み', Courts.isScored({ score: -3, result: '0    ' }), true);
+    // △（減点成功）だけの result も採点済み扱いにする（設計書 2026-09-20-rules-alignment-design.md）。
+    // score は 0（△ の配点が 0 の技も含めて result 文字列だけで判定できることを見る）。
+    assert('isScored: result が"2"（△）だけでも採点済み', Courts.isScored({ score: 0, result: '2    ' }), true);
 
     assert('compareOrder: 番号は数値順（1-2 が 1-10 より前）',
       Courts.compareOrder({ order: 'A-男子-1-2' }, { order: 'A-男子-1-10' }) < 0, true);
@@ -2794,16 +2797,19 @@
       { order: 'A-男子-1-4', score: 0, result: '', totalAdjust: 5 },
       { order: 'A-女子-2-1', score: 0, result: '0    ' },
       { order: '', score: 0, result: '' },
-      { order: 'B-女子-2-10', score: 12, result: '11   ' }
+      { order: 'B-女子-2-10', score: 12, result: '11   ' },
+      { order: 'C-男子-1-1', score: 0, result: '2    ' }   // △（減点成功）だけの result
     ];
     // derive は Courts に依存できない（サーバーは courts.js を読めない）ので同じ規則を2箇所に持つ。
     // 同じ入力で結果が一致することをここで固定する。
     assert('derive の巡目判定が Courts.roundOf と一致する',
       CMP_PLAYERS.map(function(p) { return EventStatus.roundOf(p); }),
       CMP_PLAYERS.map(function(p) { return Courts.roundOf(p); }));
-    assert('derive の採点済み判定が Courts.isScored と一致する',
+    assert('derive の採点済み判定が Courts.isScored と一致する（"2"＝△だけの result を含む）',
       CMP_PLAYERS.map(function(p) { return EventStatus.isScored(p); }),
       CMP_PLAYERS.map(function(p) { return Courts.isScored(p); }));
+    assert('EventStatus.isScored: result が"2"（△）だけでも採点済み',
+      EventStatus.isScored({ score: 0, result: '2    ' }), true);
 
     // ---- 5. of / isScoringOpen / scoringRound / isLocked / ラベル ----
     assert('of: 有効な status はそのまま', EventStatus.of({ status: 'final', players: [] }), 'final');
