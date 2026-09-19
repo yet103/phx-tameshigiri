@@ -407,6 +407,7 @@ var Courts = (function() {
       if (!name) return;
       if (name.slice(-3) === otherSuffix) return;
       var shown = name.slice(-3) === suffix ? stripGenderSuffix(name) : name;
+      if (!shown) return;   // 技名がちょうど '(男)'/'(女)' だけだと接尾辞を外すと空になる。出さない。
       if (out.some(function(o) { return o.name === shown; })) return;
       // strikes は t.strikes ではなく、表示名を実際に採点で使うときの解決規則
       // （resolveTechnique）に通した先から取る。技リストに 破図味(女) と 破図味 が

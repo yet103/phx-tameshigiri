@@ -1971,6 +1971,11 @@
     // 「isFemale が未指定（undefined）の場合は false（男子）として扱う」を参照）。
     assert('techniqueOptions: isFemale 未指定は男子と同じ',
       Courts.techniqueOptions(TECHNIQUES), Courts.techniqueOptions(TECHNIQUES, false));
+    // 技名がちょうど '(男)'/'(女)' だけだと、接尾辞を外すと空文字になる。出さない。
+    assert('techniqueOptions: 接尾辞を外すと空になる技名は出さない',
+      Courts.techniqueOptions([{ name: '(男)', strikes: [1, null, null, null] }, { name: '四方', strikes: [1, 1, 1, 1] }], false)
+        .map(function(t) { return t.name; }),
+      ['四方']);
 
     assert('resolveTechnique: 接尾辞なしの名前が性別で解決する',
       Courts.resolveTechnique(TECHNIQUES, '破図味', true),
