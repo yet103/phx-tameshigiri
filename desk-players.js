@@ -583,6 +583,9 @@
     // この行の入力を控えておく（レンタルの切り替えで技を作り直す・赤枠を塗り直す）
     var refs = { techSelects: [], bibInput: null, rankInput: null };
     var tr = document.createElement('tr');
+    // 一巡目の bib/rank/rental 保存が二巡目の行に伝播したとき、表全体を描き直さずこの行
+    // だけを探して差し替えるための目印（saveCell 参照）。
+    tr.dataset.playerId = p.id || '';
     tr.appendChild(cell(String(Courts.roundOf(p)), 'num col-round'));
     tr.appendChild(cell(String(key.no || ''), 'num col-no'));
     tr.appendChild(nameCell(ctx, p, locked));
@@ -655,10 +658,11 @@
     // 一巡目の bib/rank/rental を保存したら、サーバーが sourcePlayerId で紐づく二巡目の
     // 行にも同じ値を写している（server/index.js の PATCH …/players/:playerId）。表の
     // ローカルな控え（ctx.players）はサーバーの応答（この行だけ）では追随しないので、
-    // ここで一致する行を探して同じように書き換え、表を描き直す（レビュー修正。
-    // 二巡目のセルは読み取り専用だが、表示が一巡目の変更に追随しないと古い値のまま残る）。
+    // ここで一致する行を探して同じように書き換える（レビュー修正）。
+    // redrawTable() で表全体を作り直すと、他の行で入力途中の文字やフォーカスが消えてしまう
+    // （このコメントの上の「表そのものは描き直さない」という前提に反する）ので、
+    // 伝播した二巡目の行だけを新しく作って差し替える。他の行の DOM・入力状態には触れない。
     if (patch.bib !== undefined || patch.rank !== undefined || patch.rental !== undefined) {
-      var propagated = false;
       (ctx.players || []).forEach(function(other) {
         if (other && other.sourcePlayerId === p.id) {
           if (patch.bib !== undefined) {
@@ -666,10 +670,16 @@
           }
           if (patch.rank !== undefined) other.rank = p.rank;
           if (patch.rental !== undefined) other.rental = p.rental;
-          propagated = true;
+          // 絞り込みで隠れている・並べ替えでこの表に無い等、行が見当たらなければ何もしない
+          // （ctx.players 側は更新済みなので、次に描き直されたときには反映される）。
+          if (view && view.ctx === ctx && view.tbody) {
+            var oldTr = Array.prototype.find.call(view.tbody.children, function(tr) {
+              return tr.dataset && tr.dataset.playerId === other.id;
+            });
+            if (oldTr) oldTr.replaceWith(buildRow(ctx, other, view.locked));
+          }
         }
       });
-      if (propagated) redrawTable();
     }
     Desk.toast('保存しました');
     if (after) after();
