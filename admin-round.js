@@ -49,6 +49,12 @@ var AdminRound = (function() {
   // transition の 409 は他の端末が先に進めていた場合なので、画面を読み直す。
   async function applyStatus(from, to) {
     var ctx = CTX;
+    // 試合開始の前だけ、必須項目の未入力とレンタルの選手の技を見る（PC 運営の
+    // desk.js の applyStatus と同じ判定・同じ文言。判定は courts.js に置いてある）。
+    if (from === 'draft' && to === 'round1') {
+      var blockers = Courts.startBlockers(ctx.event, ctx.players);
+      if (blockers.length > 0) { alert(Courts.blockerMessage(blockers)); return; }
+    }
     if (!confirm(Courts.statusConfirmMessage(from, to, ctx.players))) return;
     var res = await Api.changeStatus(ctx.eventId, to);
     if (ctx.isStale()) return;   // 通信中に大会やタブを切り替えられた
@@ -301,8 +307,12 @@ var AdminRound = (function() {
     // 最新の選択は onChange で控える
     var latest = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
     TechPicker.open({
+      // レンタルの選手には抜刀後の形だけを出す（PC の二巡目の表と同じ規則）。
+      // いま選んである技が候補から外れても withCurrentTechniques が足すので、
+      // ①②③ の印は消えない（外れている技は「試合開始」の判定では止められない
+      //   二巡目なので、運営が見て直す）。
       techniques: withCurrentTechniques(
-        Courts.techniqueOptions(techniques, !!p.isFemale),
+        Courts.techniqueOptions(techniques, !!p.isFemale, p.rental === true),
         techniques, latest, !!p.isFemale),
       initial: latest,
       slot: slot,

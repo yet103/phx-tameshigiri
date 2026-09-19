@@ -366,6 +366,13 @@ var Desk = (function() {
     var eventId = selectedEventId;
     var players = (currentEvent && currentEvent.players) || [];
     if (!eventId) return;
+    // 試合開始の前だけ、必須項目の未入力とレンタルの選手の技を見る。サーバーは硬い条件
+    // （選手 0 名・遷移表にない組み合わせ）しか見ないので、ここで止める。
+    // 「確認して進む」にはしない（設計書の決定事項）。必須を外すか入力すれば通る。
+    if (from === 'draft' && to === 'round1') {
+      var blockers = Courts.startBlockers(currentEvent, players);
+      if (blockers.length > 0) { alert(Courts.blockerMessage(blockers)); return; }
+    }
     if (!confirm(Courts.statusConfirmMessage(from, to, players))) return;
     var seq = renderSeq;
     setStageButtonsDisabled(true);
