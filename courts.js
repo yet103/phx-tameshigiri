@@ -408,7 +408,12 @@ var Courts = (function() {
       if (name.slice(-3) === otherSuffix) return;
       var shown = name.slice(-3) === suffix ? stripGenderSuffix(name) : name;
       if (out.some(function(o) { return o.name === shown; })) return;
-      out.push({ name: shown, strikes: t.strikes });
+      // strikes は t.strikes ではなく、表示名を実際に採点で使うときの解決規則
+      // （resolveTechnique）に通した先から取る。技リストに 破図味(女) と 破図味 が
+      // 両方ある場合など、末尾の技を先に見つけても resolveTechnique が完全一致の
+      // 別の項目を返すことがあるため、ここで t.strikes をそのまま使うと表示と
+      // 採点の配点がずれる。
+      out.push({ name: shown, strikes: (resolveTechnique(techniques, shown, isFemale) || t).strikes });
     });
     return out;
   }

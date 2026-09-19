@@ -1954,6 +1954,14 @@
       [techNames(femaleOptions).indexOf('四方') >= 0, techNames(maleOptions).indexOf('四方') >= 0], [true, true]);
     assert('techniqueOptions: 並び順は元のまま（先頭は立位袈裟）', femaleOptions[0].name, '立位袈裟');
     assert('techniqueOptions: null でも落ちない', Courts.techniqueOptions(null, true), []);
+    // レビュー指摘: 技リストに 破図味(女) と 破図味（接尾辞なし）が両方ある場合、
+    // 先に見つかる 破図味(女) の t.strikes をそのまま出すと、実際の採点（resolveTechnique が
+    // 完全一致の 破図味 を返す）と表示の配点がずれる。resolveTechnique に通した先の
+    // strikes を出すべき。
+    var dupOrderTech = [{ name: '破図味(女)', strikes: [20, 6, 6, 2] }, { name: '破図味', strikes: [99, 99, 99, 99] }];
+    assert('techniqueOptions: 破図味(女)と破図味が両方あっても、完全一致側の配点を出す',
+      Courts.techniqueOptions(dupOrderTech, true).filter(function(t) { return t.name === '破図味'; })[0].strikes,
+      [99, 99, 99, 99]);
 
     assert('resolveTechnique: 接尾辞なしの名前が性別で解決する',
       Courts.resolveTechnique(TECHNIQUES, '破図味', true),
