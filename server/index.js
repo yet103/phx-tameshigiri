@@ -88,7 +88,9 @@ const DEFAULT_TECHNIQUES = [
 // 技リストの複製と正規化。
 // 雛形（DEFAULT_TECHNIQUES / custom.json）をそのまま大会 JSON に入れると、
 // あとで雛形を変えたときに採点中の大会の配点まで動いたように見える。必ず複製して渡す。
-// 同時に { name, strikes } 以外のキーを落とす（保存する形はこの2つだけ）。
+// 同時に { name, strikes, drawn } 以外のキーを落とす（保存する形はこの3つだけ）。
+// drawn（抜刀後の形。既定 false）はレンタルの選手に出す技を絞り込むための印
+// （設計書「選手の追加項目」。courts.js の Courts.isDrawnTechnique と同じ規則）。
 function cloneTechniques(list) {
   return (Array.isArray(list) ? list : []).map(function(t) {
     return {
@@ -96,7 +98,8 @@ function cloneTechniques(list) {
       strikes: [0, 1, 2, 3].map(function(i) {
         const v = (t && Array.isArray(t.strikes)) ? t.strikes[i] : null;
         return Number.isInteger(v) ? v : null;
-      })
+      }),
+      drawn: !!(t && t.drawn === true)
     };
   });
 }
@@ -538,12 +541,12 @@ app.post('/api/events', (req, res) => {
   }
 });
 
-// PATCH /api/events/:id : 基本情報（名前・日付・会場）だけを更新する
+// PATCH /api/events/:id : 基本情報（名前・日付・会場・settings）だけを更新する
 // POST /api/events は大会ファイルを丸ごと送り直す作法で、GET の応答（techniques を
 // effectiveTechniques で埋めたもの）をそのまま送り返すと、techniques を持たない大会
 // （この機能より前に作られた雛形運用の大会）が自前の技リストを持つ大会に変わってしまう。
-// 基本情報の保存はこの経路だけを使い、name / date / venue 以外（techniques / players /
-// status / shareToken / live）には一切触れない。
+// 基本情報の保存はこの経路だけを使い、name / date / venue / settings 以外（techniques /
+// players / status / shareToken / live）には一切触れない。
 app.patch('/api/events/:id', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -566,12 +569,22 @@ app.patch('/api/events/:id', (req, res) => {
     // 長さの上限は POST /api/events/:id/copy と同じ
     if (typeof body.date === 'string') event.date = body.date.slice(0, 20);
     if (typeof body.venue === 'string') event.venue = body.venue.slice(0, 100);
+    // settings（ゼッケン・級位段位の必須。設計書「選手の追加項目」）。
+    // { requireBib, requireRank } の真偽値だけを取り出す（他のキーは無視。真偽値でなければ false）。
+    if (body.settings !== undefined) {
+      const s = (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings))
+        ? body.settings : {};
+      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true };
+    }
 
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
     res.json({
       success: true,
-      event: { id: event.id, name: event.name, date: event.date, venue: event.venue, updatedAt: event.updatedAt }
+      event: {
+        id: event.id, name: event.name, date: event.date, venue: event.venue,
+        updatedAt: event.updatedAt, settings: event.settings
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -611,8 +624,10 @@ app.delete('/api/events/:id', (req, res) => {
 });
 
 // POST /api/events/:id/copy : 大会をコピーして新しい大会を作る
-// 技と配点は必ず複製する。選手は withPlayers のときだけ、元の一巡目の行だけを複製し、
-// 得点・結果・備考・補正・確定は落とす（来年の同じ大会を作るための機能）。
+// 技と配点（drawn を含む）と settings は必ず複製する。選手は withPlayers のときだけ、
+// 元の一巡目の行だけを複製し、得点・結果・備考・補正・確定は落とす
+// （来年の同じ大会を作るための機能）。ゼッケン・級位段位・レンタルは同じ選手を指すので
+// withPlayers のときは複製する（設計書「選手の追加項目」）。
 // 元の大会は読むだけなのでロックガードは掛けない（アーカイブ済みからもコピーできる）。
 // 新しい ID の新規作成なので、他端末との read-modify-write の競合は起きない。
 app.post('/api/events/:id/copy', (req, res) => {
@@ -640,7 +655,7 @@ app.post('/api/events/:id/copy', (req, res) => {
           let newId = generateId();
           while (used[newId]) newId = generateId();
           used[newId] = true;
-          return {
+          const newPlayer = {
             id: newId,
             name: typeof p.name === 'string' ? p.name : '',
             order: typeof p.order === 'string' ? p.order : '',
@@ -651,8 +666,12 @@ app.post('/api/events/:id/copy', (req, res) => {
             isNewFace: p.isNewFace === true,
             isFemale: p.isFemale === true,
             result: '',
-            note: ''
+            note: '',
+            rank: typeof p.rank === 'string' ? p.rank : '',
+            rental: p.rental === true
           };
+          if (Number.isInteger(p.bib)) newPlayer.bib = p.bib;
+          return newPlayer;
         });
     }
 
@@ -670,6 +689,10 @@ app.post('/api/events/:id/copy', (req, res) => {
       techniques: cloneTechniques(effectiveTechniques(src)),
       players: players
     };
+    // settings（ゼッケン・級位段位の必須）。無い大会（この機能より前に作られた大会）からは複製しない。
+    if (src.settings && typeof src.settings === 'object' && !Array.isArray(src.settings)) {
+      event.settings = { requireBib: src.settings.requireBib === true, requireRank: src.settings.requireRank === true };
+    }
     writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
     res.status(201).json({ success: true, id: id, playerCount: players.length });
   } catch (err) {
@@ -755,6 +778,22 @@ app.post('/api/events/:id/players', (req, res) => {
       return res.status(400).json({ error: '不正な巡目です' });
     }
 
+    // ゼッケン番号・級位段位・真剣レンタル（設計書「選手の追加項目」）。
+    // 型が合わないものは他の項目と違い黙って無視せず 400 で断る（ゼッケンの重複判定に
+    // 関わる値なので、送り手の入力ミスをそのまま通したくない）。
+    const bibParsed = parseBibForCreate(body.bib);
+    if (!bibParsed.ok) {
+      return res.status(400).json({ error: BIB_INVALID });
+    }
+    const rankParsed = parseRankForCreate(body.rank);
+    if (!rankParsed.ok) {
+      return res.status(400).json({ error: RANK_INVALID });
+    }
+    const rentalParsed = parseRentalForCreate(body.rental);
+    if (!rentalParsed.ok) {
+      return res.status(400).json({ error: RENTAL_INVALID });
+    }
+
     const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
     if (!fs.existsSync(eventPath)) {
       return res.status(404).json({ error: '大会が見つかりません' });
@@ -762,6 +801,16 @@ app.post('/api/events/:id/players', (req, res) => {
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     if (rejectIfLocked(res, event)) return;
     if (!Array.isArray(event.players)) event.players = [];
+
+    if (bibParsed.value !== null) {
+      const conflict = findBibConflict(event.players, bibParsed.value, null);
+      if (conflict) {
+        return res.status(409).json({
+          error: bibConflictMessage(bibParsed.value, conflict.name),
+          reason: 'bib'
+        });
+      }
+    }
 
     const isFemale = body.isFemale === true;
     const gender = isFemale ? '女子' : '男子';
@@ -777,8 +826,11 @@ app.post('/api/events/:id/players', (req, res) => {
       score: 0,
       isNewFace: body.isNewFace === true,
       isFemale: isFemale,
-      result: ''
+      result: '',
+      rank: rankParsed.value,
+      rental: rentalParsed.value
     };
+    if (bibParsed.value !== null) player.bib = bibParsed.value;
 
     event.players.push(player);
     event.updatedAt = new Date().toISOString();
@@ -807,6 +859,53 @@ function resolveTechnique(techniques, name, isFemale) {
   return null;
 }
 
+// ── 選手の追加項目（ゼッケン番号・級位段位・真剣レンタル）の検証 ──
+// 設計書「選手の追加項目」。POST/PATCH の選手 API と bulk rows で共用する。
+const BIB_INVALID = 'ゼッケン番号は1〜9999の整数で指定してください';
+const RANK_INVALID = '級位・段位は20文字までの文字列で指定してください';
+const RENTAL_INVALID = '真剣レンタルの指定が不正です';
+const RENTAL_DRAWN_ONLY = 'レンタルの選手は抜刀してからの形だけ選べます';
+
+function isValidBibValue(v) {
+  return Number.isInteger(v) && v >= 1 && v <= 9999;
+}
+function isValidRankValue(v) {
+  return typeof v === 'string' && v.trim().length <= 20;
+}
+
+// ゼッケン番号の検証（新規作成用）。省略・null は「未設定」（value: null）。
+// それ以外は 1〜9999 の整数だけを許す。戻り値: { ok, value }
+function parseBibForCreate(v) {
+  if (v === undefined || v === null) return { ok: true, value: null };
+  if (!isValidBibValue(v)) return { ok: false, value: null };
+  return { ok: true, value: v };
+}
+// 級位・段位の検証（新規作成用）。省略時は既定の空文字。
+function parseRankForCreate(v) {
+  if (v === undefined) return { ok: true, value: '' };
+  if (!isValidRankValue(v)) return { ok: false, value: '' };
+  return { ok: true, value: v.trim() };
+}
+// 真剣レンタルの検証（新規作成用）。省略時は既定の false。
+function parseRentalForCreate(v) {
+  if (v === undefined) return { ok: true, value: false };
+  if (typeof v !== 'boolean') return { ok: false, value: false };
+  return { ok: true, value: v };
+}
+
+// 同じ大会内での bib 重複を探す。selfId と同じ選手は比較から外す（PATCH の自分自身）。
+// 見つかれば bib を使っている選手を返す（無ければ null）。
+function findBibConflict(players, bib, selfId) {
+  const hit = (players || []).find(function(p) {
+    return p && p.id !== selfId && Number.isInteger(p.bib) && p.bib === bib;
+  });
+  return hit || null;
+}
+
+function bibConflictMessage(bib, ownerName) {
+  return 'ゼッケン番号 ' + bib + ' は「' + (ownerName || '') + '」が使っています';
+}
+
 // 一括登録の行形式（PC 運営の「貼り付けて追加」）。
 // 行ごとにコート・性別・新人・技が違う。全行を検証してから 1 回だけ書き、
 // 1 行でも不正なら 1 人も登録しない（半分だけ登録された状態を運営に見せない）。
@@ -833,6 +932,9 @@ function bulkFromRows(req, res, rows) {
   const techList = effectiveTechniques(event);
 
   // 1. 全行の検証（ここでは何も書かない）
+  // ゼッケン番号は行同士（seenBib）と既存の選手の両方で重複を見る
+  // （設計書「選手の追加項目」API「一括登録」）。
+  const seenBib = Object.create(null);
   const checked = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] || {};
@@ -853,11 +955,41 @@ function bulkFromRows(req, res, rows) {
     if (row.isNewFace !== undefined && typeof row.isNewFace !== 'boolean') {
       return res.status(400).json({ error: at + '新人の指定が不正です' });
     }
+    const bibParsed = parseBibForCreate(row.bib);
+    if (!bibParsed.ok) {
+      return res.status(400).json({ error: at + BIB_INVALID });
+    }
+    if (bibParsed.value !== null) {
+      if (seenBib[bibParsed.value]) {
+        return res.status(400).json({ error: at + bibConflictMessage(bibParsed.value, seenBib[bibParsed.value]) });
+      }
+      const bibConflict = findBibConflict(event.players, bibParsed.value, null);
+      if (bibConflict) {
+        return res.status(400).json({ error: at + bibConflictMessage(bibParsed.value, bibConflict.name) });
+      }
+      seenBib[bibParsed.value] = name;
+    }
+    const rankParsed = parseRankForCreate(row.rank);
+    if (!rankParsed.ok) {
+      return res.status(400).json({ error: at + RANK_INVALID });
+    }
+    const rentalParsed = parseRentalForCreate(row.rental);
+    if (!rentalParsed.ok) {
+      return res.status(400).json({ error: at + RENTAL_INVALID });
+    }
     const isFemale = row.isFemale === true;
     const techs = ['tech1', 'tech2', 'tech3'].map(k => (typeof row[k] === 'string' ? row[k].trim() : ''));
     for (let t = 0; t < techs.length; t++) {
-      if (techs[t] && !resolveTechnique(techList, techs[t], isFemale)) {
+      if (!techs[t]) continue;
+      const resolved = resolveTechnique(techList, techs[t], isFemale);
+      if (!resolved) {
         return res.status(400).json({ error: at + `技「${techs[t]}」は技リストにありません` });
+      }
+      // レンタルの選手には drawn（抜刀後の形）の技だけを許す（courts.js の startBlockers /
+      // parsePasteRows と同じ規則。ここは貼り付けのプレビューを経ずに届く経路でもあるため
+      // 400 で止める必要がある）。
+      if (rentalParsed.value && resolved.drawn !== true) {
+        return res.status(400).json({ error: at + RENTAL_DRAWN_ONLY });
       }
     }
     checked.push({
@@ -865,7 +997,10 @@ function bulkFromRows(req, res, rows) {
       court: court,
       isFemale: isFemale,
       isNewFace: row.isNewFace === true,
-      techs: techs
+      techs: techs,
+      bib: bibParsed.value,
+      rank: rankParsed.value,
+      rental: rentalParsed.value
     });
   }
 
@@ -878,7 +1013,7 @@ function bulkFromRows(req, res, rows) {
       nextNo[key] = nextOrderNumber(event.players, row.court, gender, 1);
     }
     const n = nextNo[key]++;
-    return {
+    const player = {
       id: generateId(),
       name: row.name,
       order: buildOrder(row.court, row.isFemale, 1, n),
@@ -888,8 +1023,12 @@ function bulkFromRows(req, res, rows) {
       score: 0,
       isNewFace: row.isNewFace,
       isFemale: row.isFemale,
-      result: ''
+      result: '',
+      rank: row.rank,
+      rental: row.rental
     };
+    if (row.bib !== null) player.bib = row.bib;
+    return player;
   });
 
   event.players = event.players.concat(created);
@@ -1004,6 +1143,39 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     ['isNewFace', 'isFemale'].forEach(key => {
       if (typeof body[key] === 'boolean') player[key] = body[key];
     });
+    // ゼッケン番号・級位段位・真剣レンタル（設計書「選手の追加項目」）。
+    // bib は null で未設定に戻せる（既存の「無ければキーを持たない」形に合わせてキー自体を消す）。
+    // 型が合わないものは 400 で断る（重複判定に関わる bib はもちろん、rank/rental も
+    // POST と同じ検証を通す）。
+    if (body.bib !== undefined) {
+      if (body.bib === null) {
+        delete player.bib;
+      } else {
+        if (!isValidBibValue(body.bib)) {
+          return res.status(400).json({ error: BIB_INVALID });
+        }
+        const conflict = findBibConflict(event.players, body.bib, player.id);
+        if (conflict) {
+          return res.status(409).json({
+            error: bibConflictMessage(body.bib, conflict.name),
+            reason: 'bib'
+          });
+        }
+        player.bib = body.bib;
+      }
+    }
+    if (body.rank !== undefined) {
+      if (!isValidRankValue(body.rank)) {
+        return res.status(400).json({ error: RANK_INVALID });
+      }
+      player.rank = body.rank.trim();
+    }
+    if (body.rental !== undefined) {
+      if (typeof body.rental !== 'boolean') {
+        return res.status(400).json({ error: RENTAL_INVALID });
+      }
+      player.rental = body.rental;
+    }
     // 補正点（技ごと・全体）・備考・確定。型が合わないものは黙って無視する（他の項目と同じ）。
     if (Array.isArray(body.adjust) && body.adjust.length === 3 &&
         body.adjust.every(n => Number.isInteger(n))) {
@@ -1138,15 +1310,26 @@ app.post('/api/events/:id/import', (req, res) => {
     // 先頭行で形式を判別する（設計書 T5「サーバー」の表）
     //   2列目が「コート」 → 簡易7列（名前,コート,性別,技①,技②,技③,新人）。順番はサーバーが採番
     //   それ以外          → 従来9列／拡張15列（補正点1..3,全体補正,備考,確定）。順番は CSV の値
+    // どちらの形式も末尾に ゼッケン,級位段位,レンタル の3列が続くことがある
+    // （設計書「選手の追加項目」。無ければ従来どおり読む）。
     const header = lines[0].map(c => String(c || '').trim());
     const isSimple = header[1] === 'コート';
     const dataLines = lines.slice(1);
     const toInt = v => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : 0; };
     const truthy = v => ['○', '1', 'はい', '新人'].indexOf(String(v || '').trim()) !== -1;
     const femaleMark = v => ['女', '女子', '○', 'F', 'f'].indexOf(String(v || '').trim()) !== -1;
+    // CSV のゼッケン列は緩く読む（他の数値列と同じく不正値は「未設定」に丸める。
+    // 厳密な検証は POST /players 等の登録系 API の役目で、CSV 取り込みは既存の
+    // 得点列などと同じく寛容に読む）。
+    const bibFromCsv = v => {
+      const n = parseInt(String(v == null ? '' : v).trim(), 10);
+      return (Number.isInteger(n) && n >= 1 && n <= 9999) ? n : null;
+    };
 
     let importedPlayers;
     if (isSimple) {
+      // 簡易7列の後ろに3列（ゼッケン,級位段位,レンタル）が続くことがある。
+      const hasExtra = header.length >= 10;
       // 採番の土台: replace なら空、append なら既存の選手
       const base = mode === 'replace' ? [] : (event.players || []);
       importedPlayers = [];
@@ -1161,7 +1344,7 @@ app.post('/api/events/:id/import', (req, res) => {
         const isFemale = femaleMark(row[2]);
         const gender = isFemale ? '女子' : '男子';
         const n = nextOrderNumber(base.concat(importedPlayers), court, gender, 1);
-        importedPlayers.push({
+        const player = {
           id: generateId(),
           name,
           order: buildOrder(court, isFemale, 1, n),
@@ -1173,15 +1356,25 @@ app.post('/api/events/:id/import', (req, res) => {
           score: 0,
           isNewFace: truthy(row[6]),
           isFemale,
-          result: ''
-        });
+          result: '',
+          rank: hasExtra ? String(row[8] || '').trim().slice(0, 20) : '',
+          rental: hasExtra ? truthy(row[9]) : false
+        };
+        if (hasExtra) {
+          const bib = bibFromCsv(row[7]);
+          if (bib !== null) player.bib = bib;
+        }
+        importedPlayers.push(player);
       }
     } else {
       // 拡張15列かどうかは先頭行（ヘッダー）の列数で一度だけ決める（設計書 T5 の表）。
       // 行ごとに判定すると、行によって列数が違う崩れたCSVで挙動が揺れる。
-      const isExtended = header.length >= 10;
+      // さらにその後ろに3列（ゼッケン,級位段位,レンタル）が続くことがある。
+      const isExtended = header.length >= 15;
+      const extBase = isExtended ? 15 : 9;
+      const hasExtra = header.length >= extBase + 3;
       importedPlayers = dataLines.map(row => {
-        // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定]
+        // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定][,ゼッケン,級位段位,レンタル]
         const p = {
           id: generateId(),
           name: row[0] || '',
@@ -1199,6 +1392,12 @@ app.post('/api/events/:id/import', (req, res) => {
           p.totalAdjust = toInt(row[12]);
           p.note = String(row[13] || '').trim().slice(0, 200);
           p.confirmed = String(row[14] || '').trim() === '○';
+        }
+        p.rank = hasExtra ? String(row[extBase + 1] || '').trim().slice(0, 20) : '';
+        p.rental = hasExtra ? truthy(row[extBase + 2]) : false;
+        if (hasExtra) {
+          const bib = bibFromCsv(row[extBase]);
+          if (bib !== null) p.bib = bib;
         }
         return p;
       }).filter(p => p.name !== ''); // 空行等を除外
@@ -1230,7 +1429,8 @@ app.get('/api/events/:id/export', (req, res) => {
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     
     const header = ['選手名', '順番', '技 1', '技 2', '技 3', '得点', '新人', '女子', '結果',
-                    '補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定'];
+                    '補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定',
+                    'ゼッケン', '級位段位', 'レンタル'];
     const rows = [header];
 
     for (const p of (event.players || [])) {
@@ -1250,7 +1450,10 @@ app.get('/api/events/:id/export', (req, res) => {
         Number(adj[2]) || 0,
         Number(p.totalAdjust) || 0,
         p.note || '',
-        p.confirmed === true ? '○' : ''
+        p.confirmed === true ? '○' : '',
+        Number.isInteger(p.bib) ? p.bib : '',
+        p.rank || '',
+        p.rental === true ? '○' : ''
       ]);
     }
     
@@ -1294,6 +1497,10 @@ function validateTechniques(list) {
       if (!Number.isInteger(v) || v < 0 || v > 99) {
         return n + ' 行目の' + STRIKE_LABELS[s] + 'の配点が不正です（0〜99の整数か空）';
       }
+    }
+    // drawn（抜刀後の形）は省略可。省略時は cloneTechniques が false にする。
+    if (t.drawn !== undefined && typeof t.drawn !== 'boolean') {
+      return n + ' 行目の「抜刀後」の指定が不正です';
     }
   }
   return null;
@@ -1380,7 +1587,8 @@ function bundleFilename(name, date) {
 }
 
 // エクスポートに出す選手の項目。ここに無いキーは出さない。
-// adjust / totalAdjust / note / confirmed / sourcePlayerId は持っている選手にだけ付ける。
+// adjust / totalAdjust / note / confirmed / sourcePlayerId / bib は持っている選手にだけ付ける。
+// rank / rental は設計書の既定値（''・false）どおり常に出す（isNewFace 等と同じ扱い）。
 function pickBundlePlayer(p) {
   const src = (p && typeof p === 'object') ? p : {};
   const out = {
@@ -1393,13 +1601,16 @@ function pickBundlePlayer(p) {
     score: typeof src.score === 'number' ? src.score : 0,
     isNewFace: src.isNewFace === true,
     isFemale: src.isFemale === true,
-    result: typeof src.result === 'string' ? src.result : ''
+    result: typeof src.result === 'string' ? src.result : '',
+    rank: typeof src.rank === 'string' ? src.rank : '',
+    rental: src.rental === true
   };
   if (Array.isArray(src.adjust)) out.adjust = src.adjust.slice();
   if (Number.isInteger(src.totalAdjust)) out.totalAdjust = src.totalAdjust;
   if (typeof src.note === 'string' && src.note !== '') out.note = src.note;
   if (src.confirmed === true) out.confirmed = true;
   if (isValidId(src.sourcePlayerId)) out.sourcePlayerId = src.sourcePlayerId;
+  if (Number.isInteger(src.bib)) out.bib = src.bib;
   return out;
 }
 
@@ -1439,6 +1650,10 @@ app.get('/api/events/:id/bundle', (req, res) => {
       },
       history: entries
     };
+    // settings（ゼッケン・級位段位の必須）。無い大会（古いバンドル）は書き出さない。
+    if (event.settings && typeof event.settings === 'object' && !Array.isArray(event.settings)) {
+      bundle.event.settings = { requireBib: event.settings.requireBib === true, requireRank: event.settings.requireRank === true };
+    }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     // RFC 5987 の attr-char は英数字と一部の記号だけで、' ( ) * は含まれない。
     // encodeURIComponent はこの4文字をエスケープせずに残すため、追加で %XX にする。
@@ -1539,7 +1754,9 @@ app.post('/api/events/import', (req, res) => {
         // 結果は 1=○, 0=×, 空白=未入力 のエンコード。それ以外が混じっていたら捨てる
         // （採点画面の decodeResult が読めない文字列を保存しない）。
         result: (typeof p.result === 'string' && p.result.length <= 100 && /^[01 ]*$/.test(p.result))
-          ? p.result : ''
+          ? p.result : '',
+        rank: typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : '',
+        rental: p.rental === true
       };
       if (Array.isArray(p.adjust) && p.adjust.length === 3 && p.adjust.every(n => Number.isInteger(n))) {
         player.adjust = p.adjust.slice();
@@ -1550,6 +1767,7 @@ app.post('/api/events/import', (req, res) => {
         if (note) player.note = note;
       }
       if (p.confirmed === true) player.confirmed = true;
+      if (Number.isInteger(p.bib) && p.bib >= 1 && p.bib <= 9999) player.bib = p.bib;
       // 元ファイルのどの選手も指していない sourcePlayerId は捨てる
       if (typeof p.sourcePlayerId === 'string' &&
           Object.prototype.hasOwnProperty.call(idMap, p.sourcePlayerId)) {
@@ -1569,6 +1787,10 @@ app.post('/api/events/import', (req, res) => {
       techniques: techniques,
       players: players
     };
+    // settings（ゼッケン・級位段位の必須）。無いバンドル（古いバンドル）は付けない。
+    if (src.settings && typeof src.settings === 'object' && !Array.isArray(src.settings)) {
+      event.settings = { requireBib: src.settings.requireBib === true, requireRank: src.settings.requireRank === true };
+    }
 
     // 履歴はオブジェクトの要素だけ通す。キーが '__proto__' でもプロトタイプを汚さないよう
     // setOwn で写す（computeRanking が氏名の辞書に Object.create(null) を使うのと同じ理由）。
@@ -1693,7 +1915,9 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
       const gender = isFemale ? '女子' : '男子';
       // 既存の二巡目行があればその続きから、無ければ 1 から始まる。
       const n = nextOrderNumber(players.concat(newRows), court, gender, 2);
-      newRows.push({
+      // ゼッケン・級位段位・真剣レンタルは同じ選手を指すので一巡目の行から複製する
+      // （設計書「選手の追加項目」。得点・技・結果は他の項目と同じく複製しない）。
+      const newRow = {
         id: generateId(),
         name: p.name || '',
         order: buildOrder(court, isFemale, 2, n),
@@ -1704,8 +1928,12 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
         isNewFace: p.isNewFace === true,
         isFemale: isFemale,
         result: '',
-        sourcePlayerId: p.id
-      });
+        sourcePlayerId: p.id,
+        rank: typeof p.rank === 'string' ? p.rank : '',
+        rental: p.rental === true
+      };
+      if (Number.isInteger(p.bib)) newRow.bib = p.bib;
+      newRows.push(newRow);
     });
 
     event.players = players.concat(newRows);
@@ -1816,12 +2044,15 @@ app.put('/api/events/:id/live/:court', (req, res) => {
 // ── Techniques API ──
 
 // 技術一覧の読み出し。GET /api/techniques と GET /api/links/:token/live が共有する。
+// cloneTechniques を通して返す（DEFAULT_TECHNIQUES には drawn を持たせていないため、
+// 大会の techniques と同じ形 { name, strikes, drawn } に揃える。呼び出し元の多くは
+// 既に cloneTechniques をもう一度掛けているが、掛け直しても結果は変わらない）。
 function readTechniques() {
   const customPath = path.join(TECHNIQUES_DIR, 'custom.json');
   if (fs.existsSync(customPath)) {
-    return { isCustom: true, techniques: JSON.parse(fs.readFileSync(customPath, 'utf-8')) };
+    return { isCustom: true, techniques: cloneTechniques(JSON.parse(fs.readFileSync(customPath, 'utf-8'))) };
   }
-  return { isCustom: false, techniques: DEFAULT_TECHNIQUES };
+  return { isCustom: false, techniques: cloneTechniques(DEFAULT_TECHNIQUES) };
 }
 
 // GET /api/techniques : 技術一覧取得

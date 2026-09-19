@@ -60,10 +60,12 @@ var Api = (function() {
   }
 
   async function updateEventInfo(eventId, data) {
-    // PATCH /api/events/:eventId （基本情報の保存専用。name / date / venue だけを送る）
+    // PATCH /api/events/:eventId （基本情報の保存専用。name / date / venue / settings だけを送る）
     // 大会ファイルを丸ごと送り直す saveEvent と違い、techniques / players / status には
     // 一切触れない（techniques を持たない大会の技リストを固定してしまわないため）。
-    // 戻り値: { ok: true, event: { id, name, date, venue, updatedAt } }
+    // settings は { requireBib, requireRank }（ゼッケン・級位段位を必須にするか。設計書
+    // 「選手の追加項目」）。他のキーが混ざっていてもサーバーが無視する。
+    // 戻り値: { ok: true, event: { id, name, date, venue, updatedAt, settings } }
     //       | { ok: false, status: HTTPステータス, reason, error }（400 / 404 / 409。
     //         409 の reason は 'locked'）
     //       | null（通信そのものの失敗）
@@ -177,14 +179,17 @@ var Api = (function() {
 
   async function createPlayer(eventId, data) {
     // POST /api/events/:eventId/players
-    // Body: { name, court, isFemale, isNewFace, tech1, tech2, tech3, round }
+    // Body: { name, court, isFemale, isNewFace, tech1, tech2, tech3, round, bib, rank, rental }
     // 戻り値: 追加された player オブジェクト（成功）
-    //       | { player: null, reason, error }（409。確定済みガード（reason: 'locked'）しか無い）
+    //       | { player: null, reason, error }（409。確定済みガード（reason: 'locked'）と
+    //         ゼッケン番号の重複（reason: 'bib'）の2種類）
     //       | null（400/404/通信失敗）
     // order はサーバーが コート×性別×巡目 ごとに採番するので、送っても無視される。
     // round を省略すると 1（一巡目）。二巡目の行は generateNextRound が作る。
     // round は数値（1〜9）。文字列を送ると 400 になる。
     // isFemale / isNewFace は真偽値の true のときだけ立つ（'true' などの文字列は false 扱い）。
+    // bib（ゼッケン番号。省略/null で未設定、1〜9999の整数）/ rank（級位・段位。20文字まで）/
+    // rental（真剣レンタル。真偽値）は設計書「選手の追加項目」。型が合わないと400。
     try {
       var res = await fetch('/api/events/' + eventId + '/players', {
         method: 'POST',
@@ -213,11 +218,13 @@ var Api = (function() {
   async function createPlayersBulk(eventId, data) {
     // POST /api/events/:eventId/players/bulk
     // Body: { court, isFemale, isNewFace, names: ['名前', ...] }（同じコート・性別でまとめて）
-    //     | { rows: [{ name, court, isFemale, isNewFace, tech1, tech2, tech3 }, ...] }（行ごとに違う）
+    //     | { rows: [{ name, court, isFemale, isNewFace, tech1, tech2, tech3, bib, rank, rental }, ...] }
+    //       （行ごとに違う。bib / rank / rental は設計書「選手の追加項目」）
     // 戻り値: { created, players } | { error } (400/404/409: 失敗理由を画面に出すため) | null（通信失敗）
     // 1回の書き込みで コート×性別×一巡目 の続き番号を順に付ける。
     // rows 形式は全行を検証してから書くので、失敗したときは 1 人も登録されていない。
-    // rows の 400 は「3 行目: …」のように行番号つきの文言で返る。
+    // rows の 400 は「3 行目: …」のように行番号つきの文言で返る（ゼッケンの重複、
+    // レンタルの選手が抜刀後の形以外の技を選んでいる、なども含む）。
     try {
       var res = await fetch('/api/events/' + eventId + '/players/bulk', {
         method: 'POST',
@@ -238,11 +245,12 @@ var Api = (function() {
 
   async function updatePlayerInfo(eventId, playerId, data) {
     // PATCH /api/events/:eventId/players/:playerId（運営画面の編集専用）
-    // Body: { name, tech1, tech2, tech3, isNewFace, isFemale, score, result, court, round }
-    //       のうち送りたいものだけ。id と order は送っても無視される。
+    // Body: { name, tech1, tech2, tech3, isNewFace, isFemale, score, result, court, round,
+    //         bib, rank, rental } のうち送りたいものだけ。id と order は送っても無視される。
+    // bib は null で未設定に戻せる（設計書「選手の追加項目」）。
     // 戻り値: { ok: true, player } | { ok: false, status: <HTTPステータス>, reason, error }
-    //       （reason / error が付くのは 409 のときだけ。今のところ 409 は確定済み
-    //        ガード（reason: 'locked'）しか無い）
+    //       （reason / error が付くのは 409 のときだけ。確定済みガード（reason: 'locked'）と
+    //        ゼッケン番号の重複（reason: 'bib'）の2種類）
     // 通信自体に失敗した場合は status: 0。
     // 採点経路（Outbox → updatePlayer）と混ぜないため、同じPATCHでも別関数にしている。
     try {
