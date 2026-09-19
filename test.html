@@ -173,6 +173,24 @@
     var brBadCourt = await Api.createPlayersBulk(brEvent.id, { rows: [{ name: '行 七郎', court: 'A-1' }] });
     assert('bulk rows: 不正なコートは行番号つきの 400', brBadCourt && brBadCourt.error, '1 行目: 不正なコート名です');
 
+    // レビュー修正: row.line（貼り付けプレビューの行番号）があればそれを使う
+    // （desk-players.js は ok:false の行を除いて送るため、送信順の何行目かとずれるため）。
+    var brWithLine = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '行 七郎二', court: 'A', line: 5 }, { name: '  ', court: 'A', line: 8 }]
+    });
+    assert('bulk rows: line があれば行番号つきの 400 にそれを使う',
+      brWithLine && brWithLine.error, '8 行目: 選手名が必要です');
+    var brBadLine = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '  ', court: 'A', line: 0 }]
+    });
+    assert('bulk rows: line が正の整数でなければ従来どおり i+1',
+      brBadLine && brBadLine.error, '1 行目: 選手名が必要です');
+    var brNonIntLine = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '  ', court: 'A', line: '3' }]
+    });
+    assert('bulk rows: line が数値でなければ従来どおり i+1',
+      brNonIntLine && brNonIntLine.error, '1 行目: 選手名が必要です');
+
     var brNoCourt = await Api.createPlayersBulk(brEvent.id, { rows: [{ name: '行 八郎' }] });
     assert('bulk rows: コートが空でも行番号つきの 400', brNoCourt && brNoCourt.error, '1 行目: 不正なコート名です');
 

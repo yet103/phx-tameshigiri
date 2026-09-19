@@ -1000,7 +1000,11 @@ function bulkFromRows(req, res, rows) {
   const checked = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] || {};
-    const at = `${i + 1} 行目: `;
+    // 行番号は貼り付けプレビューの行番号（row.line）があればそれを使う。貼り付けは ok:false の
+    // 行を除いて送るため、送信順の何行目か（i + 1）とプレビューの行番号がずれるため
+    // （desk-players.js の「貼り付けて追加」）。line が無い・不正なら従来どおり i + 1。
+    const lineNo = (Number.isInteger(row.line) && row.line > 0) ? row.line : (i + 1);
+    const at = `${lineNo} 行目: `;
     const name = typeof row.name === 'string' ? row.name.trim() : '';
     if (!name) {
       return res.status(400).json({ error: at + '選手名が必要です' });

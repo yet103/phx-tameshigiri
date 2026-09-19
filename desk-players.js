@@ -1425,7 +1425,10 @@
           bib: (typeof r.bib === 'number') ? r.bib : null,
           rank: r.rank || '',
           rental: r.rental === true,
-          tech1: r.techs[0], tech2: r.techs[1], tech3: r.techs[2]
+          tech1: r.techs[0], tech2: r.techs[1], tech3: r.techs[2],
+          // プレビューでの元の行番号。サーバーが 400 の文言に使う（貼り付けは ok:false の行を
+          // 除いて送るため、送信順の何行目かとプレビューの行番号がずれてしまうため）。
+          line: r.line
         };
       });
       if (!confirm(rows.length + ' 人を登録します。よろしいですか？' +
