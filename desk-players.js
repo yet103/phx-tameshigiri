@@ -765,7 +765,7 @@
       var display = resolved ? Courts.stripGenderSuffix(resolved.name) : '';
       var repeatBad = !!display && dupForms.indexOf(display) !== -1;
       setMark(t.sel, 'desk-cell-bad', rentalBad || repeatBad);
-      t.sel.title = repeatBad ? '同じ形は 1 回までです' : '';
+      t.sel.title = repeatBad ? '同じ形は 1 回までです' : rentalBad ? 'レンタルの選手は抜刀してからの形だけ選べます' : '';
     });
   }
 
