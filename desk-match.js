@@ -118,12 +118,12 @@
 
     var grid = document.createElement('div');
     grid.className = 'desk-match-courts';
-    rows.forEach(function(r) { grid.appendChild(buildCourtCard(r, ctx)); });
+    rows.forEach(function(r) { grid.appendChild(buildCourtCard(r, ctx, round)); });
     wrap.appendChild(grid);
     return wrap;
   }
 
-  function buildCourtCard(row, ctx) {
+  function buildCourtCard(row, ctx, round) {
     var card = document.createElement('section');
     card.className = 'desk-match-card';
 
@@ -137,6 +137,18 @@
       ((row.total > 0 && row.scored === row.total) ? ' done' : '');
     prog.textContent = '採点済み ' + row.scored + ' / ' + row.total;
     card.appendChild(prog);
+
+    // 真剣レンタルの人数（いま数えている巡目の行だけ）。0 なら行ごと出さない
+    // （レンタルのいない大会でカードが縦に伸びないように）。
+    var rental = (ctx.players || []).filter(function(p) {
+      return Courts.courtOf(p) === row.court && Courts.roundOf(p) === round && p.rental === true;
+    }).length;
+    if (rental > 0) {
+      var rent = document.createElement('div');
+      rent.className = 'desk-match-rental';
+      rent.textContent = '真剣レンタル ' + rental + ' 名';
+      card.appendChild(rent);
+    }
 
     // コートの決まっていない選手は採点画面のコート絞り込みに載せられない
     // （サーバーの isValidCourt が「未分類」を弾く）。カードは出すが操作は置かない。
@@ -312,10 +324,11 @@
       return tr;
     }
 
-    // 技の候補は選手の性別で絞る（Courts.techniqueOptions）。コピー（一巡目と同じ技を
-    // コピー / 全員コピー）は名前をそのまま入れるだけで、ここでは絞らない
-    // （一巡目と同じ名前が正。onCopyRow / 全員コピーの節を参照）。
-    var techOptions = Courts.techniqueOptions(techniques, !!p.isFemale);
+    // 技の候補は選手の性別とレンタルで絞る（Courts.techniqueOptions）。レンタルの選手は
+    // 抜刀後の形だけ。コピー（一巡目と同じ技をコピー / 全員コピー）は名前をそのまま
+    // 入れるだけで、ここでは絞らない（一巡目と同じ名前が正。ensureOption が候補に
+    // 無い名前を「（リストにありません）」として足すので、値は落ちない）。
+    var techOptions = Courts.techniqueOptions(techniques, !!p.isFemale, p.rental === true);
     var selects = [];
     [1, 2, 3].forEach(function(slot) {
       var td = document.createElement('td');

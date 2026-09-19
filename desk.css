@@ -350,6 +350,8 @@ a { color: var(--accent); }
 /* いま採点中の選手。待機中は帯を消して控えめにする（配信ボードと同じ言い回し） */
 .desk-match-live { font-size: 13px; padding: 4px 8px; border-radius: 4px; background: var(--row-selected); }
 .desk-match-live.idle { background: transparent; color: var(--text-muted); padding-left: 0; }
+/* 真剣レンタルの人数。刀の手配に関わるので、待機中の薄い字ではなく本文の色で出す。 */
+.desk-match-rental { font-size: 13px; font-weight: bold; }
 .desk-match-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .desk-match-actions .desk-btn { min-height: 32px; padding: 0 10px; font-size: 13px; }
 
