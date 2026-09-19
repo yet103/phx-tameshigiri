@@ -369,6 +369,56 @@ var Courts = (function() {
     return EventStatus.LABELS[to] + 'に戻します。よろしいですか？';
   }
 
+  // ---- 試合開始を止める条件（設計書「選手の追加項目」。ゼッケン・級位段位の必須と真剣レンタルの縛り） ----
+
+  // 試合開始（draft → round1）を止める理由の一覧。空配列なら進めてよい。
+  //   bib    : event.settings.requireBib かつ一巡目で bib が未設定（null/undefined）の選手
+  //   rank   : event.settings.requireRank かつ一巡目で rank が未入力（空白のみを含む）の選手
+  //   rental : rental の選手で、tech1〜3 に drawn でない技が入っている選手（巡目を問わない。
+  //            この判定を使う画面は一巡目しかない状態で呼ぶが、関数自体は巡目を絞らない）
+  // event が無くても settings なしとして扱う。技リストは event.techniques（無ければ空）。
+  function startBlockers(event, players) {
+    var list = players || [];
+    var settings = (event && event.settings) || {};
+    var techniques = (event && event.techniques) || [];
+    var blockers = [];
+    if (settings.requireBib) {
+      var bibMissing = list.filter(function(p) {
+        return roundOf(p) === 1 && (p.bib === null || p.bib === undefined);
+      });
+      if (bibMissing.length > 0) blockers.push({ kind: 'bib', players: bibMissing });
+    }
+    if (settings.requireRank) {
+      var rankMissing = list.filter(function(p) {
+        return roundOf(p) === 1 && !String((p && p.rank) || '').trim();
+      });
+      if (rankMissing.length > 0) blockers.push({ kind: 'rank', players: rankMissing });
+    }
+    var rentalBad = list.filter(function(p) {
+      if (!p || !p.rental) return false;
+      var isFemale = sexOf(p) === '女子';
+      return [p.tech1, p.tech2, p.tech3].some(function(name) {
+        var n = String(name || '').trim();
+        return n && !isDrawnTechnique(techniques, n, isFemale);
+      });
+    });
+    if (rentalBad.length > 0) blockers.push({ kind: 'rental', players: rentalBad });
+    return blockers;
+  }
+
+  // startBlockers の結果を alert の文言にする（改行で連ねる）。空配列なら空文字。
+  var BLOCKER_LABELS = {
+    bib: 'ゼッケン番号が未入力',
+    rank: '級位・段位が未入力',
+    rental: 'レンタルなのに抜刀してからの形以外の技を選んでいる'
+  };
+  function blockerMessage(blockers) {
+    return (blockers || []).map(function(b) {
+      var names = (b.players || []).map(function(p) { return (p && p.name) || ''; }).join('、');
+      return (BLOCKER_LABELS[b.kind] || b.kind) + ': ' + (b.players || []).length + ' 名（' + names + '）';
+    }).join('\n');
+  }
+
   // ---- 技の性別による絞り込み・解決（設計書「技の選択肢を性別で絞る」） ----
   // 選手に保存する技名は接尾辞なし。技リストには 胸尽くし(男)/胸尽くし(女) のように
   // 末尾 (男)/(女) で配点が分かれる組がある。採点画面の Scoring.findTechnique と
@@ -584,6 +634,8 @@ var Courts = (function() {
     isTechIncomplete: isTechIncomplete,
     stageCountText: stageCountText,
     statusConfirmMessage: statusConfirmMessage,
+    startBlockers: startBlockers,
+    blockerMessage: blockerMessage,
     parsePasteRows: parsePasteRows,
     splitDelimited: splitDelimited,
     stripGenderSuffix: stripGenderSuffix,

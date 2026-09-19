@@ -2193,6 +2193,67 @@
     assert('isDrawnTechnique: techniques が無くても落ちない', Courts.isDrawnTechnique(null, '破図味', false), false);
     assert('isDrawnTechnique: isFemale 未指定は男子と同じ', Courts.isDrawnTechnique(RENTAL_TECH, '破図味'), true);
 
+    // startBlockers: 試合開始を止める理由の一覧。[{ kind, players }]（空配列なら進める）
+    var sbPlayers = [
+      { id: 'a', order: 'A-男子-1-1', name: '山田 太郎', bib: 1, rank: '初段', rental: false },
+      { id: 'b', order: 'A-男子-1-2', name: '佐藤 次郎', bib: null, rank: '', rental: false },
+      { id: 'c', order: 'A-男子-2-1', name: '二巡目太郎', bib: null, rank: '' }
+    ];
+    assert('startBlockers: 必須が両方offなら空', Courts.startBlockers({ settings: { requireBib: false, requireRank: false } }, sbPlayers), []);
+    assert('startBlockers: requireBib で一巡目の bib 未設定だけ拾う（二巡目は数えない）',
+      Courts.startBlockers({ settings: { requireBib: true } }, sbPlayers)
+        .filter(function(b) { return b.kind === 'bib'; })[0].players.map(function(p) { return p.id; }),
+      ['b']);
+    assert('startBlockers: requireRank で一巡目の rank 未設定（空白のみ含む）だけ拾う',
+      Courts.startBlockers({ settings: { requireRank: true } }, [
+        { id: 'a', order: 'A-男子-1-1', rank: '初段' },
+        { id: 'b', order: 'A-男子-1-2', rank: '  ' },
+        { id: 'c', order: 'A-男子-2-1', rank: '' }
+      ]).filter(function(b) { return b.kind === 'rank'; })[0].players.map(function(p) { return p.id; }),
+      ['b']);
+    var rentalTechList = [{ name: '破図味(男)', drawn: true }, { name: '四方' }];
+    var rentalPlayers = [
+      { id: 'r1', order: 'A-男子-1-1', name: 'レンタル太郎', rental: true, tech1: '破図味', tech2: '', tech3: '' },
+      { id: 'r2', order: 'A-男子-1-2', name: 'レンタル二郎', rental: true, tech1: '四方', tech2: '', tech3: '' },
+      { id: 'r3', order: 'A-男子-1-3', name: '通常太郎', rental: false, tech1: '四方', tech2: '', tech3: '' }
+    ];
+    assert('startBlockers: rental の選手が drawn でない技を選んでいれば拾う',
+      Courts.startBlockers({ settings: {}, techniques: rentalTechList }, rentalPlayers)
+        .filter(function(b) { return b.kind === 'rental'; })[0].players.map(function(p) { return p.id; }),
+      ['r2']);
+    assert('startBlockers: rental でも drawn の技だけなら拾わない',
+      Courts.startBlockers({ settings: {}, techniques: rentalTechList }, rentalPlayers)
+        .some(function(b) { return b.kind === 'rental' && b.players.some(function(p) { return p.id === 'r1'; }); }),
+      false);
+    assert('startBlockers: 複数種類は bib→rank→rental の順で返す',
+      Courts.startBlockers({ settings: { requireBib: true, requireRank: true }, techniques: rentalTechList }, [
+        { id: 'x', order: 'A-男子-1-1', name: 'えっくす', bib: null, rank: '', rental: true, tech1: '四方', tech2: '', tech3: '' }
+      ]).map(function(b) { return b.kind; }),
+      ['bib', 'rank', 'rental']);
+    assert('startBlockers: event が無くても落ちない', Courts.startBlockers(null, sbPlayers).length >= 0, true);
+    assert('startBlockers: players が無くても落ちない', Courts.startBlockers({ settings: { requireBib: true } }, null), []);
+    assert('startBlockers: settings が無くても落ちない（bib/rankは拾わない）',
+      Courts.startBlockers({}, sbPlayers), []);
+
+    // blockerMessage: alert の文言を改行で連ねる
+    assert('blockerMessage: 空配列は空文字', Courts.blockerMessage([]), '');
+    assert('blockerMessage: ゼッケンの文言',
+      Courts.blockerMessage([{ kind: 'bib', players: [{ name: '山田 太郎' }, { name: '佐藤 次郎' }] }]),
+      'ゼッケン番号が未入力: 2 名（山田 太郎、佐藤 次郎）');
+    assert('blockerMessage: 級位段位の文言',
+      Courts.blockerMessage([{ kind: 'rank', players: [{ name: '田中' }] }]),
+      '級位・段位が未入力: 1 名（田中）');
+    assert('blockerMessage: レンタルの文言',
+      Courts.blockerMessage([{ kind: 'rental', players: [{ name: '鈴木 花子' }] }]),
+      'レンタルなのに抜刀してからの形以外の技を選んでいる: 1 名（鈴木 花子）');
+    assert('blockerMessage: 複数種類の連結（改行区切り）',
+      Courts.blockerMessage([
+        { kind: 'bib', players: [{ name: '山田 太郎' }] },
+        { kind: 'rental', players: [{ name: '鈴木 花子' }] }
+      ]),
+      'ゼッケン番号が未入力: 1 名（山田 太郎）\nレンタルなのに抜刀してからの形以外の技を選んでいる: 1 名（鈴木 花子）');
+    assert('blockerMessage: blockers が無くても落ちない', Courts.blockerMessage(null), '');
+
     var h2es = document.createElement('h2');
     h2es.textContent = 'status.js';
     results.appendChild(h2es);
