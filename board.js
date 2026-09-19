@@ -104,6 +104,13 @@ var Board = (function() {
     if (value === '○') {
       td.className = 'success';
       td.textContent = '成功';
+    } else if (value === '△') {
+      // 減点成功（初太刀だけ）。board.css に専用クラスは無いので、失敗ではなく
+      // 成功寄りと分かるよう --warn（黄土）をインラインで当てる（設計書 2026-09-20）。
+      td.className = 'success';
+      td.style.background = 'var(--warn)';
+      td.style.color = 'var(--bg)';
+      td.textContent = '減点';
     } else if (value === '×') {
       td.className = 'fail';
       td.textContent = '失敗';
