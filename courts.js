@@ -150,7 +150,15 @@ var Courts = (function() {
     return { key: 'order', dir: 'asc' };
   }
 
-  // 並べ替え。key は 'order' | 'name' | 'score'、dir は 'asc' | 'desc'。
+  // ゼッケンの並べ替え用の値。未設定（キーが無い・null・数値でない）は 10000 に寄せる。
+  // bib は 1〜9999 なので、どの実在の値よりも大きい＝昇順で末尾に来る。
+  // Infinity にすると Infinity - Infinity が NaN になり、比較関数が壊れる。
+  function bibValue(p) {
+    var v = p && p.bib;
+    return (typeof v === 'number' && isFinite(v)) ? v : 10000;
+  }
+
+  // 並べ替え。key は 'order' | 'name' | 'score' | 'bib'、dir は 'asc' | 'desc'。
   // 同値のときは compareOrder（昇順）で並べて安定させる。元配列は変えない。
   function sortBy(players, s) {
     s = s || defaultSort();
@@ -158,6 +166,7 @@ var Courts = (function() {
     function primary(a, b) {
       if (s.key === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'ja');
       if (s.key === 'score') return (Number(a.score) || 0) - (Number(b.score) || 0);
+      if (s.key === 'bib') return bibValue(a) - bibValue(b);
       return compareOrder(a, b);
     }
     return (players || []).slice().sort(function(a, b) {

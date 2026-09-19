@@ -1800,6 +1800,22 @@
     assert('sortBy: sort が無ければ order 昇順', ordersOf(Courts.sortBy(sPlayers, null)), ['A-男子-1-2', 'A-男子-1-10', 'B-男子-1-1']);
     assert('sortBy: 元配列を変えない', ordersOf(sPlayers), ['A-男子-1-10', 'A-男子-1-2', 'B-男子-1-1']);
 
+    // ---- ゼッケンの並べ替え（PC 選手表の「ゼッケン」列。未設定は昇順で末尾） ----
+    var bibPlayers = [
+      { id: 'a', order: 'A-男子-1-1', name: 'あ', bib: 12 },
+      { id: 'b', order: 'A-男子-1-2', name: 'い' },
+      { id: 'c', order: 'A-男子-1-3', name: 'う', bib: 3 },
+      { id: 'd', order: 'A-男子-1-4', name: 'え', bib: null }
+    ];
+    function bibIds(s) { return Courts.sortBy(bibPlayers, s).map(function(p) { return p.id; }); }
+
+    assert('sortBy: bib 昇順は小さい順・未設定は末尾（未設定同士は order 昇順）',
+      bibIds({ key: 'bib', dir: 'asc' }), ['c', 'a', 'b', 'd']);
+    assert('sortBy: bib 降順は大きい順・未設定は先頭（未設定同士は order 昇順のまま）',
+      bibIds({ key: 'bib', dir: 'desc' }), ['b', 'd', 'a', 'c']);
+    assert('sortBy: bib は元配列を変えない',
+      bibPlayers.map(function(p) { return p.id; }), ['a', 'b', 'c', 'd']);
+
     // ---- 試合の区画（PC 運営 #match）の集計 ----
     // p1 は一巡目・採点済み、p5 は二巡目・採点済み。p4 は二巡目で技が空、
     // p6 は二巡目で技が途中まで入っている。
