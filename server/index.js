@@ -760,6 +760,10 @@ app.post('/api/events/:id/status', (req, res) => {
 // POST /api/events/:id/players : 選手を1名追加
 // order はサーバーが組み立てる。クライアントが送る id / order / score / result は無視する。
 // 既存行に触れないため、採点中の端末には影響しない（ガードは掛けない）。
+// レンタル×抜刀の形（rental の選手は drawn の技だけ）の検証は bulk rows（一括登録）だけで
+// 行う。この単体経路はスマホ・PC の1件ずつの編集フォームから来るため、技の候補自体を
+// クライアントが techniqueOptions で絞り込んでおり、また「試合開始」の可否は
+// courts.js の startBlockers が別途まとめて見る。ここで二重に検証しない。
 app.post('/api/events/:id/players', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -1181,6 +1185,10 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
 // court と round は order を組み立てる入力としてだけ使い、選手オブジェクトには保存しない
 // （巡目は order から導出できる値なので、二重に持つと不整合の元になる）。
 // 採点済みガードは掛けない（誤字修正は採点中でも必要。性別変更の警告はクライアント側）。
+// レンタル×抜刀の形の検証は bulk rows（一括登録）だけで行う。この単体経路（採点画面・
+// 運営編集フォームからの1件ずつの更新）はクライアントが techniqueOptions で技の候補自体を
+// 絞り込んでおり、「試合開始」の可否は courts.js の startBlockers が別途まとめて見るため、
+// ここで二重に検証しない。
 app.patch('/api/events/:id/players/:playerId', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
