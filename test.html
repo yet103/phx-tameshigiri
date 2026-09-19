@@ -1845,6 +1845,21 @@
         .every(function(t) { return t.reducedFirst === null; }),
       true);
 
+    // 備考の文例（追補: 2026-09-20-rules-alignment-design.md）
+    assert('NOTE_PRESETS は配列で空でない', Array.isArray(NOTE_PRESETS) && NOTE_PRESETS.length > 0, true);
+    assert('NOTE_PRESETS は10件、設計書どおりの順序', NOTE_PRESETS, [
+      '間合い確認・素振りをしたため無効',
+      '刀を床に打ち付けたため失敗',
+      '切っ先が落ちていたため失敗',
+      '斬った方の肩が入りすぎていたため失敗',
+      '抜刀の際に右こぶしを大きく左に回したため失敗',
+      '申請した形の刃筋と異なるため失敗',
+      '抜刀して止まった（戻した）ため抜き打ちと認めず失敗',
+      '突きの構えで切先が鞘から抜けていたため減点',
+      '畳表のさし直し',
+      '刀の曲がりを修正'
+    ]);
+
     var h2s = document.createElement('h2');
     h2s.textContent = 'scoring.js';
     results.appendChild(h2s);
@@ -1988,6 +2003,16 @@
     assert('canReduce 胸尽くし(男) 二ノ太刀 → false（初太刀だけ）', Scoring.canReduce('胸尽くし(男)', 1, false), false);
     assert('canReduce reducedFirst の無い技 → false', Scoring.canReduce('四方', 0, false), false);
     assert('canReduce 存在しない技 → false', Scoring.canReduce('存在しない技', 0, false), false);
+
+    // Scoring.appendNote: 備考の文例追記（追補: 2026-09-20-rules-alignment-design.md）
+    assert('appendNote 空の備考に足すとそのまま', Scoring.appendNote('', '畳表のさし直し'), '畳表のさし直し');
+    assert('appendNote 既に文字があれば「、」で区切る',
+      Scoring.appendNote('間合い確認', '畳表のさし直し'), '間合い確認、畳表のさし直し');
+    assert('appendNote 同じ文例が既に含まれていれば足さない',
+      Scoring.appendNote('間合い確認、畳表のさし直し', '畳表のさし直し'), '間合い確認、畳表のさし直し');
+    assert('appendNote 200文字を超える分は切る',
+      Scoring.appendNote(Array(196).join('あ'), '畳表のさし直し').length, 200);
+    assert('appendNote currentがnull/undefinedでも足せる', Scoring.appendNote(null, '刀の曲がりを修正'), '刀の曲がりを修正');
 
     var h2st = document.createElement('h2');
     h2st.textContent = 'storage.js';

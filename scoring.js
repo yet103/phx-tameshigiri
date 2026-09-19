@@ -160,6 +160,17 @@ var Scoring = (function() {
     return str;
   }
 
+  // 備考の末尾に文例を追記する（採点画面の「文例」ボタン）。
+  // 既に文字があれば「、」で区切る。同じ文例が既に含まれていれば足さない
+  // （二重に押しても増殖しない）。200文字を超える分は呼び出し元が切って alert する分と
+  // 合わせ、ここでも念のため200文字で切る（設計書 2026-09-20-rules-alignment-design.md 追補）。
+  function appendNote(current, preset) {
+    var cur = current || '';
+    if (cur.indexOf(preset) !== -1) return cur.slice(0, 200);
+    var joined = cur ? cur + '、' + preset : preset;
+    return joined.slice(0, 200);
+  }
+
   return {
     setTechniques: setTechniques,
     findTechnique: findTechnique,
@@ -172,6 +183,7 @@ var Scoring = (function() {
     normalizeAdjust: normalizeAdjust,
     decodeResult: decodeResult,
     encodeResult: encodeResult,
-    canDecode: canDecode
+    canDecode: canDecode,
+    appendNote: appendNote
   };
 })();

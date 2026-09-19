@@ -41,3 +41,20 @@ var TECHNIQUES = [
   { name: "右の敵",      strikes: [15, 1,    null, null], drawn: false, repeatable: false, reducedFirst: null },
   { name: "四方",        strikes: [17, 5,    7,    3   ], drawn: false, repeatable: false, reducedFirst: null }
 ];
+
+// 備考欄の文例（採点画面「文例」ボタンの選択肢。順序どおりに並べる）。
+// 公式ルールの失敗・無効の理由から抜粋した固定リスト（大会ごとの編集はしない）。
+// 選ぶと Scoring.appendNote で備考の末尾に追記する
+// （設計書 2026-09-20-rules-alignment-design.md 追補）。
+var NOTE_PRESETS = [
+  "間合い確認・素振りをしたため無効",
+  "刀を床に打ち付けたため失敗",
+  "切っ先が落ちていたため失敗",
+  "斬った方の肩が入りすぎていたため失敗",
+  "抜刀の際に右こぶしを大きく左に回したため失敗",
+  "申請した形の刃筋と異なるため失敗",
+  "抜刀して止まった（戻した）ため抜き打ちと認めず失敗",
+  "突きの構えで切先が鞘から抜けていたため減点",
+  "畳表のさし直し",
+  "刀の曲がりを修正"
+];
