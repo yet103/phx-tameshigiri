@@ -668,6 +668,7 @@ var Courts = (function() {
       return badRow(row, '技「' + badTechs.join('」「') + '」は技リストにありません');
     }
     if (bibError) return badRow(row, bibError);
+    if (row.rank.length > 20) return badRow(row, '級位・段位は 20 文字までです。');
     if (rental) {
       // レンタルの選手には抜刀後の形（drawn）しか選べない。空の技枠は対象外。
       var nonDrawn = techs.some(function(t) { return t && !isDrawnTechnique(techniques, t, isFemale); });

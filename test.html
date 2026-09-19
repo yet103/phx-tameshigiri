@@ -2604,6 +2604,9 @@
       [[6, true]]);
     assert('parsePasteRows: 級位段位はそのまま文字列で読む',
       pRows10('山田,A,,,,,,,初段,').map(function(r) { return r.rank; }), ['初段']);
+    assert('parsePasteRows: 級位段位が20文字を超えたら ok:false',
+      pRows10('山田,A,,,,,,,' + new Array(22).join('あ') + ',').map(function(r) { return [r.ok, r.error]; }),
+      [[false, '級位・段位は 20 文字までです。']]);
     assert('parsePasteRows: レンタルは新人と同じ語に「レンタル」「あり」を足した語',
       pRows10('あ,A,,,,,,,,新人\nい,A,,,,,,,,○\nう,A,,,,,,,,1\nえ,A,,,,,,,,true\nお,A,,,,,,,,レンタル\nか,A,,,,,,,,あり\nき,A,,,,,,,,')
         .map(function(r) { return r.rental; }),
