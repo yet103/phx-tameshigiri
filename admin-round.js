@@ -273,6 +273,20 @@ var AdminRound = (function() {
     return false;
   }
 
+  // 性別で絞った選択肢に、いま選んでいる技（tech1〜3）が無ければ足す。接尾辞付きの
+  // 旧データ（破図味(男) など）を持つ選手でも、シートにその行が出て①などの印が付くように。
+  // admin-players.js の同名の関数と同じ規則（courts.js を共有しない2画面なので複製する）。
+  function withCurrentTechniques(list, techList, names, isFemale) {
+    var out = list.slice();
+    (names || []).forEach(function(name) {
+      if (!name) return;
+      if (out.some(function(t) { return t.name === name; })) return;
+      var resolved = Courts.resolveTechnique(techList, name, isFemale);
+      out.push(resolved || { name: name, strikes: [null, null, null, null] });
+    });
+    return out;
+  }
+
   async function openPicker(p, row, slot) {
     // 実際にシートがある（.tp-overlay）か、まだ TechPicker.open を呼んでいる
     // 最中（openingPicker）のときだけ弾く。openingPicker は await ensureTechniques()
@@ -287,7 +301,9 @@ var AdminRound = (function() {
     // 最新の選択は onChange で控える
     var latest = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
     TechPicker.open({
-      techniques: Courts.techniqueOptions(techniques, !!p.isFemale),
+      techniques: withCurrentTechniques(
+        Courts.techniqueOptions(techniques, !!p.isFemale),
+        techniques, latest, !!p.isFemale),
       initial: latest,
       slot: slot,
       onChange: function(state) {

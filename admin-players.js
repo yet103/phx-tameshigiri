@@ -23,6 +23,21 @@
     return techOwner === ctx.eventId && !!techCache;
   }
 
+  // 性別で絞った選択肢に、いま選んでいる技（tech1〜3）が無ければ足す。接尾辞付きの
+  // 旧データ（破図味(男) など）を持つ選手でも、シートにその行が出て①などの印が付くように。
+  // Courts.resolveTechnique で技リストの実物が見つかればそれ（配点も出る）、
+  // 見つからなければ配点なしの最小の項目を足す。
+  function withCurrentTechniques(list, techniques, names, isFemale) {
+    var out = list.slice();
+    (names || []).forEach(function(name) {
+      if (!name) return;
+      if (out.some(function(t) { return t.name === name; })) return;
+      var resolved = Courts.resolveTechnique(techniques, name, isFemale);
+      out.push(resolved || { name: name, strikes: [null, null, null, null] });
+    });
+    return out;
+  }
+
   async function render(container, ctx) {
     adoptTechniques(ctx);
     if (stateOwner !== ctx.eventId) {
@@ -393,7 +408,10 @@
         TechPicker.open({
           // 開くたびに今のフォームの性別で絞る（性別を切り替えた直後は、次に開く
           // ピッカーから反映されればよい。既に開いているシートは作り直さない）。
-          techniques: Courts.techniqueOptions(techCache, common.isFemale()),
+          // 絞った候補に今の tech1〜3 が無ければ足す（接尾辞付きの旧データなど）。
+          techniques: withCurrentTechniques(
+            Courts.techniqueOptions(techCache, common.isFemale()),
+            techCache, TechPicker.toArray(techState), common.isFemale()),
           initial: techState,
           slot: index,
           onChange: function(next) {
