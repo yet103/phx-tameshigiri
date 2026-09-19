@@ -2551,12 +2551,15 @@
 
     // bibDroppedMessage: CSV/バンドル取り込みの bibDropped から画面の文言を作る
     assert('bibDroppedMessage: 両方0なら空文字', Courts.bibDroppedMessage({ duplicate: 0, outOfRange: 0 }), '');
-    assert('bibDroppedMessage: 重複・範囲外の件数を文言にする',
+    assert('bibDroppedMessage: 重複・範囲外の両方があれば連結する',
       Courts.bibDroppedMessage({ duplicate: 2, outOfRange: 1 }),
-      'ゼッケンが重複していた2 件・範囲外1 件は未設定にしました');
-    assert('bibDroppedMessage: 片方だけでも文言を出す',
-      Courts.bibDroppedMessage({ duplicate: 0, outOfRange: 3 }),
-      'ゼッケンが重複していた0 件・範囲外3 件は未設定にしました');
+      'ゼッケンが重複していた 2 件・範囲外 1 件は未設定にしました');
+    assert('bibDroppedMessage: 重複だけなら範囲外は出さない',
+      Courts.bibDroppedMessage({ duplicate: 2, outOfRange: 0 }),
+      'ゼッケンが重複していた 2 件は未設定にしました');
+    assert('bibDroppedMessage: 範囲外だけなら重複は出さない',
+      Courts.bibDroppedMessage({ duplicate: 0, outOfRange: 1 }),
+      'ゼッケンが範囲外 1 件は未設定にしました');
     assert('bibDroppedMessage: bibDropped が無くても落ちない', Courts.bibDroppedMessage(null), '');
 
     // parsePasteRows: 10列（名前,コート,性別,新人,技1,技2,技3,ゼッケン,級位段位,レンタル）

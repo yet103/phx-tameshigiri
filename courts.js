@@ -444,7 +444,12 @@ var Courts = (function() {
     var d = (bibDropped && bibDropped.duplicate) || 0;
     var o = (bibDropped && bibDropped.outOfRange) || 0;
     if (d <= 0 && o <= 0) return '';
-    return 'ゼッケンが重複していた' + d + ' 件・範囲外' + o + ' 件は未設定にしました';
+    // レビュー修正: 0件の側は文言に出さない（重複だけ・範囲外だけのときに「範囲外0件」
+    // のような無意味な数字を見せない）。
+    var parts = [];
+    if (d > 0) parts.push('重複していた ' + d + ' 件');
+    if (o > 0) parts.push('範囲外 ' + o + ' 件');
+    return 'ゼッケンが' + parts.join('・') + 'は未設定にしました';
   }
 
   // ---- 技の性別による絞り込み・解決（設計書「技の選択肢を性別で絞る」） ----
