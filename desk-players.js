@@ -14,6 +14,9 @@
   // いま描いている表。行の追加・削除や並べ替えで表だけを描き直すために覚えておく。
   // render のたびに入れ替える（古い ctx の DOM を触らない）。
   var view = null;   // { chips, wrap, ctx, locked }
+  // いま表に出ている行数（絞り込み後）。セルを 1 つ保存したあとに
+  // 「表示 n / N 名」を数え直すために覚えておく。
+  var lastShown = 0;
 
   // 「＋ 行を追加」の下書き行。null なら出さない。
   // 値は次に作る行の初期値（直前の行のコート・性別・新人を引き継ぐ）。
@@ -435,7 +438,12 @@
     return box;
   }
 
-  // 表の上の「表示 n / N 名」と「絞り込みを解除」。
+  // 試合開始で止まる理由の見出し（Courts.startBlockers の kind と対応）。
+  var BLOCKER_LABELS = { bib: 'ゼッケン未入力', rank: '級位段位未入力', rental: 'レンタル不可の形' };
+
+  // 表の上の「表示 n / N 名」「ゼッケン未入力 n …」「絞り込みを解除」。
+  // 件数は Courts.startBlockers をそのまま数えるので、「試合開始」で止まる条件と
+  // 必ず一致する（絞り込みで隠れている行も数える。隠れたまま止まると理由が分からない）。
   function renderCount(shown, total) {
     if (!view || !view.bar) return;
     view.bar.innerHTML = '';
@@ -443,6 +451,18 @@
     span.className = 'desk-players-count';
     span.textContent = '表示 ' + shown + ' / ' + total + ' 名';
     view.bar.appendChild(span);
+
+    var blockers = Courts.startBlockers(view.ctx.event, view.ctx.players || []);
+    if (blockers.length > 0) {
+      var warn = document.createElement('span');
+      warn.className = 'desk-players-blockers';
+      warn.textContent = blockers.map(function(b) {
+        return (BLOCKER_LABELS[b.kind] || b.kind) + ' ' + b.players.length;
+      }).join('　');
+      warn.title = 'この件数が残っていると「試合開始」で止まります';
+      view.bar.appendChild(warn);
+    }
+
     if (!isAnyFilterActive()) return;
     var b = document.createElement('button');
     b.type = 'button';
@@ -528,6 +548,7 @@
     if (rows.length === 0 && !draft) tbody.appendChild(noMatchRow());
     // 下書き行は絞り込みに関わらず必ず末尾に出す（打ち込んでいる途中で消えない）
     if (draft && !locked) tbody.appendChild(buildDraftRow(ctx));
+    lastShown = rows.length;   // afterRowEdit が件数だけ描き直すときに使う
     renderCount(rows.length, players.length);
   }
 
@@ -707,10 +728,11 @@
     if (el) el.classList.toggle(cls, on === true);
   }
 
-  // セルを 1 つ保存できたあとに呼ぶ。行の赤枠を塗り直す
-  // （Task 7 でここに表の上の件数の数え直しも足す）。
+  // セルを 1 つ保存できたあとに呼ぶ。その行の赤枠と、表の上の件数を塗り直す。
+  // 表そのものは描き直さない（他のセルの入力途中を壊さないため。saveCell と同じ方針）。
   function afterRowEdit(ctx, refs, p) {
     markRow(ctx, refs, p);
+    if (view && view.ctx === ctx) renderCount(lastShown, (ctx.players || []).length);
   }
 
   function nameCell(ctx, p, locked) {
