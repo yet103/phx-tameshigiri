@@ -2163,6 +2163,36 @@
     assert('scoreChangeConfirmMessage: 得点が無ければ 0点',
       Courts.scoreChangeConfirmMessage({}).indexOf('（0点）') !== -1, true);
 
+    // ---- 選手の追加項目（ゼッケン・級位段位・真剣レンタル）（設計書 2026-09-19-player-extra-fields-design.md トラックB） ----
+    // techniqueOptions の第3引数 rental。drawn の技だけを出す（性別とAND）。
+    var RENTAL_TECH = [
+      { name: '立位袈裟', strikes: [1, 1, null, null] },
+      { name: '破図味(男)', strikes: [20, 6, 6, 2], drawn: true },
+      { name: '破図味(女)', strikes: [18, 5, 5, 2], drawn: true },
+      { name: '胸尽くし(男)', strikes: [1, 1, 1, 1], drawn: true },
+      { name: '胸尽くし(女)', strikes: [1, 1, 1, 1], drawn: false }
+    ];
+    function rtNames(list) { return list.map(function(t) { return t.name; }).sort(); }
+    assert('techniqueOptions: rental=true は drawn の技だけ（男子）',
+      rtNames(Courts.techniqueOptions(RENTAL_TECH, false, true)), ['破図味', '胸尽くし']);
+    assert('techniqueOptions: rental=true は drawn の技だけ（女子、性別とAND）',
+      rtNames(Courts.techniqueOptions(RENTAL_TECH, true, true)), ['破図味']);
+    assert('techniqueOptions: rental=false は従来どおり全部出る',
+      rtNames(Courts.techniqueOptions(RENTAL_TECH, false, false)), ['破図味', '立位袈裟', '胸尽くし']);
+    assert('techniqueOptions: rental 省略は false と同じ（既存の2引数呼び出しは変えない）',
+      Courts.techniqueOptions(RENTAL_TECH, false), Courts.techniqueOptions(RENTAL_TECH, false, false));
+    assert('techniqueOptions: rental=true で技リストが無くても落ちない',
+      Courts.techniqueOptions(null, false, true), []);
+
+    // isDrawnTechnique: resolveTechnique で解決した技の drawn（無ければ false）
+    assert('isDrawnTechnique: drawn:true の技は true', Courts.isDrawnTechnique(RENTAL_TECH, '破図味', false), true);
+    assert('isDrawnTechnique: 接尾辞なしでも性別で解決する（女子の胸尽くしは drawn:false）',
+      Courts.isDrawnTechnique(RENTAL_TECH, '胸尽くし', true), false);
+    assert('isDrawnTechnique: drawn が無ければ false', Courts.isDrawnTechnique(RENTAL_TECH, '立位袈裟', false), false);
+    assert('isDrawnTechnique: 技が見つからなければ false', Courts.isDrawnTechnique(RENTAL_TECH, '幻の太刀', false), false);
+    assert('isDrawnTechnique: techniques が無くても落ちない', Courts.isDrawnTechnique(null, '破図味', false), false);
+    assert('isDrawnTechnique: isFemale 未指定は男子と同じ', Courts.isDrawnTechnique(RENTAL_TECH, '破図味'), true);
+
     var h2es = document.createElement('h2');
     h2es.textContent = 'status.js';
     results.appendChild(h2es);

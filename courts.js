@@ -398,7 +398,9 @@ var Courts = (function() {
   //   末尾が (男)/(女) でない技      … そのまま
   //   末尾が性別と一致する技         … 接尾辞を外した名前で（同じ名前が既にあれば足さない）
   //   末尾が性別と一致しない技       … 出さない
-  function techniqueOptions(techniques, isFemale) {
+  // rental が true なら、さらに drawn（抜刀後の形）の技だけに絞る（性別の絞り込みと AND）。
+  // 省略時は false 扱い（既存の2引数呼び出しは変えない）。
+  function techniqueOptions(techniques, isFemale, rental) {
     var suffix = isFemale ? '(女)' : '(男)';
     var otherSuffix = isFemale ? '(男)' : '(女)';
     var out = [];
@@ -413,10 +415,18 @@ var Courts = (function() {
       // （resolveTechnique）に通した先から取る。技リストに 破図味(女) と 破図味 が
       // 両方ある場合など、末尾の技を先に見つけても resolveTechnique が完全一致の
       // 別の項目を返すことがあるため、ここで t.strikes をそのまま使うと表示と
-      // 採点の配点がずれる。
-      out.push({ name: shown, strikes: (resolveTechnique(techniques, shown, isFemale) || t).strikes });
+      // 採点の配点がずれる。drawn の判定も同じ理由でここから取る。
+      var resolved = resolveTechnique(techniques, shown, isFemale) || t;
+      if (rental && !resolved.drawn) return;
+      out.push({ name: shown, strikes: resolved.strikes });
     });
     return out;
+  }
+
+  // 技名の drawn（抜刀後の形。既定 false）。resolveTechnique で解決できなければ false。
+  function isDrawnTechnique(techniques, name, isFemale) {
+    var t = resolveTechnique(techniques, name, isFemale);
+    return !!(t && t.drawn);
   }
 
   // ---- 貼り付けによる一括登録の解析（PC 運営 desk-players.js の「📋 貼り付けて追加」） ----
@@ -578,6 +588,7 @@ var Courts = (function() {
     splitDelimited: splitDelimited,
     stripGenderSuffix: stripGenderSuffix,
     resolveTechnique: resolveTechnique,
-    techniqueOptions: techniqueOptions
+    techniqueOptions: techniqueOptions,
+    isDrawnTechnique: isDrawnTechnique
   };
 })();
