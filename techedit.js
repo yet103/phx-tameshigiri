@@ -142,6 +142,20 @@ var TechEdit = (function() {
       return techs;
     }
 
+    // 保存前の範囲チェック。「減点初太刀」欄には min="0" max="99" を付けているが、
+    // ブラウザは <form> の外の number 入力に制約を強制しない（タイプしたまま通る）ため、
+    // サーバー（validateTechniques）と同じ 0〜99 の範囲・同じ文言でここでも止める。
+    function validateReducedFirst(techs) {
+      for (var i = 0; i < techs.length; i++) {
+        var rf = techs[i].reducedFirst;
+        if (rf !== null && (!Number.isInteger(rf) || rf < 0 || rf > 99)) {
+          alert((i + 1) + ' 行目の「減点初太刀」の配点が不正です（0〜99の整数か空）');
+          return false;
+        }
+      }
+      return true;
+    }
+
     function eventById(id) {
       return events.filter(function(e) { return e.id === id; })[0] || null;
     }
@@ -296,6 +310,7 @@ var TechEdit = (function() {
     btnSave.addEventListener('click', async function() {
       var seq = loadSeq;   // 対象や画面が切り替えられていないかを await のたびに確かめる
       var techs = collectTechs();
+      if (!validateReducedFirst(techs)) return;
       if (!targetId) {
         var r0 = await Api.saveTechniques(techs);
         if (seq !== loadSeq) return;
