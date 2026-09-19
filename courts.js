@@ -369,6 +369,50 @@ var Courts = (function() {
     return EventStatus.LABELS[to] + 'に戻します。よろしいですか？';
   }
 
+  // ---- 技の性別による絞り込み・解決（設計書「技の選択肢を性別で絞る」） ----
+  // 選手に保存する技名は接尾辞なし。技リストには 胸尽くし(男)/胸尽くし(女) のように
+  // 末尾 (男)/(女) で配点が分かれる組がある。採点画面の Scoring.findTechnique と
+  // 同じ規則をここに持つ（courts.js は scoring.js に依存しないため）。
+
+  // '破図味(男)' → '破図味'。末尾が (男)/(女) でなければそのまま。
+  function stripGenderSuffix(name) {
+    var s = String(name == null ? '' : name);
+    if (s.slice(-3) === '(男)' || s.slice(-3) === '(女)') return s.slice(0, -3);
+    return s;
+  }
+
+  // 技名の解決。Scoring.findTechnique と同じ規則（完全一致 → name + 性別の接尾辞で再検索）。
+  function resolveTechnique(techniques, name, isFemale) {
+    var list = techniques || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].name === name) return list[i];
+    }
+    var nameWithGender = name + (isFemale ? '(女)' : '(男)');
+    for (var j = 0; j < list.length; j++) {
+      if (list[j] && list[j].name === nameWithGender) return list[j];
+    }
+    return null;
+  }
+
+  // 選手の性別で絞った選択肢。元の並び順を保つ。
+  //   末尾が (男)/(女) でない技      … そのまま
+  //   末尾が性別と一致する技         … 接尾辞を外した名前で（同じ名前が既にあれば足さない）
+  //   末尾が性別と一致しない技       … 出さない
+  function techniqueOptions(techniques, isFemale) {
+    var suffix = isFemale ? '(女)' : '(男)';
+    var otherSuffix = isFemale ? '(男)' : '(女)';
+    var out = [];
+    (techniques || []).forEach(function(t) {
+      var name = (t && typeof t.name === 'string') ? t.name : '';
+      if (!name) return;
+      if (name.slice(-3) === otherSuffix) return;
+      var shown = name.slice(-3) === suffix ? stripGenderSuffix(name) : name;
+      if (out.some(function(o) { return o.name === shown; })) return;
+      out.push({ name: shown, strikes: t.strikes });
+    });
+    return out;
+  }
+
   // ---- 貼り付けによる一括登録の解析（PC 運営 desk-players.js の「📋 貼り付けて追加」） ----
 
   // 性別・新人の表記ゆれ。設計書「画面設計 > PC 運営 > 選手」の貼り付けの節のとおり。
@@ -425,11 +469,6 @@ var Courts = (function() {
   // 貼り付けダイアログの「コートが空の行に使うコート」を渡す。省略すると従来どおり
   // （コートの列が空の行は「コートがありません」で断る）。
   function parsePasteRows(text, techniques, defaults) {
-    var known = Object.create(null);   // 技名が 'toString' などでも壊れないように（computeRanking と同じ）
-    (techniques || []).forEach(function(t) {
-      var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
-      if (n) known[n] = true;
-    });
     var lines = String(text == null ? '' : text).split(/\r?\n/);
     var rows = [];
     var headerSkipped = false;
@@ -450,7 +489,7 @@ var Courts = (function() {
         // Excel の1行目をそのまま貼れるように、「名前…」で始まる最初の行は見出しとみなす
         if (cols[0].indexOf('名前') === 0) { headerSkipped = true; return; }
       }
-      var row = parsePasteRow(cols, i + 1, known, defaults || {});
+      var row = parsePasteRow(cols, i + 1, techniques, defaults || {});
       if (quoteError) badRow(row, quoteError);   // 引用符の異常は他の理由より優先して断る
       rows.push(row);
     });
@@ -462,9 +501,13 @@ var Courts = (function() {
   // 無い列は 性別＝男子・新人＝なし・技＝空 として読み、コートだけ defaults.court で補う。
   // 補った値にも下の検証（'-' を含まない・未分類でない・32文字以内）を掛ける
   // （既定コートが不正なら、その行は貼った行と同じ理由で断る）。
-  function parsePasteRow(cols, line, known, defaults) {
+  function parsePasteRow(cols, line, techniques, defaults) {
     var techs = [cols[4] || '', cols[5] || '', cols[6] || ''];
-    var badTechs = techs.filter(function(t) { return t && !known[t]; });
+    var isFemale = FEMALE_WORDS.indexOf(String(cols[2] || '').toLowerCase()) !== -1;
+    // 技名の照合は resolveTechnique（完全一致 → 性別の接尾辞付き）。配列を舐めて === で
+    // 比べるだけなので、技名が 'toString' などでもプロトタイプのプロパティを拾わない
+    // （旧 known = Object.create(null) の意図はここに引き継ぐ）。
+    var badTechs = techs.filter(function(t) { return t && !resolveTechnique(techniques, t, isFemale); });
     var pasted = cols[1] || '';
     var fallback = (defaults && typeof defaults.court === 'string') ? defaults.court.trim() : '';
     var row = {
@@ -472,7 +515,7 @@ var Courts = (function() {
       name: cols[0] || '',
       court: pasted || fallback,
       courtFilled: !pasted && !!fallback,
-      isFemale: FEMALE_WORDS.indexOf(String(cols[2] || '').toLowerCase()) !== -1,
+      isFemale: isFemale,
       isNewFace: NEWFACE_WORDS.indexOf(String(cols[3] || '').toLowerCase()) !== -1,
       techs: techs,
       badTechs: badTechs,
@@ -526,6 +569,9 @@ var Courts = (function() {
     stageCountText: stageCountText,
     statusConfirmMessage: statusConfirmMessage,
     parsePasteRows: parsePasteRows,
-    splitDelimited: splitDelimited
+    splitDelimited: splitDelimited,
+    stripGenderSuffix: stripGenderSuffix,
+    resolveTechnique: resolveTechnique,
+    techniqueOptions: techniqueOptions
   };
 })();

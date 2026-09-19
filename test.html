@@ -1922,6 +1922,40 @@
     assert('statusConfirmMessage: archived から final への復元は確定の文言にならない',
       Courts.statusConfirmMessage('archived', 'final', tcP), '最終結果に戻します。よろしいですか？');
 
+    // ---- 技の性別による絞り込み・解決（設計書「技の選択肢を性別で絞る」テスト 1〜2） ----
+    // data.js の既定リストで 胸尽くし/水月/破図味 が (男)/(女) の組。
+    function techNames(list) { return list.map(function(t) { return t.name; }); }
+    var femaleOptions = Courts.techniqueOptions(TECHNIQUES, true);
+    var maleOptions = Courts.techniqueOptions(TECHNIQUES, false);
+    assert('techniqueOptions: 女子は (男) が出ない', techNames(femaleOptions).indexOf('胸尽くし(男)') === -1, true);
+    assert('techniqueOptions: 女子は接尾辞なしで1つだけ',
+      ['胸尽くし', '水月', '破図味'].map(function(n) { return techNames(femaleOptions).filter(function(x) { return x === n; }).length; }),
+      [1, 1, 1]);
+    assert('techniqueOptions: 女子の配点は (女) の値',
+      femaleOptions.filter(function(t) { return t.name === '破図味'; })[0].strikes,
+      TECHNIQUES.filter(function(t) { return t.name === '破図味(女)'; })[0].strikes);
+    assert('techniqueOptions: 男子の配点は (男) の値',
+      maleOptions.filter(function(t) { return t.name === '破図味'; })[0].strikes,
+      TECHNIQUES.filter(function(t) { return t.name === '破図味(男)'; })[0].strikes);
+    assert('techniqueOptions: 接尾辞のない技は両方に出る',
+      [techNames(femaleOptions).indexOf('四方') >= 0, techNames(maleOptions).indexOf('四方') >= 0], [true, true]);
+    assert('techniqueOptions: 並び順は元のまま（先頭は立位袈裟）', femaleOptions[0].name, '立位袈裟');
+    assert('techniqueOptions: null でも落ちない', Courts.techniqueOptions(null, true), []);
+
+    assert('resolveTechnique: 接尾辞なしの名前が性別で解決する',
+      Courts.resolveTechnique(TECHNIQUES, '破図味', true),
+      TECHNIQUES.filter(function(t) { return t.name === '破図味(女)'; })[0]);
+    assert('resolveTechnique: 接尾辞付きの名前は完全一致を優先する',
+      Courts.resolveTechnique(TECHNIQUES, '破図味(男)', true),
+      TECHNIQUES.filter(function(t) { return t.name === '破図味(男)'; })[0]);
+    assert('resolveTechnique: 無い名前は null', Courts.resolveTechnique(TECHNIQUES, '幻の太刀', true), null);
+    assert('resolveTechnique: 技リストが無くても落ちない', Courts.resolveTechnique(null, '破図味', true), null);
+
+    assert('stripGenderSuffix: (男) を外す', Courts.stripGenderSuffix('破図味(男)'), '破図味');
+    assert('stripGenderSuffix: (女) を外す', Courts.stripGenderSuffix('破図味(女)'), '破図味');
+    assert('stripGenderSuffix: 接尾辞が無ければそのまま', Courts.stripGenderSuffix('四方'), '四方');
+    assert('stripGenderSuffix: null は空文字', Courts.stripGenderSuffix(null), '');
+
     // ---- 貼り付けによる一括登録の解析（PC 運営の「📋 貼り付けて追加」） ----
     // 列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 の固定順。
     var pTech = [{ name: '四方' }, { name: '水月' }];
@@ -1959,6 +1993,19 @@
       [[['幻の太刀'], false, '技「幻の太刀」は技リストにありません']]);
     assert('parsePasteRows: 空の技は許す',
       pRows('山田,A,,,,,').map(function(r) { return [r.badTechs, r.ok]; }), [[[], true]]);
+
+    // ---- 技名照合を性別で解決する（設計書「技の選択肢を性別で絞る」テスト 3） ----
+    // pTech は接尾辞なしの技しか無いので、(男)/(女) の組を持つ技リストで別に確かめる。
+    var pGenderTech = [{ name: '破図味(男)' }, { name: '破図味(女)' }, { name: '胸尽くし(男)' }, { name: '胸尽くし(女)' }];
+    function pGRows(text) { return Courts.parsePasteRows(text, pGenderTech).rows; }
+    assert('parsePasteRows: 女子の行で接尾辞なしの技が性別で解決して ok:true',
+      pGRows('山田,A,女子,,破図味').map(function(r) { return r.ok; }), [true]);
+    assert('parsePasteRows: 男子の行で接尾辞なしの技が性別で解決して ok:true',
+      pGRows('山田,A,男子,,胸尽くし').map(function(r) { return r.ok; }), [true]);
+    assert('parsePasteRows: 接尾辞付きの技名は完全一致でそのまま ok:true',
+      pGRows('山田,A,女子,,破図味(女)').map(function(r) { return r.ok; }), [true]);
+    assert('parsePasteRows: 技リストに無い名前は従来どおり ok:false',
+      pGRows('山田,A,女子,,無い技').map(function(r) { return [r.ok, r.badTechs]; }), [[false, ['無い技']]]);
     assert('parsePasteRows: 技リストが無ければ技名は全部「リストに無い」',
       Courts.parsePasteRows('山田,A,,,四方', null).rows.map(function(r) { return [r.badTechs, r.ok]; }),
       [[['四方'], false]]);
