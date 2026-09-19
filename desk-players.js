@@ -652,6 +652,25 @@
       return;
     }
     if (res.player) adopt(p, res.player);
+    // 一巡目の bib/rank/rental を保存したら、サーバーが sourcePlayerId で紐づく二巡目の
+    // 行にも同じ値を写している（server/index.js の PATCH …/players/:playerId）。表の
+    // ローカルな控え（ctx.players）はサーバーの応答（この行だけ）では追随しないので、
+    // ここで一致する行を探して同じように書き換え、表を描き直す（レビュー修正。
+    // 二巡目のセルは読み取り専用だが、表示が一巡目の変更に追随しないと古い値のまま残る）。
+    if (patch.bib !== undefined || patch.rank !== undefined || patch.rental !== undefined) {
+      var propagated = false;
+      (ctx.players || []).forEach(function(other) {
+        if (other && other.sourcePlayerId === p.id) {
+          if (patch.bib !== undefined) {
+            other.bib = (typeof p.bib === 'number') ? p.bib : null;
+          }
+          if (patch.rank !== undefined) other.rank = p.rank;
+          if (patch.rental !== undefined) other.rental = p.rental;
+          propagated = true;
+        }
+      });
+      if (propagated) redrawTable();
+    }
     Desk.toast('保存しました');
     if (after) after();
   }
