@@ -452,7 +452,12 @@
     span.textContent = '表示 ' + shown + ' / ' + total + ' 名';
     view.bar.appendChild(span);
 
-    var blockers = Courts.startBlockers(view.ctx.event, view.ctx.players || []);
+    // 件数は一巡目の行だけを対象にする（bib/rank は startBlockers が一巡目だけ拾うが、
+    // rental は巡目を見ないため、二巡目の行の技セルの赤枠に釣られて帯の件数が二重に
+    // 膨らまないよう、渡す前にここで絞る。二巡目の行の赤枠自体は markRow 側の話なので
+    // ここでは触らない）。
+    var round1Players = (view.ctx.players || []).filter(function(p) { return Courts.roundOf(p) === 1; });
+    var blockers = Courts.startBlockers(view.ctx.event, round1Players);
     if (blockers.length > 0) {
       var warn = document.createElement('span');
       warn.className = 'desk-players-blockers';
