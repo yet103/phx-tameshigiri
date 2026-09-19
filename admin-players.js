@@ -464,11 +464,13 @@
           return;
         }
         TechPicker.open({
-          // 開くたびに今のフォームの性別で絞る（性別を切り替えた直後は、次に開く
+          // 開くたびに今のフォームの性別とレンタルで絞る（切り替えた直後は、次に開く
           // ピッカーから反映されればよい。既に開いているシートは作り直さない）。
-          // 絞った候補に今の tech1〜3 が無ければ足す（接尾辞付きの旧データなど）。
+          // レンタルにチェックが入っていれば「抜刀後」の形だけ。
+          // 絞った候補に今の tech1〜3 が無ければ足す（接尾辞付きの旧データや、
+          // レンタルにして選べなくなった形。選んである印を消さないため）。
           techniques: withCurrentTechniques(
-            Courts.techniqueOptions(techCache, common.isFemale()),
+            Courts.techniqueOptions(techCache, common.isFemale(), chkRental.checked),
             techCache, TechPicker.toArray(techState), common.isFemale()),
           initial: techState,
           slot: index,
@@ -723,6 +725,10 @@
         // 失敗してもシートは閉じない（入力を残す）
         if (res && res.reason === 'locked') {
           alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else if (res && res.reason === 'bib') {
+          // 「ゼッケン番号 12 は「山田 太郎」が使っています」。
+          // 誰と重なったかを知っているのはサーバーだけなので文言をそのまま出す。
+          alert(res.error);
         } else {
           alert('選手の更新に失敗しました。\n入力内容と通信を確認してください。');
         }
