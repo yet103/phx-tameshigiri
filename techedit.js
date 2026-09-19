@@ -71,7 +71,9 @@ var TechEdit = (function() {
     // title を添える（スマホ幅では見出しを 12px に詰めるため、文字は増やさない）。
     table.innerHTML =
       '<thead><tr><th>技名</th><th>初太刀</th><th>二ノ太刀</th><th>三ノ太刀</th><th>四ノ太刀</th>' +
-      '<th title="レンタルの選手が選べる形">抜刀後</th></tr></thead>' +
+      '<th title="レンタルの選手が選べる形">抜刀後</th>' +
+      '<th title="同じ巡（一巡目・二巡目）で何度でも選べる">回数制限なし</th>' +
+      '<th title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点">減点初太刀</th></tr></thead>' +
       '<tbody></tbody>';
     var tbody = table.querySelector('tbody');
     scroll.appendChild(table);
@@ -93,9 +95,14 @@ var TechEdit = (function() {
             return '<td><input type="number" min="0" max="99" value="' + v +
               '" data-field="strike" data-idx="' + i + '" data-strike="' + s + '"></td>';
           }).join('') +
-          // drawn を持たない古い技リスト（data.js の既定値も持たない）は未チェックで出す
+          // drawn / repeatable を持たない古い技リスト（data.js の既定値も持たない）は未チェックで出す
           '<td><input type="checkbox" data-field="drawn" data-idx="' + i + '"' +
-          (t.drawn === true ? ' checked' : '') + '></td>';
+          (t.drawn === true ? ' checked' : '') + '></td>' +
+          '<td><input type="checkbox" data-field="repeatable" data-idx="' + i + '"' +
+          (t.repeatable === true ? ' checked' : '') + '></td>' +
+          '<td><input type="number" min="0" max="99" data-field="reducedFirst" data-idx="' + i + '"' +
+          ' title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点"' +
+          ' value="' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '"></td>';
         tbody.appendChild(tr);
       });
       dirty = false;
@@ -117,7 +124,20 @@ var TechEdit = (function() {
           return isNaN(n) ? null : n;
         });
         var drawnEl = tr.querySelector('[data-field="drawn"]');
-        techs.push({ name: name, strikes: strikes, drawn: !!(drawnEl && drawnEl.checked) });
+        var repeatableEl = tr.querySelector('[data-field="repeatable"]');
+        var reducedEl = tr.querySelector('[data-field="reducedFirst"]');
+        var reducedVal = reducedEl ? reducedEl.value : '';
+        var reducedFirst = null;
+        if (reducedVal !== '') {
+          var rn = parseInt(reducedVal, 10);
+          if (!isNaN(rn)) reducedFirst = rn;
+        }
+        techs.push({
+          name: name, strikes: strikes,
+          drawn: !!(drawnEl && drawnEl.checked),
+          repeatable: !!(repeatableEl && repeatableEl.checked),
+          reducedFirst: reducedFirst
+        });
       });
       return techs;
     }
