@@ -756,7 +756,7 @@ var App = (function() {
       if (idx !== -1 && s > idx) {
         var wasVoided = cell.classList.contains('voided');
         cell.dataset.value = '';
-        cell.classList.remove('success', 'fail', 'empty');
+        cell.classList.remove('success', 'fail', 'empty', 'reduced');
         cell.classList.add('voided');
         cell.textContent = '—';
         if (!wasVoided) voided = true;
