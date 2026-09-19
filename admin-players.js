@@ -380,6 +380,11 @@
       ? TechPicker.fromArray([player.tech1, player.tech2, player.tech3])
       : [];
 
+    // 二巡目の選手はゼッケン・級位段位・レンタルが一巡目の複製なので、このシートでは
+    // 変更させない（レビュー修正。PC の desk-players.js の bibCell 等と同じ理由）。
+    var isRound2 = player ? Courts.roundOf(player) !== 1 : false;
+    var ROUND2_NOTE = '一巡目の行で変更します';
+
     // 名前
     var fName = document.createElement('div');
     fName.className = 'field';
@@ -405,6 +410,7 @@
     inBib.step = '1';
     inBib.inputMode = 'numeric';
     inBib.value = (player && typeof player.bib === 'number') ? String(player.bib) : '';
+    if (isRound2) { inBib.disabled = true; inBib.title = ROUND2_NOTE; }
     fBib.appendChild(lBib);
     fBib.appendChild(inBib);
     el.appendChild(fBib);
@@ -419,6 +425,7 @@
     inRank.type = 'text';
     inRank.setAttribute('list', 'adminRankList');
     inRank.value = (player && typeof player.rank === 'string') ? player.rank : '';
+    if (isRound2) { inRank.disabled = true; inRank.title = ROUND2_NOTE; }
     var rankList = document.createElement('datalist');
     rankList.id = 'adminRankList';
     ['無級', '十級', '九級', '八級', '七級', '六級', '五級', '四級', '三級', '二級', '一級',
@@ -445,6 +452,7 @@
     var chkRental = document.createElement('input');
     chkRental.type = 'checkbox';
     chkRental.checked = player ? player.rental === true : false;
+    if (isRound2) { chkRental.disabled = true; chkRental.title = ROUND2_NOTE; }
     var txtRental = document.createElement('span');
     txtRental.textContent = '真剣レンタル（抜刀後の形だけ選べます）';
     togRental.appendChild(chkRental);

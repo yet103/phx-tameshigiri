@@ -884,9 +884,12 @@
 
   // ゼッケン番号。整数 1〜9999 か空（未設定）。空にすると bib: null を送って戻す。
   // 同じ大会での重複はサーバーが 409 で断り、saveCell がその文言をそのまま出す。
+  // 二巡目の行は一巡目の複製（generateNextRound / saveCell の伝播）なので読み取り専用にする
+  // （レビュー修正。二巡目のセルを直接書き換えても一巡目には反映されず食い違うため）。
   function bibCell(ctx, p, locked, refs) {
     var td = document.createElement('td');
     td.className = 'col-bib';
+    var isRound2 = Courts.roundOf(p) !== 1;
     var input = document.createElement('input');
     input.type = 'number';
     input.min = '1';
@@ -895,7 +898,8 @@
     input.className = 'desk-cell-input';
     input.value = (typeof p.bib === 'number') ? String(p.bib) : '';
     input.setAttribute('aria-label', 'ゼッケン番号');
-    input.disabled = locked;
+    input.disabled = locked || isRound2;
+    if (isRound2) input.title = '一巡目の行で変更します';
     bindText(ctx, p, input, function(v) {
       if (v === '') return { bib: null };
       // type="number" でも貼り付けや IME で数字以外が残ることがあるので自分で見る
@@ -910,16 +914,19 @@
   }
 
   // 級位・段位。候補は datalist で出すが自由入力も受ける（20 文字まで）。
+  // 二巡目の行は一巡目の複製なので読み取り専用にする（bibCell と同じ理由）。
   function rankCell(ctx, p, locked, refs) {
     var td = document.createElement('td');
     td.className = 'col-rank';
+    var isRound2 = Courts.roundOf(p) !== 1;
     var input = document.createElement('input');
     input.type = 'text';
     input.className = 'desk-cell-input';
     input.setAttribute('list', RANK_LIST_ID);
     input.value = (typeof p.rank === 'string') ? p.rank : '';
     input.setAttribute('aria-label', '級位・段位');
-    input.disabled = locked;
+    input.disabled = locked || isRound2;
+    if (isRound2) input.title = '一巡目の行で変更します';
     bindText(ctx, p, input, function(v) {
       if (v.length > 20) { alert('級位・段位は 20 文字までです。'); return null; }
       return { rank: v };
@@ -932,15 +939,18 @@
   // 真剣レンタル。切り替えると技の候補が変わる（抜刀後の形だけ／全部）ので、
   // 保存できたらその行の技セレクトを作り直す。性別・コートと違って order は
   // 変わらないので、表ごとの Desk.reloadEvent() は要らない（行だけで足りる）。
+  // 二巡目の行は一巡目の複製なので読み取り専用にする（bibCell と同じ理由）。
   function rentalCell(ctx, p, locked, refs) {
     var td = document.createElement('td');
     td.className = 'col-rental';
+    var isRound2 = Courts.roundOf(p) !== 1;
     var chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.className = 'desk-cell-check';
     chk.checked = p.rental === true;
     chk.setAttribute('aria-label', '真剣レンタル');
-    chk.disabled = locked;
+    chk.disabled = locked || isRound2;
+    if (isRound2) chk.title = '一巡目の行で変更します';
     bindChoice(ctx, p, chk, p.rental === true,
       function() { return chk.checked; },
       function(v) { return { rental: v }; },
