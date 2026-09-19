@@ -784,9 +784,11 @@
     return td;
   }
 
-  // 技の選択肢は「その大会の技リスト」＋空（技を消せるように）。
-  // 選手が持っている技がリストに無い場合（技リストを入れ替えた後など）は、
-  // 黙って空にしないよう、その名前も選択肢に足す。
+  // 技の選択肢は「その選手の性別で絞った技リスト」＋空（技を消せるように）。
+  // 性別が変わって保存されると行ごと Desk.reloadEvent() で作り直されるので、
+  // ここは呼ばれるたびに p.isFemale で絞り直せばよい（作り直しは呼び出し側任せ）。
+  // 選手が持っている技がリストに無い場合（接尾辞付きの旧データ・技リストを
+  // 入れ替えた後など）は、黙って空にしないよう、その名前も選択肢に足す。
   function techCell(ctx, p, locked, slot) {
     var td = document.createElement('td');
     td.className = 'col-tech';
@@ -797,7 +799,7 @@
     var cur = p['tech' + slot] || '';
     addOption(sel, '', '—');
     var found = false;
-    (ctx.techniques || []).forEach(function(t) {
+    Courts.techniqueOptions(ctx.techniques, !!p.isFemale).forEach(function(t) {
       var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
       if (!n) return;
       addOption(sel, n, n);
@@ -891,6 +893,20 @@
     tdCourt.appendChild(selCourt);
     tr.appendChild(tdCourt);
 
+    // 技 1〜3 のセレクトはあとで性別を切り替えたときに作り直す（候補を絞り直す）ので、
+    // 先に配列へ控えておく。
+    var techSelects = [];
+    function fillTechOptions(sel) {
+      var cur = sel.value;
+      sel.innerHTML = '';
+      addOption(sel, '', '—');
+      Courts.techniqueOptions(ctx.techniques, d.isFemale).forEach(function(t) {
+        var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
+        if (n) addOption(sel, n, n);
+      });
+      sel.value = cur || '';
+    }
+
     // 性別
     var tdSex = document.createElement('td');
     tdSex.className = 'col-sex';
@@ -900,7 +916,15 @@
     addOption(selSex, '男子', '男子');
     addOption(selSex, '女子', '女子');
     selSex.value = d.isFemale ? '女子' : '男子';
-    selSex.addEventListener('change', function() { d.isFemale = (selSex.value === '女子'); });
+    selSex.addEventListener('change', function() {
+      d.isFemale = (selSex.value === '女子');
+      // 候補が変わるので技セレクトを作り直す（選んだ技名は接尾辞を外した形なので、
+      // たいていはそのまま選び直せる。無ければ空に戻る）。
+      techSelects.forEach(function(sel, i) {
+        fillTechOptions(sel);
+        d['tech' + (i + 1)] = sel.value;
+      });
+    });
     tdSex.appendChild(selSex);
     tr.appendChild(tdSex);
 
@@ -923,14 +947,11 @@
       var sel = document.createElement('select');
       sel.className = 'desk-cell-select';
       sel.setAttribute('aria-label', '技' + slot);
-      addOption(sel, '', '—');
-      (ctx.techniques || []).forEach(function(t) {
-        var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
-        if (n) addOption(sel, n, n);
-      });
+      fillTechOptions(sel);
       sel.addEventListener('change', function() { d['tech' + slot] = sel.value; });
       td.appendChild(sel);
       tr.appendChild(td);
+      techSelects.push(sel);
     });
 
     tr.appendChild(cell('—', 'num col-score'));

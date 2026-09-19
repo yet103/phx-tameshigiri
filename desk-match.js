@@ -312,10 +312,14 @@
       return tr;
     }
 
+    // 技の候補は選手の性別で絞る（Courts.techniqueOptions）。コピー（一巡目と同じ技を
+    // コピー / 全員コピー）は名前をそのまま入れるだけで、ここでは絞らない
+    // （一巡目と同じ名前が正。onCopyRow / 全員コピーの節を参照）。
+    var techOptions = Courts.techniqueOptions(techniques, !!p.isFemale);
     var selects = [];
     [1, 2, 3].forEach(function(slot) {
       var td = document.createElement('td');
-      var sel = buildTechSelect(p['tech' + slot] || '', techniques);
+      var sel = buildTechSelect(p['tech' + slot] || '', techOptions);
       sel.addEventListener('change', function() { onTechChange(p, selects, ctx, tr); });
       td.appendChild(sel);
       tr.appendChild(td);
@@ -375,8 +379,24 @@
     return [selects[0].value, selects[1].value, selects[2].value];
   }
 
+  // セレクトに value と同じ <option> が無ければ足す。技リストにありません（buildTechSelect の
+  // 初期値と同じ作法）。一巡目と同じ技をコピー」で入る値は性別で絞った候補に無いことがある
+  // （接尾辞付きの旧データなど）。setValues はコピーと保存失敗時の巻き戻しの両方で使うので、
+  // ここで足しておかないと値は正しく保存されているのに表示だけ空に見えてしまう。
+  function ensureOption(sel, value) {
+    if (!value) return;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === value) return;
+    }
+    var o = document.createElement('option');
+    o.value = value;
+    o.textContent = value + '（リストにありません）';
+    sel.appendChild(o);
+  }
+
   function setValues(selects, arr) {
     selects.forEach(function(s, i) {
+      ensureOption(s, arr[i]);
       s.value = arr[i] || '';
       markEmpty(s);
     });
