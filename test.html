@@ -1956,6 +1956,34 @@
     assert('canDecode 技数1で5文字 → true', Scoring.canDecode('10101', 1), true);
     assert('canDecode 手で編集された結果列(0/1/空白以外を含む) → false', Scoring.canDecode('1x   1    1    ', 3), false);
     assert('canDecode 空白のみのresult(技数3→15文字) → true', Scoring.canDecode('               ', 3), true);
+    assert('canDecode "2"（△）を受ける', Scoring.canDecode('2    2    2    ', 3), true);
+
+    // △（減点成功）: 設計書 2026-09-20-rules-alignment-design.md
+    assert('calcStrikeScore 胸尽くし(男) 初太刀 △ → reducedFirst(4)',
+      Scoring.calcStrikeScore('胸尽くし(男)', 0, '△', false), 4);
+    assert('calcStrikeScore 胸尽くし(女) 初太刀 △ → reducedFirst(4)',
+      Scoring.calcStrikeScore('胸尽くし(女)', 0, '△', true), 4);
+    assert('calcStrikeScore reducedFirst の無い技の初太刀 △ → 0',
+      Scoring.calcStrikeScore('四方', 0, '△', false), 0);
+    assert('calcStrikeScore 胸尽くし(男) 二ノ太刀 △ → 0（初太刀だけ）',
+      Scoring.calcStrikeScore('胸尽くし(男)', 1, '△', false), 0);
+
+    // encodeResult / decodeResult の '2' ⇔ '△' 往復
+    var drRows = [{ techName: '胸尽くし(男)', values: ['△','○','',''], adjust: 0 }];
+    assert('encodeResult △ を "2" にする', Scoring.encodeResult(drRows), '21   ');
+    assert('decodeResult "2" を △ にする', Scoring.decodeResult('21   ', 1, [0])[0].values, ['△','○','','']);
+
+    // failedAt: △ は失敗ではない（×だけを見る）
+    assert('failedAt △ は失敗として数えない', Scoring.failedAt(['△','○']), -1);
+    assert('effectiveValues △ の後ろの×はそのまま無効化される',
+      Scoring.effectiveValues(['△','×','○','']), ['△','×','','']);
+
+    // canReduce: 初太刀かつ reducedFirst が数値のセルだけ true
+    assert('canReduce 胸尽くし(男) 初太刀 → true', Scoring.canReduce('胸尽くし(男)', 0, false), true);
+    assert('canReduce 胸尽くし(女) 初太刀 → true', Scoring.canReduce('胸尽くし(女)', 0, true), true);
+    assert('canReduce 胸尽くし(男) 二ノ太刀 → false（初太刀だけ）', Scoring.canReduce('胸尽くし(男)', 1, false), false);
+    assert('canReduce reducedFirst の無い技 → false', Scoring.canReduce('四方', 0, false), false);
+    assert('canReduce 存在しない技 → false', Scoring.canReduce('存在しない技', 0, false), false);
 
     var h2st = document.createElement('h2');
     h2st.textContent = 'storage.js';

@@ -29,14 +29,26 @@ var Scoring = (function() {
 
   // 1太刀の得点を計算
   // strikeIndex: 0=初太刀, 1=二, 2=三, 3=四
-  // value: '○' | '×' | ''
+  // value: '○' | '×' | '△' | ''
   // 戻り値: number（nullセルは0、空白は0、×は0、○は定義点）
+  // △（減点成功。初太刀だけ）は tech.reducedFirst が数値ならその点、無ければ0
+  // （設計書 2026-09-20-rules-alignment-design.md。胸尽くしの初太刀が切先を鞘から
+  // 抜いた状態で成功したときの減点）。
   function calcStrikeScore(techName, strikeIndex, value, isFemale) {
     var tech = findTechnique(techName, isFemale);
     if (!tech) return 0;
     if (tech.strikes[strikeIndex] === null) return 0;
     if (value === '○') return tech.strikes[strikeIndex];
+    if (value === '△' && strikeIndex === 0 && typeof tech.reducedFirst === 'number') return tech.reducedFirst;
     return 0;
+  }
+
+  // △ を出せるセルか（初太刀かつ reducedFirst が数値の技）。採点画面のタップ順序
+  // （未→○→△→×→未）をこのセルだけ変えるのに使う。
+  function canReduce(techName, strikeIndex, isFemale) {
+    if (strikeIndex !== 0) return false;
+    var tech = findTechnique(techName, isFemale);
+    return !!(tech && typeof tech.reducedFirst === 'number');
   }
 
   // 最初の '×' の添字。無ければ -1
@@ -103,7 +115,7 @@ var Scoring = (function() {
   }
 
   // resultエンコード文字列から行データに変換
-  // result は技ごとに5文字: 初〜四ノ太刀（1=○, 0=×, 空白=未）＋5文字目。
+  // result は技ごとに5文字: 初〜四ノ太刀（1=○, 0=×, 2=△(減点成功), 空白=未）＋5文字目。
   // 5文字目は旧「技術点」（1=○ → 補正点3）で、adjust 配列を持たない旧データの読み替えにだけ使う。
   // adjust が配列なら、その値を各行の補正点にし、5文字目は見ない。
   // 注意: 技名(techName)はエンコード文字列に含まれない。呼び出し元が player.tech1〜tech3 から別途供給すること。
@@ -119,7 +131,7 @@ var Scoring = (function() {
       var values = [];
       for (var s = 0; s < 4; s++) {
         var ch = result.charAt(offset + s);
-        values.push(ch === '1' ? '○' : ch === '0' ? '×' : '');
+        values.push(ch === '1' ? '○' : ch === '0' ? '×' : ch === '2' ? '△' : '');
       }
       var tpCh = result.charAt(offset + 4);
       rows.push({ values: values, adjust: hasAdjust ? adj[i] : (tpCh === '1' ? 3 : 0) });
@@ -131,17 +143,17 @@ var Scoring = (function() {
   // result は技ごとに5文字。技の数が変わると復元できない。
   // 手で編集された結果列が混ざっても復元しない
   function canDecode(result, techCount) {
-    return !!result && result.length === techCount * 5 && /^[01 ]*$/.test(result);
+    return !!result && result.length === techCount * 5 && /^[012 ]*$/.test(result);
   }
 
   // 行データからresultエンコード文字列を生成。5文字目は常に空白（補正点は adjust に持つ）。
-  // 最初の×より後ろ（無効化された太刀）は空白で書く。
+  // 最初の×より後ろ（無効化された太刀）は空白で書く。△（減点成功）は '2'。
   function encodeResult(rows) {
     var str = '';
     for (var i = 0; i < rows.length; i++) {
       var values = effectiveValues(rows[i].values);
       for (var s = 0; s < 4; s++) {
-        str += values[s] === '○' ? '1' : values[s] === '×' ? '0' : ' ';
+        str += values[s] === '○' ? '1' : values[s] === '×' ? '0' : values[s] === '△' ? '2' : ' ';
       }
       str += ' ';
     }
@@ -152,6 +164,7 @@ var Scoring = (function() {
     setTechniques: setTechniques,
     findTechnique: findTechnique,
     calcStrikeScore: calcStrikeScore,
+    canReduce: canReduce,
     calcRowScore: calcRowScore,
     calcTotalScore: calcTotalScore,
     failedAt: failedAt,
