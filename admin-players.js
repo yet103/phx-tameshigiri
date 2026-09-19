@@ -391,7 +391,9 @@
           return;
         }
         TechPicker.open({
-          techniques: techCache,
+          // 開くたびに今のフォームの性別で絞る（性別を切り替えた直後は、次に開く
+          // ピッカーから反映されればよい。既に開いているシートは作り直さない）。
+          techniques: Courts.techniqueOptions(techCache, common.isFemale()),
           initial: techState,
           slot: index,
           onChange: function(next) {

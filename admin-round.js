@@ -287,7 +287,7 @@ var AdminRound = (function() {
     // 最新の選択は onChange で控える
     var latest = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
     TechPicker.open({
-      techniques: techniques,
+      techniques: Courts.techniqueOptions(techniques, !!p.isFemale),
       initial: latest,
       slot: slot,
       onChange: function(state) {
