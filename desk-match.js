@@ -398,7 +398,8 @@
         var display = resolved ? Courts.stripGenderSuffix(resolved.name) : '';
         bad = !!display && dup.indexOf(display) !== -1;
       }
-      s.className = (s.value ? '' : 'empty') + (bad ? ' desk-cell-bad' : '');
+      s.classList.toggle('empty', !s.value);
+      s.classList.toggle('desk-cell-bad', bad);
       s.title = bad ? '同じ形は 1 回までです' : '';
     });
   }
