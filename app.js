@@ -35,6 +35,7 @@ var App = (function() {
   var courtSelect      = document.getElementById('courtSelect');
   var totalAdjustInput = document.getElementById('totalAdjustInput');
   var noteInput        = document.getElementById('noteInput');
+  var btnNotePreset    = document.getElementById('btnNotePreset');
   var btnConfirm       = document.getElementById('btnConfirm');
   var adjustBar        = document.querySelector('.adjust-bar');
   var scoreTable       = document.getElementById('scoreTable');
@@ -184,6 +185,7 @@ var App = (function() {
     btnConfirm.addEventListener('click', onConfirm);
     totalAdjustInput.addEventListener('change', onTotalAdjustChange);
     noteInput.addEventListener('change', onNoteChange);
+    btnNotePreset.addEventListener('click', openNotePresetSheet);
 
     // 大会管理イベント
     document.getElementById('eventSelect').addEventListener('change', function() {
@@ -325,6 +327,8 @@ var App = (function() {
     if (locked) {
       totalAdjustInput.disabled = true;
       noteInput.disabled = true;
+      btnNotePreset.disabled = true;
+      closeNotePresetSheet();   // 採点できなくなったら、開いていた文例シートも片付ける
     }
     var inputs = scoreTableBody.querySelectorAll('.adjust-input');
     for (var i = 0; i < inputs.length; i++) inputs[i].disabled = locked;
@@ -633,12 +637,14 @@ var App = (function() {
       setTotalDisplay(player.score || 0);
       totalAdjustInput.disabled = true;
       noteInput.disabled = true;
+      btnNotePreset.disabled = true;
       applyConfirmedStyle(!!player.confirmed);
       applyScoringLock();
       return;
     }
     totalAdjustInput.disabled = false;
     noteInput.disabled = false;
+    btnNotePreset.disabled = false;
     // 何も記録されていない選手（得点0で○×も無い）は空のグリッドが正しい状態。
     // result が空白だけでも同じ
     gridRestorable = Scoring.canDecode(player.result, techNames.length) || !Courts.isScored(player);
@@ -905,6 +911,8 @@ var App = (function() {
     noteInput.value = '';
     totalAdjustInput.disabled = true;
     noteInput.disabled = true;
+    btnNotePreset.disabled = true;
+    closeNotePresetSheet();   // 選手がいなくなったら、開いていた文例シートも片付ける
     applyConfirmedStyle(false);
   }
 
@@ -978,6 +986,74 @@ var App = (function() {
     if (!p) return;
     p.note = noteInput.value.trim().slice(0, 200);
     Outbox.enqueue({ eventId: currentEvent.id, playerId: p.id, note: p.note });
+  }
+
+  // 備考の文例シート（下部固定パネル）。開いている間は全画面を覆い、
+  // 外側タップと「閉じる」で閉じる（techpicker.js のシートと同じ見た目・作法）。
+  var notePresetOverlay = null;
+
+  function closeNotePresetSheet() {
+    if (notePresetOverlay && notePresetOverlay.parentNode) {
+      notePresetOverlay.parentNode.removeChild(notePresetOverlay);
+    }
+    notePresetOverlay = null;
+  }
+
+  function openNotePresetSheet() {
+    if (!scoringOpen()) return;   // ボタンは無効化してあるが、念のため
+    closeNotePresetSheet();
+
+    var overlay = document.createElement('div');
+    overlay.className = 'note-preset-overlay';
+    var sheet = document.createElement('div');
+    sheet.className = 'note-preset-sheet';
+
+    var head = document.createElement('div');
+    head.className = 'note-preset-head';
+    var title = document.createElement('span');
+    title.textContent = '文例を選ぶ';
+    var btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'note-preset-close';
+    btnClose.textContent = '閉じる';
+    head.appendChild(title);
+    head.appendChild(btnClose);
+
+    var list = document.createElement('div');
+    list.className = 'note-preset-list';
+    NOTE_PRESETS.forEach(function(preset) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'note-preset-item';
+      item.textContent = preset;
+      item.addEventListener('click', function() {
+        pickNotePreset(preset);
+        closeNotePresetSheet();
+      });
+      list.appendChild(item);
+    });
+
+    sheet.appendChild(head);
+    sheet.appendChild(list);
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+    notePresetOverlay = overlay;
+
+    btnClose.addEventListener('click', closeNotePresetSheet);
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeNotePresetSheet();   // シートの外側をタップしたら閉じる
+    });
+  }
+
+  // 文例を備考の末尾に追記し、onNoteChange と同じ経路（Outbox.enqueue）で保存する。
+  // 200文字を超える分は Scoring.appendNote が切るので、ここでは超えていたかどうかだけ判定して alert する。
+  function pickNotePreset(preset) {
+    var current = noteInput.value || '';
+    var alreadyIncluded = current.indexOf(preset) !== -1;
+    var wouldExceed = !alreadyIncluded && (current ? current.length + 1 + preset.length : preset.length) > 200;
+    noteInput.value = Scoring.appendNote(current, preset);
+    onNoteChange();
+    if (wouldExceed) alert('備考は 200 文字までです');
   }
 
   function onAdjustChange(e) {

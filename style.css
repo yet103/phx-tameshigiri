@@ -227,6 +227,41 @@ input[type="file"] { display: none; }
   flex: 1; height: 44px; padding: 0 8px; font-size: 16px;
   background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
 }
+/* 「文例」ボタン。備考欄の右に置く（768px でも .adjust-bar 内で折り返さない幅） */
+.btn-note-preset {
+  min-height: 44px; min-width: 56px; padding: 0 14px; flex-shrink: 0;
+  background: var(--bg-header); color: var(--text); border: 1px solid var(--border);
+}
+.btn-note-preset:disabled { opacity: 0.5; cursor: default; }
+
+/* ===== 備考の文例シート（下部固定パネル） =====
+   techpicker.js のシート（admin.css の .tp-*）と同じ見た目・作法。
+   採点画面（style.css）は admin.css を読まないので別クラス名で持つ。 */
+.note-preset-overlay {
+  position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: flex-end;
+}
+.note-preset-sheet {
+  /* vh はモバイルのURLバー分だけ大きく解決されるので % を使う */
+  width: 100%; max-height: 80%; display: flex; flex-direction: column;
+  background: var(--bg); border-radius: 14px 14px 0 0; border-top: 2px solid var(--accent);
+}
+.note-preset-head {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid var(--border); font-weight: bold;
+}
+.note-preset-head span { flex: 1; }
+.note-preset-close { min-width: 64px; min-height: 44px; background: var(--bg-header); color: var(--text); }
+.note-preset-list {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: 4px 0;
+}
+.note-preset-item {
+  display: block; width: 100%; min-height: 44px; padding: 8px 14px; text-align: left;
+  border-radius: 0; background: transparent; color: var(--text);
+  border-bottom: 1px solid var(--border); font-size: 14px;
+}
+.note-preset-item:hover { background: var(--bg-header); }
 
 /* ===== 確定 ===== */
 .btn-confirm { background: var(--btn-neutral); color: #fff; }
@@ -491,6 +526,9 @@ body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
 .player-list-toggle { background: var(--band-bg); color: var(--gold-light); }
 .player-list-section { border-top-color: var(--gold); }
 .ranking-section h3 { font-family: var(--mincho); }
+.note-preset-sheet { border-top-color: var(--gold); }
+.note-preset-head { background: var(--band-bg); color: var(--band-text); border-color: var(--gold); }
+.note-preset-close { background: var(--band-bg-2); color: var(--band-text); border: 1px solid var(--gold-deep); }
 
 /* ===== スマホ幅の採点表 =====
    一般規則（.score-table-wrap / td.tech-name）より後ろに置かないと同じ詳細度で負けるため、末尾に置く。 */
