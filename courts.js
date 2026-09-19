@@ -421,10 +421,18 @@ var Courts = (function() {
     rank: '級位・段位が未入力',
     rental: 'レンタルなのに抜刀してからの形以外の技を選んでいる'
   };
+  // alert に全員の名前を並べると長くなりすぎるので、先頭 BLOCKER_NAME_LIMIT 名までにして
+  // 残りは件数だけ添える（レビュー修正）。
+  var BLOCKER_NAME_LIMIT = 10;
   function blockerMessage(blockers) {
     return (blockers || []).map(function(b) {
-      var names = (b.players || []).map(function(p) { return (p && p.name) || ''; }).join('、');
-      return (BLOCKER_LABELS[b.kind] || b.kind) + ': ' + (b.players || []).length + ' 名（' + names + '）';
+      var all = b.players || [];
+      var shown = all.slice(0, BLOCKER_NAME_LIMIT);
+      var names = shown.map(function(p) { return (p && p.name) || ''; }).join('、');
+      if (all.length > BLOCKER_NAME_LIMIT) {
+        names += '…ほか ' + (all.length - BLOCKER_NAME_LIMIT) + ' 名';
+      }
+      return (BLOCKER_LABELS[b.kind] || b.kind) + ': ' + all.length + ' 名（' + names + '）';
     }).join('\n');
   }
 

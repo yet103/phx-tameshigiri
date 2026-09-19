@@ -2519,6 +2519,15 @@
       ]),
       'ゼッケン番号が未入力: 1 名（山田 太郎）\nレンタルなのに抜刀してからの形以外の技を選んでいる: 1 名（鈴木 花子）');
     assert('blockerMessage: blockers が無くても落ちない', Courts.blockerMessage(null), '');
+    // レビュー修正: 名前は先頭10名までにして「…ほか n 名」を付ける
+    var bm11Players = [];
+    for (var bmi = 1; bmi <= 11; bmi++) bm11Players.push({ name: '選手' + bmi });
+    assert('blockerMessage: 11名は先頭10名＋「…ほか1名」',
+      Courts.blockerMessage([{ kind: 'bib', players: bm11Players }]),
+      'ゼッケン番号が未入力: 11 名（選手1、選手2、選手3、選手4、選手5、選手6、選手7、選手8、選手9、選手10…ほか 1 名）');
+    var bm10Players = bm11Players.slice(0, 10);
+    assert('blockerMessage: 10名ちょうどは「…ほか」を付けない',
+      Courts.blockerMessage([{ kind: 'bib', players: bm10Players }]).indexOf('ほか'), -1);
 
     // bibDroppedMessage: CSV/バンドル取り込みの bibDropped から画面の文言を作る
     assert('bibDroppedMessage: 両方0なら空文字', Courts.bibDroppedMessage({ duplicate: 0, outOfRange: 0 }), '');
