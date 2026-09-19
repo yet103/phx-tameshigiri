@@ -219,9 +219,13 @@
       <li><span class="ui">コート</span> を選ぶ（<span class="ui">A</span> <span class="ui">B</span>、<span class="ui">＋</span> で増やせます）。</li>
       <li><span class="ui">性別</span> を選ぶ（<span class="ui">男子</span> <span class="ui">女子</span>）。</li>
       <li>新人なら <span class="ui">新人</span> にチェックを入れる。</li>
+      <li><span class="ui">ゼッケン番号</span> を入れる（1〜9999 の整数。空でも登録できます）。<span class="term">同じ大会の中で同じ番号は使えません。</span>すでに使われている番号を入れると <span class="msg">ゼッケン番号 12 は「山田 太郎」が使っています</span> と出ます。</li>
+      <li><span class="ui">級位・段位</span> を入れる（<span class="ui">無級</span> <span class="ui">十級</span>〜<span class="ui">一級</span> <span class="ui">初段</span>〜<span class="ui">十段</span> の候補から選べます。<span class="ui">錬士六段</span> のように自由にも書けます。20 文字まで）。</li>
+      <li>真剣を借りる選手は <span class="ui">真剣レンタル</span> にチェックを入れる。チェックすると、技の候補が<span class="term">抜刀後の形</span>だけになります（下の「技の選び方」）。</li>
       <li>技を <span class="ui">①</span> <span class="ui">②</span> <span class="ui">③</span> の枠ごとにタップして選ぶ。</li>
       <li><span class="ui">保存して次を追加</span> で続けて登録、<span class="ui">保存して閉じる</span> で終わります。</li>
     </ul>
+    <div class="note"><span class="term">ゼッケン番号と級位・段位は、空のままでも登録できます。</span>PC 用の運営画面の <span class="ui">基本情報</span> で <span class="ui">ゼッケン番号を必須にする</span> / <span class="ui">級位・段位を必須にする</span> にチェックを入れると、一巡目にその項目が空の選手がいる間だけ <span class="ui">試合開始 ▶</span> で止まります（§2 の「当日の流れ」）。登録の途中で止められることはありません。</div>
 
     <figure class="shot-mobile">
       <img src="help/img/admin_player_form.png" loading="lazy" alt="「選手を追加」のシート。名前、コート、性別、新人、技①②③の枠、保存ボタン。">
@@ -268,7 +272,8 @@
     <div class="note">当日はできるだけ追記を選んでください。クリアして入れ直すと選手の ID が変わるため、その前に採点していたコートの端末で「保存できなかった採点が n 件あります」が出ることがあります（§5 を見てください）。</div>
 
     <h3>（d）PC の表に打ち込む・Excel から貼り付ける</h3>
-    <p>PC 用の運営画面（<code>desk.html</code>）の <span class="ui">選手登録</span> の区画は、1人1行の<span class="term">編集できる表</span>です。名前・コート・性別・新人・技1〜3のセルをその場で直せます。直したセルから離れる（Tab や Enter、ほかの場所をクリック）と、その項目だけが保存されます。</p>
+    <p>PC 用の運営画面（<code>desk.html</code>）の <span class="ui">選手登録</span> の区画は、1人1行の<span class="term">編集できる表</span>です。名前・ゼッケン・級位段位・レンタル・コート・性別・新人・技1〜3のセルをその場で直せます。直したセルから離れる（Tab や Enter、ほかの場所をクリック）と、その項目だけが保存されます。</p>
+    <p>表の上には <span class="msg">ゼッケン未入力 3　級位段位未入力 1　レンタル不可の形 2</span> のように、<span class="term">このままでは試合を開始できない件数</span>が赤く出ます。該当するセルは赤い枠になります（必須なのに空は点線、レンタルの選手が選べない形は実線）。0 件になると消えます。</p>
     <ul>
       <li><span class="ui">＋ 行を追加</span> で末尾に空の行が増えます。名前を入れて確定すると登録されます。コート・性別・新人は1つ上の行と同じものが入ります。</li>
       <li>見出しの <span class="ui">▼</span> で列ごとに絞り込めます（コート・性別・新人・巡・技が未入力の行だけ）。名前は <span class="ui">▼</span> の中の検索欄で部分一致します。</li>
@@ -278,7 +283,7 @@
     </ul>
     <p>Excel の名簿からまとめて入れるときは <span class="ui">📋 貼り付けて追加</span> です。</p>
     <ol>
-      <li>Excel で <span class="term">名前・コート・性別・新人・技1・技2・技3</span> の 7 列を、この順に並べて選び、コピーします。</li>
+      <li>Excel で <span class="term">名前・コート・性別・新人・技1・技2・技3・ゼッケン・級位段位・レンタル</span> の 10 列を、この順に並べて選び、コピーします。右側の列は無くてもかまいません（7 列までのこれまでの名簿もそのまま読めます）。</li>
       <li><span class="ui">📋 貼り付けて追加</span> を押し、開いた欄に貼り付けます。</li>
       <li>読み取った内容が一覧で出ます。1行目が「名前」で始まっていれば見出しとして飛ばします。</li>
       <li>技リストに無い技名は<span class="term">赤く</span>示されます。その行は送られないので、技名を直してから貼り直してください。</li>
@@ -287,7 +292,9 @@
     <p><span class="term">名前だけ</span>の行でも登録できます。足りない列は 性別＝男子・新人＝なし・技＝空 として読みます。コートの列が空の行には、貼り付け欄の上の <span class="ui">コートが空の行に使うコート</span> で選んだコートが入ります（下見の一覧では、補ったコートが<span class="term">薄い字</span>で出ます）。コートを選んでいないと、コートの列が空の行は赤くなって登録できません。男女で配点が分かれる技は <span class="ui">破図味</span> のように接尾辞なしで書けます（行の性別で解決します）。</p>
     <ul>
       <li>タブ区切り（Excel からのコピー）とカンマ区切りのどちらでも読めます。</li>
-      <li>性別は <span class="ui">女子</span> <span class="ui">女</span> <span class="ui">F</span> で女子、ほかは男子です。新人は <span class="ui">新人</span> <span class="ui">○</span> <span class="ui">1</span> <span class="ui">true</span> で新人です。</li>
+      <li>性別は <span class="ui">女子</span> <span class="ui">女</span> <span class="ui">F</span> で女子、ほかは男子です。新人は <span class="ui">新人</span> <span class="ui">○</span> <span class="ui">1</span> <span class="ui">true</span> で新人です。レンタルは <span class="ui">レンタル</span> <span class="ui">あり</span> <span class="ui">○</span> <span class="ui">1</span> <span class="ui">true</span> でレンタルです。</li>
+      <li>ゼッケンは数字だけです（数字以外は <span class="msg">ゼッケン番号は数字で</span> で断られます）。<span class="term">貼り付けた行どうしの重複も、すでに登録されている選手との重複も断ります。</span></li>
+      <li>レンタルの行に<span class="term">抜刀後でない形</span>が書いてあると、その行は赤くなって登録できません。</li>
       <li>順番はサーバーが自動で採番します。</li>
       <li>1行でも不正があると、1人も登録されません（半分だけ入った状態を作りません）。</li>
     </ul>
@@ -303,6 +310,7 @@
     <p>技は一巡目・二巡目とも3つ入れるのが基本です。事情があれば2つでも採点はできます。</p>
     <p>ここに出る技と配点は<span class="term">その大会のもの</span>です。直すときは、運営画面の右上 <span class="ui">⋯</span> → <span class="ui">🗒 技術リスト編集</span>（選択中の大会のものが開きます）、または採点画面の上のリンク <span class="ui">技術リスト編集</span> から開きます。</p>
     <div class="note"><span class="term">男女で配点が違う技があります。</span><span class="ui">胸尽くし</span>・<span class="ui">水月</span>・<span class="ui">破図味</span> は技リストでは <span class="ui">(男)</span> <span class="ui">(女)</span> の2つの行に分かれていますが、この画面には選手の性別に合う方だけが接尾辞なしで出ます（もう一方は選択肢に出ません）。</div>
+    <div class="note"><span class="term">真剣レンタルの選手は、抜刀してからの形だけを選べます。</span><span class="ui">真剣レンタル</span> にチェックが入っている選手の技の候補は、技リストで <span class="ui">抜刀後</span> にチェックが付いている形だけになります（どの形が「抜刀後」かは §3 の「技の配点を変える」で運営が決めます）。すでに選んである技は候補に残りますが、抜刀後でない形が残っていると <span class="ui">試合開始 ▶</span> で止まります。</div>
 
     <figure class="shot-mobile">
       <img src="help/img/admin_tech_sheet.png" loading="lazy" alt="技を選ぶシート。上に絞り込みの入力欄、見出し行、技名と各太刀の配点の一覧。">
@@ -402,6 +410,16 @@
     <p>当日は運営画面の上に出ている <span class="ui">次へ進む</span> のボタンを、順に押していくだけです。PC 用では左の区画の <span class="ui">試合進行</span> を開いて進めます（スマホ用では <span class="ui">試合進行</span> タブです）。</p>
     <ol>
       <li><span class="ui">試合開始 ▶</span> — <span class="msg">一巡目 n名。技が未入力の選手が m名います。試合を開始しますか？</span> の確認で <span class="ui">OK</span>。<span class="ui">一巡目 進行中</span> になり、採点画面が別のウィンドウで開きます。</li>
+    </ol>
+    <div class="note"><span class="term">試合開始で止まることがあります。</span>次のどれかに当てはまる選手がいると、<span class="msg">ゼッケン番号が未入力: 3 名（山田 太郎、…）</span> のように人数と名前が出て、<span class="term">状態は「準備中」のまま進みません</span>（「このまま進む」はありません）。直すか、必須の設定を外してから押し直してください。
+      <ul>
+        <li><span class="ui">基本情報</span> で <span class="ui">ゼッケン番号を必須にする</span> にしていて、一巡目にゼッケンが空の選手がいる。</li>
+        <li><span class="ui">級位・段位を必須にする</span> にしていて、一巡目に級位・段位が空の選手がいる。</li>
+        <li><span class="ui">真剣レンタル</span> の選手に、<span class="ui">抜刀後</span> でない形が入っている。</li>
+      </ul>
+      PC 用の <span class="ui">選手登録</span> の表では、同じ件数が表の上に赤く出ます（§1 の（d））。
+    </div>
+    <ol start="2">
       <li><span class="term">コート別の状況を見る</span> — <span class="ui">試合進行</span> の区画に、コートごとのカードが並びます（下の節）。</li>
       <li><span class="ui">一巡目を終了 ▶</span> — 全コートの採点が済んだら押します。ここで初めて <span class="ui">二巡目を生成</span> が押せます。</li>
       <li><span class="ui">二巡目を生成</span> — 全コート分の二巡目の行ができます。</li>
@@ -536,6 +554,7 @@
       <li><span class="ui">雛形（新規大会の初期値）</span> を変えても、すでにある大会の配点は変わりません。雛形はこれから作る大会に入る初期値です。</li>
       <li><span class="ui">雛形に戻す</span> を押すと、その大会の配点を雛形の内容で置き換えます。</li>
       <li><span class="ui">別の大会からコピー</span> で、ほかの大会の配点を表に読み込めます。<span class="ui">保存</span> を押すまでは反映されません。</li>
+      <li>いちばん右の <span class="ui">抜刀後</span> は「抜刀してからの形」の印です。<span class="term">真剣レンタルの選手は、ここにチェックが付いている形だけを選べます。</span>どの形を抜刀後とするかは大会ごとに運営が決めます（既定ではどれも付いていません）。</li>
     </ul>
     <div class="note">配点を変えても、すでに採点した選手の得点は変わりません。変えたときは、その技を使った選手を採点画面で開き直して採点し直してください。大会が始まってからの変更は避けてください。採点済みの選手がいる大会を開くと、画面に人数の注意が出ます。</div>
 
