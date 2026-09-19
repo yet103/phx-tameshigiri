@@ -397,6 +397,10 @@ body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
   color: var(--score-color);
 }
 .player-list-table td.confirmed { color: var(--score-confirmed); }
+/* ゼッケンが未設定の行（「—」）。入っている行と見分けられるように薄くする。
+   選択中の行は .player-list-table tr.current-player td のほうが詳細度が高いので、
+   反転した文字色が勝つ（薄いまま読めなくなることはない）。 */
+.player-list-table td.no-bib { color: var(--text-muted); }
 .player-list-table tr:hover td { opacity: 0.75; }
 .player-list-table tr.current-player td {
   background: var(--accent);

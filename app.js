@@ -593,12 +593,15 @@ var App = (function() {
   function updatePlayerLabels(p) {
     // 順番パース: コート-性別-巡目-番号（コート名は Courts.roundOf 等と同じく「-」を含まない前提）
     var m = (p.order || '').match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
+    // ゼッケンは持っている選手だけ。コートで呼び出すときに使うので順番の右に添える
+    // （未設定の選手に「No.」だけが残らないよう、数値のときだけ足す）。
+    var bib = (typeof p.bib === 'number') ? '　No.' + p.bib : '';
     if (m) {
       courtLabel.textContent = m[1] + 'コート';
-      playerOrderLabel.textContent = m[2] + ' ' + m[3] + '巡目 ' + m[4] + '番';
+      playerOrderLabel.textContent = m[2] + ' ' + m[3] + '巡目 ' + m[4] + '番' + bib;
     } else {
       courtLabel.textContent = '';
-      playerOrderLabel.textContent = p.order || '';
+      playerOrderLabel.textContent = (p.order || '') + bib;
     }
     playerNameLabel.textContent = p.name || '';
   }
@@ -1279,8 +1282,11 @@ var App = (function() {
     var tr = document.createElement('tr');
     tr.dataset.index = index;
     if (index === currentIndex) tr.classList.add('current-player');
+    var hasBib = (typeof p.bib === 'number');
     tr.innerHTML =
       '<td>' + esc(p.order || '') + '</td>' +
+      // 未設定は薄い「—」（数値なので esc は要らないが、列を空にはしない）
+      '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
       '<td>' + esc(p.name || '') + '</td>' +
       '<td>' + esc(p.tech1 || '') + '</td>' +
       '<td>' + esc(p.tech2 || '') + '</td>' +
