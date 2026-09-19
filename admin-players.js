@@ -883,7 +883,10 @@
       alert('インポートに失敗しました。' + (result && result.error ? '\n' + result.error : ''));
       return;
     }
-    Admin.toast(result.playerCount + '名を読み込みました');
+    // ゼッケンの重複・範囲外は行を弾かず「未設定」に落として取り込む（サーバー側）ので、
+    // その件数があれば結果の文言に足す（設計書「選手の追加項目」レビュー修正）。
+    var bibMsg = Courts.bibDroppedMessage(result.bibDropped);
+    Admin.toast(result.playerCount + '名を読み込みました' + (bibMsg ? '。' + bibMsg : ''));
     // 履歴記録（server/data/history に残す。CSV の一括登録は履歴を辿れるようにする）
     Api.addHistory(eventId, {
       action: 'csv_import',

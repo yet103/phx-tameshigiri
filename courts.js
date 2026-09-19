@@ -428,6 +428,17 @@ var Courts = (function() {
     }).join('\n');
   }
 
+  // CSV 取り込み・バンドル取り込みの応答 bibDropped: { duplicate, outOfRange } から
+  // 画面に足す文言を作る（設計書「選手の追加項目」レビュー修正）。両方 0 なら空文字
+  // （呼び出し側は空文字なら何も足さない）。admin-players.js / desk-players.js の
+  // CSV 取り込みと desk-events.js / admin-events.js のバンドル取り込みで共用する。
+  function bibDroppedMessage(bibDropped) {
+    var d = (bibDropped && bibDropped.duplicate) || 0;
+    var o = (bibDropped && bibDropped.outOfRange) || 0;
+    if (d <= 0 && o <= 0) return '';
+    return 'ゼッケンが重複していた' + d + ' 件・範囲外' + o + ' 件は未設定にしました';
+  }
+
   // ---- 技の性別による絞り込み・解決（設計書「技の選択肢を性別で絞る」） ----
   // 選手に保存する技名は接尾辞なし。技リストには 胸尽くし(男)/胸尽くし(女) のように
   // 末尾 (男)/(女) で配点が分かれる組がある。採点画面の Scoring.findTechnique と
@@ -670,6 +681,7 @@ var Courts = (function() {
     statusConfirmMessage: statusConfirmMessage,
     startBlockers: startBlockers,
     blockerMessage: blockerMessage,
+    bibDroppedMessage: bibDroppedMessage,
     parsePasteRows: parsePasteRows,
     splitDelimited: splitDelimited,
     stripGenderSuffix: stripGenderSuffix,

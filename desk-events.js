@@ -418,7 +418,10 @@
       alert('取り込みに失敗しました。\n' + (result.error || ''));
       return;
     }
-    Desk.toast('大会を取り込みました（' + (result.playerCount || 0) + '名）');
+    // ゼッケンの重複・範囲外は取り込みを弾かず「未設定」に落とす（サーバー側）ので、
+    // その件数があれば結果の文言に足す（設計書「選手の追加項目」レビュー修正）。
+    var bundleBibMsg = Courts.bibDroppedMessage(result.bibDropped);
+    Desk.toast('大会を取り込みました（' + (result.playerCount || 0) + '名）' + (bundleBibMsg ? '。' + bundleBibMsg : ''));
     Desk.navigate('players', result.id);
   }
 

@@ -922,6 +922,52 @@ function bibConflictMessage(bib, ownerName) {
   return 'ゼッケン番号 ' + bib + ' は「' + (ownerName || '') + '」が使っています';
 }
 
+// CSV取り込み・バンドル取り込みは登録系 API と違って行単位で 400 にはせず、
+// 重複・範囲外の bib を黙って「未設定」に落として取り込みを続ける（多数の選手データを
+// 1件のミスで丸ごと弾かない）。その代わり、落とした件数を bibDropped として応答に含め、
+// 画面側で「n 件は未設定にしました」と伝える。
+// parseOne(raw) は 3 通りを返す: undefined（未入力）/ null（範囲外・不正な値）/ 整数（1〜9999）。
+// existingBibs はすでにその大会にある bib の配列（append 取り込み時。replace・新規作成時は空）。
+// groupKeys は rawValues と同じ長さの配列（省略可）。同じ groupKey を持つ行同士は「同じ選手の
+// 別の巡目」として重複扱いしない（バンドル取り込みで一巡目と二巡目が同じ bib を持つのは
+// findBibConflict と同じく正常な状態のため）。省略時は全行が別グループ扱い（CSV 取り込みは
+// 二巡目の複製を扱わないので、これで従来どおりの単純な重複判定になる）。
+// 戻り値: { bibs: (number|null)[]（rawValues と同じ順・同じ長さ）, duplicate, outOfRange }
+function resolveBibDrops(rawValues, parseOne, existingBibs, groupKeys) {
+  const seen = Object.create(null);   // bib(文字列化) -> groupKey
+  (existingBibs || []).forEach(function(b, idx) { seen[b] = '__existing_' + idx; });
+  let duplicate = 0;
+  let outOfRange = 0;
+  const bibs = rawValues.map(function(raw, i) {
+    const parsed = parseOne(raw);
+    if (parsed === undefined) return null;   // 未入力
+    if (parsed === null) { outOfRange++; return null; }   // 範囲外・不正な値
+    const groupKey = groupKeys ? groupKeys[i] : '__row_' + i;
+    if (Object.prototype.hasOwnProperty.call(seen, parsed) && seen[parsed] !== groupKey) {
+      duplicate++;   // 2件目以降の重複（別の選手が同じ番号を使っている）
+      return null;
+    }
+    seen[parsed] = groupKey;
+    return parsed;
+  });
+  return { bibs: bibs, duplicate: duplicate, outOfRange: outOfRange };
+}
+
+// CSV の1セルから bib を分類する。空欄は「未入力」、数値化できないか範囲外は「範囲外」。
+// 従来の bibFromCsv と同じ緩い読み方（parseInt）を保ちつつ、未入力と不正値を区別する。
+function classifyBibCsv(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (s === '') return undefined;
+  const n = parseInt(s, 10);
+  return (Number.isInteger(n) && n >= 1 && n <= 9999) ? n : null;
+}
+
+// バンドル取り込みの選手1名分の生の bib 値を分類する（JSON の値なので型もさまざま）。
+function classifyBibBundle(v) {
+  if (v === undefined || v === null) return undefined;
+  return (Number.isInteger(v) && v >= 1 && v <= 9999) ? v : null;
+}
+
 // 一括登録の行形式（PC 運営の「貼り付けて追加」）。
 // 行ごとにコート・性別・新人・技が違う。全行を検証してから 1 回だけ書き、
 // 1 行でも不正なら 1 人も登録しない（半分だけ登録された状態を運営に見せない）。
@@ -1352,21 +1398,21 @@ app.post('/api/events/:id/import', (req, res) => {
     const toInt = v => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : 0; };
     const truthy = v => ['○', '1', 'はい', '新人'].indexOf(String(v || '').trim()) !== -1;
     const femaleMark = v => ['女', '女子', '○', 'F', 'f'].indexOf(String(v || '').trim()) !== -1;
-    // CSV のゼッケン列は緩く読む（他の数値列と同じく不正値は「未設定」に丸める。
-    // 厳密な検証は POST /players 等の登録系 API の役目で、CSV 取り込みは既存の
-    // 得点列などと同じく寛容に読む）。
-    const bibFromCsv = v => {
-      const n = parseInt(String(v == null ? '' : v).trim(), 10);
-      return (Number.isInteger(n) && n >= 1 && n <= 9999) ? n : null;
-    };
+    // ゼッケンの重複（2件目以降）・範囲外の値は行ごと 400 にはせず「未設定」に落として
+    // 取り込みを続ける。落とした件数は bibDropped として応答に含める（下の resolveBibDrops）。
+    // append 時は既存選手の bib も重複判定に含める（replace/新規は空）。
+    const existingBibsForImport = mode === 'replace' ? [] :
+      (event.players || []).filter(p => Number.isInteger(p && p.bib)).map(p => p.bib);
 
     let importedPlayers;
+    let bibDropped = { duplicate: 0, outOfRange: 0 };
     if (isSimple) {
       // 簡易7列の後ろに3列（ゼッケン,級位段位,レンタル）が続くことがある。
       const hasExtra = header.length >= 10;
       // 採番の土台: replace なら空、append なら既存の選手
       const base = mode === 'replace' ? [] : (event.players || []);
       importedPlayers = [];
+      const rawBibs = [];
       for (let i = 0; i < dataLines.length; i++) {
         const row = dataLines[i];
         const name = String(row[0] || '').trim();
@@ -1394,20 +1440,21 @@ app.post('/api/events/:id/import', (req, res) => {
           rank: hasExtra ? String(row[8] || '').trim().slice(0, 20) : '',
           rental: hasExtra ? truthy(row[9]) : false
         };
-        if (hasExtra) {
-          const bib = bibFromCsv(row[7]);
-          if (bib !== null) player.bib = bib;
-        }
         importedPlayers.push(player);
+        rawBibs.push(hasExtra ? row[7] : undefined);
       }
+      const bibResult = resolveBibDrops(rawBibs, classifyBibCsv, existingBibsForImport);
+      importedPlayers.forEach((p, i) => { if (bibResult.bibs[i] !== null) p.bib = bibResult.bibs[i]; });
+      bibDropped = { duplicate: bibResult.duplicate, outOfRange: bibResult.outOfRange };
     } else {
       // 拡張15列かどうかは先頭行（ヘッダー）の列数で一度だけ決める（設計書 T5 の表）。
       // 行ごとに判定すると、行によって列数が違う崩れたCSVで挙動が揺れる。
+      // 10〜14列は従来どおり9列として読む（補正点・備考・確定は読まない）。
       // さらにその後ろに3列（ゼッケン,級位段位,レンタル）が続くことがある。
       const isExtended = header.length >= 15;
       const extBase = isExtended ? 15 : 9;
       const hasExtra = header.length >= extBase + 3;
-      importedPlayers = dataLines.map(row => {
+      const rows = dataLines.map(row => {
         // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定][,ゼッケン,級位段位,レンタル]
         const p = {
           id: generateId(),
@@ -1429,24 +1476,26 @@ app.post('/api/events/:id/import', (req, res) => {
         }
         p.rank = hasExtra ? String(row[extBase + 1] || '').trim().slice(0, 20) : '';
         p.rental = hasExtra ? truthy(row[extBase + 2]) : false;
-        if (hasExtra) {
-          const bib = bibFromCsv(row[extBase]);
-          if (bib !== null) p.bib = bib;
-        }
-        return p;
-      }).filter(p => p.name !== ''); // 空行等を除外
+        return { player: p, rawBib: hasExtra ? row[extBase] : undefined };
+      }).filter(r => r.player.name !== ''); // 空行等を除外
+      const bibResult = resolveBibDrops(rows.map(r => r.rawBib), classifyBibCsv, existingBibsForImport);
+      importedPlayers = rows.map((r, i) => {
+        if (bibResult.bibs[i] !== null) r.player.bib = bibResult.bibs[i];
+        return r.player;
+      });
+      bibDropped = { duplicate: bibResult.duplicate, outOfRange: bibResult.outOfRange };
     }
-    
+
     if (mode === 'replace') {
       event.players = importedPlayers;
     } else {
       event.players = (event.players || []).concat(importedPlayers);
     }
-    
+
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
 
-    res.json({ success: true, playerCount: event.players.length });
+    res.json({ success: true, playerCount: event.players.length, bibDropped: bibDropped });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1773,6 +1822,19 @@ app.post('/api/events/import', (req, res) => {
       return newId;
     });
 
+    // ゼッケンの重複（2件目以降）・範囲外の値は取り込み全体を 400 にはせず「未設定」に落とす
+    // （設計書「選手の追加項目」・CSV 取り込みと同じ規則）。一巡目とその二巡目の複製は
+    // sourcePlayerId でつながる「同じ選手」なので、groupKey を揃えて重複扱いしない
+    // （findBibConflict が同じ関係を bib 重複判定から外すのと同じ理由）。
+    const bibGroupKeys = kept.map((p, i) => {
+      if (typeof p.sourcePlayerId === 'string' &&
+          Object.prototype.hasOwnProperty.call(idMap, p.sourcePlayerId)) {
+        return idMap[p.sourcePlayerId];
+      }
+      return assigned[i];
+    });
+    const bibResult = resolveBibDrops(kept.map(p => p.bib), classifyBibBundle, [], bibGroupKeys);
+
     // 許可リストのキーだけを取り込む。それ以外は捨てる。
     const players = kept.map((p, i) => {
       const player = {
@@ -1801,7 +1863,7 @@ app.post('/api/events/import', (req, res) => {
         if (note) player.note = note;
       }
       if (p.confirmed === true) player.confirmed = true;
-      if (Number.isInteger(p.bib) && p.bib >= 1 && p.bib <= 9999) player.bib = p.bib;
+      if (bibResult.bibs[i] !== null) player.bib = bibResult.bibs[i];
       // 元ファイルのどの選手も指していない sourcePlayerId は捨てる
       if (typeof p.sourcePlayerId === 'string' &&
           Object.prototype.hasOwnProperty.call(idMap, p.sourcePlayerId)) {
@@ -1849,7 +1911,12 @@ app.post('/api/events/import', (req, res) => {
     }
     writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
 
-    res.json({ success: true, id: id, playerCount: players.length });
+    res.json({
+      success: true,
+      id: id,
+      playerCount: players.length,
+      bibDropped: { duplicate: bibResult.duplicate, outOfRange: bibResult.outOfRange }
+    });
   } catch (err) {
     console.error('大会の取り込みに失敗:', err);
     res.status(500).json({ error: '大会の取り込みに失敗しました' });

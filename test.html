@@ -411,6 +411,20 @@
     var csvOldImported = (await Api.loadEvent(csvExtEvent.id)).players[0];
     assert('CSV旧形式（列なし）: bib/rank/rental は既定値のまま読める',
       [csvOldImported.bib, csvOldImported.rank, csvOldImported.rental], [undefined, '', false]);
+
+    // レビュー修正: ゼッケンの重複（2件目以降）・範囲外は行を弾かず「未設定」に落とし、
+    // 応答に bibDropped: { duplicate, outOfRange } を返す。
+    var csvBibDropCsv = '名前,コート,性別,技①,技②,技③,新人,ゼッケン,級位段位,レンタル\n' +
+      '重複 一郎,A,男,,,,,5,,\n' +
+      '重複 二郎,A,男,,,,,5,,\n' +
+      '範囲外 三郎,A,男,,,,,10000,,\n' +
+      '正常 四郎,A,男,,,,,6,,';
+    var csvBibDropRes = await Api.importCsv(csvExtEvent.id, csvBibDropCsv, 'replace', true);
+    assert('CSV取り込み: bibDropped に重複・範囲外の件数を返す',
+      csvBibDropRes.bibDropped, { duplicate: 1, outOfRange: 1 });
+    var csvBibDropPlayers = (await Api.loadEvent(csvExtEvent.id)).players;
+    assert('CSV取り込み: 重複・範囲外のゼッケンは未設定に落ちる、先着と正常な値は残る',
+      csvBibDropPlayers.map(function(p) { return p.bib; }), [5, undefined, undefined, 6]);
     await Api.deleteEvent(csvExtEvent.id);
     // ==== ここまで: 選手の追加項目 ====
 
@@ -2487,6 +2501,16 @@
       ]),
       'ゼッケン番号が未入力: 1 名（山田 太郎）\nレンタルなのに抜刀してからの形以外の技を選んでいる: 1 名（鈴木 花子）');
     assert('blockerMessage: blockers が無くても落ちない', Courts.blockerMessage(null), '');
+
+    // bibDroppedMessage: CSV/バンドル取り込みの bibDropped から画面の文言を作る
+    assert('bibDroppedMessage: 両方0なら空文字', Courts.bibDroppedMessage({ duplicate: 0, outOfRange: 0 }), '');
+    assert('bibDroppedMessage: 重複・範囲外の件数を文言にする',
+      Courts.bibDroppedMessage({ duplicate: 2, outOfRange: 1 }),
+      'ゼッケンが重複していた2 件・範囲外1 件は未設定にしました');
+    assert('bibDroppedMessage: 片方だけでも文言を出す',
+      Courts.bibDroppedMessage({ duplicate: 0, outOfRange: 3 }),
+      'ゼッケンが重複していた0 件・範囲外3 件は未設定にしました');
+    assert('bibDroppedMessage: bibDropped が無くても落ちない', Courts.bibDroppedMessage(null), '');
 
     // parsePasteRows: 10列（名前,コート,性別,新人,技1,技2,技3,ゼッケン,級位段位,レンタル）
     function pRows10(text, techniques, defaults) { return Courts.parsePasteRows(text, techniques || pTech, defaults).rows; }

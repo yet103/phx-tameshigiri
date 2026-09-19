@@ -309,7 +309,8 @@ var Api = (function() {
   async function importCsv(eventId, csvText, mode, force) {
     // POST /api/events/:eventId/import
     // Body: { csvText, mode: 'replace' | 'append', force }
-    // 戻り値: { success: true, playerCount } |
+    // 戻り値: { success: true, playerCount, bibDropped: { duplicate, outOfRange } }
+    //           （bibDropped は重複・範囲外で「未設定」に落とした件数。設計書「選手の追加項目」） |
     //         { blocked: true, reason, error, scoredCount } (409: reason は 'locked'
     //           （確定済み。この場合 scoredCount は0）か ''（採点済みデータあり）) |
     //         { success: false, error } (その他の4xx: 失敗理由を画面に出すため) | null（通信失敗）
@@ -370,7 +371,8 @@ var Api = (function() {
   async function importBundle(bundle) {
     // POST /api/events/import
     // Body: エクスポートファイルの JSON をパースしたオブジェクト
-    // 戻り値: { success: true, id, playerCount }
+    // 戻り値: { success: true, id, playerCount, bibDropped: { duplicate, outOfRange } }
+    //           （bibDropped は重複・範囲外で「未設定」に落とした件数。設計書「選手の追加項目」）
     //       | { success: false, error }（4xx/5xx: 失敗理由を画面に出すため。JSON でない
     //         エラー応答でも「通信を確認してください」に丸めず理由を出せるようにする）
     //       | null（通信そのものの失敗。fetch が投げた場合のみ）
