@@ -351,6 +351,22 @@
     assert('generateNextRound: 二巡目に bib/rank/rental を複製する',
       [pcRound2Row.bib, pcRound2Row.rank, pcRound2Row.rental], [21, '弐段', true]);
 
+    // findBibConflict のレビュー修正: 二巡目生成後に一巡目の bib を変えても、
+    // 自分自身の複製（sourcePlayerId で紐づく二巡目行）とは衝突しない。
+    var pcPatchBib = await Api.updatePlayerInfo(pcSrc.id, pcBulk.players[0].id, { bib: 99 });
+    assert('PATCH: 二巡目がある一巡目の bib を変えても自分の複製とは 409 にならない', pcPatchBib.ok, true);
+    var pcAfterPatchBib = await Api.loadEvent(pcSrc.id);
+    var pcRound2AfterPatch = pcAfterPatchBib.players.find(function(p) { return p.sourcePlayerId === pcBulk.players[0].id; });
+    assert('PATCH: 一巡目の bib 変更が sourcePlayerId で紐づく二巡目にも写る', pcRound2AfterPatch.bib, 99);
+    // 複製の bib も 99 に書き換わったので、旧番号（21）はもう誰も使っておらず別の選手に付けられる
+    // （複製がまだ 21 を握ったままなら、ここで 409 になるはず）。
+    var pcOtherBibPlayer = await Api.createPlayer(pcSrc.id, { name: '複製 次郎（一時）', court: 'A', bib: 21 });
+    assert('createPlayer: 複製に書き写された旧番号は別の選手に付けられる', pcOtherBibPlayer.bib, 21);
+    // 後続のバンドル・インポート確認に影響しないよう、元の状態（bib:21）に戻す。
+    await Api.deletePlayer(pcSrc.id, pcOtherBibPlayer.id);
+    var pcRevertBib = await Api.updatePlayerInfo(pcSrc.id, pcBulk.players[0].id, { bib: 21 });
+    assert('PATCH: bib を元の21に戻せる', pcRevertBib.ok, true);
+
     var pcBundle = JSON.parse(await Api.exportBundle(pcSrc.id));
     assert('bundle: settings を書き出す', pcBundle.event.settings, { requireBib: true, requireRank: false });
     assert('bundle: 選手の bib/rank/rental を書き出す',

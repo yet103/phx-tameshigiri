@@ -894,10 +894,26 @@ function parseRentalForCreate(v) {
 }
 
 // 同じ大会内での bib 重複を探す。selfId と同じ選手は比較から外す（PATCH の自分自身）。
+// 加えて「同じ選手の別の巡目の行」も比較から外す（二巡目生成が一巡目の bib を複製するため、
+// 素直に比較すると自分自身の複製と衝突してしまう）。selfId が二巡目行ならその sourcePlayerId
+// （元の一巡目行）も、selfId を sourcePlayerId として持つ行（selfId が一巡目行ならその二巡目行）
+// も同じ選手として除外する。
 // 見つかれば bib を使っている選手を返す（無ければ null）。
 function findBibConflict(players, bib, selfId) {
-  const hit = (players || []).find(function(p) {
-    return p && p.id !== selfId && Number.isInteger(p.bib) && p.bib === bib;
+  const list = players || [];
+  const selfPlayer = list.find(function(p) { return p && p.id === selfId; });
+  const originId = selfPlayer && isValidId(selfPlayer.sourcePlayerId) ? selfPlayer.sourcePlayerId : null;
+  const excluded = Object.create(null);
+  if (selfId) excluded[selfId] = true;
+  if (originId) excluded[originId] = true;
+  list.forEach(function(p) {
+    if (p && isValidId(p.sourcePlayerId) &&
+        (p.sourcePlayerId === selfId || (originId && p.sourcePlayerId === originId))) {
+      excluded[p.id] = true;
+    }
+  });
+  const hit = list.find(function(p) {
+    return p && !excluded[p.id] && Number.isInteger(p.bib) && p.bib === bib;
   });
   return hit || null;
 }
@@ -1175,6 +1191,24 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
         return res.status(400).json({ error: RENTAL_INVALID });
       }
       player.rental = body.rental;
+    }
+    // 一巡目の bib / rank / rental が変わったら、sourcePlayerId でその行に紐づく二巡目の行にも
+    // 同じ値を写す。二巡目生成が一巡目の値を複製しているのと同じ選手を指すため、PATCH で
+    // 一巡目だけ更新すると食い違ってしまう（名前は元から複製するだけで PATCH では追随させない。
+    // 名前は採点中に直接編集される可能性があり、二巡目側の呼び出し名を勝手に書き換えたくない）。
+    // player.id が二巡目行の sourcePlayerId でない（＝player が一巡目行でない）場合は
+    // 該当する行が無いので何もしない。
+    const bibRankRentalChanged = body.bib !== undefined || body.rank !== undefined || body.rental !== undefined;
+    if (bibRankRentalChanged) {
+      event.players.forEach(function(p) {
+        if (p && p.sourcePlayerId === player.id) {
+          if (body.bib !== undefined) {
+            if (Number.isInteger(player.bib)) p.bib = player.bib; else delete p.bib;
+          }
+          if (body.rank !== undefined) p.rank = player.rank;
+          if (body.rental !== undefined) p.rental = player.rental;
+        }
+      });
     }
     // 補正点（技ごと・全体）・備考・確定。型が合わないものは黙って無視する（他の項目と同じ）。
     if (Array.isArray(body.adjust) && body.adjust.length === 3 &&
