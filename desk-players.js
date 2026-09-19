@@ -1,4 +1,6 @@
 // 選手の区画（#players/<id>）。編集できる表。
+// ゼッケン・級位段位・真剣レンタルは名前のすぐ右の 3 列（設計書「選手の追加項目」）。
+// レンタルの選手には「抜刀後」の形だけを技の候補に出す（Courts.techniqueOptions の第 3 引数）。
 // 絞り込み・並べ替えはスマホ運営の選手登録タブと同じ純粋関数（Courts.applyFilter / Courts.sortBy）。
 // 絞り込みは見出しの ▼（Excel 風）。スマホの admin-players.js はチップの帯のまま。
 // セルの編集・行の追加・貼り付け・削除はこのあとのタスクで足す。
@@ -26,6 +28,11 @@
     { label: '巡', cls: 'col-round', filter: 'round' },
     { key: 'order', label: 'No.', cls: 'col-no' },
     { key: 'name', label: '名前', cls: 'col-name', filter: 'name' },
+    // 選手の追加項目。名前のすぐ右にまとめる（col-name は sticky なので、
+    // その右に足すぶんには左端の固定に影響しない）。
+    { key: 'bib', label: 'ゼッケン', cls: 'col-bib' },
+    { label: '級位段位', cls: 'col-rank' },
+    { label: 'レンタル', cls: 'col-rental' },
     { label: 'コート', cls: 'col-court', filter: 'court' },
     { label: '性別', cls: 'col-sex', filter: 'sex' },
     { label: '新人', cls: 'col-new', filter: 'newFace' },
@@ -35,6 +42,24 @@
     { key: 'score', label: '得点', cls: 'col-score' },
     { label: '', cls: 'act' }
   ];
+
+  // 級位・段位の候補（datalist）。自由入力も受けるので、この一覧は縛りではない。
+  var RANKS = ['無級', '十級', '九級', '八級', '七級', '六級', '五級', '四級', '三級', '二級', '一級',
+    '初段', '二段', '三段', '四段', '五段', '六段', '七段', '八段', '九段', '十段'];
+  var RANK_LIST_ID = 'deskRankList';
+
+  // 級位段位のセルが list= で参照する datalist。render のたびに作り直す
+  // （render は container.innerHTML = '' で前のを捨てるので id は重複しない）。
+  function buildRankList() {
+    var dl = document.createElement('datalist');
+    dl.id = RANK_LIST_ID;
+    RANKS.forEach(function(r) {
+      var o = document.createElement('option');
+      o.value = r;
+      dl.appendChild(o);
+    });
+    return dl;
+  }
 
   // この画面の絞り込みの初期値。複数選べるのはコートだけなので配列にする
   // （Courts.applyFilter は文字列も配列も受ける。Courts.defaultFilter() の既定は '' のまま）。
@@ -75,6 +100,7 @@
     closePopover();
 
     container.innerHTML = '';
+    container.appendChild(buildRankList());   // 級位段位のセルが参照する候補
 
     var head = document.createElement('div');
     head.className = 'desk-section-head';
@@ -528,21 +554,27 @@
   // 巡・No.（order から導出）と得点は読み取り（得点は採点画面が書く）。
   function buildRow(ctx, p, locked) {
     var key = Courts.orderKey(p);
+    // この行の入力を控えておく（レンタルの切り替えで技を作り直す・赤枠を塗り直す）
+    var refs = { techSelects: [], bibInput: null, rankInput: null };
     var tr = document.createElement('tr');
     tr.appendChild(cell(String(Courts.roundOf(p)), 'num col-round'));
     tr.appendChild(cell(String(key.no || ''), 'num col-no'));
     tr.appendChild(nameCell(ctx, p, locked));
+    tr.appendChild(bibCell(ctx, p, locked, refs));
+    tr.appendChild(rankCell(ctx, p, locked, refs));
+    tr.appendChild(rentalCell(ctx, p, locked, refs));
     tr.appendChild(courtCell(ctx, p, locked));
     tr.appendChild(sexCell(ctx, p, locked));
     tr.appendChild(newFaceCell(ctx, p, locked));
-    tr.appendChild(techCell(ctx, p, locked, 1));
-    tr.appendChild(techCell(ctx, p, locked, 2));
-    tr.appendChild(techCell(ctx, p, locked, 3));
+    tr.appendChild(techCell(ctx, p, locked, 1, refs));
+    tr.appendChild(techCell(ctx, p, locked, 2, refs));
+    tr.appendChild(techCell(ctx, p, locked, 3, refs));
     tr.appendChild(cell(String(p.score || 0), 'num col-score'));
     var tdAct = document.createElement('td');
     tdAct.className = 'act';
     if (!locked) tdAct.appendChild(buildRowMenu(ctx, p));
     tr.appendChild(tdAct);
+    markRow(ctx, refs, p);   // 描いた時点の赤枠
     return tr;
   }
 
@@ -557,6 +589,11 @@
     if (typeof src.score === 'number') dst.score = src.score;
     dst.isFemale = src.isFemale === true;
     dst.isNewFace = src.isNewFace === true;
+    // 追加項目。サーバーは選手の全体を返すので、キーが無い＝未設定として揃える
+    // （null / '' / false。この形は markRow と Courts.startBlockers が前提にしている）。
+    dst.bib = (typeof src.bib === 'number') ? src.bib : null;
+    dst.rank = (typeof src.rank === 'string') ? src.rank : '';
+    dst.rental = src.rental === true;
   }
 
   // セル 1 つの保存。patch は送る 1 項目だけ。
@@ -579,6 +616,10 @@
       revert();
       if (res && res.reason === 'locked') {
         alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+      } else if (res && res.reason === 'bib') {
+        // 「ゼッケン番号 12 は「山田 太郎」が使っています」。誰と重なったかを
+        // 知っているのはサーバーだけなので、文言をそのまま出す（セルは元に戻す）。
+        alert(res.error);
       } else {
         alert('保存できませんでした。\n入力内容と通信を確認してください。');
       }
@@ -640,6 +681,36 @@
       if (ctx.isStale()) return;
       if (readValue() === value) last = value;
     });
+  }
+
+  // --- 赤枠（必須未入力・レンタルが選べない形） ---
+  // 判定は Courts.startBlockers と同じ規則にする（表の上の件数と食い違わせない）。
+  //   ゼッケン・級位段位 … 大会の settings で必須にしていて、一巡目の行が空のとき
+  //   技                 … レンタルの選手の tech1〜3 のうち、抜刀後の形でない技
+  // 二巡目の行の必須は数えない（二巡目は一巡目の行から複製されるため）。
+  function markRow(ctx, refs, p) {
+    var settings = (ctx.event && ctx.event.settings) || {};
+    var firstRound = Courts.roundOf(p) === 1;
+    setMark(refs.bibInput, 'desk-cell-required',
+      settings.requireBib === true && firstRound && typeof p.bib !== 'number');
+    setMark(refs.rankInput, 'desk-cell-required',
+      settings.requireRank === true && firstRound && !String(p.rank || '').trim());
+    refs.techSelects.forEach(function(t) {
+      var name = p['tech' + t.slot] || '';
+      setMark(t.sel, 'desk-cell-bad',
+        p.rental === true && !!name &&
+        !Courts.isDrawnTechnique(ctx.techniques, name, !!p.isFemale));
+    });
+  }
+
+  function setMark(el, cls, on) {
+    if (el) el.classList.toggle(cls, on === true);
+  }
+
+  // セルを 1 つ保存できたあとに呼ぶ。行の赤枠を塗り直す
+  // （Task 7 でここに表の上の件数の数え直しも足す）。
+  function afterRowEdit(ctx, refs, p) {
+    markRow(ctx, refs, p);
   }
 
   function nameCell(ctx, p, locked) {
@@ -784,30 +855,111 @@
     return td;
   }
 
-  // 技の選択肢は「その選手の性別で絞った技リスト」＋空（技を消せるように）。
-  // 性別が変わって保存されると行ごと Desk.reloadEvent() で作り直されるので、
-  // ここは呼ばれるたびに p.isFemale で絞り直せばよい（作り直しは呼び出し側任せ）。
-  // 選手が持っている技がリストに無い場合（接尾辞付きの旧データ・技リストを
-  // 入れ替えた後など）は、黙って空にしないよう、その名前も選択肢に足す。
-  function techCell(ctx, p, locked, slot) {
+  // ゼッケン番号。整数 1〜9999 か空（未設定）。空にすると bib: null を送って戻す。
+  // 同じ大会での重複はサーバーが 409 で断り、saveCell がその文言をそのまま出す。
+  function bibCell(ctx, p, locked, refs) {
+    var td = document.createElement('td');
+    td.className = 'col-bib';
+    var input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = '9999';
+    input.step = '1';
+    input.className = 'desk-cell-input';
+    input.value = (typeof p.bib === 'number') ? String(p.bib) : '';
+    input.setAttribute('aria-label', 'ゼッケン番号');
+    input.disabled = locked;
+    bindText(ctx, p, input, function(v) {
+      if (v === '') return { bib: null };
+      // type="number" でも貼り付けや IME で数字以外が残ることがあるので自分で見る
+      if (!/^[0-9]+$/.test(v)) { alert('ゼッケン番号は 1〜9999 の整数で入力してください。'); return null; }
+      var n = parseInt(v, 10);
+      if (n < 1 || n > 9999) { alert('ゼッケン番号は 1〜9999 の整数で入力してください。'); return null; }
+      return { bib: n };
+    }, function() { afterRowEdit(ctx, refs, p); });
+    td.appendChild(input);
+    refs.bibInput = input;
+    return td;
+  }
+
+  // 級位・段位。候補は datalist で出すが自由入力も受ける（20 文字まで）。
+  function rankCell(ctx, p, locked, refs) {
+    var td = document.createElement('td');
+    td.className = 'col-rank';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'desk-cell-input';
+    input.setAttribute('list', RANK_LIST_ID);
+    input.value = (typeof p.rank === 'string') ? p.rank : '';
+    input.setAttribute('aria-label', '級位・段位');
+    input.disabled = locked;
+    bindText(ctx, p, input, function(v) {
+      if (v.length > 20) { alert('級位・段位は 20 文字までです。'); return null; }
+      return { rank: v };
+    }, function() { afterRowEdit(ctx, refs, p); });
+    td.appendChild(input);
+    refs.rankInput = input;
+    return td;
+  }
+
+  // 真剣レンタル。切り替えると技の候補が変わる（抜刀後の形だけ／全部）ので、
+  // 保存できたらその行の技セレクトを作り直す。性別・コートと違って order は
+  // 変わらないので、表ごとの Desk.reloadEvent() は要らない（行だけで足りる）。
+  function rentalCell(ctx, p, locked, refs) {
+    var td = document.createElement('td');
+    td.className = 'col-rental';
+    var chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.className = 'desk-cell-check';
+    chk.checked = p.rental === true;
+    chk.setAttribute('aria-label', '真剣レンタル');
+    chk.disabled = locked;
+    bindChoice(ctx, p, chk, p.rental === true,
+      function() { return chk.checked; },
+      function(v) { return { rental: v }; },
+      function(v) { chk.checked = v; },
+      function() {
+        refs.techSelects.forEach(function(t) { t.fill(); });
+        afterRowEdit(ctx, refs, p);
+      });
+    td.appendChild(chk);
+    return td;
+  }
+
+  // 技の選択肢は「その選手の性別とレンタルで絞った技リスト」＋空（技を消せるように）。
+  // 性別が変わって保存されると行ごと Desk.reloadEvent() で作り直される。レンタルは
+  // order を変えないので表を作り直さず、rentalCell から fill() を呼んで候補だけ入れ替える。
+  // 選手が持っている技が候補に無い場合（接尾辞付きの旧データ、技リストを入れ替えた後、
+  // レンタルにしたら選べなくなった形）は、黙って空にしないよう、その名前も選択肢に足す。
+  function techCell(ctx, p, locked, slot, refs) {
     var td = document.createElement('td');
     td.className = 'col-tech';
     var sel = document.createElement('select');
     sel.className = 'desk-cell-select';
     sel.setAttribute('aria-label', '技' + slot);
     sel.disabled = locked;
-    var cur = p['tech' + slot] || '';
-    addOption(sel, '', '—');
-    var found = false;
-    Courts.techniqueOptions(ctx.techniques, !!p.isFemale).forEach(function(t) {
-      var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
-      if (!n) return;
-      addOption(sel, n, n);
-      if (n === cur) found = true;
-    });
-    if (cur && !found) addOption(sel, cur, cur + '（リストに無い技）');
-    sel.value = cur;
-    bindChoice(ctx, p, sel, cur,
+
+    function fill() {
+      var cur = p['tech' + slot] || '';
+      sel.innerHTML = '';
+      addOption(sel, '', '—');
+      var found = false;
+      Courts.techniqueOptions(ctx.techniques, !!p.isFemale, p.rental === true).forEach(function(t) {
+        var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
+        if (!n) return;
+        addOption(sel, n, n);
+        if (n === cur) found = true;
+      });
+      if (cur && !found) {
+        // 技リストに無いのか、レンタルで選べなくなっただけなのかを書き分ける
+        addOption(sel, cur, cur +
+          (Courts.resolveTechnique(ctx.techniques, cur, !!p.isFemale) ? '（選べない技）' : '（リストに無い技）'));
+      }
+      sel.value = cur;
+    }
+    fill();
+
+    bindChoice(ctx, p, sel, p['tech' + slot] || '',
       function() { return sel.value; },
       function(v) {
         var patch = {};
@@ -815,8 +967,9 @@
         return patch;
       },
       function(v) { sel.value = v; },
-      null);
+      function() { afterRowEdit(ctx, refs, p); });
     td.appendChild(sel);
+    refs.techSelects.push({ sel: sel, slot: slot, fill: fill });
     return td;
   }
 
@@ -833,7 +986,10 @@
     return {
       court: court,
       isFemale: last ? !!last.isFemale : false,
-      isNewFace: last ? !!last.isNewFace : false
+      isNewFace: last ? !!last.isNewFace : false,
+      // レンタルも直前の行から引き継ぐ（受付でレンタルの列が続くことが多い）。
+      // ゼッケンと級位段位は人ごとに違うので引き継がない。
+      rental: last ? last.rental === true : false
     };
   }
 
@@ -858,6 +1014,7 @@
   function buildDraftRow(ctx) {
     var d = {
       name: '', court: draft.court, isFemale: draft.isFemale, isNewFace: draft.isNewFace,
+      bib: '', rank: '', rental: draft.rental === true,
       tech1: '', tech2: '', tech3: ''
     };
     var tr = document.createElement('tr');
@@ -874,6 +1031,43 @@
     input.setAttribute('aria-label', '追加する選手の名前');
     tdName.appendChild(input);
     tr.appendChild(tdName);
+
+    // ゼッケン（空なら未設定で登録する）
+    var tdBib = document.createElement('td');
+    tdBib.className = 'col-bib';
+    var inBib = document.createElement('input');
+    inBib.type = 'number';
+    inBib.min = '1';
+    inBib.max = '9999';
+    inBib.step = '1';
+    inBib.className = 'desk-cell-input';
+    inBib.setAttribute('aria-label', '追加する選手のゼッケン番号');
+    inBib.addEventListener('change', function() { d.bib = inBib.value.trim(); });
+    tdBib.appendChild(inBib);
+    tr.appendChild(tdBib);
+
+    // 級位段位
+    var tdRank = document.createElement('td');
+    tdRank.className = 'col-rank';
+    var inRank = document.createElement('input');
+    inRank.type = 'text';
+    inRank.className = 'desk-cell-input';
+    inRank.setAttribute('list', RANK_LIST_ID);
+    inRank.setAttribute('aria-label', '追加する選手の級位・段位');
+    inRank.addEventListener('change', function() { d.rank = inRank.value.trim(); });
+    tdRank.appendChild(inRank);
+    tr.appendChild(tdRank);
+
+    // レンタル（技の候補が変わるので、切り替えたら技セレクトを作り直す）
+    var tdRental = document.createElement('td');
+    tdRental.className = 'col-rental';
+    var chkRental = document.createElement('input');
+    chkRental.type = 'checkbox';
+    chkRental.className = 'desk-cell-check';
+    chkRental.checked = d.rental;
+    chkRental.setAttribute('aria-label', '真剣レンタル');
+    tdRental.appendChild(chkRental);
+    tr.appendChild(tdRental);
 
     // コート
     var tdCourt = document.createElement('td');
@@ -900,12 +1094,21 @@
       var cur = sel.value;
       sel.innerHTML = '';
       addOption(sel, '', '—');
-      Courts.techniqueOptions(ctx.techniques, d.isFemale).forEach(function(t) {
+      Courts.techniqueOptions(ctx.techniques, d.isFemale, d.rental).forEach(function(t) {
         var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
         if (n) addOption(sel, n, n);
       });
       sel.value = cur || '';
     }
+
+    chkRental.addEventListener('change', function() {
+      d.rental = chkRental.checked;
+      // 候補が変わる（レンタルなら抜刀後の形だけ）。選べなくなった技は空に戻る。
+      techSelects.forEach(function(sel, i) {
+        fillTechOptions(sel);
+        d['tech' + (i + 1)] = sel.value;
+      });
+    });
 
     // 性別
     var tdSex = document.createElement('td');
@@ -968,7 +1171,7 @@
     var composing = false;
 
     function setDisabled(flag) {
-      [input, selCourt, selSex, chk].forEach(function(el) { el.disabled = flag; });
+      [input, inBib, inRank, chkRental, selCourt, selSex, chk].forEach(function(el) { el.disabled = flag; });
       var sels = tr.querySelectorAll('.col-tech select');
       for (var i = 0; i < sels.length; i++) sels[i].disabled = flag;
     }
@@ -977,11 +1180,26 @@
       if (busy || done) return;
       var name = input.value.trim();
       if (!name) { cancelDraft(); return; }
+      // change を待たずに Enter で確定されることがあるので、送る直前に読み直す
+      d.bib = inBib.value.trim();
+      d.rank = inRank.value.trim();
+      d.rental = chkRental.checked;
+      var bib = null;
+      if (d.bib !== '') {
+        if (!/^[0-9]+$/.test(d.bib) || parseInt(d.bib, 10) < 1 || parseInt(d.bib, 10) > 9999) {
+          alert('ゼッケン番号は 1〜9999 の整数で入力してください。');
+          inBib.focus();
+          return;
+        }
+        bib = parseInt(d.bib, 10);
+      }
+      if (d.rank.length > 20) { alert('級位・段位は 20 文字までです。'); inRank.focus(); return; }
       var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する（貼り付け・CSV と同じ規約）
       busy = true;
       setDisabled(true);
       var result = await Api.createPlayer(eventId, {
         name: name, court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace,
+        bib: bib, rank: d.rank, rental: d.rental,
         tech1: d.tech1, tech2: d.tech2, tech3: d.tech3, round: 1
       });
       if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
@@ -1008,7 +1226,8 @@
       done = true;
       Desk.toast(result.order + ' ' + result.name + ' を追加しました');
       // 続けて打ち込めるよう、同じコート・性別・新人でもう 1 行出す
-      draft = { court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace };
+      // ゼッケンは大会内で重複できないので引き継がない。級位段位も人ごとに違う。
+      draft = { court: d.court, isFemale: d.isFemale, isNewFace: d.isNewFace, rental: d.rental };
       await Desk.reloadEvent();
       // reloadEvent は必ず renderSeq を上げるので、ここでは ctx.isStale() ではなく
       // 「大会が変わったか」で見る（貼り付け・CSV と同じ規約）。
