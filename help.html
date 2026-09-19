@@ -308,6 +308,7 @@
       <li>いちばん上の <span class="ui">（この枠を空にする）</span> を選ぶと、その枠を空にできます。</li>
     </ul>
     <p>技は一巡目・二巡目とも3つ入れるのが基本です。事情があれば2つでも採点はできます。</p>
+    <div class="note"><span class="term">同じ形は1人の3枠に1回まで（同じ巡の中で）。</span>技リストで <span class="ui">回数制限なし</span> にチェックが付いている形（既定では抜刀してからの6形）だけは、同じ巡で何度でも選べます。それ以外の形を2枠以上に選ぶと、その選手の枠が赤くなり<span class="term">試合開始</span>で止まります（一巡目と二巡目では別に数えるので、一巡目と二巡目で同じ形を選ぶのは問題ありません）。</div>
     <p>ここに出る技と配点は<span class="term">その大会のもの</span>です。直すときは、運営画面の右上 <span class="ui">⋯</span> → <span class="ui">🗒 技術リスト編集</span>（選択中の大会のものが開きます）、または採点画面の上のリンク <span class="ui">技術リスト編集</span> から開きます。</p>
     <div class="note"><span class="term">男女で配点が違う技があります。</span><span class="ui">胸尽くし</span>・<span class="ui">水月</span>・<span class="ui">破図味</span> は技リストでは <span class="ui">(男)</span> <span class="ui">(女)</span> の2つの行に分かれていますが、この画面には選手の性別に合う方だけが接尾辞なしで出ます（もう一方は選択肢に出ません）。</div>
     <div class="note"><span class="term">真剣レンタルの選手は、抜刀してからの形だけを選べます。</span><span class="ui">真剣レンタル</span> にチェックが入っている選手の技の候補は、技リストで <span class="ui">抜刀後</span> にチェックが付いている形だけになります（どの形が「抜刀後」かは §3 の「技の配点を変える」で運営が決めます）。すでに選んである技は候補に残りますが、抜刀後でない形が残っていると <span class="ui">試合開始 ▶</span> で止まります。</div>
@@ -452,7 +453,7 @@
         <ul>
           <li>①大会バー — 大会とコートを選びます。右の <span class="ui">● 保存済み</span> がサーバーへの保存の様子です。大会の作成と削除は運営画面にあります（バーの <span class="ui">大会の作成は運営画面で</span> のリンクから開けます）。選択肢にはアーカイブ済みの大会は出ず、採点できる大会が先頭に並びます。</li>
           <li>②選手の帯 — <span class="term">コートのバッジは帯の左端に小さく</span>付きます。中央に「男子 1巡目 1番」のような<span class="term">順番と選手名が並んで</span>出ます。前後の選手へのボタンはこの帯には無く、⑤の操作区画に移りました。</li>
-          <li>③採点表 — 技名をタップするとその行が選ばれます（黒く反転します）。太刀のセルは押すたびに <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と変わります。灰色のセルは、その技で打たない太刀です。<span class="term">行がまるごと灰色で得点の欄も空のときは、その技名が技術リストに無い状態です</span>（配点を引けず0点のままになります）。§5 の「技が見つからない」を見てください。<span class="ui">補正点</span> はその技だけに効き、マイナスも入れられます。<span class="ui">得点</span> はその行の合計で、こちらは自動です。</li>
+          <li>③採点表 — 技名をタップするとその行が選ばれます（黒く反転します）。太刀のセルは押すたびに <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と変わります。灰色のセルは、その技で打たない太刀です。<span class="term">行がまるごと灰色で得点の欄も空のときは、その技名が技術リストに無い状態です</span>（配点を引けず0点のままになります）。§5 の「技が見つからない」を見てください。<span class="ui">補正点</span> はその技だけに効き、マイナスも入れられます。<span class="ui">得点</span> はその行の合計で、こちらは自動です。<span class="term">胸尽くしなど「減点初太刀」が設定された技は、初太刀のセルだけ</span> <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">減点</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と一段増えます。<span class="ui">減点</span>（黄土色。切先が鞘から抜けていたときの成功）は失敗ではないので、後ろの太刀は無効になりません。得点はその技に設定した「減点初太刀」の点になります。</li>
           <li>④<span class="ui">全体補正点</span>・<span class="ui">備考</span> — <span class="ui">全体補正点</span> は選手全体に効きます。<span class="ui">備考</span> は得点に影響しません（200文字まで）。</li>
           <li>⑤操作区画 — <span class="term">1段目がタイマー</span>（<span class="ui">▶ 開始</span> <span class="ui">■ 停止</span> <span class="ui">↺ リセット</span>。5分から0へ向かって数え、選手を切り替えると自動で <span class="ui">05:00</span> に戻ります）、<span class="term">2段目が</span> <span class="ui">◀ 前の選手</span> <span class="ui">形成功</span> <span class="ui">失敗</span> <span class="ui">確定</span> <span class="ui">合計</span> <span class="ui">次の選手 ▶</span> です。<span class="ui">形成功</span> <span class="ui">失敗</span> はどちらも選択中の行にだけ効きます。<span class="ui">形成功</span> は打つ太刀を全部「成功」に、<span class="ui">失敗</span> は最初の「未」のセルだけを「失敗」にします（すでに成功・失敗のセルは変えません）。<span class="ui">確定</span> を押すと <span class="ui">確定済み</span> になり、得点と合計が青くなります。得点に関わる編集をすると、自動で確定が外れます。</li>
           <li>⑥ツールバー — <span class="ui">CSVエクスポート</span> で全選手の内訳を、<span class="ui">HTML保存</span> で成績表を保存できます。<span class="ui">🌙 ダーク</span> で暗い配色に切り替わります。</li>
@@ -554,7 +555,9 @@
       <li><span class="ui">雛形（新規大会の初期値）</span> を変えても、すでにある大会の配点は変わりません。雛形はこれから作る大会に入る初期値です。</li>
       <li><span class="ui">雛形に戻す</span> を押すと、その大会の配点を雛形の内容で置き換えます。</li>
       <li><span class="ui">別の大会からコピー</span> で、ほかの大会の配点を表に読み込めます。<span class="ui">保存</span> を押すまでは反映されません。</li>
-      <li>いちばん右の <span class="ui">抜刀後</span> は「抜刀してからの形」の印です。<span class="term">真剣レンタルの選手は、ここにチェックが付いている形だけを選べます。</span>どの形を抜刀後とするかは大会ごとに運営が決めます（既定ではどれも付いていません）。</li>
+      <li><span class="ui">抜刀後</span> は「抜刀してからの形」の印です。<span class="term">真剣レンタルの選手は、ここにチェックが付いている形だけを選べます。</span>どの形を抜刀後とするかは大会ごとに運営が決めます（既定では <span class="ui">立位袈裟</span> <span class="ui">立位逆袈裟</span> <span class="ui">立位横一</span> <span class="ui">座位袈裟</span> <span class="ui">座位逆袈裟</span> <span class="ui">座位横一</span> の6形に付いています）。</li>
+      <li><span class="ui">回数制限なし</span> にチェックが付いている形は、同じ巡の中で1人が何度選んでも構いません（既定では上の抜刀後の6形だけ）。チェックが無い形は、1人の3枠のうち同じ巡で1回までです（§1 の「技の選び方」）。</li>
+      <li><span class="ui">減点初太刀</span> は、初太刀が減点扱いで成功したときの点です（胸尽くしなど、切先が鞘から抜けていた状態での成功）。空欄なら減点の状態そのものが出ません。数値を入れると、採点画面のその技の初太刀だけ <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">減点</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と一段増えます（既定では <span class="ui">胸尽くし(男)</span> <span class="ui">胸尽くし(女)</span> に4点）。</li>
     </ul>
     <div class="note">配点を変えても、すでに採点した選手の得点は変わりません。変えたときは、その技を使った選手を採点画面で開き直して採点し直してください。大会が始まってからの変更は避けてください。採点済みの選手がいる大会を開くと、画面に人数の注意が出ます。</div>
 
