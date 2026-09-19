@@ -157,6 +157,11 @@
     });
     assert('bulk rows: 技リストに無い名前は行番号つきの 400',
       brGenderBad && brGenderBad.error, '1 行目: 技「無い技」は技リストにありません');
+    // isFemale を省いた行は男子として解決する（resolveTechnique と同じ）。
+    var brGenderOmitted = await Api.createPlayersBulk(brEvent.id, {
+      rows: [{ name: '行 性別寅', court: 'A', tech1: '破図味' }]
+    });
+    assert('bulk rows: isFemale を省いた行は男子として解決して 201', brGenderOmitted && brGenderOmitted.created, 1);
 
     var brNoName = await Api.createPlayersBulk(brEvent.id, {
       rows: [{ name: '行 六郎', court: 'A' }, { name: '  ', court: 'A' }]
@@ -190,7 +195,7 @@
     assert('bulk rows: 501 行は 400', brTooMany && brTooMany.error, '一度に登録できるのは500名までです');
 
     var brAfter = await Api.loadEvent(brEvent.id);
-    assert('bulk rows: 1 行でも不正なら 1 人も登録されない（5名のまま）', brAfter.players.length, 5);
+    assert('bulk rows: 1 行でも不正なら 1 人も登録されない（6名のまま）', brAfter.players.length, 6);
     await Api.deleteEvent(brEvent.id);
 
     // PATCH: 補正点・備考・確定・負の得点
@@ -1962,6 +1967,10 @@
     assert('techniqueOptions: 破図味(女)と破図味が両方あっても、完全一致側の配点を出す',
       Courts.techniqueOptions(dupOrderTech, true).filter(function(t) { return t.name === '破図味'; })[0].strikes,
       [99, 99, 99, 99]);
+    // isFemale 未指定は男子として扱う（Scoring.findTechnique と同じ。findTechnique のコメント
+    // 「isFemale が未指定（undefined）の場合は false（男子）として扱う」を参照）。
+    assert('techniqueOptions: isFemale 未指定は男子と同じ',
+      Courts.techniqueOptions(TECHNIQUES), Courts.techniqueOptions(TECHNIQUES, false));
 
     assert('resolveTechnique: 接尾辞なしの名前が性別で解決する',
       Courts.resolveTechnique(TECHNIQUES, '破図味', true),
@@ -1971,6 +1980,9 @@
       TECHNIQUES.filter(function(t) { return t.name === '破図味(男)'; })[0]);
     assert('resolveTechnique: 無い名前は null', Courts.resolveTechnique(TECHNIQUES, '幻の太刀', true), null);
     assert('resolveTechnique: 技リストが無くても落ちない', Courts.resolveTechnique(null, '破図味', true), null);
+    assert('resolveTechnique: isFemale 未指定は男子と同じ',
+      Courts.resolveTechnique(TECHNIQUES, '破図味'),
+      TECHNIQUES.filter(function(t) { return t.name === '破図味(男)'; })[0]);
 
     assert('stripGenderSuffix: (男) を外す', Courts.stripGenderSuffix('破図味(男)'), '破図味');
     assert('stripGenderSuffix: (女) を外す', Courts.stripGenderSuffix('破図味(女)'), '破図味');
