@@ -1307,6 +1307,16 @@
       if (t && row.badTechs.indexOf(t) !== -1) span.className = 'desk-paste-bad';
       div.appendChild(span);
     });
+    // 追加項目。書いていない列は出さない（短い行の下見が横に伸びないように）。
+    var extras = [];
+    if (typeof row.bib === 'number') extras.push('No.' + row.bib);
+    if (row.rank) extras.push(row.rank);
+    if (row.rental) extras.push('レンタル');
+    if (extras.length > 0) {
+      var ex = document.createElement('span');
+      ex.textContent = '　' + extras.join('　');
+      div.appendChild(ex);
+    }
     if (!row.ok) {
       var why = document.createElement('span');
       why.textContent = '　← ' + row.error;
@@ -1320,12 +1330,16 @@
 
     var note = document.createElement('p');
     note.className = 'desk-note';
-    note.textContent = 'Excel の範囲をそのまま貼り付けられます。列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 の順' +
+    note.textContent = 'Excel の範囲をそのまま貼り付けられます。列は ' +
+      '名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 / ゼッケン / 級位段位 / レンタル の順' +
       '（タブ区切りかカンマ区切り）。1 行目が「名前」で始まるときは見出しとして読み飛ばします。' +
-      '性別は「女子」「女」「F」が女子、それ以外は男子。新人は「新人」「○」「1」「true」。' +
+      '性別は「女子」「女」「F」が女子、それ以外は男子。新人とレンタルは「○」「1」「true」など' +
+      '（レンタルは「レンタル」「あり」も可）。ゼッケンは 1〜9999 の整数で、同じ大会の中で重複できません。' +
       '技はこの大会の技リストにある名前だけです。' +
       '男女で配点が分かれる技は 破図味 のように接尾辞なしで書けます（行の性別で解決します）。' +
-      '名前だけの行でも登録できます（足りない列は 男子・新人なし・技は空。コートは下のセレクトの値）。';
+      'レンタルの行には「抜刀後」の形しか書けません。' +
+      '名前だけの行でも登録できます（足りない列は 男子・新人なし・技は空・ゼッケンと級位段位は未設定・' +
+      'レンタルなし。コートは下のセレクトの値）。';
     body.appendChild(note);
 
     // 「コートが空の行に使うコート」。既存コート（未分類は除く）＋「新しいコート…」。
@@ -1407,6 +1421,10 @@
       var rows = okRows.map(function(r) {
         return {
           name: r.name, court: r.court, isFemale: r.isFemale, isNewFace: r.isNewFace,
+          // 未設定は bib: null / rank: '' / rental: false で送る（サーバーの検証に合わせる）
+          bib: (typeof r.bib === 'number') ? r.bib : null,
+          rank: r.rank || '',
+          rental: r.rental === true,
           tech1: r.techs[0], tech2: r.techs[1], tech3: r.techs[2]
         };
       });
