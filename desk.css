@@ -404,6 +404,26 @@ a { color: var(--accent); }
 .desk-results-board { margin-top: 28px; }
 .desk-results-boardlist { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ===== 基本情報のコート一覧のチップ（desk-setup.js） ===== */
+.desk-court-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.desk-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  min-height: 32px; padding: 0 4px 0 12px;
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 16px; font-size: 13px;
+}
+/* 選手から導かれたコート。外せないので、押せる見た目にしない */
+.desk-chip.fixed { background: var(--bg-secondary); color: var(--text-muted); padding-right: 12px; }
+.desk-chip-x {
+  width: 26px; height: 26px; line-height: 1;
+  background: transparent; color: var(--text-muted);
+  border: none; border-radius: 50%; font-size: 15px; cursor: pointer;
+}
+.desk-chip-x:hover { background: var(--bg-secondary); color: var(--text); }
+.desk-empty-inline { color: var(--text-muted); font-size: 13px; }
+/* 状態バッジの隣にテストのバッジが並ぶ（desk-events.js） */
+.desk-badge + .desk-badge { margin-left: 4px; }
+
 /* ===== 大会トーン（ポスター準拠） =====
    帯（上部バー・大会の見出し・区画ナビ・表の見出し・ダイアログの見出し・トースト）は
    テーマに依らず黒地に金。作業面（表の中身・入力欄・カードの本文）は theme.css の
