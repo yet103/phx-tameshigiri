@@ -209,24 +209,31 @@ var Home = (function() {
     document.getElementById('newBody').innerHTML = '';
   }
 
-  // --- 進行中の大会 ---
+  // --- 作成済みの大会（#list）---
 
   // 読み込みの世代。あとから始めた読み込みが先に返ることがあるので、
   // 古い応答では DOM に触らない（他の画面の renderSeq と同じ作法）。
-  var listSeq = 0;
+  // #list と #new のどちらも一覧を使うので、世代は 1 つで足りる。
+  var eventsSeq = 0;
+  var eventsCache = null;   // 直近に取れた一覧。null は「まだ取れていない・取れなかった」
+  var showTest = false;     // 「テストも表示」のチェック
+  var listExpanded = false; // 「すべて見る」を押したか
+  var LIST_LIMIT = 5;       // 畳む前に出す件数（設計書「作成済みの大会」）
 
   async function loadEvents() {
-    var seq = ++listSeq;
+    var seq = ++eventsSeq;
     var box = document.getElementById('homeEventList');
     box.textContent = '読み込み中…';
     var events = await Api.listEvents();
-    if (seq !== listSeq) return;
+    if (seq !== eventsSeq) return;                      // 新しい読み込みが始まっている
+    if (paneFor(location.hash) !== 'list') return;      // 待っている間に区画を離れた
+    eventsCache = events;
     // Api.listEvents は通信に失敗すると null、大会が 0 件なら [] を返す。区別して出す。
     if (events === null) {
       renderNote(box, '大会の一覧を取得できませんでした。通信を確かめて、画面を読み込み直してください。');
       return;
     }
-    renderEvents(box, sortForHome(events));
+    renderList(box, events);
   }
 
   function renderNote(box, text) {
@@ -237,39 +244,98 @@ var Home = (function() {
     box.appendChild(p);
   }
 
-  function renderEvents(box, list) {
-    if (list.length === 0) {
-      renderNote(box, '進行中の大会はありません。「運営画面を開く」から作成してください。');
+  // テスト大会は既定で隠す（本物の大会に混ぜない）。運営画面の一覧と採点画面の
+  // 選択肢には出るので、テストで使う人はそちらから入れる。
+  function visibleHere(ev) {
+    return showTest || ev.test !== true;
+  }
+
+  function renderList(box, events) {
+    box.innerHTML = '';
+    // sortForHome はアーカイブを外して「採点中 → 準備中・巡目終了 → 最終結果」の順にする
+    var active = sortForHome(events).filter(visibleHere);
+    var archived = (events || []).filter(function(ev) {
+      return EventStatus.of(ev) === 'archived';
+    }).filter(visibleHere).sort(function(a, b) {
+      var x = String(a.updatedAt || ''), y = String(b.updatedAt || '');
+      if (x === y) return 0;
+      return x < y ? 1 : -1;
+    });
+
+    if ((events || []).length === 0) {
+      renderNote(box, '大会がまだありません。「＋ 大会を新規作成」から作ってください。');
       return;
     }
-    box.innerHTML = '';
-    list.forEach(function(ev) {
-      var status = EventStatus.of(ev);
+    if (active.length === 0 && archived.length === 0) {
+      renderNote(box, 'テスト大会だけです。「テストも表示」にチェックを入れると出ます。');
+      return;
+    }
 
-      // 行はリンクにする（中クリックで別タブに開ける。行き先はモードで変わるので
-      // data-event-id を持たせ、updateAdminLinks が href だけ作り直す）。
-      var a = document.createElement('a');
-      a.className = 'home-event';
-      a.setAttribute('data-event-id', ev.id);
-      a.href = Storage.adminHref('#players/' + encodeURIComponent(ev.id));
+    var shown = listExpanded ? active : active.slice(0, LIST_LIMIT);
+    shown.forEach(function(ev) { box.appendChild(eventRow(ev)); });
 
-      var name = document.createElement('span');
-      name.className = 'home-event-name';
-      name.textContent = ev.name || '(名称未設定)';
+    if (active.length > shown.length) {
+      var more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'home-more';
+      more.textContent = 'すべて見る（残り ' + (active.length - shown.length) + ' 件）';
+      more.addEventListener('click', function() {
+        listExpanded = true;
+        renderList(box, eventsCache || []);
+      });
+      box.appendChild(more);
+    }
 
-      var meta = document.createElement('span');
-      meta.className = 'home-event-meta';
-      meta.textContent = (ev.date || '日付なし') + ' ・ ' + (ev.playerCount || 0) + '名';
+    if (archived.length > 0) {
+      var det = document.createElement('details');
+      det.className = 'home-archived';
+      var sum = document.createElement('summary');
+      sum.textContent = '▸ アーカイブ（' + archived.length + ' 件）';
+      det.addEventListener('toggle', function() {
+        sum.textContent = (det.open ? '▾ ' : '▸ ') + 'アーカイブ（' + archived.length + ' 件）';
+      });
+      det.appendChild(sum);
+      var inner = document.createElement('div');
+      inner.className = 'home-event-list';
+      archived.forEach(function(ev) { inner.appendChild(eventRow(ev)); });
+      det.appendChild(inner);
+      box.appendChild(det);
+    }
+  }
 
-      var badge = document.createElement('span');
-      badge.className = 'home-badge' + (EventStatus.isScoringOpen(status) ? ' on' : '');
-      badge.textContent = EventStatus.LABELS[status];
+  // 行はリンクにする（中クリックで別タブに開ける。行き先はモードで変わるので
+  // data-event-id を持たせ、updateAdminLinks が href だけ作り直す）。
+  function eventRow(ev) {
+    var status = EventStatus.of(ev);
 
-      a.appendChild(name);
-      a.appendChild(meta);
-      a.appendChild(badge);
-      box.appendChild(a);
-    });
+    var a = document.createElement('a');
+    a.className = 'home-event';
+    a.setAttribute('data-event-id', ev.id);
+    a.href = Storage.adminHref('#players/' + encodeURIComponent(ev.id));
+
+    var name = document.createElement('span');
+    name.className = 'home-event-name';
+    name.textContent = ev.name || '(名称未設定)';
+
+    var meta = document.createElement('span');
+    meta.className = 'home-event-meta';
+    meta.textContent = (ev.date || '日付なし') + ' ・ ' + (ev.playerCount || 0) + '名';
+
+    var badge = document.createElement('span');
+    badge.className = 'home-badge' + (EventStatus.isScoringOpen(status) ? ' on' : '');
+    badge.textContent = EventStatus.LABELS[status];
+
+    a.appendChild(name);
+    a.appendChild(meta);
+    a.appendChild(badge);
+
+    if (ev.test === true) {
+      var tb = document.createElement('span');
+      tb.className = 'home-badge test';
+      tb.textContent = 'テスト';
+      a.appendChild(tb);
+    }
+    return a;
   }
 
   // --- 起動 ---
@@ -286,6 +352,15 @@ var Home = (function() {
     document.getElementById('btnMode').addEventListener('click', onModeClick);
     applyMode();
     renderFlow();
+    // 「テストも表示」。取れている一覧があれば描き直すだけで済ませる
+    // （チェックのたびに通信しない）。取れていなければ読み直す。
+    var chk = document.getElementById('chkShowTest');
+    chk.addEventListener('change', function() {
+      showTest = chk.checked;
+      listExpanded = false;
+      if (eventsCache) renderList(document.getElementById('homeEventList'), eventsCache);
+      else loadEvents().catch(function(e) { console.error(e); });
+    });
     // ハッシュで区画を出し分ける。index.html の <head> での redirectIfScoring は
     // ページ読み込み時の 1 回だけなので、開いたままハッシュを書き換えられた場合にも
     // 効くよう applyRoute からも通す。
