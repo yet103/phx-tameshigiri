@@ -494,92 +494,150 @@ app.get('/api/events/:id', (req, res) => {
   }
 });
 
+// POST /api/events の body の players を保存用に洗う。
+// PATCH .../players/:playerId や CSV/バンドル取り込みと同程度の検証（型が違えば既定に落とす）。
+// id が isValidId を通らない要素は丸ごと落とす（他の選手の行を装った上書きを防ぐ）。
+// ここに無いキー（order 以外の運営専用の値、__proto__ 等）は出力に出ない＝保存されない。
+function sanitizeEventPlayersForSave(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(p => p && typeof p === 'object' && !Array.isArray(p) && isValidId(p.id))
+    .map(p => {
+      const out = {
+        id: p.id,
+        name: typeof p.name === 'string' ? p.name.trim().slice(0, 100) : '',
+        order: typeof p.order === 'string' ? p.order.slice(0, 40) : '',
+        tech1: typeof p.tech1 === 'string' ? p.tech1.trim().slice(0, 50) : '',
+        tech2: typeof p.tech2 === 'string' ? p.tech2.trim().slice(0, 50) : '',
+        tech3: typeof p.tech3 === 'string' ? p.tech3.trim().slice(0, 50) : '',
+        score: Number.isFinite(p.score) ? p.score : 0,
+        isNewFace: p.isNewFace === true,
+        isFemale: p.isFemale === true,
+        // 結果は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード。それ以外は捨てる
+        // （バンドル取り込みと同じ規則。採点画面の decodeResult が読めない文字列を保存しない）。
+        result: (typeof p.result === 'string' && p.result.length <= 100 && /^[012 ]*$/.test(p.result))
+          ? p.result : '',
+        rank: typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : '',
+        rental: p.rental === true
+      };
+      if (Array.isArray(p.adjust) && p.adjust.length === 3 && p.adjust.every(n => Number.isInteger(n))) {
+        out.adjust = p.adjust.slice();
+      }
+      if (Number.isInteger(p.totalAdjust)) out.totalAdjust = p.totalAdjust;
+      if (typeof p.note === 'string') {
+        const note = p.note.trim().slice(0, 200);
+        if (note) out.note = note;
+      }
+      if (p.confirmed === true) out.confirmed = true;
+      if (Number.isInteger(p.bib) && p.bib >= 1 && p.bib <= 9999) out.bib = p.bib;
+      if (isValidId(p.sourcePlayerId)) out.sourcePlayerId = p.sourcePlayerId;
+      return out;
+    });
+}
+
 // POST /api/events : 大会作成・更新
+// body を丸ごと信用しない。ここで書き出す event オブジェクトはこの関数が組み立てた
+// フィールドだけを持つ（許すキーは id/name/date/venue/createdAt/updatedAt/players/
+// techniques/settings/status/shareToken/test。live はこの経路では書かない）。
+// body にしか無い未知のキー（live・techniquesSource・その他）は最初から event に
+// コピーしないので、自然に落ちる。
 app.post('/api/events', (req, res) => {
   try {
-    const event = req.body;
-    if (!event.id) {
-      event.id = generateId();
-    } else if (!isValidId(event.id)) {
+    const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
+
+    let id = body.id;
+    if (!id) {
+      id = generateId();
+    } else if (!isValidId(id)) {
       return res.status(400).json({ error: '不正な大会IDです' });
     }
-    const now = new Date().toISOString();
-    if (!event.createdAt) {
-      event.createdAt = now;
-    }
-    event.updatedAt = now;
-    
-    if (!event.players) {
-      event.players = [];
-    }
 
-    const eventPath = path.join(EVENTS_DIR, `${event.id}.json`);
+    const eventPath = path.join(EVENTS_DIR, `${id}.json`);
+    const exists = fs.existsSync(eventPath);
+    let prev = null;
+    if (exists) {
+      try {
+        prev = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+      } catch (e) {
+        prev = null;   // 壊れた既存ファイルは上書きを止めない（引き継ぎも行わない）
+      }
+    }
+    // 確定済みの大会を丸ごと上書きさせない（得点・選手・技が消える）
+    if (prev && rejectIfLocked(res, prev)) return;
+
+    // name / date / venue は PATCH /api/events/:id と同じ検証・切り詰め。
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length > 100) {
+      return res.status(400).json({ error: '大会名が不正です（1〜100文字）' });
+    }
+    const date = typeof body.date === 'string' ? body.date.slice(0, 20) : '';
+    const venue = typeof body.venue === 'string' ? body.venue.slice(0, 100) : '';
+
+    const now = new Date().toISOString();
+    const event = {
+      id: id,
+      name: name,
+      date: date,
+      venue: venue,
+      createdAt: (typeof body.createdAt === 'string' && body.createdAt) ? body.createdAt : now,
+      updatedAt: now,
+      players: sanitizeEventPlayersForSave(body.players)
+    };
+
     // status はこの経路では変えない。状態を変える経路は POST /api/events/:id/status だけ。
-    // body に status が入っていても捨てる。既存の大会が status を持っていればその値を
+    // body に status が入っていても無視する。既存の大会が status を持っていればその値を
     // そのまま引き継ぎ、持たない大会（この機能より前に作られた・取り込んだ大会）は
     // 書かずに推定のままにする（EventStatus.of が読み出しのたびに選手から推定する）。
     // ここで推定値を書き込んでしまうと、「status の無い大会」という区別が消え、
     // 以後は常にこの POST 時点の推定値に固定されてしまう。新規作成のときだけ draft。
-    delete event.status;
-    // test（テスト大会の印）も同じ理由でこの経路では変えない。body に入っていても捨て、
-    // 既存の大会が test:true を持っていればそのまま引き継ぐ（テンプレート API だけが true にする）。
-    delete event.test;
-    if (!fs.existsSync(eventPath)) {
+    if (!exists) {
       event.status = 'draft';
-    } else {
-      try {
-        const prevForStatus = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
-        // 確定済みの大会を丸ごと上書きさせない（得点・選手・技が消える）
-        if (rejectIfLocked(res, prevForStatus)) return;
-        if (EventStatus.STATES.indexOf(prevForStatus.status) !== -1) {
-          event.status = prevForStatus.status;
-        }
-        if (prevForStatus.test === true) event.test = true;
-      } catch (e) {
-        // 壊れた既存ファイルは上書きを止めない（status も付けない）
-      }
+    } else if (prev && EventStatus.STATES.indexOf(prev.status) !== -1) {
+      event.status = prev.status;
     }
-    // 既存の shareToken を落とさない。落とすと links/<token>.json が孤児になり、
-    // 連鎖削除も効かなくなる（消えた大会を指すトークンが生き残る）。
-    if (!isValidId(event.shareToken) && fs.existsSync(eventPath)) {
-      try {
-        const prev = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
-        if (isValidId(prev.shareToken)) event.shareToken = prev.shareToken;
-      } catch (e) {
-        // 壊れた既存ファイルは上書きを止めない
-      }
+    // test（テスト大会の印）も同じ理由でこの経路では変えない。body に入っていても無視し、
+    // 既存の大会が test:true を持っていればそのまま引き継ぐ（テンプレート API だけが true にする）。
+    if (prev && prev.test === true) event.test = true;
+
+    // shareToken は body から常に捨てる（他の大会の shareToken を書き込めると、その大会を
+    // 削除したときに無関係な大会の共有 URL が孤児のまま生き残る）。既存の値だけを引き継ぐ。
+    if (prev && isValidId(prev.shareToken)) {
+      event.shareToken = prev.shareToken;
     }
-    // live（配信用ボードのコートごとの状態）は shareToken と違って引き継がない。
+    // live（配信用ボードのコートごとの状態）は shareToken と違ってこの経路では扱わない。
     // 名簿を入れ直した大会の live には、もう居ない選手の playerId が残りうる。
     // 落としても配信用ボードが数秒「待機中」になるだけで、コート端末の次の
     // publishLive がすぐ入れ直す（トークンのように配布済みで失うと困る値ではない）。
+
+    // settings（ゼッケン・級位段位の必須・コート一覧）。{ requireBib, requireRank, courts }
+    // だけを抽出する（他のキーは無視。真偽値でなければ false）。courts は不正なら 400 で断る。
+    // body に settings が無いときは techniques と同じく既存の値を引き継ぐ。
+    if (body.settings !== undefined) {
+      const rawSettings = body.settings;
+      const s = (rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)) ? rawSettings : {};
+      const courtsInput = Array.isArray(s.courts) ? s.courts : [];
+      const courtsErr = validateCourtList(courtsInput);
+      if (courtsErr) return res.status(400).json({ error: courtsErr });
+      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courtsInput.slice() };
+    } else if (prev && prev.settings && typeof prev.settings === 'object' && !Array.isArray(prev.settings)) {
+      event.settings = prev.settings;
+    }
 
     // 技リスト（大会ごとの配点）。body に techniques が無いときは
     //   既存ファイルがある → その大会の techniques を引き継ぐ（shareToken と同じ扱い）
     //   既存ファイルが無い → 雛形（custom.json / 既定値）を複製して持たせる
     // 複製なので、あとで雛形を変えてもこの大会の配点は動かない。
-    if (!Array.isArray(event.techniques)) {
-      let inherited = null;
-      if (fs.existsSync(eventPath)) {
-        try {
-          const prevForTech = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
-          if (Array.isArray(prevForTech.techniques)) inherited = prevForTech.techniques;
-        } catch (e) {
-          // 壊れた既存ファイルは上書きを止めない
-        }
-      }
+    if (!Array.isArray(body.techniques)) {
+      const inherited = (prev && Array.isArray(prev.techniques)) ? prev.techniques : null;
       event.techniques = inherited || cloneTechniques(readTechniques().techniques);
     } else {
       // body が techniques を送ってきたとき（技術リスト編集画面からの保存し直しなど）は
       // PUT /api/events/:id/techniques と同じ検証を通す。素通りさせると壊れた
       // 技リストがそのまま保存され、以後の PUT/DELETE の挙動が壊れる。
-      const badTech = validateTechniques(event.techniques);
+      const badTech = validateTechniques(body.techniques);
       if (badTech) return res.status(400).json({ error: badTech });
-      event.techniques = cloneTechniques(event.techniques);
+      event.techniques = cloneTechniques(body.techniques);
     }
-    // GET /api/events/:id の応答にだけ足す値。そのまま POST に投げ返されても
-    // ファイルには残さない（ファイルの内容は techniquesSourceOf で毎回判定する）。
-    delete event.techniquesSource;
 
     writeJsonAtomic(eventPath, event);
     res.json({ success: true, id: event.id });

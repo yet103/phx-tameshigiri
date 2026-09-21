@@ -1674,6 +1674,58 @@
       pOkLoaded.techniquesSource, 'event');
     await Api.deleteEvent(pOkEvent.id);
 
+    // --- POST /api/events: PATCH と同じ検証（全体点検 A-1） ---
+    var pLongName = await fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'あ'.repeat(101), date: '2026-09-22', venue: '', players: [] })
+    });
+    var pLongNameJson = await pLongName.json();
+    assert('POST /api/events: 101文字の name は断る',
+      [pLongName.status, pLongNameJson.error], [400, '大会名が不正です（1〜100文字）']);
+
+    var pBadCourts = await fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'settings検証テスト', date: '2026-09-22', venue: '', players: [],
+        settings: { courts: ['A', 'A'] } })
+    });
+    var pBadCourtsJson = await pBadCourts.json();
+    assert('POST /api/events: settings.courts の不正は断る',
+      [pBadCourts.status, pBadCourtsJson.error], [400, 'コート名「A」が重複しています']);
+
+    var pUnknownEvent = await Api.saveEvent({ name: '未知キーテスト', date: '2026-09-22', venue: '', players: [],
+      hackKey: 'should-not-be-saved', live: { A: { playerId: 'x' } } });
+    var pUnknownLoaded = await Api.loadEvent(pUnknownEvent.id);
+    assert('POST /api/events: 未知のトップレベルキーは保存されない',
+      [pUnknownLoaded.hackKey, pUnknownLoaded.live], [undefined, undefined]);
+    await Api.deleteEvent(pUnknownEvent.id);
+
+    // 既存 ID で settings を省略したら、techniques と同じく既存の値を引き継ぐ
+    var pSetEvent = await Api.saveEvent({ name: 'settings引き継ぎテスト', date: '2026-09-22', venue: '', players: [] });
+    await Api.updateEventInfo(pSetEvent.id, { settings: { requireBib: true, requireRank: true, courts: ['A', 'B'] } });
+    await Api.saveEvent({ id: pSetEvent.id, name: 'settings引き継ぎテスト改', date: '2026-09-22', venue: '', players: [] });
+    assert('POST /api/events: 既存 ID で settings を省略すると既存の値を引き継ぐ',
+      (await Api.loadEvent(pSetEvent.id)).settings, { requireBib: true, requireRank: true, courts: ['A', 'B'] });
+    await Api.deleteEvent(pSetEvent.id);
+
+    // 他大会の shareToken を送っても既存の値が保たれ、削除しても他大会の links が消えない
+    var pShareA = await Api.saveEvent({ name: 'shareToken乗っ取りテストA', date: '2026-09-22', venue: '', players: [] });
+    var pShareB = await Api.saveEvent({ name: 'shareToken乗っ取りテストB', date: '2026-09-22', venue: '', players: [] });
+    var pShareBLink = await Api.createShareLink(pShareB.id);
+    await fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pShareA.id, name: 'shareToken乗っ取りテストA', date: '2026-09-22', venue: '',
+        players: [], shareToken: pShareBLink.token })
+    });
+    assert('POST /api/events: body の shareToken は常に捨てられる（他大会の値を書き込めない）',
+      (await Api.loadEvent(pShareA.id)).shareToken, undefined);
+    await Api.deleteEvent(pShareA.id);
+    assert('shareToken を乗っ取れないので、大会Aを削除しても大会Bの共有リンクは消えない',
+      await Api.loadShareLink(pShareBLink.token) !== null, true);
+    await Api.deleteEvent(pShareB.id);
+
     // ---- 12. 大会のコピー ----
     var cpSrc = await Api.saveEvent({ name: 'コピー元', date: '2026-03-01', venue: '本部道場', players: [] });
     await Api.saveEventTechniques(cpSrc.id, [{ name: 'コピー技', strikes: [7, null, null, null] }]);
