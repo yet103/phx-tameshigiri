@@ -294,7 +294,7 @@ var Home = (function() {
       '稽古用・大会用・システムテスト用の雛形から作ります。',
       function() { newRoute = 'template'; renderNew(); }));
 
-    if (events.length > 0) {
+    if (copyableEvents(events).length > 0) {
       cards.appendChild(newCard('作成済みの大会からコピー',
         '元にする大会を選びます（アーカイブ済みも選べます）。',
         function() { newRoute = 'copy-pick'; copySource = ''; renderNew(); }));
@@ -357,6 +357,11 @@ var Home = (function() {
     return found.length ? found[0] : null;
   }
 
+  // 「作成済みの大会からコピー」の候補。テスト大会（test）は本物でないのでコピー元にしない。
+  function copyableEvents(events) {
+    return (events || []).filter(function(ev) { return ev && ev.test !== true; });
+  }
+
   // フォームの世代。「作成」を押して通信を待っている間に「← 選び直す」で戻られたら、
   // 遅れて届いた結果に対して alert も遷移もしない（戻った後の画面を汚さない）。
   var formSeq = 0;
@@ -399,7 +404,7 @@ var Home = (function() {
     var selSrc = null;
     if (newRoute === 'copy-pick') {
       selSrc = addSelect(form, 'コピー元の大会');
-      (eventsCache || []).slice().sort(function(a, b) {
+      copyableEvents(eventsCache).slice().sort(function(a, b) {
         var x = String(a.updatedAt || ''), y = String(b.updatedAt || '');
         if (x === y) return 0;
         return x < y ? 1 : -1;
