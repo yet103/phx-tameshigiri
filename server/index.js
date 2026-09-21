@@ -804,6 +804,12 @@ function buildSystestTechPicker(techniques) {
 }
 
 // systest のダミー選手20名（男子01〜10・女子01〜10）。コート A・B に交互、bib は1〜20の連番。
+// 級位・段位は画面の候補（desk-players.js の RANKS）と同じ 21 段階を順に回す
+// （検証は 20 文字までの文字列なので、どれも通る）。動作確認で級位段位の表示と
+// 必須チェックを試せるように、空にしない。
+const SYSTEST_RANKS = ['無級', '十級', '九級', '八級', '七級', '六級', '五級', '四級', '三級', '二級', '一級',
+  '初段', '二段', '三段', '四段', '五段', '六段', '七段', '八段', '九段', '十段'];
+
 function buildSystestPlayers(techniques) {
   const pickTechs = buildSystestTechPicker(techniques);
   const courts = ['A', 'B'];
@@ -828,7 +834,7 @@ function buildSystestPlayers(techniques) {
         isNewFace: false,
         isFemale: isFemale,
         result: '',
-        rank: '',
+        rank: SYSTEST_RANKS[(bib - 1) % SYSTEST_RANKS.length],
         rental: false,
         bib: bib
       });
