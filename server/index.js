@@ -2296,9 +2296,78 @@ app.post('/api/events/import', (req, res) => {
 
 // ── Round API ──
 
-// POST /api/events/:id/rounds/2/generate : 二巡目の行を生成
-// 並べ替えは 女子先 → 得点昇順 → 同点は既存 order の文字列順で安定化。
-// 採番は コート×性別ごとに1から（現行CSV生成のコート横断通番は廃止）。
+// ── 二巡目の生成（設計書 2026-09-08 と 2026-09-22） ──
+// POST …/rounds/2/generate と POST …/status（round1 → round1_done）の両方から呼ぶ
+// 唯一の実装。event は書き換えず、新しい players 配列を返す。
+// 呼び出し側は ok のときだけ event.players を差し替えて書き出す
+// （生成できなければ状態も進めない＝「失敗したら遷移も取り消す」）。
+// この関数は同期のまま維持すること（server/index.js 冒頭の【不変条件】）。
+
+function scoreOf(p) {
+  return (p && typeof p.score === 'number') ? p.score : 0;
+}
+
+// 暫定ベスト8。一般男子（isFemale が true でない＝新人も含む。computeRanking と同じ規則）の
+// 一巡目の得点上位 8 名。0 点は含めない。8 位が同点なら全員（同点同順位）。8 名未満なら全員。
+// 戻り値: { <playerId>: true }（選手 id が '__proto__' でも壊れない辞書）
+function pickFinalists(src) {
+  const out = Object.create(null);
+  const males = src
+    .filter(p => p.isFemale !== true && scoreOf(p) > 0)
+    .slice()
+    .sort((a, b) => scoreOf(b) - scoreOf(a) || (a.order || '').localeCompare(b.order || ''));
+  if (males.length === 0) return out;
+  const cut = scoreOf(males.length >= 8 ? males[7] : males[males.length - 1]);
+  males.forEach(p => { if (scoreOf(p) >= cut) out[p.id] = true; });
+  return out;
+}
+
+// 決戦以外の並び（従来どおり）: 女子が先、その中で一巡目の得点が低い順、同点は order 順。
+function compareForRound2(a, b) {
+  const fa = a.isFemale === true ? 0 : 1;
+  const fb = b.isFemale === true ? 0 : 1;
+  if (fa !== fb) return fa - fb;
+  if (scoreOf(a) !== scoreOf(b)) return scoreOf(a) - scoreOf(b);
+  return (a.order || '').localeCompare(b.order || '');
+}
+
+// 決戦の並び: 一巡目の得点が低い順、同点は一巡目の order 順（設計書の決定）。
+function compareByScoreAsc(a, b) {
+  if (scoreOf(a) !== scoreOf(b)) return scoreOf(a) - scoreOf(b);
+  return (a.order || '').localeCompare(b.order || '');
+}
+
+// 一巡目の行から二巡目の行を1つ作る。
+// ゼッケン・級位段位・真剣レンタルは同じ選手を指すので複製する（設計書「選手の追加項目」）。
+// 技も複製する（自己申告があった選手だけ運営画面で直す。設計書 2026-09-22 の決定）。
+// 得点・結果は複製しない。
+function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
+  const gender = isFemale ? '女子' : '男子';
+  const n = nextOrderNumber(players.concat(newRows), court, gender, 2);
+  const row = {
+    id: generateId(),
+    name: p.name || '',
+    order: buildOrder(court, isFemale, 2, n),
+    tech1: typeof p.tech1 === 'string' ? p.tech1 : '',
+    tech2: typeof p.tech2 === 'string' ? p.tech2 : '',
+    tech3: typeof p.tech3 === 'string' ? p.tech3 : '',
+    score: 0,
+    isNewFace: p.isNewFace === true,
+    isFemale: isFemale,
+    result: '',
+    sourcePlayerId: p.id,
+    rank: typeof p.rank === 'string' ? p.rank : '',
+    rental: p.rental === true
+  };
+  if (Number.isInteger(p.bib)) row.bib = p.bib;
+  // コートを手で変えても決戦の印は残す（設計書「データ」）。
+  if (finalist) row.finalist = true;
+  return row;
+}
+
+// 二巡目の行を生成する（純粋関数）。
+// 並べ替えは 決戦以外→女子先→得点昇順→同点は order 順、決戦は得点昇順→同点は order 順。
+// 採番は コート×性別ごとに1から（決戦は決戦コートで1から）。
 // 一巡目の行は一切変更せず、新規行を末尾に追記するだけにする。
 // source は order が解析できる一巡目の行だけ（parseOrder できない選手は
 // コートが決まらないので二巡目を作れない。'未分類' を製造すると isValidCourt と
@@ -2308,6 +2377,70 @@ app.post('/api/events/import', (req, res) => {
 // （force での差分追加時に意味を持つ）。sourcePlayerId を持たない二巡目行は
 // CSV インポート由来で、force するとそれとは別に重複生成されてしまうため
 // untrackedCount として件数を返し、クライアントが force 前に警告できるようにする。
+// 戻り値:
+//   { ok: true, players, created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount }
+//   { ok: false, code: 400 | 409, body: { error, reason?, … } }
+function generateRound2(event, force) {
+  const players = Array.isArray(event.players) ? event.players : [];
+  const round1Candidates = players.filter(p => p && EventStatus.roundOf(p) === 1);
+  // '未分類' コートの行（order が解析できても isValidCourt を通らない）からは作らない。
+  const src = round1Candidates.filter(p => {
+    const parsed = parseOrder(p && p.order);
+    return parsed !== null && isValidCourt(parsed.court);
+  });
+  const unassignedCount = round1Candidates.length - src.length;
+  if (src.length === 0) {
+    return { ok: false, code: 400, body: { error: '一巡目の選手がいません' } };
+  }
+
+  const existing = players.filter(p => p && EventStatus.roundOf(p) === 2);
+  const untrackedCount = existing.filter(p => !p.sourcePlayerId).length;
+  const unscored = src.filter(p => !EventStatus.isScored(p));
+  if (unscored.length > 0 && !force) {
+    return { ok: false, code: 409, body: {
+      error: '一巡目に未採点の選手がいます', reason: 'unscored',
+      unscoredCount: unscored.length, existingCount: existing.length,
+      untrackedCount: untrackedCount, unassignedCount: unassignedCount } };
+  }
+  if (existing.length > 0 && !force) {
+    return { ok: false, code: 409, body: {
+      error: '二巡目は既に生成されています', reason: 'exists',
+      unscoredCount: unscored.length, existingCount: existing.length,
+      untrackedCount: untrackedCount, unassignedCount: unassignedCount } };
+  }
+
+  // force のときは未生成の一巡目行だけを差分追加する。既存の二巡目行には触れない。
+  const generated = Object.create(null);
+  existing.forEach(p => { if (p && p.sourcePlayerId) generated[p.sourcePlayerId] = true; });
+  const targets = src.filter(p => p && !generated[p.id]);
+
+  // 暫定ベスト8 は src 全体（一巡目の全員）から選ぶ。差分追加でも母集団を変えない。
+  const finalistIds = pickFinalists(src);
+  const plain = targets.filter(p => !finalistIds[p.id]).sort(compareForRound2);
+  const finals = targets.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
+
+  const finalCourt = EventStatus.finalCourtOf(event);
+  const newRows = [];
+  plain.forEach(p => {
+    newRows.push(buildRound2Row(players, newRows, p, courtOf(p), p.isFemale === true, false));
+  });
+  finals.forEach(p => {
+    newRows.push(buildRound2Row(players, newRows, p, finalCourt, false, true));
+  });
+
+  return {
+    ok: true,
+    players: players.concat(newRows),
+    created: newRows.length,
+    skipped: src.length - targets.length,
+    existingCount: existing.length,
+    untrackedCount: untrackedCount,
+    unassignedCount: unassignedCount,
+    finalistCount: finals.length
+  };
+}
+
+// POST /api/events/:id/rounds/2/generate : 二巡目の行を生成
 app.post('/api/events/:id/rounds/2/generate', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -2327,103 +2460,20 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
         status: genStatus
       });
     }
-    const players = Array.isArray(event.players) ? event.players : [];
-    const force = !!(req.body && req.body.force === true);
+    const result = generateRound2(event, !!(req.body && req.body.force === true));
+    if (!result.ok) return res.status(result.code).json(result.body);
 
-    const round1Candidates = players.filter(p => p && EventStatus.roundOf(p) === 1);
-    // '未分類' コートの行（order が解析できても isValidCourt を通らない）からは
-    // 二巡目を作らない（コメントの約束どおり）。isValidCourt で弾いた分も
-    // parseOrder できない行と同じく unassignedCount に数える。
-    const src = round1Candidates.filter(p => {
-      const parsed = parseOrder(p && p.order);
-      return parsed !== null && isValidCourt(parsed.court);
-    });
-    const unassignedCount = round1Candidates.length - src.length;
-    if (src.length === 0) {
-      return res.status(400).json({ error: '一巡目の選手がいません' });
-    }
-
-    const existing = players.filter(p => p && EventStatus.roundOf(p) === 2);
-    // sourcePlayerId を持たない二巡目行（CSV経由）は force で作り直すと重複するため件数を返す。
-    const untrackedCount = existing.filter(p => !p.sourcePlayerId).length;
-
-    const unscored = src.filter(p => !EventStatus.isScored(p));
-    if (unscored.length > 0 && !force) {
-      return res.status(409).json({
-        error: '一巡目に未採点の選手がいます',
-        reason: 'unscored',
-        unscoredCount: unscored.length,
-        existingCount: existing.length,
-        untrackedCount: untrackedCount,
-        unassignedCount: unassignedCount
-      });
-    }
-
-    if (existing.length > 0 && !force) {
-      return res.status(409).json({
-        error: '二巡目は既に生成されています',
-        reason: 'exists',
-        unscoredCount: unscored.length,
-        existingCount: existing.length,
-        untrackedCount: untrackedCount,
-        unassignedCount: unassignedCount
-      });
-    }
-
-    // force のときは未生成の一巡目行だけを差分追加する。既存の二巡目行には触れない。
-    // sourcePlayerId を持たない二巡目行（CSV経由）は「未生成」と見なされる。
-    const generated = Object.create(null);
-    existing.forEach(p => { if (p && p.sourcePlayerId) generated[p.sourcePlayerId] = true; });
-    const targets = src.filter(p => p && !generated[p.id]);
-
-    targets.sort((a, b) => {
-      const fa = a.isFemale === true ? 0 : 1;
-      const fb = b.isFemale === true ? 0 : 1;
-      if (fa !== fb) return fa - fb;
-      const sa = typeof a.score === 'number' ? a.score : 0;
-      const sb = typeof b.score === 'number' ? b.score : 0;
-      if (sa !== sb) return sa - sb;
-      return (a.order || '').localeCompare(b.order || '');
-    });
-
-    const newRows = [];
-    targets.forEach(p => {
-      const court = courtOf(p);
-      const isFemale = p.isFemale === true;
-      const gender = isFemale ? '女子' : '男子';
-      // 既存の二巡目行があればその続きから、無ければ 1 から始まる。
-      const n = nextOrderNumber(players.concat(newRows), court, gender, 2);
-      // ゼッケン・級位段位・真剣レンタルは同じ選手を指すので一巡目の行から複製する
-      // （設計書「選手の追加項目」。得点・技・結果は他の項目と同じく複製しない）。
-      const newRow = {
-        id: generateId(),
-        name: p.name || '',
-        order: buildOrder(court, isFemale, 2, n),
-        tech1: '',
-        tech2: '',
-        tech3: '',
-        score: 0,
-        isNewFace: p.isNewFace === true,
-        isFemale: isFemale,
-        result: '',
-        sourcePlayerId: p.id,
-        rank: typeof p.rank === 'string' ? p.rank : '',
-        rental: p.rental === true
-      };
-      if (Number.isInteger(p.bib)) newRow.bib = p.bib;
-      newRows.push(newRow);
-    });
-
-    event.players = players.concat(newRows);
+    event.players = result.players;
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
     res.json({
       success: true,
-      created: newRows.length,
-      skipped: src.length - targets.length,
-      existingCount: existing.length,
-      untrackedCount: untrackedCount,
-      unassignedCount: unassignedCount
+      created: result.created,
+      skipped: result.skipped,
+      existingCount: result.existingCount,
+      untrackedCount: result.untrackedCount,
+      unassignedCount: result.unassignedCount,
+      finalistCount: result.finalistCount
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

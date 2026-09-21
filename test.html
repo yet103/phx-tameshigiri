@@ -1280,6 +1280,122 @@
     await Api.deleteEvent(edEvent.id);
 
     // --- 二巡目の生成 ---
+    // ---- 暫定ベスト8（決戦）の抽出。設計書 2026-09-22「データ」 ----
+    // 一般男子（女子でない＝新人も含む）の一巡目の得点上位 8 名。0 点は含めない。
+    // 8 位が同点なら全員。決戦コートに移し、一巡目の得点が低い順に 1〜n 番。
+    async function makeGenEvent(name, csv) {
+      var ev = await Api.saveEvent({ name: name, date: '2026-09-22', venue: '', players: [] });
+      await Api.importCsv(ev.id, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' + csv, 'replace');
+      return ev;
+    }
+    function round2Of(players) {
+      return players.filter(function(p) { return Courts.roundOf(p) === 2; });
+    }
+
+    // 男子 10 名（60,55,50,45,40,35,30,25,20,15）＋女子 2 名。上位 8 名が決戦。
+    var b8Csv = '';
+    [60, 55, 50, 45, 40, 35, 30, 25, 20, 15].forEach(function(s, i) {
+      b8Csv += 'M' + (i + 1) + ',A-男子-1-' + (i + 1) + ',真,水月,四方,' + s + ',,,1    \n';
+    });
+    b8Csv += 'F1,A-女子-1-1,真,水月,四方,99,,○,1    \n';
+    b8Csv += 'F2,A-女子-1-2,真,水月,四方,90,,○,1    \n';
+    var b8 = await makeGenEvent('決戦8名', b8Csv);
+    await toRound1Done(b8.id);
+    await Api.generateNextRound(b8.id, true);
+    var b8Rows = round2Of((await Api.loadEvent(b8.id)).players);
+    var b8Fin = b8Rows.filter(function(p) { return p.finalist === true; });
+    assert('決戦は一般男子の上位8名', b8Fin.map(function(p) { return p.name; }).sort(),
+      ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8']);
+    assert('決戦の order は決戦コート・男子・二巡目・得点の低い順に1から',
+      b8Fin.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
+      ['決戦-男子-2-1:M8', '決戦-男子-2-2:M7', '決戦-男子-2-3:M6', '決戦-男子-2-4:M5',
+       '決戦-男子-2-5:M4', '決戦-男子-2-6:M3', '決戦-男子-2-7:M2', '決戦-男子-2-8:M1']);
+    assert('決戦に入らない男子は元のコートに残る',
+      b8Rows.filter(function(p) { return p.name === 'M9' || p.name === 'M10'; })
+        .map(function(p) { return p.order; }).sort(), ['A-男子-2-1', 'A-男子-2-2']);
+    assert('女子は決戦に入らない',
+      b8Rows.filter(function(p) { return p.isFemale; }).map(function(p) { return p.finalist; }),
+      [undefined, undefined]);
+    assert('決戦の行は男子として作られる',
+      b8Fin.every(function(p) { return p.isFemale === false; }), true);
+    assert('二巡目の技は一巡目の複製',
+      [b8Rows[0].tech1, b8Rows[0].tech2, b8Rows[0].tech3], ['真', '水月', '四方']);
+    assert('生成の応答に決戦の人数を返す',
+      (await Api.generateNextRound(b8.id, false)).existingCount, 12);
+    await Api.deleteEvent(b8.id);
+
+    // 8 位が同点なら 9 名になる
+    var tieCsv = '';
+    [60, 55, 50, 45, 40, 35, 30, 25, 25, 20].forEach(function(s, i) {
+      tieCsv += 'T' + (i + 1) + ',A-男子-1-' + (i + 1) + ',真,水月,四方,' + s + ',,,1    \n';
+    });
+    var tie = await makeGenEvent('決戦同点', tieCsv);
+    await toRound1Done(tie.id);
+    await Api.generateNextRound(tie.id, true);
+    var tieFin = round2Of((await Api.loadEvent(tie.id)).players)
+      .filter(function(p) { return p.finalist === true; });
+    assert('8位が同点なら9名が決戦に入る', tieFin.length, 9);
+    // T8・T9 が同点（25点）で8位タイ。9名（T1〜T9）が決戦に入り、T10（20点）は入らない。
+    // 決戦の並びは一巡目の得点が低い順・同点は order 順（T8 が 'A-男子-1-8' で T9 より先）。
+    assert('同点は一巡目の order 順で番号が付く',
+      tieFin.slice().sort(Courts.compareOrder).map(function(p) { return p.name; }),
+      ['T8', 'T9', 'T7', 'T6', 'T5', 'T4', 'T3', 'T2', 'T1']);
+    await Api.deleteEvent(tie.id);
+
+    // 男子 5 名なら 5 名全員
+    var few = await makeGenEvent('決戦5名',
+      'P1,A-男子-1-1,真,,,50,,,1    \nP2,A-男子-1-2,真,,,40,,,1    \n' +
+      'P3,A-男子-1-3,真,,,30,,,1    \nP4,A-男子-1-4,真,,,20,,,1    \n' +
+      'P5,A-男子-1-5,真,,,10,,,1    \n');
+    await toRound1Done(few.id);
+    await Api.generateNextRound(few.id, true);
+    assert('男子が8名未満なら全員が決戦',
+      round2Of((await Api.loadEvent(few.id)).players)
+        .filter(function(p) { return p.finalist === true; }).length, 5);
+    await Api.deleteEvent(few.id);
+
+    // 0 点は決戦に含めない
+    var zero = await makeGenEvent('決戦0点',
+      'Z1,A-男子-1-1,真,,,30,,,1    \nZ2,A-男子-1-2,真,,,0,,,\nZ3,A-男子-1-3,真,,,0,,,\n');
+    await toRound1Done(zero.id);
+    await Api.generateNextRound(zero.id, true);
+    assert('0点の選手は決戦に入らない',
+      round2Of((await Api.loadEvent(zero.id)).players)
+        .filter(function(p) { return p.finalist === true; }).map(function(p) { return p.name; }), ['Z1']);
+    await Api.deleteEvent(zero.id);
+
+    // 男子 0 名なら決戦は作らない
+    var noMale = await makeGenEvent('決戦なし',
+      'W1,A-女子-1-1,真,,,50,,○,1    \nW2,A-女子-1-2,真,,,40,,○,1    \n');
+    await toRound1Done(noMale.id);
+    await Api.generateNextRound(noMale.id, true);
+    assert('男子が0名なら決戦の行を作らない',
+      round2Of((await Api.loadEvent(noMale.id)).players)
+        .filter(function(p) { return p.finalist === true; }).length, 0);
+    await Api.deleteEvent(noMale.id);
+
+    // 新人も一般男子として決戦に入る
+    var nf = await makeGenEvent('決戦新人',
+      'N1,A-男子-1-1,真,,,50,○,,1    \nN2,A-男子-1-2,真,,,40,,,1    \n');
+    await toRound1Done(nf.id);
+    await Api.generateNextRound(nf.id, true);
+    assert('新人も一般男子として決戦に入る',
+      round2Of((await Api.loadEvent(nf.id)).players)
+        .filter(function(p) { return p.finalist === true; }).map(function(p) { return p.name; }).sort(),
+      ['N1', 'N2']);
+    await Api.deleteEvent(nf.id);
+
+    // 決戦コートの名前は settings.finalCourt に従う
+    var fcGen = await makeGenEvent('決戦コート名',
+      'C1,A-男子-1-1,真,,,50,,,1    \n');
+    await Api.updateEventInfo(fcGen.id, { name: '決戦コート名', settings: { finalCourt: '決勝' } });
+    await toRound1Done(fcGen.id);
+    await Api.generateNextRound(fcGen.id, true);
+    assert('決戦コートの名前は settings.finalCourt に従う',
+      round2Of((await Api.loadEvent(fcGen.id)).players)
+        .filter(function(p) { return p.finalist === true; })[0].order, '決勝-男子-2-1');
+    await Api.deleteEvent(fcGen.id);
+
     var genEvent = await Api.saveEvent({ name: '二巡目テスト', date: '2026-02-01', venue: '', players: [] });
     var genCsv = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
                  'M1,A-男子-1-1,真,,,30,,,1    \n' +
@@ -1302,12 +1418,15 @@
     assert('二巡目が6行追加される', genLoaded.players.length, 12);
 
     var round2 = genLoaded.players.slice(6);
-    assert('二巡目は女子が先頭・得点の低い順',
-      round2.map(function(p) { return p.name; }), ['F2', 'F1', 'M2', 'M3', 'M1', 'M4']);
-    assert('二巡目の順番はコート×性別ごとに1から',
-      round2.map(function(p) { return p.order; }),
-      ['A-女子-2-1', 'A-女子-2-2', 'A-男子-2-1', 'A-男子-2-2', 'A-男子-2-3', 'B-男子-2-1']);
-    assert('二巡目の技は空', [round2[0].tech1, round2[0].tech2, round2[0].tech3], ['', '', '']);
+    assert('二巡目は決戦以外が先・女子が先頭・得点の低い順',
+      round2.filter(function(p) { return p.finalist !== true; }).map(function(p) { return p.name; }),
+      ['F2', 'F1']);
+    assert('二巡目の順番はコート×性別ごとに1から（決戦は決戦コートで1から）',
+      round2.slice().sort(Courts.compareOrder).map(function(p) { return p.order; }),
+      ['A-女子-2-1', 'A-女子-2-2', '決戦-男子-2-1', '決戦-男子-2-2', '決戦-男子-2-3', '決戦-男子-2-4']);
+    assert('二巡目の技は一巡目の複製',
+      [round2[0].tech1, round2[0].tech2, round2[0].tech3],
+      [genLoaded.players[4].tech1, genLoaded.players[4].tech2, genLoaded.players[4].tech3]);
     assert('二巡目の得点は0', round2[0].score, 0);
     assert('二巡目の結果は空', round2[0].result, '');
     assert('二巡目は一巡目の id を sourcePlayerId に持つ',
@@ -1374,8 +1493,10 @@
     assert('差分追加の skipped は生成済みの一巡目人数', diffGen.skipped, 2);
     assert('差分追加の existingCount は既存の二巡目人数', diffGen.existingCount, 2);
     var diffRows = (await Api.loadEvent(diffEvent.id)).players.filter(function(p) { return Courts.roundOf(p) === 2; });
+    // D1・D2・D3 は男子8名未満で全員得点0より大きいため、3名とも決戦（暫定ベスト8）に入る。
+    // 決戦コートでも番号は続き番号のまま採番される。
     assert('差分追加は既存の二巡目の続き番号', diffRows.map(function(p) { return p.order; }),
-      ['A-男子-2-1', 'A-男子-2-2', 'A-男子-2-3']);
+      ['決戦-男子-2-1', '決戦-男子-2-2', '決戦-男子-2-3']);
     assert('差分追加の行は追加した一巡目を指す', diffRows[2].sourcePlayerId, diffP3.id);
     await Api.deleteEvent(diffEvent.id);
 
@@ -1392,9 +1513,10 @@
     var unaGen = await Api.generateNextRound(unaEvent.id, false);
     assert('order 無し・未分類コートの選手は二巡目を作らない', unaGen.created, 1);
     assert('order 無し・未分類コートの選手数を合わせて返す', unaGen.unassignedCount, 2);
+    // U2（唯一の候補）は男子1名だけなので決戦（暫定ベスト8）に入り、決戦コートで採番される。
     assert('未分類のコートを製造しない',
       (await Api.loadEvent(unaEvent.id)).players.map(function(p) { return p.order; }),
-      ['', 'A-男子-1-1', '未分類-男子-1-1', 'A-男子-2-1']);
+      ['', 'A-男子-1-1', '未分類-男子-1-1', '決戦-男子-2-1']);
     await Api.deleteEvent(unaEvent.id);
 
     assert('存在しない大会の二巡目生成は null', await Api.generateNextRound('nosuchevent', false), null);
