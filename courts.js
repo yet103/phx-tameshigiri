@@ -11,18 +11,43 @@ var Courts = (function() {
   }
 
   // 選手一覧から一意なコート名を昇順で返す。UNASSIGNED は末尾に置く。
-  function listFrom(players) {
+  // extraCourts（省略可）は大会の settings.courts。選手のコートとの和集合にする
+  // （設計書「コート一覧」。既存の1引数呼び出しは挙動を変えない）。
+  function listFrom(players, extraCourts) {
     var seen = Object.create(null);   // コート名が 'constructor' などでも壊れないように（parsePasteRow と同じ）
     var list = [];
     var hasUnassigned = false;
-    (players || []).forEach(function(p) {
-      var c = courtOf(p);
+    function add(c) {
       if (c === UNASSIGNED) { hasUnassigned = true; return; }
       if (!seen[c]) { seen[c] = true; list.push(c); }
+    }
+    (players || []).forEach(function(p) { add(courtOf(p)); });
+    (extraCourts || []).forEach(function(c) {
+      if (typeof c === 'string' && c) add(c);
     });
     list.sort();
     if (hasUnassigned) list.push(UNASSIGNED);
     return list;
+  }
+
+  // コート一覧（大会の settings.courts）の検証。選手のコート名と同じ規則
+  // （空・'-' を含む・'未分類' は不可、32文字まで）に加えて、重複なし・最大20件。
+  // 妥当なら空文字、そうでなければ日本語のエラー文言を返す（PATCH /api/events/:id が
+  // そのままクライアントに返す）。
+  function validateCourtList(list) {
+    if (!Array.isArray(list)) return 'コート一覧の形式が不正です';
+    if (list.length > 20) return 'コートは20件までです';
+    var seen = Object.create(null);   // コート名が 'constructor' などでも壊れないように
+    for (var i = 0; i < list.length; i++) {
+      var name = list[i];
+      if (typeof name !== 'string' || !name || name.length > 32 ||
+          name.indexOf('-') !== -1 || name === UNASSIGNED) {
+        return 'コート名「' + name + '」は使えません';
+      }
+      if (seen[name]) return 'コート名「' + name + '」が重複しています';
+      seen[name] = true;
+    }
+    return '';
   }
 
   // 指定コートの選手だけを返す。court が空文字なら全件。
@@ -724,6 +749,7 @@ var Courts = (function() {
     UNASSIGNED: UNASSIGNED,
     courtOf: courtOf,
     listFrom: listFrom,
+    validateCourtList: validateCourtList,
     filter: filter,
     roundOf: roundOf,
     isScored: isScored,

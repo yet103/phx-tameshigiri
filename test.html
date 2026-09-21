@@ -2050,6 +2050,34 @@
     assert('listFrom: コート名が constructor でも落ちない',
       Courts.listFrom([{ order: 'constructor-男子-1-1' }]), ['constructor']);
 
+    // ---- listFrom の第2引数（extraCourts）。設計書「コート一覧」・大会の settings.courts との和集合 ----
+    assert('listFrom: extraCourts との和集合を昇順で返す',
+      Courts.listFrom(courtPlayers, ['C', 'A']), ['A', 'B', 'C', Courts.UNASSIGNED]);
+    assert('listFrom: extraCourts が省略なら従来どおり', Courts.listFrom(courtPlayers), ['A', 'B', Courts.UNASSIGNED]);
+    assert('listFrom: extraCourts だけでも使える（選手が空でも）',
+      Courts.listFrom([], ['稽古']), ['稽古']);
+    assert('listFrom: extraCourts の重複は除く',
+      Courts.listFrom([{ order: 'A-男子-1-1' }], ['A', 'A']), ['A']);
+    assert('listFrom: extraCourts に未分類があっても末尾にまとめる',
+      Courts.listFrom([{ order: 'A-男子-1-1' }], [Courts.UNASSIGNED]), ['A', Courts.UNASSIGNED]);
+    assert('listFrom: extraCourts が空配列なら選手のコートのまま', Courts.listFrom(courtPlayers, []), ['A', 'B', Courts.UNASSIGNED]);
+
+    // ---- validateCourtList（大会の settings.courts の検証。空・重複・'-'・'未分類'・32文字超・20件超は不可） ----
+    assert('validateCourtList: 妥当な一覧は空文字', Courts.validateCourtList(['A', 'B', '稽古']), '');
+    assert('validateCourtList: 空配列は妥当', Courts.validateCourtList([]), '');
+    assert('validateCourtList: 配列でなければエラー', Courts.validateCourtList(null) !== '', true);
+    assert('validateCourtList: 空文字は使えない', Courts.validateCourtList(['']), 'コート名「」は使えません');
+    assert('validateCourtList: ハイフンを含む名前は使えない', Courts.validateCourtList(['A-1']), 'コート名「A-1」は使えません');
+    assert('validateCourtList: 未分類は使えない', Courts.validateCourtList([Courts.UNASSIGNED]), 'コート名「' + Courts.UNASSIGNED + '」は使えません');
+    assert('validateCourtList: 33文字は使えない', Courts.validateCourtList(['あ'.repeat(33)]), 'コート名「' + 'あ'.repeat(33) + '」は使えません');
+    assert('validateCourtList: 32文字は妥当', Courts.validateCourtList(['あ'.repeat(32)]), '');
+    assert('validateCourtList: 重複はエラー', Courts.validateCourtList(['A', 'A']), 'コート名「A」が重複しています');
+    var manyCourts20 = [];
+    for (var mc = 0; mc < 20; mc++) manyCourts20.push('court' + mc);
+    assert('validateCourtList: 20件は妥当', Courts.validateCourtList(manyCourts20), '');
+    var manyCourts21 = manyCourts20.concat(['court20']);
+    assert('validateCourtList: 21件はエラー', Courts.validateCourtList(manyCourts21), 'コートは20件までです');
+
     assert('filter: 空文字は全件', Courts.filter(courtPlayers, '').length, 5);
     assert('filter: Aで2件', Courts.filter(courtPlayers, 'A').length, 2);
     assert('filter: 未分類で1件', Courts.filter(courtPlayers, Courts.UNASSIGNED).length, 1);
