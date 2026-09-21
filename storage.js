@@ -238,7 +238,7 @@ var Storage = (function() {
         esc(p.result),
         esc(String(Number(adj[0]) || 0)), esc(String(Number(adj[1]) || 0)), esc(String(Number(adj[2]) || 0)),
         esc(String(Number(p.totalAdjust) || 0)), esc(p.note), p.confirmed === true ? '○' : '',
-        (typeof p.bib === 'number') ? esc(String(p.bib)) : '', esc(p.rank), p.rental === true ? '○' : ''
+        Number.isInteger(p.bib) ? esc(String(p.bib)) : '', esc(p.rank), p.rental === true ? '○' : ''
       ].join('</td><td>') + '</td></tr>';
     });
     return '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +

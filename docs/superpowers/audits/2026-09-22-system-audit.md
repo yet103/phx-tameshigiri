@@ -13,7 +13,7 @@
 1. 〔S〕**`POST /api/events` が丸ごと無検証**（`server/index.js:498-589`）。名前 300 文字・`settings.courts` の不正値・他大会の `shareToken` まで保存される。`shareToken` を書き込めるため、その大会を削除すると無関係な大会の共有 URL が消える。既存 ID に送ると `settings` が消える。→ `PATCH` と同じ検証（name 1〜100、date/venue 切り詰め、`settings` は `validateCourtList` 経由で 3 項目だけ、`shareToken` は body から常に捨てて既存を引き継ぐ、`settings` も引き継ぐ、未知キーを落とす）。
 2. 〔S〕**バンドル往復で `status` が失われ、`final`/`archived` のロックが外れる**（`index.js:1957-1982`, `2119-2128`）。取り込み後は `derive` で `round2` 等になる。→ バンドルに `status` を含め、取り込み時に `STATES` にあれば採用。
 3. 〔S〕**二巡目生成が `未分類` コートの行を作る**（`index.js:2182-2212`）。コメントは「作らない」だが `parseOrder` が `未分類-男子-1-1` を通す。→ `isValidCourt` で弾き `unassignedCount` に加える。
-4. 〔S〕**`PATCH …/players/:id` が `result` と `name` を無検証で受ける**（`index.js:1415`）。`result: "ZZZZ"`、空白だけの `name`（順位表から静かに消える）、`score: 1e9` が通る。→ バンドル取込と同じ `/^[012 ]*$/` と `POST` と同じ name 検証。CSV 拡張取込にも同じ正規化。
+4. 〔S〕**`PATCH …/players/:id` が `result` と `name` を無検証で受ける**（`index.js:1415`）。`result: "ZZZZ"`、空白だけの `name`（順位表から静かに消える）、`score: 1e9` が通る。→ バンドル取込と同じ `/^[012 ]*$/` と `POST` と同じ name 検証。CSV 拡張取込にも同じ正規化。備考: 型が違う値: 氏名・結果は 400 で断り、数値項目は 0 に丸めて受ける（既存クライアントの互換のため）。
 
 ### 画面
 
