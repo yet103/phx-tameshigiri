@@ -1476,9 +1476,27 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     const body = req.body || {};
     const player = event.players[playerIndex];
 
-    ['name', 'tech1', 'tech2', 'tech3', 'result'].forEach(key => {
+    ['tech1', 'tech2', 'tech3'].forEach(key => {
       if (typeof body[key] === 'string') player[key] = body[key];
     });
+    // name は POST /api/events/:id/players（選手を1名追加）と同じ検証（trim 後 1〜100 文字）。
+    // 空白だけの名前を通すと、順位表から静かに選手が消える（trim した名前で集計するため）。
+    if (body.name !== undefined) {
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!name || name.length > 100) {
+        return res.status(400).json({ error: '選手名が必要です' });
+      }
+      player.name = name;
+    }
+    // result は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード（バンドル取込・CSV拡張取込と
+    // 同じ規則）。それ以外の文字列（手入力の誤りなど）が混じると採点画面の decodeResult が
+    // 読めずに壊れるため、緩く無視せず 400 で断る。
+    if (body.result !== undefined) {
+      if (typeof body.result !== 'string' || body.result.length > 100 || !/^[012 ]*$/.test(body.result)) {
+        return res.status(400).json({ error: 'result が不正です' });
+      }
+      player.result = body.result;
+    }
     ['isNewFace', 'isFemale'].forEach(key => {
       if (typeof body[key] === 'boolean') player[key] = body[key];
     });
@@ -1541,8 +1559,12 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     if (Number.isInteger(body.totalAdjust)) player.totalAdjust = body.totalAdjust;
     if (typeof body.note === 'string') player.note = body.note.trim().slice(0, 200);
     if (typeof body.confirmed === 'boolean') player.confirmed = body.confirmed;
-    // 補正点で負の合計になりうるので負数も受理する。NaN・Infinity は無視する
-    if (Number.isFinite(body.score)) player.score = body.score;
+    // 補正点で負の合計になりうるので負数も受理する。NaN・Infinity は無視する。
+    // 採点画面が送る値は常に整数（Scoring.calcTotalScore が toInt で丸める）なので、
+    // -9999〜9999 の整数だけ受理する（それ以外は他の項目と同じく黙って無視する）。
+    if (Number.isInteger(body.score) && body.score >= -9999 && body.score <= 9999) {
+      player.score = body.score;
+    }
 
     // court / round / isFemale が来たときだけ order を組み立て直す。
     // ただし (コート, 性別, 巡目) が実際に変わったときだけにする。
@@ -1743,7 +1765,11 @@ app.post('/api/events/:id/import', (req, res) => {
           score: parseFloat(row[5]) || 0,
           isNewFace: row[6] === '○',
           isFemale: row[7] === '○',
-          result: row[8] || ''
+          // 結果は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード。それ以外（手入力・
+          // 崩れたCSV由来の誤り）が混じっていたら PATCH .../players/:id やバンドル取込と
+          // 同じ規則で空に落とす（採点画面の decodeResult が読めない文字列を保存しない）。
+          result: (typeof row[8] === 'string' && row[8].length <= 100 && /^[012 ]*$/.test(row[8]))
+            ? row[8] : ''
         };
         if (isExtended) {
           p.adjust = [toInt(row[9]), toInt(row[10]), toInt(row[11])];

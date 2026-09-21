@@ -596,6 +596,13 @@
     assert('CSV拡張+3列: ゼッケン・級位段位・レンタルを読む',
       [csvExtendedImported.bib, csvExtendedImported.rank, csvExtendedImported.rental], [15, '初段', false]);
 
+    // result（結果列）は 0/1/2/空白以外が混じっていたら空に落とす（全体点検 A-4）
+    var csvBadResult = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果,補正点1,補正点2,補正点3,全体補正,備考,確定\n' +
+      '結果不正 太郎,A-男子-1-1,,,,,,,ZZZZ,0,0,0,0,,';
+    await Api.importCsv(csvExtEvent.id, csvBadResult, 'replace', true);
+    assert('CSV拡張取込: 不正な result は空に落ちる',
+      (await Api.loadEvent(csvExtEvent.id)).players[0].result, '');
+
     var csvOldFormat = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n旧 太郎,A-男子-1-1,,,,,,,';
     await Api.importCsv(csvExtEvent.id, csvOldFormat, 'replace', true);
     var csvOldImported = (await Api.loadEvent(csvExtEvent.id)).players[0];
@@ -1186,6 +1193,46 @@
     // 補正点でマイナスになりうるので負の得点も受理する
     assert('負の得点は受理される',
       (await Api.updatePlayerInfo(edEvent.id, edP.id, { score: -5 })).player.score, -5);
+    // 範囲外・整数でない得点は他の項目（adjust 等）と同じく黙って無視する
+    var scoreBefore = (await Api.loadEvent(edEvent.id)).players
+      .filter(function(p) { return p.id === edP.id; })[0].score;
+    await Api.updatePlayerInfo(edEvent.id, edP.id, { score: 100000 });
+    await Api.updatePlayerInfo(edEvent.id, edP.id, { score: 1.5 });
+    assert('範囲外・小数の得点は無視される（-9999〜9999の整数だけ受理）',
+      (await Api.loadEvent(edEvent.id)).players.filter(function(p) { return p.id === edP.id; })[0].score,
+      scoreBefore);
+
+    // result・name の検証（全体点検 A-4）。Api.updatePlayerInfo は 400 のエラー文言を
+    // 運ばないので、ここは生の fetch で確かめる。
+    var patchBase = '/api/events/' + edEvent.id + '/players/' + edP.id;
+    var badResultRes = await fetch(patchBase, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ result: 'ZZZZ' })
+    });
+    var badResultJson = await badResultRes.json();
+    assert('result が不正なら 400',
+      [badResultRes.status, badResultJson.error], [400, 'result が不正です']);
+    assert('不正な result は保存されない（変更前のまま）',
+      (await Api.loadEvent(edEvent.id)).players.filter(function(p) { return p.id === edP.id; })[0].result, '');
+
+    var okResultRes = await fetch(patchBase, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ result: '1  2 ' })
+    });
+    assert('0/1/2/空白だけの result は保存できる', okResultRes.status, 200);
+
+    var blankNameRes = await fetch(patchBase, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '   ' })
+    });
+    var blankNameJson = await blankNameRes.json();
+    assert('空白だけの name は 400', [blankNameRes.status, blankNameJson.error], [400, '選手名が必要です']);
+
+    var longNameRes = await fetch(patchBase, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'あ'.repeat(101) })
+    });
+    assert('101文字の name も 400', longNameRes.status, 400);
 
     assert('存在しない選手は status 404',
       (await Api.updatePlayerInfo(edEvent.id, 'nosuchplayer', { name: 'x' })).status, 404);
