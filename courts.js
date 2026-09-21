@@ -370,29 +370,34 @@ var Courts = (function() {
   // 状態を変える前の確認文言（設計書「確認と拒否」の表）。承諾したときだけ遷移する。
   // サーバーは硬い条件（選手0名・二巡目0件・遷移表にない組み合わせ）だけを 409 で拒むので、
   // 件数の警告はここで出す。
+  // 「〜が 3名います」「〜がいません」。0 名のときに「0名います」と出さない。
+  function countPhrase(prefix, n) {
+    return n > 0 ? prefix + 'が ' + n + '名います。' : prefix + 'がいません。';
+  }
+
   function statusConfirmMessage(from, to, players) {
     var list = players || [];
     function round(n) { return list.filter(function(p) { return roundOf(p) === n; }); }
     if (from === 'draft' && to === 'round1') {
       var r1 = round(1);
-      return '一巡目 ' + r1.length + '名。技が未入力の選手が ' +
-        r1.filter(isTechIncomplete).length + '名います。\n試合を開始しますか？';
+      return '一巡目 ' + r1.length + '名。' +
+        countPhrase('技が未入力の選手', r1.filter(isTechIncomplete).length) + '\n試合を開始しますか？';
     }
     if (from === 'round1' && to === 'round1_done') {
-      return '一巡目の未採点が ' + round(1).filter(function(p) { return !isScored(p); }).length +
-        '名います。\n一巡目を終了しますか？';
+      return countPhrase('一巡目の未採点', round(1).filter(function(p) { return !isScored(p); }).length) +
+        '\n一巡目を終了しますか？';
     }
     if (from === 'round1_done' && to === 'round2') {
       var r2 = round(2);
-      return '二巡目 ' + r2.length + '名。技が未入力の選手が ' +
-        r2.filter(isTechIncomplete).length + '名います。\n二巡目を開始しますか？';
+      return '二巡目 ' + r2.length + '名。' +
+        countPhrase('技が未入力の選手', r2.filter(isTechIncomplete).length) + '\n二巡目を開始しますか？';
     }
     if (from === 'round1_done' && to === 'final') {
       return '二巡目を行わずに最終結果にします。\nよろしいですか？';
     }
     if (from === 'round2' && to === 'round2_done') {
-      return '二巡目の未採点が ' + round(2).filter(function(p) { return !isScored(p); }).length +
-        '名います。\n二巡目を終了しますか？';
+      return countPhrase('二巡目の未採点', round(2).filter(function(p) { return !isScored(p); }).length) +
+        '\n二巡目を終了しますか？';
     }
     if (from === 'archived' && to === 'final') {
       return '最終結果に戻します。よろしいですか？';
