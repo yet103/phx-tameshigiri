@@ -173,7 +173,15 @@ async function main() {
         const failLines = text.split('\n').filter((l) => l.startsWith('✗'));
         for (const line of failLines) console.log(line);
       }
-      exitCode = failedCount === 0 ? 0 : 1;
+      // failedCount が 0 でも、通過件数が極端に少なければ「成功」と誤判定しない。
+      // フィクスチャの読み込み失敗やスクリプトエラーで assert 自体が1件も走らず
+      // failed:0 のまま終わるケースを拾うため（本来 1221 件以上ある）。
+      if (failedCount === 0 && passedCount < 1000) {
+        console.error(`通過件数が少なすぎます（${passedCount} 件）。フィクスチャや読み込みを確認してください。`);
+        exitCode = 1;
+      } else {
+        exitCode = failedCount === 0 ? 0 : 1;
+      }
     }
   } catch (err) {
     console.error('run-test-html: ' + err.message);

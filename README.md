@@ -49,9 +49,12 @@ PORT=3461 node server/index.js
 
 ## テスト
 
-このプロジェクトのテストは2種類ある。両方合わせて確認すること。
+このプロジェクトのテストは2種類ある。両方合わせて確認すること。必要な Node のバージョンが
+異なる点に注意（`npm test` は Node 18 以上、`npm run test:browser` はヘッドレス Chrome との
+やり取りにグローバル `WebSocket`（Node 22 で追加）を素の `new WebSocket(...)` で使っているため
+Node 22 以上が要る）。
 
-### `npm test` — 認証・静的配信のテスト（Node のみ、外部依存なし）
+### `npm test` — 認証・静的配信のテスト（Node 18 以上、外部依存なし）
 
 ```
 npm test
@@ -60,7 +63,7 @@ npm test
 `server/auth.test.js` を実行する。`server/index.js` を子プロセスとして起動し、Basic 認証の
 組み合わせや静的ファイルの許可リストを HTTP で検証する。ブラウザは不要。
 
-### `npm run test:browser` — アプリ本体の単体テスト（`test.html`、1000件超）
+### `npm run test:browser` — アプリ本体の単体テスト（`test.html`、1000件超、Node 22 以上）
 
 `data.js` `scoring.js` `api.js` `storage.js` `courts.js` など画面側のロジックは `test.html` に
 1000件を超えるテストとしてまとまっている。ブラウザで直接開いても確認できるが、CI やコマンド
