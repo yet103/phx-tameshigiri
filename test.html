@@ -461,6 +461,10 @@
     assert('from-template: 空の name は理由を返す', ftEmptyName && !!ftEmptyName.error, true);
     var ftLongName = await Api.createFromTemplate('practice', { name: 'あ'.repeat(101) });
     assert('from-template: 101文字の name は理由を返す', ftLongName && !!ftLongName.error, true);
+    var ftProtoTemplate = await Api.createFromTemplate('constructor', { name: 'x' });
+    assert('from-template: template=constructor は不明なテンプレートとして拒む', ftProtoTemplate && ftProtoTemplate.error, '不明なテンプレートです');
+    var ftProtoTemplate2 = await Api.createFromTemplate('__proto__', { name: 'x' });
+    assert('from-template: template=__proto__ は不明なテンプレートとして拒む', ftProtoTemplate2 && ftProtoTemplate2.error, '不明なテンプレートです');
 
     var ftPractice = await Api.createFromTemplate('practice', { name: '稽古用テンプレ', date: '2026-09-21', venue: '' });
     assert('from-template practice: 成功して選手0名', ftPractice.playerCount, 0);

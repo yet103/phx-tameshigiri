@@ -839,7 +839,7 @@ function buildSystestPlayers(techniques) {
 app.post('/api/events/from-template', (req, res) => {
   try {
     const body = req.body || {};
-    const spec = TEMPLATE_SPECS[body.template];
+    const spec = Object.prototype.hasOwnProperty.call(TEMPLATE_SPECS, body.template) ? TEMPLATE_SPECS[body.template] : null;
     if (!spec) {
       return res.status(400).json({ error: '不明なテンプレートです' });
     }
