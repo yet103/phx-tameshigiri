@@ -86,7 +86,7 @@
     if (locked) {
       var warn = document.createElement('p');
       warn.className = 'admin-warn';
-      warn.textContent = 'この大会は最終結果を確定済みです。上部の「戻す」を押すと編集できます。';
+      warn.textContent = 'この大会は最終結果を確定済みです。試合進行タブの「⋯」→「◀ … に戻す」を押すと編集できます。';
       container.appendChild(warn);
     }
 
@@ -884,7 +884,7 @@
     if (locked) {
       var note = document.createElement('p');
       note.className = 'admin-warn';
-      note.textContent = 'この大会は最終結果を確定済みです。上部の「戻す」を押すと編集できます。';
+      note.textContent = 'この大会は最終結果を確定済みです。試合進行タブの「⋯」→「◀ … に戻す」を押すと編集できます。';
       body.appendChild(note);
     }
 

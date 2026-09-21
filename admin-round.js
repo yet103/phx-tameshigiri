@@ -129,15 +129,10 @@ var AdminRound = (function() {
     container.appendChild(buildStage(st));
 
     // 技を入れられるのは「一巡目終了」のときだけ（PC 運営 desk-match.js の editable と同じ）。
-    // それ以外の状態では行タップ・チップ・「一巡目と同じ技をコピー」を止め、同じ注記を出す。
+    // それ以外の状態では行タップ・チップ・「一巡目と同じ技をコピー」を止め、同じ注記を出す
+    // （注記は二巡目の節＝ counterEl／listEl の直前に置く。desk-match.js の「二巡目」見出し
+    // 直下と同じ位置）。
     editable = (st === 'round1_done');
-    if (!editable) {
-      var note = document.createElement('p');
-      note.className = 'round-note';
-      note.textContent = '技を入れられるのは「一巡目終了」のときだけです（いまは「' +
-        EventStatus.LABELS[st] + '」）。直すときは上部の「戻す」で一巡目終了まで戻してください。';
-      container.appendChild(note);
-    }
 
     // 見出し：採点の進み具合・生成ボタン・メニュー
     var head = document.createElement('div');
@@ -183,6 +178,14 @@ var AdminRound = (function() {
     }
     Admin.renderCourtChips(chipsWrap, players, currentCourt, onCourtChange);
 
+    if (!editable) {
+      var note = document.createElement('p');
+      note.className = 'round-note';
+      note.textContent = '技を入れられるのは「一巡目終了」のときだけです（いまは「' +
+        EventStatus.LABELS[st] + '」）。直すときは「⋯」→「◀ … に戻す」で一巡目終了まで戻してください。';
+      container.appendChild(note);
+    }
+
     counterEl = document.createElement('div');
     counterEl.className = 'round-counter';
     counterEl.id = 'roundCounter';
@@ -202,7 +205,11 @@ var AdminRound = (function() {
     if (rows.length === 0) {
       var p = document.createElement('p');
       p.className = 'round-empty';
-      p.textContent = '二巡目の選手はまだいません。「二巡目を生成」を押してください。';
+      // 「一巡目終了」以外は二巡目を生成できない（PC の desk-match.js と同じ出し分け）。
+      // editable でないのに「押してください」と出すと、押せないボタンへ誘導してしまう。
+      p.textContent = editable
+        ? '二巡目の選手はまだいません。「二巡目を生成」を押してください。'
+        : '二巡目の選手はいません。';
       listEl.appendChild(p);
     } else {
       rows.forEach(function(r) { listEl.appendChild(buildRow(r)); });

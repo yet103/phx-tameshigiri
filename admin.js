@@ -522,7 +522,7 @@ var Admin = (function() {
     if (locked) {
       var warn = document.createElement('p');
       warn.className = 'admin-warn';
-      warn.textContent = 'この大会は最終結果を確定済みです。上部の「戻す」を押すと編集できます。';
+      warn.textContent = 'この大会は最終結果を確定済みです。試合進行タブの「⋯」→「◀ … に戻す」を押すと編集できます。';
       body.appendChild(warn);
     }
 
@@ -579,6 +579,10 @@ var Admin = (function() {
     courtField.appendChild(courtLabel);
     var courtNote = document.createElement('p');
     courtNote.className = 'field-note';
+    // この文言が PC（desk-setup.js）の後半と違うのは意図（スマホの試合進行画面には
+    // settings.courts の一覧を出していないため、PC 側の「試合進行にも出ます」に相当する
+    // 一文が無い＝全体点検 B-26）。
+    // B-26（スマホ試合進行に settings.courts を出す）を直すとき PC の文言に揃える。
     courtNote.textContent =
       'ここで足したコートは、選手が1人もいなくても選手登録のコート候補に出ます。' +
       '選手あり（灰色）のコートは選手のコート指定から決まったもので、ここでは外せません。';
@@ -683,6 +687,9 @@ var Admin = (function() {
           courts: extra.slice()
         }
       });
+      // 保存中に大会を切り替えられていたら、もう閉じているシートを操作しない
+      // （PC 運営 desk-setup.js の ctx.isStale() と同じ扱い）。
+      if (currentEventId() !== eventId) return;
       sheet.lock(false);
       btnSave.disabled = false;
       if (!result || !result.ok) {
@@ -695,7 +702,7 @@ var Admin = (function() {
       }
       sheet.close();
       toast('基本情報を保存しました');
-      if (currentEventId() === eventId) await reloadEvent();
+      await reloadEvent();
     });
   }
 
