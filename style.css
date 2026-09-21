@@ -110,6 +110,13 @@ input[type="file"] { display: none; }
 }
 .timer-bar button { background: var(--bg-header); color: var(--text); min-height: 44px; }
 .timer-bar button:hover { opacity: 0.8; }
+/* タイマー稼働中: 「開始」を押したことが見えるよう、ボタンを青にして表示を脈打たせる */
+.timer-bar #btnTimerStart.on { background: var(--btn-confirm-on); color: #fff; border-color: var(--btn-confirm-on); }
+.timer-display.running { animation: timer-pulse 1s ease-in-out infinite alternate; }
+@keyframes timer-pulse {
+  from { box-shadow: 0 0 0 2px var(--gold) inset; }
+  to   { box-shadow: 0 0 0 2px var(--gold) inset, 0 0 12px 3px var(--timer-bg); }
+}
 
 /* ===== 採点テーブル ===== */
 .score-table-wrap { overflow-x: auto; padding: 0 12px; }
@@ -151,6 +158,8 @@ input[type="file"] { display: none; }
   min-width: 50px;
   user-select: none;
 }
+/* 太刀のセルの点数（未・成功は配点、減点は減点時の点、失敗は 0。常に出す） */
+.score-table td.strike-cell .strike-pts { display: block; font-size: 12px; font-weight: normal; line-height: 1.1; opacity: 0.85; }
 .score-table td.strike-cell:hover:not(.disabled):not(.voided) { opacity: 0.8; }
 .score-table td.strike-cell.success {
   background: var(--cell-success);
@@ -264,8 +273,8 @@ input[type="file"] { display: none; }
 .note-preset-item:hover { background: var(--bg-header); }
 
 /* ===== 確定 ===== */
-.btn-confirm { background: var(--btn-neutral); color: #fff; }
-.btn-confirm.on { background: var(--score-confirmed); color: #fff; }
+.btn-confirm { background: var(--btn-confirm); color: #fff; }        /* 未確定＝水色 */
+.btn-confirm.on { background: var(--btn-confirm-on); color: #fff; }  /* 確定済み＝青 */
 
 /* ===== アクションバー =====
    .action-block（.timer-bar の直下）に収まる2段目。区画の境界線は .action-block と
@@ -331,6 +340,9 @@ input[type="file"] { display: none; }
 /* 採点できない状態。太刀のセルは押せなくし、全体を薄く見せる */
 body.scoring-locked .strike-cell { pointer-events: none; opacity: 0.55; }
 body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
+/* 確定済み: 太刀のセルを押せなくする（採点できない状態と同じ見せ方。確定ボタンだけは押せる） */
+body.score-frozen .score-table td.strike-cell { pointer-events: none; }
+body.score-frozen .action-bar button[disabled] { opacity: 0.45; }
 
 /* ===== ページリンクバー ===== */
 .page-links {
@@ -452,6 +464,8 @@ body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
    反転した文字色が勝つ（薄いまま読めなくなることはない）。 */
 .player-list-table td.no-bib { color: var(--text-muted); }
 .player-list-table tr:hover td { opacity: 0.75; }
+/* 確定済みの行はグレー。選択中の行（下の .current-player）のほうが後にあるので勝つ */
+.player-list-table tr.done td { background: var(--cell-disabled); color: var(--text-muted); }
 .player-list-table tr.current-player td {
   background: var(--accent);
   color: var(--accent-text);

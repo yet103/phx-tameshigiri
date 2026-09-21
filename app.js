@@ -189,10 +189,12 @@ var App = (function() {
 
     // 大会管理イベント
     document.getElementById('eventSelect').addEventListener('change', function() {
+      if (!confirmLeave()) { this.value = currentEvent ? currentEvent.id : ''; return; }
       currentCourt = '';   // 大会が変われば担当コートも選び直す
       onEventSelect(this.value, '');
     });
     courtSelect.addEventListener('change', function() {
+      if (!confirmLeave()) { this.value = currentCourt; return; }
       currentCourt = this.value;
       applyCourtFilter();
       if (currentEvent) Route.set(currentEvent.id, currentCourt);
@@ -318,20 +320,29 @@ var App = (function() {
 
   // 採点できない状態のとき、得点に関わる操作を全部止める。
   // 前後の選手の移動・タイマー・CSVエクスポート・HTML保存は使える（設計書「採点画面」）。
+  // いま開いている選手が確定済みか（確定済みの間は点数を触れない。ユーザー要望）
+  function currentConfirmed() {
+    var p = visiblePlayers[currentIndex];
+    return !!(p && p.confirmed);
+  }
+
   function applyScoringLock() {
     var locked = !!currentEvent && !scoringOpen();
+    // 確定済みは「採点できる状態」のまま入力だけ止める。確定ボタンは押せる（取り消しのトグル）。
+    var frozen = locked || currentConfirmed();
     document.body.classList.toggle('scoring-locked', locked);
+    document.body.classList.toggle('score-frozen', frozen);
     btnConfirm.disabled = locked;
-    document.getElementById('btnAllSuccess').disabled = locked;
-    document.getElementById('btnAllFail').disabled = locked;
-    if (locked) {
+    document.getElementById('btnAllSuccess').disabled = frozen;
+    document.getElementById('btnAllFail').disabled = frozen;
+    if (frozen) {
       totalAdjustInput.disabled = true;
       noteInput.disabled = true;
       btnNotePreset.disabled = true;
       closeNotePresetSheet();   // 採点できなくなったら、開いていた文例シートも片付ける
     }
     var inputs = scoreTableBody.querySelectorAll('.adjust-input');
-    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = locked;
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = frozen;
   }
 
   // 表示する選手。進行中ならその巡目だけに絞る（コートの絞り込みと併用）。
@@ -522,11 +533,21 @@ var App = (function() {
   // コート端末から全コート分のデータを消せる操作を置かないため、この画面からは外した。
 
   // --- 選手切り替え ---
+  // 採点を入れたのに確定していない選手から離れようとしたら、一度だけ聞く（ユーザー要望）。
+  // 採点できない状態や、まだ何も入れていない選手では聞かない。戻り値 true なら移動してよい。
+  function confirmLeave() {
+    var p = visiblePlayers[currentIndex];
+    if (!p || !scoringOpen() || p.confirmed) return true;
+    if (!gridEdited && !Courts.isScored(p)) return true;
+    return confirm('この選手の採点がまだ確定されていません。確定せずに移動しますか？');
+  }
+
   function movePlayer(delta) {
     if (visiblePlayers.length === 0) return;
-    saveCurrentState();
     var next = currentIndex + delta;
     if (next < 0 || next >= visiblePlayers.length) return;
+    if (!confirmLeave()) return;
+    saveCurrentState();
     selectPlayer(next);
   }
 
@@ -701,6 +722,7 @@ var App = (function() {
       var td = document.createElement('td');
       td.className = 'strike-cell';
       td.dataset.strike = s;
+      td.dataset.tech = techName;   // 行に付ける前に描くので、技名はセル自身にも持たせる（strikePoints が読む）
       var disabled = !tech || tech.strikes[s] === null;
       if (disabled) {
         td.classList.add('disabled');
@@ -738,14 +760,38 @@ var App = (function() {
     return tr;
   }
 
+  // そのセルの点数。未・成功はその太刀の配点、減点は減点時の点、失敗は 0
+  // （常に点数を出しておく。ユーザー要望）。
+  function strikePoints(td, value) {
+    var tr = td.closest('tr');
+    var techName = td.dataset.tech || (tr ? tr.dataset.tech : '');
+    if (!techName) return null;
+    if (value === '×') return 0;
+    var p = visiblePlayers[currentIndex];
+    return Scoring.calcStrikeScore(techName, parseInt(td.dataset.strike, 10),
+      value === '△' ? '△' : '○', p ? p.isFemale === true : false);
+  }
+
   function setCellDisplay(td, value) {
     td.classList.remove('success', 'fail', 'empty', 'reduced');
-    if (value === '○') { td.textContent = '成功'; td.classList.add('success'); }
+    var label;
+    if (value === '○') { label = '成功'; td.classList.add('success'); }
     // △（減点成功）。抜刀していた初太刀の胸尽くしなど。失敗ではないので
     // 後ろの太刀は無効にならない（Scoring.failedAt は '×' しか見ない）
-    else if (value === '△') { td.textContent = '減点'; td.classList.add('reduced'); }
-    else if (value === '×') { td.textContent = '失敗'; td.classList.add('fail'); }
-    else { td.textContent = '未'; td.classList.add('empty'); }
+    else if (value === '△') { label = '減点'; td.classList.add('reduced'); }
+    else if (value === '×') { label = '失敗'; td.classList.add('fail'); }
+    else { label = '未'; td.classList.add('empty'); }
+    td.textContent = '';
+    var main = document.createElement('span');
+    main.textContent = label;
+    td.appendChild(main);
+    var pts = strikePoints(td, value);
+    if (pts !== null) {
+      var sub = document.createElement('span');
+      sub.className = 'strike-pts';
+      sub.textContent = pts + '点';
+      td.appendChild(sub);
+    }
   }
 
   // 一つの形で途中失敗したら、それ以降の太刀（配点のある太刀）を無効表示にする。
@@ -841,9 +887,16 @@ var App = (function() {
   }
 
   // --- タイマー ---
+  // 「開始」を押したことが見えるように、稼働中はボタンと表示にクラスを付ける
+  function syncTimerLook() {
+    document.getElementById('btnTimerStart').classList.toggle('on', timerRunning);
+    timerDisplay.classList.toggle('running', timerRunning);
+  }
+
   function startTimer() {
     if (timerRunning) return;
     timerRunning = true;
+    syncTimerLook();
     timerInterval = setInterval(function() {
       if (timerSec > 0) {
         timerSec--;
@@ -864,6 +917,7 @@ var App = (function() {
     timerRunning = false;
     clearInterval(timerInterval);
     timerInterval = null;
+    syncTimerLook();
   }
 
   function stopTimer() {
@@ -928,9 +982,22 @@ var App = (function() {
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     var p = visiblePlayers[currentIndex];
     if (!p) return;
-    // 既に確定済みなら何もしない。技の有無を先に見ると、技が無い確定済みの
-    // 選手をただ開いただけで無関係な警告が出る。
-    if (p.confirmed) return;
+    // 確定済みで押したら確定を取り消す（トグル。ユーザー要望）。技の有無を先に見ると、
+    // 技が無い確定済みの選手をただ開いただけで無関係な警告が出るので、ここで分岐する。
+    if (p.confirmed) {
+      if (!confirm('確定を取り消しますか？（取り消すと点数を直せます）')) return;
+      p.confirmed = false;
+      gridEdited = true;
+      applyConfirmedStyle(false);
+      applyScoringLock();
+      saveCurrentState();
+      Api.addHistory(currentEvent.id, {
+        action: 'unconfirm',
+        playerName: p.name || '',
+        detail: '確定を取り消し（' + (p.score || 0) + '点）'
+      });
+      return;
+    }
     if (!hasScoreRows()) {
       alert('技が未入力のため確定できません。');
       return;
@@ -942,6 +1009,7 @@ var App = (function() {
     p.confirmed = true;
     gridEdited = true;
     applyConfirmedStyle(true);
+    applyScoringLock();   // 確定済みは点数を触れない
     saveCurrentState();
     Api.addHistory(currentEvent.id, {
       action: 'confirm',
@@ -1103,6 +1171,7 @@ var App = (function() {
 
   function onStrikeClick(e) {
     if (!scoringOpen()) return;   // 採点できない状態（理由はバナーに出ている）
+    if (currentConfirmed()) return;   // 確定済みは触れない（確定済みボタンで取り消してから）
     var td = e.currentTarget;
     if (td.classList.contains('disabled') || td.classList.contains('voided')) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
@@ -1377,6 +1446,7 @@ var App = (function() {
     var tr = document.createElement('tr');
     tr.dataset.index = index;
     if (index === currentIndex) tr.classList.add('current-player');
+    if (p.confirmed) tr.classList.add('done');   // 確定済みの行はグレー（ユーザー要望）
     var hasBib = (typeof p.bib === 'number');
     tr.innerHTML =
       '<td>' + esc(p.order || '') + '</td>' +
@@ -1389,6 +1459,7 @@ var App = (function() {
       '<td class="' + (p.confirmed ? 'confirmed' : '') + '">' + (p.score || 0) + '</td>';
     tr.addEventListener('click', function() {
       var idx = parseInt(this.dataset.index, 10);
+      if (idx !== currentIndex && !confirmLeave()) return;
       saveCurrentState();
       selectPlayer(idx);
     });
@@ -1444,6 +1515,7 @@ var App = (function() {
     if (!isPlayerListOpen()) return;
     var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
     if (row) {
+      row.classList.toggle('done', on);
       var cells = row.querySelectorAll('td');
       cells[cells.length - 1].classList.toggle('confirmed', on);
     }
