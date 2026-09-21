@@ -512,6 +512,9 @@
     assert('from-template systest: bib は1〜20の連番',
       ftSysPlayers.map(function(p) { return p.bib; }).sort(function(a, b) { return a - b; }),
       Array.from({ length: 20 }, function(_, i) { return i + 1; }));
+    assert('from-template systest: 級位段位が全員に入り、検証（20 文字まで）に通る',
+      ftSysPlayers.every(function(p) { return typeof p.rank === 'string' && p.rank.length >= 1 && p.rank.length <= 20; }),
+      true);
     assert('from-template systest: A・Bに交互（コートごとに男女5名ずつ）',
       ['A', 'B'].map(function(c) {
         var rows = ftSysPlayers.filter(function(p) { return Courts.courtOf(p) === c; });
@@ -1990,7 +1993,7 @@
       '抜刀して止まった（戻した）ため抜き打ちと認めず失敗',
       '突きの構えで切先が鞘から抜けていたため減点',
       '畳表のさし直し',
-      '刀の曲がりを修正'
+      '持ち時間を超過（タイムオーバー）'
     ]);
 
     var h2s = document.createElement('h2');
@@ -2145,7 +2148,7 @@
       Scoring.appendNote('間合い確認、畳表のさし直し', '畳表のさし直し'), '間合い確認、畳表のさし直し');
     assert('appendNote 200文字を超える分は切る',
       Scoring.appendNote(Array(196).join('あ'), '畳表のさし直し').length, 200);
-    assert('appendNote currentがnull/undefinedでも足せる', Scoring.appendNote(null, '刀の曲がりを修正'), '刀の曲がりを修正');
+    assert('appendNote currentがnull/undefinedでも足せる', Scoring.appendNote(null, '持ち時間を超過（タイムオーバー）'), '持ち時間を超過（タイムオーバー）');
 
     var h2st = document.createElement('h2');
     h2st.textContent = 'storage.js';
@@ -2478,6 +2481,17 @@
     assert('statusConfirmMessage: draft → round1',
       Courts.statusConfirmMessage('draft', 'round1', tcP),
       '一巡目 2名。技が未入力の選手が 1名います。\n試合を開始しますか？');
+    // 0 名のときは「0名います」ではなく「いません」（ユーザー要望）
+    assert('statusConfirmMessage: 未入力が 0 名なら「いません」',
+      Courts.statusConfirmMessage('draft', 'round1', [
+        { order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 0 }
+      ]),
+      '一巡目 1名。技が未入力の選手がいません。\n試合を開始しますか？');
+    assert('statusConfirmMessage: 未採点が 0 名なら「いません」',
+      Courts.statusConfirmMessage('round1', 'round1_done', [
+        { order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 10, result: '1    ' }
+      ]),
+      '一巡目の未採点がいません。\n一巡目を終了しますか？');
     assert('statusConfirmMessage: round1 → round1_done',
       Courts.statusConfirmMessage('round1', 'round1_done', tcP),
       '一巡目の未採点が 1名います。\n一巡目を終了しますか？');
