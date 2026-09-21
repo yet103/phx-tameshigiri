@@ -151,6 +151,16 @@
     badge.className = 'desk-badge' + (EventStatus.isScoringOpen(st) ? ' on' : '');
     badge.textContent = EventStatus.LABELS[st];
     tdStatus.appendChild(badge);
+
+    // テスト大会（テンプレート「システムテスト用」で作った大会）。
+    // トップの一覧では既定で隠れるが、運営画面では隠さない（テストで使うため）。
+    if (ev.test === true) {
+      var testBadge = document.createElement('span');
+      testBadge.className = 'desk-badge';
+      testBadge.textContent = 'テスト';
+      tdStatus.appendChild(testBadge);
+    }
+
     tr.appendChild(tdStatus);
 
     tr.appendChild(cell(formatUpdated(ev.updatedAt)));

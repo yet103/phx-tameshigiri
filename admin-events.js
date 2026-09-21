@@ -97,7 +97,8 @@
     var sub = document.createElement('span');
     sub.className = 'row-sub';
     sub.textContent = (ev.date || '日付なし') + ' ・ ' + (ev.playerCount || 0) + '名 ・ ' +
-      EventStatus.LABELS[EventStatus.of(ev)];
+      EventStatus.LABELS[EventStatus.of(ev)] +
+      (ev.test === true ? ' ・ テスト' : '');
     body.appendChild(main);
     body.appendChild(sub);
     body.addEventListener('click', function() {
