@@ -306,7 +306,7 @@
 
     <h3>（d）PC の表に打ち込む・Excel から貼り付ける</h3>
     <p>PC 用の運営画面（<code>desk.html</code>）の <span class="ui">選手登録</span> の区画は、1人1行の<span class="term">編集できる表</span>です。名前・ゼッケン・級位段位・レンタル・コート・性別・新人・技1〜3のセルをその場で直せます。直したセルから離れる（Tab や Enter、ほかの場所をクリック）と、その項目だけが保存されます。</p>
-    <p>表の上には <span class="msg">ゼッケン未入力 3　級位段位未入力 1　レンタル不可の形 2</span> のように、<span class="term">このままでは試合を開始できない件数</span>が赤く出ます。該当するセルは赤い枠になります（必須なのに空は点線、レンタルの選手が選べない形は実線）。0 件になると消えます。</p>
+    <p>表の上には <span class="msg">ゼッケン未入力 3　級位段位未入力 1　レンタル不可の形 2　同じ形2回 1</span> のように、<span class="term">このままでは試合を開始できない件数</span>が赤く出ます。該当するセルは赤い枠になります（必須なのに空は点線、レンタルの選手が選べない形は実線）。0 件になると消えます。</p>
     <ul>
       <li><span class="ui">＋ 行を追加</span> で末尾に空の行が増えます。名前を入れて確定すると登録されます。コート・性別・新人は1つ上の行と同じものが入ります。</li>
       <li>見出しの <span class="ui">▼</span> で列ごとに絞り込めます（コート・性別・新人・巡・技が未入力の行だけ）。名前は <span class="ui">▼</span> の中の検索欄で部分一致します。</li>
@@ -342,7 +342,7 @@
     </ul>
     <p>技は一巡目・二巡目とも3つ入れるのが基本です。事情があれば2つでも採点はできます。</p>
     <div class="note"><span class="term">同じ形は1人の3枠に1回まで（同じ巡の中で）。</span>技リストで <span class="ui">回数制限なし</span> にチェックが付いている形（既定では抜刀してからの6形）だけは、同じ巡で何度でも選べます。それ以外の形を2枠以上に選ぶと、その選手の枠が赤くなり<span class="term">試合開始</span>で止まります（一巡目と二巡目では別に数えるので、一巡目と二巡目で同じ形を選ぶのは問題ありません）。</div>
-    <p>ここに出る技と配点は<span class="term">その大会のもの</span>です。直すときは、運営画面の右上 <span class="ui">⋯</span> → <span class="ui">🗒 技術リスト編集</span>（選択中の大会のものが開きます）、または採点画面の上のリンク <span class="ui">技術リスト編集</span> から開きます。</p>
+    <p>ここに出る技と配点は<span class="term">その大会のもの</span>です。直すときは、運営画面の右上 <span class="ui">⋯</span> → <span class="ui">🗒 技術リスト編集</span>（選択中の大会のものが開きます）、または採点画面の上のリンク <span class="ui">技術リスト編集</span> から開きます。PC 用は左の <span class="ui">技と配点</span> です。</p>
     <div class="note"><span class="term">男女で配点が違う技があります。</span><span class="ui">胸尽くし</span>・<span class="ui">水月</span>・<span class="ui">破図味</span> は技リストでは <span class="ui">(男)</span> <span class="ui">(女)</span> の2つの行に分かれていますが、この画面には選手の性別に合う方だけが接尾辞なしで出ます（もう一方は選択肢に出ません）。</div>
     <div class="note"><span class="term">真剣レンタルの選手は、抜刀してからの形だけを選べます。</span><span class="ui">真剣レンタル</span> にチェックが入っている選手の技の候補は、技リストで <span class="ui">抜刀後</span> にチェックが付いている形だけになります（どの形が「抜刀後」かは §3 の「技の配点を変える」で運営が決めます）。すでに選んである技は候補に残りますが、抜刀後でない形が残っていると <span class="ui">試合開始 ▶</span> で止まります。</div>
 
@@ -450,6 +450,7 @@
         <li><span class="ui">基本情報</span> で <span class="ui">ゼッケン番号を必須にする</span> にしていて、一巡目にゼッケンが空の選手がいる。</li>
         <li><span class="ui">級位・段位を必須にする</span> にしていて、一巡目に級位・段位が空の選手がいる。</li>
         <li><span class="ui">真剣レンタル</span> の選手に、<span class="ui">抜刀後</span> でない形が入っている。</li>
+        <li>一巡目に、<span class="ui">回数制限なし</span> でない同じ形を2枠以上選んでいる選手がいる。</li>
       </ul>
       PC 用の <span class="ui">選手登録</span> の表では、同じ件数が表の上に赤く出ます（§1 の（d））。
     </div>
@@ -583,7 +584,7 @@
     </ul>
 
     <h3>技の配点を変える</h3>
-    <p>配点は <span class="ui">技術リスト編集</span>（<code>techniques.html</code>）で<span class="term">大会ごとに</span>変えられます。画面の上の <span class="ui">編集する対象</span> で大会を選び、技名ごとに <span class="ui">初太刀</span> から <span class="ui">四ノ太刀</span> までの点を入れ、<span class="ui">保存</span> を押します。</p>
+    <p>配点は <span class="ui">技術リスト編集</span>（<code>techniques.html</code>）で<span class="term">大会ごとに</span>変えられます。画面の上の <span class="ui">編集する対象</span> で大会を選び、技名ごとに <span class="ui">初太刀</span> から <span class="ui">四ノ太刀</span> までの点を入れ、<span class="ui">保存</span> を押します。PC 用は左の <span class="ui">技と配点</span> から同じことができます。</p>
     <ul>
       <li><span class="ui">雛形（新規大会の初期値）</span> を変えても、すでにある大会の配点は変わりません。雛形はこれから作る大会に入る初期値です。</li>
       <li><span class="ui">雛形に戻す</span> を押すと、その大会の配点を雛形の内容で置き換えます。</li>
@@ -768,7 +769,7 @@
     <p>ダイアログに選手 ID と点数が並びます。該当する選手を採点画面で開き、採点を確認して入力し直してください。</p>
 
     <h3>技が見つからない</h3>
-    <p>技を選ぶシートの絞り込みに出てこない、あるいは採点表の行がまるごと灰色になるときは、その技名が <span class="ui">技術リスト編集</span> にあるか確かめてください。配点は大会ごとなので、<span class="term">その大会を選んで</span>から確かめます（画面の上の <span class="ui">編集する対象</span>）。</p>
+    <p>技を選ぶシートの絞り込みに出てこない、あるいは採点表の行がまるごと灰色になるときは、その技名が <span class="ui">技術リスト編集</span> にあるか確かめてください。配点は大会ごとなので、<span class="term">その大会を選んで</span>から確かめます（画面の上の <span class="ui">編集する対象</span>）。PC 用は左の <span class="ui">技と配点</span> です。</p>
     <div class="note">技術リスト編集では<span class="term">行を足せません</span>。できるのは、すでにある行の技名と配点を書き換えて <span class="ui">保存</span> するか、雛形なら <span class="ui">デフォルト設定に戻す</span>、大会なら <span class="ui">雛形に戻す</span> のどちらかです。</div>
     <p>対処は2つあります。</p>
     <ol>

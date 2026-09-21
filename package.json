@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
-    "test": "node server/auth.test.js"
+    "test": "node server/auth.test.js",
+    "test:browser": "node scripts/run-test-html.mjs"
   },
   "dependencies": {
     "express": "^5.2.1"
