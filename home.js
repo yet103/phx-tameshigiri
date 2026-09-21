@@ -466,6 +466,11 @@ var Home = (function() {
       var date = inDate.value;
       var venue = inVenue.value.trim();
       if (newRoute === 'blank') {
+        // 他の 3 経路はサーバーの 400 で理由を返すが、完全新規は saveEvent が通信失敗と
+        // 区別しない（null）ので、送る前にここで同じ文言のまま弾く。
+        if (name.length < 1 || name.length > 100) {
+          return { error: '大会名が不正です（1〜100文字）' };
+        }
         var saved = await Api.saveEvent({ name: name, date: date, venue: venue, players: [] });
         return (saved && saved.id) ? { id: saved.id } : null;
       }
