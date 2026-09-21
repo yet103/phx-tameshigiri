@@ -1018,10 +1018,48 @@ app.post('/api/events/:id/status', (req, res) => {
         players.filter(p => EventStatus.roundOf(p) === 1).length === 0) {
       return res.status(409).json({ error: '一巡目の選手がいません', reason: 'empty' });
     }
-    // 二巡目の行が無ければ二巡目は始められない（先に生成する）
+
+    // 一巡目の終了で二巡目を作る（設計書 2026-09-22 の決定。手動の「二巡目を生成」は無い）。
+    // 生成できなければ状態も進めない（ファイルを書かずに返す＝遷移の取り消し）。
+    let round2Info = null;
+    if (from === 'round1' && to === 'round1_done') {
+      if (players.filter(p => EventStatus.roundOf(p) === 1).length === 0) {
+        return res.status(409).json({ error: '一巡目の選手がいません', reason: 'empty' });
+      }
+      // 未採点の確認はクライアントが済ませているので force 扱いで呼ぶ
+      // （既に二巡目があれば差分だけ追加される）。
+      const gen = generateRound2(event, true);
+      if (!gen.ok) {
+        return res.status(409).json({
+          error: gen.body.error || '二巡目を生成できませんでした', reason: 'generate_failed'
+        });
+      }
+      event.players = gen.players;
+      round2Info = {
+        created: gen.created, skipped: gen.skipped, existingCount: gen.existingCount,
+        untrackedCount: gen.untrackedCount, unassignedCount: gen.unassignedCount,
+        finalistCount: gen.finalistCount
+      };
+    }
+
+    // 二巡目の行が無ければ二巡目は始められない（既存データの移行。通常の遷移では
+    // round1_done が必ず二巡目を作るので、この経路は round2 が無いまま round1_done を
+    // 持つ大会＝取り込んだ古いデータのためだけに残る）。
     if (from === 'round1_done' && to === 'round2' &&
         players.filter(p => EventStatus.roundOf(p) === 2).length === 0) {
       return res.status(409).json({ error: '二巡目が生成されていません', reason: 'no_round2' });
+    }
+    // 決戦の行が無ければ決戦は始められない（暫定ベスト8 が 0 名の大会）
+    if (from === 'round2' && to === 'round2_final' && !EventStatus.hasFinalists(event.players)) {
+      return res.status(409).json({ error: '決戦の選手がいません', reason: 'no_finale' });
+    }
+    // 決戦の行があるのに二巡目を終了しようとしたら止める（先に「決戦を開始」を押す）。
+    // 決戦の行が無い大会（この機能より前に作られた大会）は round2 → round2_done を素通しする
+    // （既存データの移行）。
+    if (from === 'round2' && to === 'round2_done' && EventStatus.hasFinalists(event.players)) {
+      return res.status(409).json({
+        error: '決戦がまだです。先に「決戦を開始」を押してください', reason: 'finale_pending'
+      });
     }
 
     event.status = to;
@@ -1032,9 +1070,11 @@ app.post('/api/events/:id/status', (req, res) => {
     writeJsonAtomic(eventPath, event);
     appendHistory(req.params.id, {
       action: 'status_change',
-      detail: EventStatus.LABELS[from] + ' → ' + EventStatus.LABELS[to]
+      detail: EventStatus.LABELS[from] + ' → ' + EventStatus.LABELS[to] +
+        (round2Info ? '（二巡目 ' + round2Info.created + ' 名を生成。決戦 ' +
+                      round2Info.finalistCount + ' 名）' : '')
     });
-    res.json({ success: true, status: to });
+    res.json({ success: true, status: to, round2: round2Info });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

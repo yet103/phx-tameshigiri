@@ -46,11 +46,13 @@
     h2.textContent = 'api.js';
     results.appendChild(h2);
 
-    // 二巡目の生成は状態が round1_done のときだけ通る。
-    // 生成を使うテストはこの補助で draft → round1 → round1_done と進めてから呼ぶ。
+    // 一巡目を終了すると、サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
+    // 生成の結果は応答の round2（created / skipped / finalistCount …）に入る。
+    // この補助を通したあとで Api.generateNextRound を呼ぶと、
+    // 一巡目が全員採点済みなら reason:'exists'、未採点がいれば reason:'unscored' が返る。
     async function toRound1Done(eventId) {
       await Api.changeStatus(eventId, 'round1');
-      await Api.changeStatus(eventId, 'round1_done');
+      return await Api.changeStatus(eventId, 'round1_done');
     }
 
     // 技術APIテスト
@@ -461,8 +463,7 @@
     assert('copyEvent: withPlayers で bib/rank/rental を複製する',
       [pcNew.players[0].bib, pcNew.players[0].rank, pcNew.players[0].rental], [21, '弐段', true]);
 
-    await toRound1Done(pcSrc.id);
-    await Api.generateNextRound(pcSrc.id, true);   // 一巡目が未採点のまま force で生成する
+    await toRound1Done(pcSrc.id);   // 一巡目終了の遷移が未採点のまま二巡目を生成する
     var pcAfterGen = await Api.loadEvent(pcSrc.id);
     var pcRound2Row = pcAfterGen.players.find(function(p) { return p.sourcePlayerId === pcBulk.players[0].id; });
     assert('generateNextRound: 二巡目に bib/rank/rental を複製する',
@@ -670,8 +671,7 @@
     // bibDropped が 0 件であることを確かめる（一巡目と同じ bib を持つのが正常な状態）。
     var csvR2Event = await Api.saveEvent({ name: 'CSV二巡目往復テスト', date: '2026-09-19', venue: '', players: [] });
     await Api.createPlayer(csvR2Event.id, { name: 'CSV往復 一郎', court: 'A', bib: 8 });
-    await toRound1Done(csvR2Event.id);
-    await Api.generateNextRound(csvR2Event.id, true);
+    await toRound1Done(csvR2Event.id);   // 一巡目終了の遷移が二巡目を生成する
     var csvR2Csv = await Api.exportCsv(csvR2Event.id);
     var csvR2Import = await Api.importCsv(csvR2Event.id, csvR2Csv, 'replace', true);
     assert('CSV取り込み: 二巡目のある大会の往復で bibDropped は0件',
@@ -872,11 +872,10 @@
       ['status_change', '準備中 → 一巡目 進行中']);
     assert('遷移の履歴に時刻が付く', typeof stLast.timestamp, 'string');
 
-    await Api.changeStatus(stEvent.id, 'round1_done');
-    var stNoR2 = await Api.changeStatus(stEvent.id, 'round2');
-    assert('二巡目が0件なら round1_done → round2 は 409 no_round2',
-      [stNoR2.ok, stNoR2.status, stNoR2.reason], [false, 409, 'no_round2']);
-    assert('409 no_round2 は理由の文言を返す', stNoR2.error, '二巡目が生成されていません');
+    // 一巡目終了は未採点でも二巡目を生成する（設計書 2026-09-22。未採点の確認は
+    // クライアントが済ませている前提でサーバーは force 扱いにする）。
+    var stDone = await Api.changeStatus(stEvent.id, 'round1_done');
+    assert('一巡目の終了は未採点でも二巡目を生成する', stDone.round2 && stDone.round2.created, 1);
 
     var stFinal = await Api.changeStatus(stEvent.id, 'final');
     assert('二巡目なしで round1_done → final に進める', [stFinal.ok, stFinal.status], [true, 'final']);
@@ -888,6 +887,21 @@
     assert('STATES に無い状態は 400', [stBad.ok, stBad.status], [false, 400]);
     assert('存在しない大会の遷移は 404', (await Api.changeStatus('nosuchevent', 'round1')).status, 404);
     await Api.deleteEvent(stEvent.id);
+
+    // no_round2 の拒否は「round2 の行が無いまま round1_done を持つ大会」だけに残る
+    // （通常の遷移では round1_done が必ず二巡目を作るので、この経路は既存データの
+    // 移行のためだけに残る。バンドル取り込みで status を直接 round1_done にして再現する）。
+    var noR2Src = await Api.saveEvent({ name: 'no_round2テスト', date: '2026-02-01', venue: '', players: [] });
+    await Api.createPlayer(noR2Src.id, { name: 'S1', court: 'A' });
+    var noR2Bundle = JSON.parse(await Api.exportBundle(noR2Src.id));
+    noR2Bundle.event.status = 'round1_done';
+    var noR2Imported = await Api.importBundle(noR2Bundle);
+    var stNoR2 = await Api.changeStatus(noR2Imported.id, 'round2');
+    assert('二巡目が0件なら round1_done → round2 は 409 no_round2',
+      [stNoR2.ok, stNoR2.status, stNoR2.reason], [false, 409, 'no_round2']);
+    assert('409 no_round2 は理由の文言を返す', stNoR2.error, '二巡目が生成されていません');
+    await Api.deleteEvent(noR2Src.id);
+    await Api.deleteEvent(noR2Imported.id);
 
     // ---- 10. ロックガード（final / archived は書き込めない） ----
     // Api の関数はステータスコードを丸めるものがあるので、ここは直接 fetch して
@@ -909,9 +923,11 @@
       'L1,A-男子-1-1,真,,,30,,,1    \n' +
       'L2,A-男子-1-2,真,,,10,,,1    \n', 'replace');
     await Api.changeStatus(lockEvent.id, 'round1');
-    await Api.changeStatus(lockEvent.id, 'round1_done');
-    await Api.generateNextRound(lockEvent.id, false);
+    await Api.changeStatus(lockEvent.id, 'round1_done');   // 遷移が二巡目を生成する
     await Api.changeStatus(lockEvent.id, 'round2');
+    // L1・L2 は男子2名とも得点があり8名未満なので両方が決戦（暫定ベスト8）に入る。
+    // 決戦の行がある大会は round2 → round2_done の前に round2_final を挟む必要がある。
+    await Api.changeStatus(lockEvent.id, 'round2_final');
     await Api.changeStatus(lockEvent.id, 'round2_done');
     assert('round2_done → final に進める',
       (await Api.changeStatus(lockEvent.id, 'final')).status, 'final');
@@ -1405,12 +1421,11 @@
                  'F2,A-女子-1-2,真,,,5,,○,1    \n' +
                  'M4,B-男子-1-1,真,,,40,,,1    \n';
     await Api.importCsv(genEvent.id, genCsv, 'replace');
-    await toRound1Done(genEvent.id);
     var beforeIds = (await Api.loadEvent(genEvent.id)).players.map(function(p) { return p.id; });
 
-    var gen = await Api.generateNextRound(genEvent.id, false);
-    assert('generateNextRound の created は一巡目の人数', gen.created, 6);
-    assert('生成時の skipped は0', gen.skipped, 0);
+    var genRes = await toRound1Done(genEvent.id);
+    assert('一巡目の終了で作られる二巡目は一巡目の人数', genRes.round2.created, 6);
+    assert('生成時の skipped は0', genRes.round2.skipped, 0);
 
     var genLoaded = await Api.loadEvent(genEvent.id);
     assert('二巡目を足しても一巡目の id は変わらない',
@@ -1450,13 +1465,16 @@
                  'S2,A-男子-1-2,真,,,0,,,\n' +
                  'S3,A-男子-1-3,真,,,0,,,\n';
     await Api.importCsv(unsEvent.id, unsCsv, 'replace');
-    await toRound1Done(unsEvent.id);
+    await toRound1Done(unsEvent.id);   // 遷移が force 扱いで二巡目を生成済み（未採点があっても進む）
     var unscored = await Api.generateNextRound(unsEvent.id, false);
     assert('未採点があれば拒否される', unscored.reason, 'unscored');
     assert('未採点の人数を返す', unscored.unscoredCount, 2);
-    assert('未採点の拒否でも既存の二巡目人数を返す', unscored.existingCount, 0);
+    // unscored の判定は existing より先に見るので、遷移で既に生成済みでも reason は変わらない。
+    // ただし existingCount は遷移で生成済みの3名を返す。
+    assert('未採点の拒否でも既存の二巡目人数を返す', unscored.existingCount, 3);
     var forcedGen = await Api.generateNextRound(unsEvent.id, true);
-    assert('force なら未採点でも生成できる', forcedGen.created, 3);
+    // 遷移が既に3名分生成済みなので、force での差分追加は0（全員生成済み）。
+    assert('force でも追加する選手はいない（遷移で生成済み）', forcedGen.created, 0);
     assert('未採点は得点0として先頭に並ぶ',
       (await Api.loadEvent(unsEvent.id)).players.slice(3).map(function(p) { return p.name; }),
       ['S2', 'S3', 'S1']);
@@ -1484,8 +1502,7 @@
                   'D1,A-男子-1-1,真,,,30,,,1    \n' +
                   'D2,A-男子-1-2,真,,,10,,,1    \n';
     await Api.importCsv(diffEvent.id, diffCsv, 'replace');
-    await toRound1Done(diffEvent.id);
-    await Api.generateNextRound(diffEvent.id, false);
+    await toRound1Done(diffEvent.id);   // 遷移が二巡目を生成する
     var diffP3 = await Api.createPlayer(diffEvent.id, { name: 'D3', court: 'A', isFemale: false });
     await Api.updatePlayer(diffEvent.id, diffP3.id, { score: 20, result: '1    ' });
     var diffGen = await Api.generateNextRound(diffEvent.id, true);
@@ -1509,10 +1526,9 @@
         { id: 'una2', name: 'U2', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 20, isNewFace: false, isFemale: false, result: '1    ' },
         { id: 'una3', name: 'U3', order: '未分類-男子-1-1', tech1: '', tech2: '', tech3: '', score: 10, isNewFace: false, isFemale: false, result: '1    ' }
       ] });
-    await toRound1Done(unaEvent.id);
-    var unaGen = await Api.generateNextRound(unaEvent.id, false);
-    assert('order 無し・未分類コートの選手は二巡目を作らない', unaGen.created, 1);
-    assert('order 無し・未分類コートの選手数を合わせて返す', unaGen.unassignedCount, 2);
+    var unaDone = await toRound1Done(unaEvent.id);   // 遷移が二巡目を生成する
+    assert('order 無し・未分類コートの選手は二巡目を作らない', unaDone.round2.created, 1);
+    assert('order 無し・未分類コートの選手数を合わせて返す', unaDone.round2.unassignedCount, 2);
     // U2（唯一の候補）は男子1名だけなので決戦（暫定ベスト8）に入り、決戦コートで採番される。
     assert('未分類のコートを製造しない',
       (await Api.loadEvent(unaEvent.id)).players.map(function(p) { return p.order; }),
@@ -1534,10 +1550,75 @@
     assert('一巡目 進行中では二巡目を生成できない', [genRound1.blocked, genRound1.reason], [true, 'status']);
     assert('生成を拒まれても選手は増えない',
       (await Api.loadEvent(stGenEvent.id)).players.length, 2);
-    await Api.changeStatus(stGenEvent.id, 'round1_done');
-    assert('一巡目終了なら二巡目を生成できる',
-      (await Api.generateNextRound(stGenEvent.id, false)).created, 2);
+    var stGenDone = await Api.changeStatus(stGenEvent.id, 'round1_done');
+    assert('一巡目の終了で二巡目ができる', stGenDone.round2 && stGenDone.round2.created, 2);
     await Api.deleteEvent(stGenEvent.id);
+
+    // ---- 一巡目の終了で二巡目が生成される（設計書 2026-09-22） ----
+    var trEvent = await makeGenEvent('遷移生成',
+      'R1,A-男子-1-1,真,水月,四方,30,,,1    \nR2,A-男子-1-2,真,水月,四方,10,,,1    \n' +
+      'R3,A-女子-1-1,真,水月,四方,20,,○,1    \n');
+    var trRes = await toRound1Done(trEvent.id);
+    assert('一巡目の終了で二巡目が生成される', [trRes.ok, trRes.status], [true, 'round1_done']);
+    assert('応答に生成の件数が入る',
+      [trRes.round2.created, trRes.round2.finalistCount, trRes.round2.unassignedCount], [3, 2, 0]);
+    assert('遷移で作った二巡目は技を複製している',
+      round2Of((await Api.loadEvent(trEvent.id)).players)
+        .map(function(p) { return p.tech1 + p.tech2 + p.tech3; }),
+      ['真水月四方', '真水月四方', '真水月四方']);
+    assert('遷移の直後に生成 API を呼ぶと exists',
+      (await Api.generateNextRound(trEvent.id, false)).reason, 'exists');
+
+    // 一巡目に戻して選手を足し、もう一度終了すると差分だけ追加される
+    await Api.changeStatus(trEvent.id, 'round1');
+    var trAdd = await Api.createPlayer(trEvent.id, { name: 'R4', court: 'A', isFemale: false });
+    await Api.updatePlayer(trEvent.id, trAdd.id, { score: 5, result: '1    ' });
+    var trAgain = await Api.changeStatus(trEvent.id, 'round1_done');
+    assert('二度目の一巡目終了は差分だけ追加する',
+      [trAgain.round2.created, trAgain.round2.skipped], [1, 3]);
+    await Api.deleteEvent(trEvent.id);
+
+    // 一巡目が0名なら一巡目を終了できない
+    var trEmpty = await Api.saveEvent({ name: '遷移生成0名', date: '2026-09-22', venue: '', players: [] });
+    await Api.createPlayer(trEmpty.id, { name: 'X1', court: 'A', isFemale: false });
+    await Api.changeStatus(trEmpty.id, 'round1');
+    var trGoneP = (await Api.loadEvent(trEmpty.id)).players[0];
+    await Api.deletePlayer(trEmpty.id, trGoneP.id, true);
+    var trEmptyRes = await Api.changeStatus(trEmpty.id, 'round1_done');
+    assert('一巡目が0名なら一巡目を終了できない',
+      [trEmptyRes.ok, trEmptyRes.status, trEmptyRes.reason], [false, 409, 'empty']);
+    await Api.deleteEvent(trEmpty.id);
+
+    // ---- 決戦の遷移（設計書「遷移の確認と拒否」） ----
+    var fnEvent = await makeGenEvent('決戦遷移',
+      'K1,A-男子-1-1,真,,,30,,,1    \nK2,A-男子-1-2,真,,,10,,,1    \n' +
+      'K3,A-女子-1-1,真,,,20,,○,1    \n');
+    await toRound1Done(fnEvent.id);
+    await Api.changeStatus(fnEvent.id, 'round2');
+    var fnBlocked = await Api.changeStatus(fnEvent.id, 'round2_done');
+    assert('決戦があるのに round2 → round2_done は 409 finale_pending',
+      [fnBlocked.ok, fnBlocked.status, fnBlocked.reason], [false, 409, 'finale_pending']);
+    assert('round2 → round2_final に進める',
+      (await Api.changeStatus(fnEvent.id, 'round2_final')).status, 'round2_final');
+    assert('round2_final → round2_done に進める',
+      (await Api.changeStatus(fnEvent.id, 'round2_done')).status, 'round2_done');
+    assert('round2_done → round2_final に戻せる',
+      (await Api.changeStatus(fnEvent.id, 'round2_final')).status, 'round2_final');
+    assert('round2_final → round2 に戻せる',
+      (await Api.changeStatus(fnEvent.id, 'round2')).status, 'round2');
+    await Api.deleteEvent(fnEvent.id);
+
+    // 決戦が無い大会（女子だけ）は round2 → round2_done がそのまま通る
+    var fnNone = await makeGenEvent('決戦なし遷移',
+      'V1,A-女子-1-1,真,,,30,,○,1    \nV2,A-女子-1-2,真,,,10,,○,1    \n');
+    await toRound1Done(fnNone.id);
+    await Api.changeStatus(fnNone.id, 'round2');
+    var fnNoFinale = await Api.changeStatus(fnNone.id, 'round2_final');
+    assert('決戦の行が無ければ round2 → round2_final は 409 no_finale',
+      [fnNoFinale.ok, fnNoFinale.status, fnNoFinale.reason], [false, 409, 'no_finale']);
+    assert('決戦の行が無ければ round2 → round2_done がそのまま通る',
+      (await Api.changeStatus(fnNone.id, 'round2_done')).status, 'round2_done');
+    await Api.deleteEvent(fnNone.id);
 
     // --- 順位データ ---
     var rankEvent = await Api.saveEvent({ name: '順位テスト', date: '2026-03-01', venue: '道場', players: [] });
@@ -1954,8 +2035,7 @@
       tech1: 'コピー技', score: 21, result: '11   ', note: 'メモ'
     });
     await Api.changeStatus(cpSrc.id, 'round1');
-    await Api.changeStatus(cpSrc.id, 'round1_done');
-    await Api.generateNextRound(cpSrc.id, true);   // 二巡目の行（コピーされないことの確認用）
+    await Api.changeStatus(cpSrc.id, 'round1_done');   // 遷移が二巡目を生成する（コピーされないことの確認用）
     await Api.createShareLink(cpSrc.id);
 
     var cpRes = await Api.copyEvent(cpSrc.id,
@@ -2164,9 +2244,8 @@
       tech1: '往復技B', result: '11   ', adjust: [0, 1, 0], totalAdjust: -1,
       note: '二郎メモ', confirmed: false, score: 9
     });
-    await toRound1Done(rtEvent.id);
-    var rtRound = await Api.generateNextRound(rtEvent.id);
-    assert('往復テスト用に二巡目が生成される', rtRound && rtRound.created, 2);
+    var rtDone = await toRound1Done(rtEvent.id);   // 遷移が二巡目を生成する
+    assert('往復テスト用に二巡目が生成される', rtDone.round2 && rtDone.round2.created, 2);
     await Api.addHistory(rtEvent.id, { action: 'round2_generated', detail: '往復テスト' });
     await Api.addHistory(rtEvent.id, { action: 'note', detail: '往復テスト2' });
 
@@ -2214,9 +2293,10 @@
       '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
       'S1,A-男子-1-1,真,,,30,,,1    \n', 'replace');
     await Api.changeStatus(bsEvent.id, 'round1');
-    await Api.changeStatus(bsEvent.id, 'round1_done');
-    await Api.generateNextRound(bsEvent.id, false);
+    await Api.changeStatus(bsEvent.id, 'round1_done');   // 遷移が二巡目を生成する
     await Api.changeStatus(bsEvent.id, 'round2');
+    // S1 は男子1名だけなので決戦に入る。round2_done の前に round2_final を挟む。
+    await Api.changeStatus(bsEvent.id, 'round2_final');
     await Api.changeStatus(bsEvent.id, 'round2_done');
     await Api.changeStatus(bsEvent.id, 'final');
     var bsBundle = JSON.parse(await Api.exportBundle(bsEvent.id));

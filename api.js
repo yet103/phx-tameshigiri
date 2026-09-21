@@ -147,12 +147,16 @@ var Api = (function() {
   async function changeStatus(eventId, to) {
     // POST /api/events/:eventId/status
     // Body: { to: 'round1' }
-    // 戻り値: { ok: true, status: 新しい状態 }
+    // 戻り値: { ok: true, status: 新しい状態, round2: 生成の結果 | null }
     //       | { ok: false, status: HTTPステータス, reason, error }（400 / 404 / 409）
     //       | null（通信そのものの失敗）
-    // 409 の reason は 'transition' | 'empty' | 'no_round2'。画面はこれで
-    // 「読み直す」「先に生成する」などの次の行動を出し分けるので、error だけでなく
-    // reason も返す（他の API と違って ok:false に理由を載せるのはこのため）。
+    // 409 の reason は 'transition' | 'empty' | 'no_round2' | 'no_finale' |
+    //   'finale_pending' | 'generate_failed'。画面はこれで「読み直す」「先に決戦を開始する」
+    //   などの次の行動を出し分けるので、error だけでなく reason も返す（他の API と違って
+    //   ok:false に理由を載せるのはこのため）。
+    // round2 は round1 → round1_done のときだけ入る
+    //   { created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount }。
+    //   サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
     try {
       var res = await fetch('/api/events/' + eventId + '/status', {
         method: 'POST',
@@ -171,7 +175,7 @@ var Api = (function() {
         };
       }
       var json = await res.json();
-      return { ok: true, status: json.status };
+      return { ok: true, status: json.status, round2: json.round2 || null };
     } catch (e) {
       return null;
     }
@@ -430,7 +434,7 @@ var Api = (function() {
   async function generateNextRound(eventId, force) {
     // POST /api/events/:eventId/rounds/2/generate
     // 戻り値:
-    //   { success: true, created, skipped, existingCount, untrackedCount, unassignedCount }
+    //   { success: true, created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount }
     //     created: 新規に作った二巡目行数
     //     skipped: source（order が解析できる一巡目）のうち既に二巡目行を生成済みだった人数
     //              （force での差分追加時に意味を持つ。それ以外は 0）
@@ -438,6 +442,7 @@ var Api = (function() {
     //     untrackedCount: 既存の二巡目行のうち sourcePlayerId を持たない件数
     //                     （CSVインポート由来。force すると重複生成される）
     //     unassignedCount: order が解析できず二巡目を作れなかった一巡目選手の人数
+    //     finalistCount: 決戦（暫定ベスト8）に入った人数（設計書 2026-09-22）
     //   | { blocked: true, reason: 'unscored' | 'exists' | 'status' | 'locked', error,
     //       unscoredCount, existingCount, untrackedCount, unassignedCount }
     //       （該当しない件数は 0。error はサーバーの文言で、'status' / 'locked' のときは
