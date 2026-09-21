@@ -494,44 +494,58 @@ app.get('/api/events/:id', (req, res) => {
   }
 });
 
+// 選手1件を保存用に洗う共通部分。POST /api/events の丸ごと保存とバンドル取り込みの
+// 両方から呼ぶ（全体点検 A-14: 二重実装の解消）。id・bib・sourcePlayerId は呼び出し元ごとに
+// 検証・採番の規則が違う（バンドル取り込みは id を振り直し、bib はゼッケン重複解決を経る）ため、
+// 呼び出し元で検証・解決済みの値をそのまま渡してもらう（bib は null なら出力に含めない。
+// sourcePlayerId も同様）。ここに無いキー（order 以外の運営専用の値、__proto__ 等）は
+// 出力に出ない＝保存されない。
+// score は PATCH .../players/:playerId と同じ規則: 採点画面が送る値は常に整数
+// （Scoring.calcTotalScore が toInt で丸める）なので、-9999〜9999 の整数だけ受理し、
+// それ以外（1e9 や小数など）は 0 に丸める。
+function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
+  const out = {
+    id: id,
+    name: typeof p.name === 'string' ? p.name.trim().slice(0, 100) : '',
+    order: typeof p.order === 'string' ? p.order.slice(0, 40) : '',
+    tech1: typeof p.tech1 === 'string' ? p.tech1.trim().slice(0, 50) : '',
+    tech2: typeof p.tech2 === 'string' ? p.tech2.trim().slice(0, 50) : '',
+    tech3: typeof p.tech3 === 'string' ? p.tech3.trim().slice(0, 50) : '',
+    score: (Number.isInteger(p.score) && p.score >= -9999 && p.score <= 9999) ? p.score : 0,
+    isNewFace: p.isNewFace === true,
+    isFemale: p.isFemale === true,
+    // 結果は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード。それ以外は捨てる
+    // （採点画面の decodeResult が読めない文字列を保存しない）。
+    result: (typeof p.result === 'string' && p.result.length <= 100 && /^[012 ]*$/.test(p.result))
+      ? p.result : '',
+    rank: typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : '',
+    rental: p.rental === true
+  };
+  if (Array.isArray(p.adjust) && p.adjust.length === 3 && p.adjust.every(n => Number.isInteger(n))) {
+    out.adjust = p.adjust.slice();
+  }
+  if (Number.isInteger(p.totalAdjust)) out.totalAdjust = p.totalAdjust;
+  if (typeof p.note === 'string') {
+    const note = p.note.trim().slice(0, 200);
+    if (note) out.note = note;
+  }
+  if (p.confirmed === true) out.confirmed = true;
+  if (bib !== null && bib !== undefined) out.bib = bib;
+  if (sourcePlayerId) out.sourcePlayerId = sourcePlayerId;
+  return out;
+}
+
 // POST /api/events の body の players を保存用に洗う。
 // PATCH .../players/:playerId や CSV/バンドル取り込みと同程度の検証（型が違えば既定に落とす）。
 // id が isValidId を通らない要素は丸ごと落とす（他の選手の行を装った上書きを防ぐ）。
-// ここに無いキー（order 以外の運営専用の値、__proto__ 等）は出力に出ない＝保存されない。
 function sanitizeEventPlayersForSave(list) {
   if (!Array.isArray(list)) return [];
   return list
     .filter(p => p && typeof p === 'object' && !Array.isArray(p) && isValidId(p.id))
     .map(p => {
-      const out = {
-        id: p.id,
-        name: typeof p.name === 'string' ? p.name.trim().slice(0, 100) : '',
-        order: typeof p.order === 'string' ? p.order.slice(0, 40) : '',
-        tech1: typeof p.tech1 === 'string' ? p.tech1.trim().slice(0, 50) : '',
-        tech2: typeof p.tech2 === 'string' ? p.tech2.trim().slice(0, 50) : '',
-        tech3: typeof p.tech3 === 'string' ? p.tech3.trim().slice(0, 50) : '',
-        score: Number.isFinite(p.score) ? p.score : 0,
-        isNewFace: p.isNewFace === true,
-        isFemale: p.isFemale === true,
-        // 結果は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード。それ以外は捨てる
-        // （バンドル取り込みと同じ規則。採点画面の decodeResult が読めない文字列を保存しない）。
-        result: (typeof p.result === 'string' && p.result.length <= 100 && /^[012 ]*$/.test(p.result))
-          ? p.result : '',
-        rank: typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : '',
-        rental: p.rental === true
-      };
-      if (Array.isArray(p.adjust) && p.adjust.length === 3 && p.adjust.every(n => Number.isInteger(n))) {
-        out.adjust = p.adjust.slice();
-      }
-      if (Number.isInteger(p.totalAdjust)) out.totalAdjust = p.totalAdjust;
-      if (typeof p.note === 'string') {
-        const note = p.note.trim().slice(0, 200);
-        if (note) out.note = note;
-      }
-      if (p.confirmed === true) out.confirmed = true;
-      if (Number.isInteger(p.bib) && p.bib >= 1 && p.bib <= 9999) out.bib = p.bib;
-      if (isValidId(p.sourcePlayerId)) out.sourcePlayerId = p.sourcePlayerId;
-      return out;
+      const bib = (Number.isInteger(p.bib) && p.bib >= 1 && p.bib <= 9999) ? p.bib : null;
+      const sourcePlayerId = isValidId(p.sourcePlayerId) ? p.sourcePlayerId : null;
+      return sanitizePlayerForSave(p, p.id, bib, sourcePlayerId);
     });
 }
 
@@ -579,7 +593,10 @@ app.post('/api/events', (req, res) => {
       name: name,
       date: date,
       venue: venue,
-      createdAt: (typeof body.createdAt === 'string' && body.createdAt) ? body.createdAt : now,
+      // 既存 ID への上書きは元の createdAt を優先する（body.createdAt は取り込み時などに
+      // 送られてくる程度で、実在する大会の作成日時としては prev の方が正）。
+      createdAt: (prev && typeof prev.createdAt === 'string' && prev.createdAt) ||
+        (typeof body.createdAt === 'string' && body.createdAt) || now,
       updatedAt: now,
       players: sanitizeEventPlayersForSave(body.players)
     };
@@ -2176,41 +2193,13 @@ app.post('/api/events/import', (req, res) => {
     });
     const bibResult = resolveBibDrops(kept.map(p => p.bib), classifyBibBundle, [], bibGroupKeys);
 
-    // 許可リストのキーだけを取り込む。それ以外は捨てる。
+    // 許可リストのキーだけを取り込む。それ以外は捨てる（sanitizePlayerForSave の共通部分 +
+    // このバンドル取り込み固有の id・bib・sourcePlayerId 解決）。
     const players = kept.map((p, i) => {
-      const player = {
-        id: assigned[i],
-        name: p.name.trim().slice(0, 100),
-        order: typeof p.order === 'string' ? p.order.slice(0, 40) : '',
-        tech1: typeof p.tech1 === 'string' ? p.tech1.trim().slice(0, 50) : '',
-        tech2: typeof p.tech2 === 'string' ? p.tech2.trim().slice(0, 50) : '',
-        tech3: typeof p.tech3 === 'string' ? p.tech3.trim().slice(0, 50) : '',
-        score: Number.isFinite(p.score) ? p.score : 0,
-        isNewFace: p.isNewFace === true,
-        isFemale: p.isFemale === true,
-        // 結果は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード。それ以外が混じっていたら捨てる
-        // （採点画面の decodeResult が読めない文字列を保存しない）。
-        result: (typeof p.result === 'string' && p.result.length <= 100 && /^[012 ]*$/.test(p.result))
-          ? p.result : '',
-        rank: typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : '',
-        rental: p.rental === true
-      };
-      if (Array.isArray(p.adjust) && p.adjust.length === 3 && p.adjust.every(n => Number.isInteger(n))) {
-        player.adjust = p.adjust.slice();
-      }
-      if (Number.isInteger(p.totalAdjust)) player.totalAdjust = p.totalAdjust;
-      if (typeof p.note === 'string') {
-        const note = p.note.trim().slice(0, 200);
-        if (note) player.note = note;
-      }
-      if (p.confirmed === true) player.confirmed = true;
-      if (bibResult.bibs[i] !== null) player.bib = bibResult.bibs[i];
       // 元ファイルのどの選手も指していない sourcePlayerId は捨てる
-      if (typeof p.sourcePlayerId === 'string' &&
-          Object.prototype.hasOwnProperty.call(idMap, p.sourcePlayerId)) {
-        player.sourcePlayerId = idMap[p.sourcePlayerId];
-      }
-      return player;
+      const sourcePlayerId = (typeof p.sourcePlayerId === 'string' &&
+        Object.prototype.hasOwnProperty.call(idMap, p.sourcePlayerId)) ? idMap[p.sourcePlayerId] : null;
+      return sanitizePlayerForSave(p, assigned[i], bibResult.bibs[i], sourcePlayerId);
     });
 
     const id = generateId();
