@@ -2287,7 +2287,13 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
     const force = !!(req.body && req.body.force === true);
 
     const round1Candidates = players.filter(p => p && EventStatus.roundOf(p) === 1);
-    const src = round1Candidates.filter(p => parseOrder(p && p.order) !== null);
+    // '未分類' コートの行（order が解析できても isValidCourt を通らない）からは
+    // 二巡目を作らない（コメントの約束どおり）。isValidCourt で弾いた分も
+    // parseOrder できない行と同じく unassignedCount に数える。
+    const src = round1Candidates.filter(p => {
+      const parsed = parseOrder(p && p.order);
+      return parsed !== null && isValidCourt(parsed.court);
+    });
     const unassignedCount = round1Candidates.length - src.length;
     if (src.length === 0) {
       return res.status(400).json({ error: '一巡目の選手がいません' });

@@ -1291,19 +1291,22 @@
     assert('差分追加の行は追加した一巡目を指す', diffRows[2].sourcePlayerId, diffP3.id);
     await Api.deleteEvent(diffEvent.id);
 
-    // order が解析できない選手はコートが決まらないので二巡目を作らず件数だけ返す
+    // order が解析できない選手はコートが決まらないので二巡目を作らず件数だけ返す。
+    // '未分類-男子-1-1' のように order 自体は解析できても isValidCourt を通らない
+    // コート（'未分類'）の行も同じく作らず unassignedCount に数える（全体点検 A-3）。
     var unaEvent = await Api.saveEvent({ name: '未分類テスト', date: '2026-02-01', venue: '',
       players: [
         { id: 'una1', name: 'U1', order: '', tech1: '', tech2: '', tech3: '', score: 30, isNewFace: false, isFemale: false, result: '1    ' },
-        { id: 'una2', name: 'U2', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 20, isNewFace: false, isFemale: false, result: '1    ' }
+        { id: 'una2', name: 'U2', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 20, isNewFace: false, isFemale: false, result: '1    ' },
+        { id: 'una3', name: 'U3', order: '未分類-男子-1-1', tech1: '', tech2: '', tech3: '', score: 10, isNewFace: false, isFemale: false, result: '1    ' }
       ] });
     await toRound1Done(unaEvent.id);
     var unaGen = await Api.generateNextRound(unaEvent.id, false);
-    assert('order 無しの選手は二巡目を作らない', unaGen.created, 1);
-    assert('order 無しの選手数を返す', unaGen.unassignedCount, 1);
+    assert('order 無し・未分類コートの選手は二巡目を作らない', unaGen.created, 1);
+    assert('order 無し・未分類コートの選手数を合わせて返す', unaGen.unassignedCount, 2);
     assert('未分類のコートを製造しない',
       (await Api.loadEvent(unaEvent.id)).players.map(function(p) { return p.order; }),
-      ['', 'A-男子-1-1', 'A-男子-2-1']);
+      ['', 'A-男子-1-1', '未分類-男子-1-1', 'A-男子-2-1']);
     await Api.deleteEvent(unaEvent.id);
 
     assert('存在しない大会の二巡目生成は null', await Api.generateNextRound('nosuchevent', false), null);
