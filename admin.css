@@ -348,6 +348,12 @@ main { padding: 8px 12px 16px; }
 }
 .round-copy:disabled { color: var(--text-muted); opacity: .5; cursor: default; }
 .round-empty { color: var(--text-muted); padding: 12px 4px; }
+/* 技を入れられない状態（「一巡目終了」以外）の注記。PC 運営 desk.css の .desk-note と
+   同じ見た目（desk.css はこの計画で触らないファイルなのでここに複製する）。 */
+.round-note {
+  padding: 8px 10px; border-radius: 4px; font-size: 13px; margin-bottom: 12px;
+  background: var(--card-bg); border: 1px solid var(--border); color: var(--text-muted);
+}
 
 /* ===== 結果タブ（admin-results.js） ===== */
 .results-bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 0; }

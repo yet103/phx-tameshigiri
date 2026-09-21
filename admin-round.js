@@ -7,6 +7,9 @@ var AdminRound = (function() {
   var currentCourt = '';   // '' なら全コート
   var lastEventId = null;  // 大会が変わったらコート絞り込みを戻すため
   var techniques = null;   // ctx.techniques（その大会の有効な技リスト）。render のたびに入れ替える
+  // 技を入れられるのは「一巡目終了」のときだけ（PC 運営 desk-match.js の editable と同じ規則）。
+  // render のたびに入れ替える。
+  var editable = false;
   // チップと行の両方がタップを拾うので二重に開かないよう、実際にシートが
   // 存在するか（.tp-overlay）と、まだ開いている最中か（openingPicker）だけで判定する。
   // かつて pickerOpen という別フラグも持っていたが、openPicker が新しいシートの
@@ -125,6 +128,17 @@ var AdminRound = (function() {
     var st = EventStatus.of(ctx.event);
     container.appendChild(buildStage(st));
 
+    // 技を入れられるのは「一巡目終了」のときだけ（PC 運営 desk-match.js の editable と同じ）。
+    // それ以外の状態では行タップ・チップ・「一巡目と同じ技をコピー」を止め、同じ注記を出す。
+    editable = (st === 'round1_done');
+    if (!editable) {
+      var note = document.createElement('p');
+      note.className = 'round-note';
+      note.textContent = '技を入れられるのは「一巡目終了」のときだけです（いまは「' +
+        EventStatus.LABELS[st] + '」）。直すときは上部の「戻す」で一巡目終了まで戻してください。';
+      container.appendChild(note);
+    }
+
     // 見出し：採点の進み具合・生成ボタン・メニュー
     var head = document.createElement('div');
     head.className = 'round-head';
@@ -242,7 +256,10 @@ var AdminRound = (function() {
     copy.type = 'button';
     copy.className = 'round-copy';
     copy.textContent = '一巡目と同じ技をコピー';
-    if (!src) {
+    if (!editable) {
+      copy.disabled = true;
+      copy.title = '「一巡目終了」のときだけコピーできます';
+    } else if (!src) {
       copy.disabled = true;
       copy.title = '一巡目の行が削除されています';
       copy.textContent = '一巡目の行がありません';
@@ -256,23 +273,35 @@ var AdminRound = (function() {
 
     // 行タップ（チップ以外の部分）は、空いている最初の枠を開く。
     // 全部埋まっていたら①を開く（重複を許すので、選び直しの入口として①を使う）。
-    row.addEventListener('click', function() {
-      var arr = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
-      var slot = 0;
-      for (var i = 0; i < arr.length; i++) {
-        if (!arr[i]) { slot = i; break; }
-      }
-      openPicker(p, row, slot);
-    });
+    // 技を入れられるのは「一巡目終了」のときだけ（editable）。それ以外は行タップもチップも
+    // 反応させない（drawChips 側で個々のチップの click も無効にする）。
+    if (editable) {
+      row.addEventListener('click', function() {
+        var arr = TechPicker.fromArray([p.tech1, p.tech2, p.tech3]);
+        var slot = 0;
+        for (var i = 0; i < arr.length; i++) {
+          if (!arr[i]) { slot = i; break; }
+        }
+        openPicker(p, row, slot);
+      });
+    }
     return row;
   }
 
   function drawChips(p, row) {
+    var chipsEl = row.querySelector('.round-chips');
+    // 技を入れられるのは「一巡目終了」のときだけ。それ以外は onTap を渡さず
+    // （TechPicker.renderChips は techpicker.js 側の共有部品でこの計画では触らないので、
+    // 描いた後にここで disabled にする）、チップを押しても開かないようにする。
     TechPicker.renderChips(
-      row.querySelector('.round-chips'),
+      chipsEl,
       TechPicker.fromArray([p.tech1, p.tech2, p.tech3]),
-      function(slot) { openPicker(p, row, slot); }
+      editable ? function(slot) { openPicker(p, row, slot); } : null
     );
+    if (!editable) {
+      var chipButtons = chipsEl.querySelectorAll('button');
+      for (var i = 0; i < chipButtons.length; i++) chipButtons[i].disabled = true;
+    }
     updateRepeatNote(p, row);
   }
 
