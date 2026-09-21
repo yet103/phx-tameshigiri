@@ -368,6 +368,10 @@ main { padding: 8px 12px 16px; }
   padding: 8px 10px; border-radius: 4px; font-size: 13px; margin-bottom: 12px;
   background: var(--card-bg); border: 1px solid var(--border); color: var(--text-muted);
 }
+/* 決戦（暫定ベスト8）の区画。PC 運営の desk-match-finale と同じ、金の細い枠で区別する
+   （--gold 系はテーマに依らない「大会トーン」の色。--accent は光テーマで黒になるため使わない）。 */
+.round-finale { border: 1px solid var(--gold-deep); border-radius: 8px; padding: 6px; }
+.round-finale-caption { margin: 12px 0 6px; font-size: 13px; color: var(--gold-deep); }
 
 /* ===== 結果タブ（admin-results.js） ===== */
 .results-bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 0; }
