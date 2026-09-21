@@ -2298,9 +2298,12 @@
     assert('storage.js loadTheme default is light', Storage.loadTheme() === 'light' || Storage.loadTheme() === 'dark', true);
 
     var html15 = Storage.buildPlayersHtml([{ name: 'A', order: 'A-男子-1-1', tech1: '四方', tech2: '', tech3: '', score: 10, isNewFace: false, isFemale: false, result: '1    ', adjust: [1, 0, 0], totalAdjust: -2, note: '備考<b>', confirmed: true }]);
-    assert('buildPlayersHtml は15列の見出し', (html15.match(/<th>/g) || []).length, 15);
+    assert('buildPlayersHtml は18列の見出し（CSV エクスポートと同じ）', (html15.match(/<th>/g) || []).length, 18);
     assert('buildPlayersHtml 備考をエスケープ', html15.indexOf('備考&lt;b&gt;') !== -1, true);
-    assert('buildPlayersHtml 確定は○', html15.indexOf('<td>○</td></tr>') !== -1, true);
+    // 確定は○。その後ろにゼッケン・級位段位・レンタル（未設定は空）が並ぶ
+    assert('buildPlayersHtml 確定は○、追加3列は未設定なら空', html15.indexOf('<td>○</td><td></td><td></td><td></td></tr>') !== -1, true);
+    var html18 = Storage.buildPlayersHtml([{ name: 'B', order: 'A-男子-1-2', tech1: '四方', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: false, result: '', bib: 12, rank: '初段', rental: true }]);
+    assert('buildPlayersHtml ゼッケン・級位段位・レンタルを出す', html18.indexOf('<td>12</td><td>初段</td><td>○</td></tr>') !== -1, true);
 
     var h2c = document.createElement('h2');
     h2c.textContent = 'courts.js';
