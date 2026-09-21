@@ -537,6 +537,7 @@ var Home = (function() {
   var LIST_LIMIT = 5;       // 畳む前に出す件数（設計書「作成済みの大会」）
 
   async function loadEvents() {
+    listExpanded = false;   // #list を開き直したら「すべて見る」の展開を引きずらない
     var seq = ++eventsSeq;
     var box = document.getElementById('homeEventList');
     box.textContent = '読み込み中…';
