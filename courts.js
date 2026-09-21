@@ -22,7 +22,9 @@ var Courts = (function() {
       if (!seen[c]) { seen[c] = true; list.push(c); }
     }
     (players || []).forEach(function(p) { add(courtOf(p)); });
-    (extraCourts || []).forEach(function(c) {
+    // extraCourts は大会の settings.courts をそのまま渡されることが多く、壊れたデータ
+    // （配列でない値）が来ても落ちないよう配列以外は無視する。
+    (Array.isArray(extraCourts) ? extraCourts : []).forEach(function(c) {
       if (typeof c === 'string' && c) add(c);
     });
     list.sort();

@@ -85,7 +85,8 @@
     var settings = ctx.event.settings || {};
     // 画面で編集中のコート一覧（保存するのはこの配列）。
     // 選手から導かれるコートはここに入れない（外せないものを保存し直さない）。
-    var extra = (settings.courts || []).slice();
+    // settings.courts は壊れたデータ（配列でない値）が来ても落ちないように読む
+    var extra = Array.isArray(settings.courts) ? settings.courts.slice() : [];
     var chkBib = addCheck(form, 'ゼッケン番号を必須にする', settings.requireBib === true);
     var chkRank = addCheck(form, '級位・段位を必須にする', settings.requireRank === true);
 

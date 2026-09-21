@@ -2174,6 +2174,8 @@
     assert('listFrom: extraCourts に未分類があっても末尾にまとめる',
       Courts.listFrom([{ order: 'A-男子-1-1' }], [Courts.UNASSIGNED]), ['A', Courts.UNASSIGNED]);
     assert('listFrom: extraCourts が空配列なら選手のコートのまま', Courts.listFrom(courtPlayers, []), ['A', 'B', Courts.UNASSIGNED]);
+    assert('listFrom: extraCourts が配列でなくても落ちない（文字列は無視）',
+      Courts.listFrom(courtPlayers, 'A'), ['A', 'B', Courts.UNASSIGNED]);
 
     // ---- validateCourtList（大会の settings.courts の検証。空・重複・'-'・'未分類'・32文字超・20件超は不可） ----
     assert('validateCourtList: 妥当な一覧は空文字', Courts.validateCourtList(['A', 'B', '稽古']), '');
