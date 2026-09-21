@@ -2,8 +2,8 @@
    375px のスマホから PC まで、この 1 枚で読めるように組む。
    style.css / admin.css / desk.css / help.css は読み込まない
    （各画面のレイアウトを持ち込まない）。色は theme.css の変数だけを使う。
-   このファイルは計画3の Task 2 で書き切る。以降のタスクでは編集しない
-   （並行作業で衝突するため。足りない見た目が出たら計画の Task 2 の節に
+   このファイルは計画「トップの作り直し」の Task B2 で書き切る。以降のタスクでは編集しない
+   （並行作業で衝突するため。足りない見た目が出たら計画の Task B2 の節に
     追記してからまとめて直す）。 */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,31 +39,56 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px
 /* ===== 本文 ===== */
 .home-main { max-width: 760px; margin: 0 auto; padding: 16px 16px 64px; }
 .home-main h2 {
-  font-family: var(--mincho); font-size: 18px; margin: 28px 0 10px;
+  font-family: var(--mincho); font-size: 18px; margin: 0 0 10px;
   padding-bottom: 4px; border-bottom: 1px solid var(--border);
 }
-.home-intro p { margin: 0 0 8px; }
-.home-intro a { color: var(--accent); }
+.home-note { color: var(--text-muted); font-size: 13px; }
 
-/* ===== 入口ボタン ===== */
-.home-entries { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 18px; }
+/* 区画。hidden の属性だけで出し分ける（display は .home-pane に持たせない） */
+.home-pane[hidden] { display: none; }
+.home-pane-head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.home-back { align-self: flex-start; color: var(--text-muted); text-decoration: none; font-size: 14px; }
+.home-back:hover { color: var(--accent); text-decoration: underline; }
+
+/* ===== 入口の 2 つ ===== */
+.home-entries { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .home-entry {
   display: flex; flex-direction: column; justify-content: center;
-  min-height: 64px; padding: 10px 14px;
+  min-height: 88px; padding: 14px 16px;
   background: var(--card-bg); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px; text-decoration: none;
 }
 .home-entry:hover { border-color: var(--accent); }
 .home-entry.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-.home-entry-main { font-size: 16px; font-weight: bold; }
+.home-entry-main { font-family: var(--mincho); font-size: 19px; font-weight: bold; }
 .home-entry-sub { font-size: 12px; color: var(--text-muted); }
-/* accent-text は同じ primary の本文（home-entry-main）用に元から用意された
-   「accent の上で読める色」。band-muted は帯（黒に近い --band-bg）の上で読める
-   前提の色なので、ダークテーマでは accent（金地）の上に乗ると読みにくくなっていた。
-   本文と同じ accent-text を使い、不透明度だけ落として副題らしく弱める。 */
+/* accent-text は accent（濃い地）の上で読める色。band-muted は帯の上の前提の色なので、
+   暗いテーマで accent（金地）に乗ると読みにくい。本文と同じ色の不透明度を落として弱める。 */
 .home-entry.primary .home-entry-sub { color: var(--accent-text); opacity: 0.8; }
 
-/* ===== 進行中の大会 ===== */
+/* 小さなリンクの行 */
+.home-links { margin-top: 14px; font-size: 13px; color: var(--text-muted); }
+.home-links a { color: var(--accent); }
+
+/* ===== このアプリについて（折りたたみ） ===== */
+.home-about { margin-top: 18px; }
+.home-about > summary {
+  cursor: pointer; list-style: none;
+  padding: 8px 0; color: var(--text-muted); font-size: 14px;
+}
+.home-about > summary::-webkit-details-marker { display: none; }
+.home-about > summary::before { content: "▸ "; }
+.home-about[open] > summary::before { content: "▾ "; }
+.home-about > summary:hover { color: var(--text); }
+.home-about-body p { margin: 0 0 8px; }
+.home-about-body a { color: var(--accent); }
+.home-flow { margin-top: 18px; }
+
+/* ===== 大会の一覧（#list） ===== */
+.home-check {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-bottom: 10px; font-size: 13px; color: var(--text-muted); cursor: pointer;
+}
 .home-event-list { display: flex; flex-direction: column; gap: 8px; }
 .home-event {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -79,12 +104,58 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px
   border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-muted);
 }
 .home-badge.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
-.home-note { color: var(--text-muted); font-size: 13px; }
+.home-badge.test { border-color: var(--warn); color: var(--warn); }
+.home-more {
+  align-self: flex-start;
+  min-height: 36px; padding: 0 12px;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); font-size: 13px;
+}
+.home-more:hover { color: var(--text); border-color: var(--accent); }
+.home-archived { margin-top: 12px; }
+.home-archived > summary { cursor: pointer; color: var(--text-muted); font-size: 13px; padding: 6px 0; }
+.home-archived > summary::-webkit-details-marker { display: none; }
+.home-archived .home-event-list { margin-top: 8px; }
+
+/* ===== 大会を新規作成（#new） ===== */
+.home-cards { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.home-card {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  min-height: 64px; padding: 12px 14px;
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.home-card:hover { border-color: var(--accent); }
+.home-card-main { font-size: 16px; font-weight: bold; }
+.home-card-sub { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+.home-form { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0; }
+.home-form label { font-size: 13px; color: var(--text-muted); }
+.home-form input[type="text"], .home-form input[type="date"], .home-form select {
+  width: 100%; min-height: 40px; padding: 0 8px;
+  font-family: inherit; font-size: 15px;
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.home-form-check { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text); }
+.home-form-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.home-btn {
+  min-height: 44px; padding: 0 20px;
+  background: var(--accent); color: var(--accent-text);
+  border: 1px solid var(--accent); font-size: 15px; font-weight: bold;
+}
+.home-btn:disabled { opacity: .5; cursor: not-allowed; }
+.home-btn-sub {
+  min-height: 44px; padding: 0 8px;
+  background: transparent; color: var(--text-muted);
+  border: none; font-size: 14px; text-decoration: underline;
+}
+.home-btn-sub:hover { color: var(--text); }
 
 /* ===== 全体の流れの帯 =====
    help.html の縦長の図は使わず、desk.js の上部の段階表示と同じ調子で
-   横一列のコンパクトな帯にする（指揮官の決定）。ラベルは EventStatus.LABELS を
-   そのまま使うので文言の二重定義がない。375px では折り返して 2〜3 段になる。 */
+   横一列のコンパクトな帯にする。ラベルは EventStatus.LABELS をそのまま使うので
+   文言の二重定義がない。375px では折り返して 2〜3 段になる。 */
 .home-flow-band {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px;
   margin: 14px 0;
@@ -109,7 +180,14 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px
 .home-flow-caption { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.3; }
 .home-flow-step.key .home-flow-caption { color: var(--band-muted); }
 
-/* 2 列に置けるだけの幅があるときだけ入口ボタンを並べる */
+/* 2 列に置けるだけの幅があるときだけ入口とカードを並べる */
 @media (min-width: 620px) {
   .home-entries { grid-template-columns: 1fr 1fr; }
+  .home-cards { grid-template-columns: 1fr 1fr; }
+  .home-pane-head { flex-direction: row; align-items: baseline; gap: 12px; }
+  .home-pane-head h2 { flex: 1; margin: 0; }
+  .home-form { grid-template-columns: 120px 1fr; align-items: center; }
+  .home-form label { grid-column: 1; }
+  .home-form input[type="text"], .home-form input[type="date"], .home-form select { grid-column: 2; }
+  .home-form-check, .home-form-actions { grid-column: 2; }
 }

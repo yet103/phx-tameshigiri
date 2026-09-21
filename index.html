@@ -24,42 +24,66 @@
     <button type="button" class="home-icon-btn" id="btnMode" aria-label="運営画面の行き先を切り替える"></button>
   </header>
 
+  <!-- 3 つの区画を 1 ページに置き、ハッシュで出し分ける（home.js の applyRoute）。
+       ハッシュ無し＝入口、#new＝大会を新規作成、#list＝作成済みの大会。
+       #event/… は採点画面へ転送されるので、ここには来ない。 -->
   <main class="home-main" id="homeMain">
 
-    <section class="home-intro">
-      <p>試し斬りの大会を、選手の登録から採点・順位の発表まで一本で進めるためのアプリです。大会のデータはサーバーに1つだけあり、運営者の PC とスマホ、コートのタブレット、会場の大画面が同じ大会を読み書きします。</p>
-      <p>運営は PC かスマホで大会を作り、コートのタブレットで採点し、結果を大画面や共有リンクで発表します。初めての方は<a href="help.html">ヘルプ</a>をご覧ください。</p>
+    <!-- 入口（ハッシュ無し） -->
+    <section class="home-pane" id="paneHome">
+      <nav class="home-entries" aria-label="入口">
+        <a class="home-entry primary" href="#new">
+          <span class="home-entry-main">＋ 大会を新規作成</span>
+          <span class="home-entry-sub">テンプレート・コピー・完全新規</span>
+        </a>
+        <a class="home-entry" href="#list">
+          <span class="home-entry-main">▶ 作成済みの大会</span>
+          <span class="home-entry-sub">選んで開始・続きから</span>
+        </a>
+      </nav>
+
+      <p class="home-links">コート端末の方は
+        <a href="scoring.html">採点画面</a> ／
+        <a href="ranking.html">順位表示</a> ／
+        <a href="help.html">ヘルプ</a>
+      </p>
+
+      <!-- 説明と 7 段階の流れは既定で閉じる（初めの画面を 2 つの入口だけにするため） -->
+      <details class="home-about">
+        <summary>このアプリについて</summary>
+        <div class="home-about-body">
+          <p>試し斬りの大会を、選手の登録から採点・順位の発表まで一本で進めるためのアプリです。大会のデータはサーバーに1つだけあり、運営者の PC とスマホ、コートのタブレット、会場の大画面が同じ大会を読み書きします。</p>
+          <p>運営は PC かスマホで大会を作り、コートのタブレットで採点し、結果を大画面や共有リンクで発表します。初めての方は<a href="help.html">ヘルプ</a>をご覧ください。</p>
+
+          <section class="home-flow" id="homeFlow">
+            <h2>全体の流れ</h2>
+            <p>大会は 7 つの<strong>状態</strong>を順に進みます。状態が変わるのは、運営者が「次へ進む」を押したときだけです。</p>
+            <div class="home-flow-band" id="homeFlowBand"></div>
+            <p class="home-note">二巡目を行わない大会は、「一巡目終了」から直接「最終結果」へ進められます。どの状態からも 1 つ前に戻せます。</p>
+          </section>
+        </div>
+      </details>
     </section>
 
-    <section class="home-flow" id="homeFlow">
-      <h2>全体の流れ</h2>
-      <p>大会は 7 つの<strong>状態</strong>を順に進みます。状態が変わるのは、運営者が「次へ進む」を押したときだけです。</p>
-      <div class="home-flow-band" id="homeFlowBand"></div>
-      <p class="home-note">二巡目を行わない大会は、「一巡目終了」から直接「最終結果」へ進められます。どの状態からも 1 つ前に戻せます。</p>
-    </section>
-
-    <nav class="home-entries" aria-label="入口">
-      <a class="home-entry primary" id="linkAdmin" href="admin.html#events">
-        <span class="home-entry-main">運営画面を開く</span>
-        <span class="home-entry-sub">大会の作成・選手の登録・試合の進行</span>
-      </a>
-      <a class="home-entry" href="scoring.html">
-        <span class="home-entry-main">採点画面（コート端末）</span>
-        <span class="home-entry-sub">コートのタブレットで得点を入れる</span>
-      </a>
-      <a class="home-entry" href="ranking.html">
-        <span class="home-entry-main">順位表示</span>
-        <span class="home-entry-sub">大会の順位を見る・成績表を保存する</span>
-      </a>
-      <a class="home-entry" href="help.html">
-        <span class="home-entry-main">ヘルプ</span>
-        <span class="home-entry-sub">当日の手引き（マニュアル）</span>
-      </a>
-    </nav>
-
-    <section class="home-events" id="homeEvents">
-      <h2>進行中の大会</h2>
+    <!-- 作成済みの大会（#list） -->
+    <section class="home-pane" id="paneList" hidden>
+      <div class="home-pane-head">
+        <a class="home-back" href="#">← 戻る</a>
+        <h2>作成済みの大会</h2>
+      </div>
+      <label class="home-check">
+        <input type="checkbox" id="chkShowTest"> テストも表示
+      </label>
       <div class="home-event-list" id="homeEventList">読み込み中…</div>
+    </section>
+
+    <!-- 大会を新規作成（#new）。中身は home.js が作る -->
+    <section class="home-pane" id="paneNew" hidden>
+      <div class="home-pane-head">
+        <a class="home-back" href="#">← 戻る</a>
+        <h2>大会を新規作成</h2>
+      </div>
+      <div id="newBody"></div>
     </section>
 
   </main>
