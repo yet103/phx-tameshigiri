@@ -2657,7 +2657,7 @@
     assert('statusConfirmMessage: 戻すときは行き先のラベル',
       Courts.statusConfirmMessage('round1', 'draft', tcP), '準備中に戻します。よろしいですか？');
     assert('statusConfirmMessage: final から round1_done に戻す',
-      Courts.statusConfirmMessage('final', 'round1_done', tcP), '一巡目終了に戻します。よろしいですか？');
+      Courts.statusConfirmMessage('final', 'round1_done', tcP), '二巡目準備（形の登録）に戻します。よろしいですか？');
     assert('statusConfirmMessage: archived から final への復元は確定の文言にならない',
       Courts.statusConfirmMessage('archived', 'final', tcP), '最終結果に戻します。よろしいですか？');
 
@@ -3124,13 +3124,14 @@
     h2es.textContent = 'status.js';
     results.appendChild(h2es);
 
-    // ---- 1. canTransition（設計書「状態と遷移」の表） ----
+    // ---- 1. canTransition（設計書「状態と遷移」の表 + 2026-09-22 の決戦） ----
     var OK_TRANSITIONS = [
       ['draft', 'round1'],
       ['round1', 'draft'], ['round1', 'round1_done'],
       ['round1_done', 'round1'], ['round1_done', 'round2'], ['round1_done', 'final'],
-      ['round2', 'round1_done'], ['round2', 'round2_done'],
-      ['round2_done', 'round2'], ['round2_done', 'final'],
+      ['round2', 'round1_done'], ['round2', 'round2_final'], ['round2', 'round2_done'],
+      ['round2_final', 'round2'], ['round2_final', 'round2_done'],
+      ['round2_done', 'round2'], ['round2_done', 'round2_final'], ['round2_done', 'final'],
       ['final', 'round2_done'], ['final', 'round1_done'], ['final', 'archived'],
       ['archived', 'final']
     ];
@@ -3144,14 +3145,20 @@
     assert('canTransition: 同じ状態へは false', EventStatus.canTransition('round1', 'round1'), false);
     assert('canTransition: 未知の状態は false', EventStatus.canTransition('zzz', 'round1'), false);
     assert('canTransition: 未知の行き先は false', EventStatus.canTransition('draft', 'zzz'), false);
+    assert('canTransition: round2_final → final は false',
+      EventStatus.canTransition('round2_final', 'final'), false);
+    assert('canTransition: round1_done → round2_final は false',
+      EventStatus.canTransition('round1_done', 'round2_final'), false);
 
-    // ---- 2. next / prev ----
+    // ---- 2. next / nextStep / prev ----
     assert('next: draft → round1', EventStatus.next('draft'), 'round1');
     assert('next: round1_done → round2', EventStatus.next('round1_done'), 'round2');
     assert('next: round2_done → final', EventStatus.next('round2_done'), 'final');
     assert('next: final → archived', EventStatus.next('final'), 'archived');
     assert('next: archived は null', EventStatus.next('archived'), null);
     assert('next: 未知の状態は null', EventStatus.next('zzz'), null);
+    assert('next: round2 → round2_final（添字どおり）', EventStatus.next('round2'), 'round2_final');
+    assert('next: round2_final → round2_done', EventStatus.next('round2_final'), 'round2_done');
 
     var R1_ONLY = [{ order: 'A-男子-1-1' }, { order: 'A-男子-1-2' }];
     var R1_R2 = [{ order: 'A-男子-1-1' }, { order: 'A-男子-2-1' }];
@@ -3159,11 +3166,78 @@
     assert('prev: round1 → draft', EventStatus.prev('round1', R1_ONLY), 'draft');
     assert('prev: round1_done → round1', EventStatus.prev('round1_done', R1_ONLY), 'round1');
     assert('prev: round2 → round1_done', EventStatus.prev('round2', R1_R2), 'round1_done');
-    assert('prev: round2_done → round2', EventStatus.prev('round2_done', R1_R2), 'round2');
     assert('prev: final は二巡目があれば round2_done', EventStatus.prev('final', R1_R2), 'round2_done');
     assert('prev: final は二巡目が無ければ round1_done', EventStatus.prev('final', R1_ONLY), 'round1_done');
     assert('prev: final で players が無くても落ちない', EventStatus.prev('final', null), 'round1_done');
     assert('prev: archived → final', EventStatus.prev('archived', R1_ONLY), 'final');
+
+    var FIN_ROWS = [
+      { order: 'A-男子-1-1', score: 30 },
+      { order: '決戦-男子-2-1', finalist: true },
+      { order: 'A-男子-2-1' }
+    ];
+    var NOFIN_ROWS = [{ order: 'A-男子-1-1', score: 30 }, { order: 'A-男子-2-1' }];
+
+    assert('prev: round2_final → round2', EventStatus.prev('round2_final', FIN_ROWS), 'round2');
+    assert('prev: round2_done は決戦があれば round2_final',
+      EventStatus.prev('round2_done', FIN_ROWS), 'round2_final');
+    assert('prev: round2_done は決戦が無ければ round2',
+      EventStatus.prev('round2_done', NOFIN_ROWS), 'round2');
+    assert('prev: round2_done で players が無くても落ちない',
+      EventStatus.prev('round2_done', null), 'round2');
+
+    assert('nextStep: round2 は決戦があれば round2_final',
+      EventStatus.nextStep('round2', FIN_ROWS), 'round2_final');
+    assert('nextStep: round2 は決戦が無ければ round2_done',
+      EventStatus.nextStep('round2', NOFIN_ROWS), 'round2_done');
+    assert('nextStep: round2 で players が無くても落ちない',
+      EventStatus.nextStep('round2', null), 'round2_done');
+    assert('nextStep: round2 以外は next と同じ',
+      EventStatus.nextStep('round1_done', FIN_ROWS), 'round2');
+    assert('nextLabel: round2 は決戦があれば「決戦を開始」',
+      EventStatus.nextLabel('round2', FIN_ROWS), '決戦を開始');
+    assert('nextLabel: round2 は決戦が無ければ「二巡目を終了」',
+      EventStatus.nextLabel('round2', NOFIN_ROWS), '二巡目を終了');
+    assert('nextLabel: round2_final は「二巡目を終了」',
+      EventStatus.nextLabel('round2_final', FIN_ROWS), '二巡目を終了');
+    assert('nextLabel: archived は null', EventStatus.nextLabel('archived', FIN_ROWS), null);
+
+    // ---- 決戦の選手と決戦コート ----
+    assert('finalists: 二巡目の finalist の行だけを返す',
+      EventStatus.finalists(FIN_ROWS).map(function(p) { return p.order; }), ['決戦-男子-2-1']);
+    assert('finalists: 一巡目に finalist が付いていても拾わない',
+      EventStatus.finalists([{ order: 'A-男子-1-1', finalist: true }]), []);
+    assert('finalists: players が無くても空配列', EventStatus.finalists(null), []);
+    assert('hasFinalists: 決戦の行があれば true', EventStatus.hasFinalists(FIN_ROWS), true);
+    assert('hasFinalists: 決戦の行が無ければ false', EventStatus.hasFinalists(NOFIN_ROWS), false);
+
+    assert('finalCourtOf: 既定は「決戦」', EventStatus.finalCourtOf({}), '決戦');
+    assert('finalCourtOf: settings が無くても既定', EventStatus.finalCourtOf(null), '決戦');
+    assert('finalCourtOf: settings.finalCourt があればそれ',
+      EventStatus.finalCourtOf({ settings: { finalCourt: '決勝' } }), '決勝');
+    assert('finalCourtOf: 空白だけの指定は既定に戻す',
+      EventStatus.finalCourtOf({ settings: { finalCourt: '  ' } }), '決戦');
+    assert('finalCourtOf: 文字列でない指定は既定に戻す',
+      EventStatus.finalCourtOf({ settings: { finalCourt: 3 } }), '決戦');
+
+    // ---- 採点できるコートの絞り込み ----
+    var FIN_EVENT = { settings: { finalCourt: '決戦' } };
+    assert('scoringCourtFilter: round2 は決戦コート以外',
+      EventStatus.scoringCourtFilter('round2', FIN_EVENT), { mode: 'exclude', court: '決戦' });
+    assert('scoringCourtFilter: round2_final は決戦コートだけ',
+      EventStatus.scoringCourtFilter('round2_final', FIN_EVENT), { mode: 'only', court: '決戦' });
+    assert('scoringCourtFilter: round1 は制限なし',
+      EventStatus.scoringCourtFilter('round1', FIN_EVENT), { mode: 'all', court: '' });
+    assert('isCourtScorable: round2 は決戦コートだけ false', [
+      EventStatus.isCourtScorable('round2', FIN_EVENT, 'A'),
+      EventStatus.isCourtScorable('round2', FIN_EVENT, '決戦')
+    ], [true, false]);
+    assert('isCourtScorable: round2_final は決戦コートだけ true', [
+      EventStatus.isCourtScorable('round2_final', FIN_EVENT, 'A'),
+      EventStatus.isCourtScorable('round2_final', FIN_EVENT, '決戦')
+    ], [false, true]);
+    assert('isCourtScorable: round1 はどのコートも true',
+      EventStatus.isCourtScorable('round1', FIN_EVENT, '決戦'), true);
 
     // ---- 3. derive ----
     function derivePlayers(list) { return EventStatus.derive({ players: list }); }
@@ -3218,6 +3292,21 @@
     assert('EventStatus.isScored: result が"2"（△）だけでも採点済み',
       EventStatus.isScored({ score: 0, result: '2    ' }), true);
 
+    // ---- derive は決戦を推定しない（既存データを壊さない） ----
+    assert('derive: 決戦の行があっても round2_final にはしない',
+      EventStatus.derive({ players: [
+        { order: 'A-男子-1-1', score: 30, result: '1    ' },
+        { order: '決戦-男子-2-1', finalist: true, score: 0, result: '' }
+      ] }), 'round2');
+    assert('derive: STATES のどれかで round2_final ではない',
+      EventStatus.STATES.indexOf(EventStatus.derive({ players: [
+        { order: 'A-男子-1-1', score: 30, result: '1    ' },
+        { order: '決戦-男子-2-1', finalist: true, score: 10, result: '1    ' }
+      ] })) !== -1 && EventStatus.derive({ players: [
+        { order: 'A-男子-1-1', score: 30, result: '1    ' },
+        { order: '決戦-男子-2-1', finalist: true, score: 10, result: '1    ' }
+      ] }) !== 'round2_final', true);
+
     // ---- 5. of / isScoringOpen / scoringRound / isLocked / ラベル ----
     assert('of: 有効な status はそのまま', EventStatus.of({ status: 'final', players: [] }), 'final');
     assert('of: 不正な文字列は derive', EventStatus.of({ status: 'zzz', players: [] }), 'draft');
@@ -3225,22 +3314,29 @@
       EventStatus.of({ players: [{ order: 'A-男子-1-1', score: 30, result: '1    ' }] }), 'round1');
     assert('of: null でも draft', EventStatus.of(null), 'draft');
 
-    assert('isScoringOpen: round1 / round2 だけ true',
-      EventStatus.STATES.filter(EventStatus.isScoringOpen), ['round1', 'round2']);
+    assert('isScoringOpen: round1 / round2 / round2_final が true',
+      EventStatus.STATES.filter(EventStatus.isScoringOpen), ['round1', 'round2', 'round2_final']);
     assert('scoringRound: round1 は 1', EventStatus.scoringRound('round1'), 1);
     assert('scoringRound: round2 は 2', EventStatus.scoringRound('round2'), 2);
+    assert('scoringRound: round2_final は 2', EventStatus.scoringRound('round2_final'), 2);
     assert('scoringRound: それ以外は null', EventStatus.scoringRound('round1_done'), null);
     assert('isLocked: final / archived だけ true',
       EventStatus.STATES.filter(EventStatus.isLocked), ['final', 'archived']);
 
-    assert('STATES は7段階',
+    assert('STATES は8段階',
       EventStatus.STATES,
-      ['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final', 'archived']);
+      ['draft', 'round1', 'round1_done', 'round2', 'round2_final', 'round2_done', 'final', 'archived']);
     assert('LABELS は全状態にある',
       EventStatus.STATES.filter(function(s) { return !EventStatus.LABELS[s]; }), []);
     assert('LABELS: round1 は「一巡目 進行中」', EventStatus.LABELS.round1, '一巡目 進行中');
+    assert('LABELS: round1_done は「二巡目準備（形の登録）」',
+      EventStatus.LABELS.round1_done, '二巡目準備（形の登録）');
+    assert('LABELS: round2_final は「決戦 進行中」', EventStatus.LABELS.round2_final, '決戦 進行中');
     assert('NEXT_LABELS: draft は「試合開始」', EventStatus.NEXT_LABELS.draft, '試合開始');
     assert('NEXT_LABELS: round1_done は「二巡目を開始」', EventStatus.NEXT_LABELS.round1_done, '二巡目を開始');
+    assert('NEXT_LABELS: round2 は「決戦を開始」', EventStatus.NEXT_LABELS.round2, '決戦を開始');
+    assert('NEXT_LABELS: round2_final は「二巡目を終了」',
+      EventStatus.NEXT_LABELS.round2_final, '二巡目を終了');
     assert('NEXT_LABELS: archived は null', EventStatus.NEXT_LABELS.archived, null);
 
     var h2tp = document.createElement('h2');
