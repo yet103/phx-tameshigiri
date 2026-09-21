@@ -20,8 +20,8 @@ var Desk = (function() {
   var TABS = NAV.map(function(n) { return n.tab; });
 
   // 上部に並べる段階。archived は並べない（アーカイブは final の「次へ進む」で、
-  // 戻すときは prev が final を返す）。
-  var STAGE_STEPS = ['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final'];
+  // 戻すときは prev が final を返す）。決戦（round2_final）も1段として並べる。
+  var STAGE_STEPS = ['draft', 'round1', 'round1_done', 'round2', 'round2_final', 'round2_done', 'final'];
 
   var defs = {};
   var activeDef = null;    // いま描いている区画（DOM から外す前に destroy を呼ぶ）
@@ -324,13 +324,15 @@ var Desk = (function() {
       actions.appendChild(btnBack);
     }
 
-    var nx = EventStatus.next(st);
+    // 「次へ進む」の行き先は選手データで変わる（二巡目 進行中は、決戦の行があれば
+    // 決戦へ、無ければ二巡目終了へ）。ラベルも同じ判定で決める。
+    var nx = EventStatus.nextStep(st, players);
     if (nx) {
       var btnNext = document.createElement('button');
       btnNext.type = 'button';
       btnNext.className = 'desk-btn primary';
       btnNext.id = 'btnDeskNext';
-      btnNext.textContent = EventStatus.NEXT_LABELS[st] + ' ▶';
+      btnNext.textContent = EventStatus.nextLabel(st, players) + ' ▶';
       btnNext.addEventListener('click', function() { applyStatus(st, nx); });
       actions.appendChild(btnNext);
     }
@@ -387,13 +389,25 @@ var Desk = (function() {
     }
     if (!res.ok) {
       alert(res.error);
-      // 他の端末が先に進めていたときだけ読み直す（empty / no_round2 は自分の画面が古いわけではない）
-      if (res.reason === 'transition') await reloadEvent();
+      // 他の端末が先に進めていたときだけ読み直す。
+      // finale_pending / no_finale はこちらの画面が古い（決戦の行の有無を取り違えている）
+      // 可能性があるので、これも読み直す。empty / no_round2 は入力不足なので読み直さない。
+      if (res.reason === 'transition' || res.reason === 'finale_pending' ||
+          res.reason === 'no_finale') {
+        await reloadEvent();
+      }
       return;
     }
-    toast(EventStatus.LABELS[to] + ' にしました');
+    toast(EventStatus.LABELS[to] + ' にしました' +
+      (res.round2 ? '（二巡目 ' + res.round2.created + ' 名分作りました' +
+        (res.round2.finalistCount > 0 ? '・決戦 ' + res.round2.finalistCount + ' 名）' : '）') : ''));
     // 試合開始に成功したら、コート端末で使う採点画面を別ウィンドウで開く
     if (from === 'draft' && to === 'round1') openScoring(eventId, '');
+    // 一巡目を終了したら、形を直す画面（試合進行）へ自動で移る（設計書の決定）
+    if (from === 'round1' && to === 'round1_done') {
+      navigate('match', eventId);
+      return;
+    }
     await reloadEvent();
   }
 
