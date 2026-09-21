@@ -44,13 +44,18 @@ var Board = (function() {
 
   // 採点表の行。技①②③から空の枠を除き、result と adjust を行に添える。
   // 添字は Scoring.decodeResult と同じく「空の枠を詰めた表示行」の順。
-  // 戻り値: [{ techName, values: ['○'|'×'|''] ×4, adjust: 整数 }]
+  // values は生の値（'×' 以降もそのまま）。無効化された太刀は failedAt（最初の '×' の
+  // 添字。無ければ -1）で表す。採点画面（app.js の applyVoiding）と同じく、太刀セルの
+  // 描画側（strikeCell）で failedAt より後ろを「—」にする。Scoring.calcRowScore は
+  // 内部で effectiveValues を掛けるので、渡す values を先に潰す必要はない。
+  // 戻り値: [{ techName, values: ['○'|'×'|'△'|''] ×4, failedAt, adjust: 整数 }]
   function rowsFor(player) {
     var p = player || {};
     var names = [p.tech1, p.tech2, p.tech3].filter(Boolean);
     var decoded = Scoring.decodeResult(String(p.result || ''), names.length, p.adjust);
     return names.map(function(name, i) {
-      return { techName: name, values: Scoring.effectiveValues(decoded[i].values), adjust: decoded[i].adjust };
+      var values = decoded[i].values;
+      return { techName: name, values: values, failedAt: Scoring.failedAt(values), adjust: decoded[i].adjust };
     });
   }
 
@@ -92,12 +97,19 @@ var Board = (function() {
     el.timer.classList.toggle('is-zero', sec === 0);
   }
 
-  // 太刀セル1つ分。打てない太刀（配点 null）はグレーにする。
-  function strikeCell(techName, index, value, isFemale) {
+  // 太刀セル1つ分。
+  //   打てない太刀（配点 null）      … 採点画面の .disabled と同じく、灰色だけで文字は出さない。
+  //   一つの形で途中失敗した後ろの太刀（failedAt より後ろ）
+  //                                  … 採点画面の .voided と同じく「—」を灰色で出す。
+  function strikeCell(techName, index, value, isFemale, failedAt) {
     var td = document.createElement('td');
     var tech = Scoring.findTechnique(techName, isFemale);
     if (tech && tech.strikes[index] === null) {
       td.className = 'na';
+      return td;
+    }
+    if (typeof failedAt === 'number' && failedAt !== -1 && index > failedAt) {
+      td.className = 'voided';
       td.textContent = '—';
       return td;
     }
@@ -120,9 +132,25 @@ var Board = (function() {
   }
 
   var CIRCLED = ['①', '②', '③'];
+  var DETAIL_COLS = 7;   // 技・初〜四ノ太刀・補正・得点（board.html の <thead> と同じ列数）
 
   function renderRows(player) {
     el.body.textContent = '';
+    var p = player || {};
+    var names = [p.tech1, p.tech2, p.tech3].filter(Boolean);
+    // result が今の技数と合わない（技を差し替えた後など）選手は、内訳をでたらめな
+    // 配点で描かず「内訳なし」にする（合計は保存済み score をそのまま出す。
+    // 採点画面 Scoring.canDecode と同じ判定）。
+    if (!Scoring.canDecode(String(p.result || ''), names.length)) {
+      var tr0 = document.createElement('tr');
+      var td0 = document.createElement('td');
+      td0.className = 'no-detail';
+      td0.colSpan = DETAIL_COLS;
+      td0.textContent = '内訳なし';
+      tr0.appendChild(td0);
+      el.body.appendChild(tr0);
+      return;
+    }
     var rows = rowsFor(player);
     rows.forEach(function(row, i) {
       var tr = document.createElement('tr');
@@ -137,7 +165,7 @@ var Board = (function() {
       tr.appendChild(tech);
 
       for (var s = 0; s < 4; s++) {
-        tr.appendChild(strikeCell(row.techName, s, row.values[s], player.isFemale === true));
+        tr.appendChild(strikeCell(row.techName, s, row.values[s], player.isFemale === true, row.failedAt));
       }
 
       var adjust = document.createElement('td');
