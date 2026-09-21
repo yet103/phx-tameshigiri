@@ -173,6 +173,42 @@ var Home = (function() {
     }
   }
 
+  // --- 区画の出し分け ---
+
+  // ハッシュから出す区画を決める。知らないハッシュは入口に落とす。
+  //   '' / '#' → 'home'、'#new' → 'new'、'#list' → 'list'
+  // '#event/…' はここに来ない（applyRoute の先頭で採点画面へ転送する）。
+  function paneFor(hash) {
+    var raw = String(hash == null ? '' : hash).replace(/^#/, '');
+    if (raw === 'new') return 'new';
+    if (raw === 'list') return 'list';
+    return 'home';
+  }
+
+  function showPane(id, on) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (on) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+  }
+
+  // ハッシュが変わるたびに呼ぶ。転送の判定が最優先（採点画面の URL を誤って
+  // 共有・ブックマークされたとき、入口や一覧を一瞬でも見せない）。
+  function applyRoute() {
+    if (redirectIfScoring()) return;
+    var pane = paneFor(location.hash);
+    showPane('paneHome', pane === 'home');
+    showPane('paneList', pane === 'list');
+    showPane('paneNew', pane === 'new');
+    if (pane === 'list') loadEvents().catch(function(e) { console.error(e); });
+    if (pane === 'new') openNew();
+  }
+
+  // Task B5 で中身を入れる。いまは器を空にするだけ。
+  function openNew() {
+    document.getElementById('newBody').innerHTML = '';
+  }
+
   // --- 進行中の大会 ---
 
   // 読み込みの世代。あとから始めた読み込みが先に返ることがあるので、
@@ -250,11 +286,11 @@ var Home = (function() {
     document.getElementById('btnMode').addEventListener('click', onModeClick);
     applyMode();
     renderFlow();
-    loadEvents().catch(function(e) { console.error(e); });
-    // トップを開いたままハッシュだけ書き換えられても転送する（採点画面のURLを
-    // 誤って共有・ブックマークされた場合など）。index.html の <head> での
-    // 呼び出しはページ読み込み時の 1 回だけなので、それとは別に効かせる。
-    window.addEventListener('hashchange', Home.redirectIfScoring);
+    // ハッシュで区画を出し分ける。index.html の <head> での redirectIfScoring は
+    // ページ読み込み時の 1 回だけなので、開いたままハッシュを書き換えられた場合にも
+    // 効くよう applyRoute からも通す。
+    applyRoute();
+    window.addEventListener('hashchange', applyRoute);
   }
 
   document.addEventListener('DOMContentLoaded', init);
