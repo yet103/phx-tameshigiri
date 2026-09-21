@@ -24,6 +24,9 @@ var Present = (function() {
   var pendingRefresh = false;
   var tokenSeq = 0;
   var timerId = null;
+  // 運営者が自分でモードボタンを押したか。押した後は defaultMode で勝手に切り替えない
+  // （設計書「発表モード」。決戦 進行中でも「掲示」「発表」を見続けられるように）。
+  var modeChosen = false;
 
   // 発表（reveal）モードの状態（後続タスクで使用）。
   var picking = true;
@@ -35,6 +38,7 @@ var Present = (function() {
   var elStatus = null;
   var elModeBoard = null;
   var elModeReveal = null;
+  var elModeFinale = null;
   var elRefresh = null;
   var elFull = null;
 
@@ -56,7 +60,7 @@ var Present = (function() {
   function startTimer() {
     stopTimer();
     timerId = setInterval(function() {
-      if (mode === 'board') load();
+      if (mode === 'board' || mode === 'finale') load();
     }, REFRESH_MS);
   }
 
@@ -96,6 +100,19 @@ var Present = (function() {
     return out;
   }
 
+  // 決戦の行（サーバーが計算した暫定順位）。試技順のまま返す。
+  function finaleRows(d) {
+    if (!d || !d.finale || !Array.isArray(d.finale.rows)) return [];
+    return d.finale.rows;
+  }
+
+  // 最初に開くモード。決戦 進行中なら決戦を出す（設計書「発表モード」）。
+  function defaultMode(d) {
+    if (d && d.finale && d.finale.status === 'round2_final' &&
+        Array.isArray(d.finale.rows) && d.finale.rows.length > 0) return 'finale';
+    return 'board';
+  }
+
   // Api.fetchSharedRanking の結果で状態を進める。busy 中に来た呼び出しは捨てず
   // pendingRefresh に立てておき、進行中の取得が終わった時点でもう一度だけ実行する。
   async function load() {
@@ -126,6 +143,13 @@ var Present = (function() {
       if (mode === 'reveal' && !picking) {
         order = revealOrder(rowsOf(catIndex));
         if (step > order.length) step = order.length;
+      }
+
+      // 最初の取得で決戦 進行中なら決戦モードで開く（設計書「発表モード」）。
+      // 運営者が自分でモードを選んだ後は勝手に切り替えない。
+      if (!modeChosen) {
+        var want = defaultMode(data);
+        if (want !== mode) setMode(want);
       }
 
       var updatedAt = data.event ? data.event.updatedAt : null;
@@ -182,9 +206,57 @@ var Present = (function() {
 
     if (mode === 'reveal') {
       renderReveal();
+    } else if (mode === 'finale') {
+      renderFinale();
     } else {
       renderBoard();
     }
+  }
+
+  function renderFinale() {
+    var rows = finaleRows(data);
+    var h1 = document.createElement('h1');
+    h1.className = 'present-title';
+    h1.textContent = '決戦（暫定）';
+    elScreen.appendChild(h1);
+
+    if (rows.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'present-error';
+      empty.textContent = '決戦はまだありません';
+      elScreen.appendChild(empty);
+      if (elHint) elHint.textContent = '';
+      return;
+    }
+
+    var ul = document.createElement('ul');
+    ul.className = 'present-list present-finale';
+    rows.forEach(function(r) {
+      var li = document.createElement('li');
+      var cls = '';
+      if (r.rank !== null && r.rank <= 3) cls = 'top';
+      if (!r.scored) cls = (cls ? cls + ' ' : '') + 'pending';
+      if (cls) li.className = cls;
+
+      var rankEl = document.createElement('span');
+      rankEl.className = 'present-rank';
+      rankEl.textContent = r.rank === null ? String(r.order) + '番' : String(r.rank);
+      li.appendChild(rankEl);
+
+      var nameEl = document.createElement('span');
+      nameEl.className = 'present-name';
+      nameEl.textContent = r.name;
+      li.appendChild(nameEl);
+
+      var scoreEl = document.createElement('span');
+      scoreEl.className = 'present-score';
+      scoreEl.textContent = r.scored ? String(r.total) : '—';
+      li.appendChild(scoreEl);
+
+      ul.appendChild(li);
+    });
+    elScreen.appendChild(ul);
+    if (elHint) elHint.textContent = '斬った人から合計と暫定順位が埋まります';
   }
 
   function renderBoard() {
@@ -392,6 +464,10 @@ var Present = (function() {
       if (m === 'reveal') elModeReveal.classList.add('on');
       else elModeReveal.classList.remove('on');
     }
+    if (elModeFinale) {
+      if (m === 'finale') elModeFinale.classList.add('on');
+      else elModeFinale.classList.remove('on');
+    }
     render();
   }
 
@@ -433,6 +509,7 @@ var Present = (function() {
     elStatus = document.getElementById('presentStatus');
     elModeBoard = document.getElementById('btnModeBoard');
     elModeReveal = document.getElementById('btnModeReveal');
+    elModeFinale = document.getElementById('btnModeFinale');
     elRefresh = document.getElementById('btnPresentRefresh');
     elFull = document.getElementById('btnPresentFull');
 
@@ -444,12 +521,21 @@ var Present = (function() {
     document.addEventListener('keydown', onKey);
     elModeBoard.addEventListener('click', function() {
       this.blur();
+      modeChosen = true;
       setMode('board');
     });
     elModeReveal.addEventListener('click', function() {
       this.blur();
+      modeChosen = true;
       setMode('reveal');
     });
+    if (elModeFinale) {
+      elModeFinale.addEventListener('click', function() {
+        this.blur();
+        modeChosen = true;
+        setMode('finale');
+      });
+    }
     elRefresh.addEventListener('click', function() {
       this.blur();
       load();
@@ -462,7 +548,7 @@ var Present = (function() {
     document.addEventListener('visibilitychange', function() {
       if (document.hidden) return;
       if (invalid) return;
-      if (mode !== 'board') return;
+      if (mode !== 'board' && mode !== 'finale') return;
       // 直近の取得試行から5秒未満なら floor（可視化のたびに叩き過ぎない）
       if (lastAttemptAt && (new Date() - lastAttemptAt) < 5000) return;
       load();
@@ -485,8 +571,10 @@ var Present = (function() {
       step = 0;
       catIndex = 0;
       mode = 'board';
+      modeChosen = false;
       if (elModeBoard) elModeBoard.classList.add('on');
       if (elModeReveal) elModeReveal.classList.remove('on');
+      if (elModeFinale) elModeFinale.classList.remove('on');
       token = decodeToken();
       start();
     });
@@ -499,6 +587,8 @@ var Present = (function() {
   });
 
   return {
-    revealOrder: revealOrder
+    revealOrder: revealOrder,
+    finaleRows: finaleRows,
+    defaultMode: defaultMode
   };
 })();

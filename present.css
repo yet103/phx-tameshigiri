@@ -49,3 +49,7 @@ body {
 .present-title { font-family: var(--mincho); letter-spacing: .06em; color: var(--gold-light); border-bottom: 1px solid var(--gold); padding-bottom: 6px; }
 .present-list li.top { font-family: var(--mincho); }
 .present-rank { color: var(--gold-light); }
+
+/* ===== 決戦（暫定） ===== */
+.present-finale li.pending { color: var(--text-muted); }
+.present-finale li.pending .present-rank { color: var(--text-muted); }

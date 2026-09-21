@@ -4276,6 +4276,18 @@
     assert('revealOrder: 最後に開くのは1位の行',
       revRows[Present.revealOrder(revRows)[revRows.length - 1]].rank, 1);
 
+    // ---- 発表モードの決戦 ----
+    assert('Present.finaleRows: finale があれば試技順のまま返す',
+      Present.finaleRows({ finale: { rows: [{ name: 'A', order: 1 }, { name: 'B', order: 2 }] } })
+        .map(function(r) { return r.name; }), ['A', 'B']);
+    assert('Present.finaleRows: finale が無ければ空', Present.finaleRows({ rankings: {} }), []);
+    assert('Present.finaleRows: data が null でも空', Present.finaleRows(null), []);
+    assert('Present.defaultMode: 決戦 進行中なら finale',
+      Present.defaultMode({ finale: { status: 'round2_final', rows: [{ name: 'A' }] } }), 'finale');
+    assert('Present.defaultMode: 決戦 進行中でなければ board',
+      Present.defaultMode({ finale: { status: 'round2', rows: [{ name: 'A' }] } }), 'board');
+    assert('Present.defaultMode: finale が無ければ board', Present.defaultMode({}), 'board');
+
     // board.js テスト（配信用ボードの純粋関数。DOM には触らない）
     var h2b = document.createElement('h2');
     h2b.textContent = 'board.js';
