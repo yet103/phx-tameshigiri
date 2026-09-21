@@ -42,9 +42,14 @@
     <h2>0. 全体の流れ</h2>
 
     <h3>トップページ（入口）</h3>
-    <p>アドレスをそのまま開く（末尾に何も付けない）と <span class="term">トップページ</span>（<code>index.html</code>）が出ます。アプリの説明と、全体の流れ、進行中の大会の一覧が並んでいます。</p>
-    <p>ここから <span class="ui">運営画面を開く</span>・<span class="ui">採点画面（コート端末）</span>・<span class="ui">順位表示</span>・<span class="ui">ヘルプ</span> へ行けます。進行中の大会の行を押すと、その大会の運営画面が直接開きます。</p>
-    <p>右上の <span class="ui">🖥</span> / <span class="ui">📱</span> は、<span class="ui">運営画面を開く</span> の行き先を PC 用（<code>desk.html</code>）とスマホ用（<code>admin.html</code>）で切り替えるボタンです。押した端末に控えられるので、次に開いたときも同じほうが出ます。</p>
+    <p>アドレスをそのまま開く（末尾に何も付けない）と <span class="term">トップページ</span>（<code>index.html</code>）が出ます。入口は 2 つだけです。</p>
+    <ul>
+      <li><span class="ui">＋ 大会を新規作成</span> … テンプレート・コピー・完全新規から選んで大会を作ります（§1「大会を作る」）。</li>
+      <li><span class="ui">▶ 作成済みの大会</span> … いまある大会の一覧です。行を押すと、その大会の運営画面が直接開きます。</li>
+    </ul>
+    <p>一覧は <span class="term">採点中 → 準備中・巡目終了 → 最終結果</span> の順に並び、5 件まで出ます。残りは <span class="ui">すべて見る</span> で開きます。アーカイブ済みの大会は下の <span class="ui">▸ アーカイブ（n 件）</span> に畳まれます。<span class="ui">システムテスト用</span> のテンプレートで作った大会は既定で隠れていて、<span class="ui">テストも表示</span> にチェックを入れると <span class="ui">テスト</span> の印付きで出ます。</p>
+    <p>入口の下の小さなリンクから <span class="ui">採点画面</span>・<span class="ui">順位表示</span>・<span class="ui">ヘルプ</span> へ行けます。コート端末の方はここから採点画面へ入ってください。アプリの説明と 7 段階の流れは <span class="ui">▸ このアプリについて</span> に畳まれています。</p>
+    <p>右上の <span class="ui">🖥</span> / <span class="ui">📱</span> は、運営画面の行き先を PC 用（<code>desk.html</code>）とスマホ用（<code>admin.html</code>）で切り替えるボタンです。押した端末に控えられるので、次に開いたときも同じほうが出ます。</p>
     <div class="note">以前のアドレス（採点画面が <code>index.html</code> だった頃のブックマーク）を開くと、自動で <code>scoring.html</code> に移ります。コートのタブレットのブックマークは貼り替えなくて構いません。</div>
 
     <p>大会は、大会を作るところから発表までを一本の流れで進めます。</p>
@@ -151,6 +156,23 @@
     <div class="note">大会が始まってから配点を変えると、すでに採点した選手の得点は変わらないまま、新しい配点との食い違いが残ります。配点の確認は必ず大会の前に済ませてください。</div>
 
     <h3>大会を作る</h3>
+    <p><span class="term">いちばん簡単なのはトップページからです。</span>トップの <span class="ui">＋ 大会を新規作成</span> を押すと、4 つの作り方から選べます。</p>
+    <ul>
+      <li><span class="ui">前回の大会をコピー</span> … 直近に触った大会（テスト大会とアーカイブ済みを除く）をそのままコピーします。毎回の大会はこれがいちばん速いです。</li>
+      <li><span class="ui">テンプレートから</span> … 下の 3 種類から選びます。</li>
+      <li><span class="ui">作成済みの大会からコピー</span> … 元にする大会を選んでコピーします（アーカイブ済みも選べます）。</li>
+      <li><span class="ui">完全新規</span> … 名前・日付・会場だけの空の大会です。技と配点は雛形から入ります。</li>
+    </ul>
+    <p>どれを選んでも、次の画面で <span class="ui">大会名</span>・<span class="ui">日付</span>（今日が入っています）・<span class="ui">会場</span> を入れて <span class="ui">作成</span> を押します。作ったあとは、その大会の <span class="ui">選手登録</span> が開きます。</p>
+
+    <p><span class="term">テンプレート 3 種</span></p>
+    <ul>
+      <li><span class="ui">稽古用</span> … 技と配点は雛形のまま。コートは <span class="term">稽古</span> の 1 つ。選手は 0 名。道場の稽古でその場の何人かを採点するとき。</li>
+      <li><span class="ui">大会用</span> … 技と配点は雛形のまま。コートは <span class="term">A・B</span>。<span class="ui">ゼッケン番号を必須にする</span> が入った状態。選手は 0 名。本番の大会を一から作るとき。</li>
+      <li><span class="ui">システムテスト用</span> … <span class="ui">大会用</span> に加えて、ダミーの選手 20 名（男子01〜10・女子01〜10、ゼッケン 1〜20、A と B に交互、技も入っている）。初めての人が練習する・新しい端末で通しの確認をするとき。</li>
+    </ul>
+    <div class="note"><span class="ui">システムテスト用</span> で作った大会には <span class="ui">テスト</span> の印が付き、トップの <span class="ui">作成済みの大会</span> では既定で隠れます（<span class="ui">テストも表示</span> で出ます）。運営画面の大会一覧と採点画面の選択肢には、いつでも出ます。練習が終わったら消してください。</div>
+
     <p>運営画面には <span class="term">PC 用</span>（<code>desk.html</code>）と <span class="term">スマホ用</span>（<code>admin.html</code>）があります。中身は同じ大会で、ヘッダーの <span class="ui">🖥</span> / <span class="ui">📱</span> でいつでも行き来できます。当日の受付や名簿の打ち込みは PC 用が向いています。</p>
     <p><span class="term">PC 用（<code>desk.html</code>）</span>:</p>
     <ol>
@@ -168,6 +190,7 @@
     <div class="note">このマニュアルの画面写真はスマホ用のものです。PC 用は同じ内容を広い画面に並べたもので、ボタンの名前もほぼ同じです。</div>
 
     <h3>去年の大会をコピーして作る</h3>
+    <p>トップページの <span class="ui">＋ 大会を新規作成</span> → <span class="ui">作成済みの大会からコピー</span> でも同じことができます。運営画面からやる場合は次のとおりです。</p>
     <p>PC 用の <span class="ui">大会一覧</span> で、元にする大会の行の <span class="ui">⋯</span> → <span class="ui">📄 コピーして作成</span> を押します。</p>
     <ul>
       <li><span class="ui">大会名</span>（「元の名前（コピー）」が入っています）・<span class="ui">日付</span>（今日）・<span class="ui">会場</span> を直します。</li>
@@ -175,6 +198,16 @@
       <li>技と配点は必ず複製されます。共有リンクと配信用ボードのアドレスは引き継ぎません。</li>
     </ul>
     <p>できた大会は <span class="ui">準備中</span> です。アーカイブ済みの大会からもコピーできます。</p>
+
+    <h3>基本情報（コート・必須の設定）</h3>
+    <p>PC 用の運営画面で大会を開き、左の <span class="ui">基本情報</span> を選ぶと、大会名・日付・会場のほかに <span class="term">コート一覧</span> を編集できます。</p>
+    <ul>
+      <li><span class="ui">＋ コートを足す</span> でコート名（<span class="term">A</span> など）を入れます。<span class="term">選手が 1 人もいなくても</span>、そのコートが選手登録のコート候補と <span class="ui">試合進行</span> のカードに出ます。</li>
+      <li>足したコートは <span class="ui">×</span> で外せます。<span class="term">灰色のコート</span>（「A（選手あり）」）は選手のコート指定から決まったもので、外せません。外すときは <span class="ui">選手</span> の区画でその選手のコートを変えます。</li>
+      <li>コート名の決まり: 空・<span class="term">-</span>・<span class="term">未分類</span> は使えません。32 文字まで、同じ名前は 1 つだけ、20 コートまでです。</li>
+      <li>足した・外したあとは <span class="ui">保存</span> を押してください（上の <span class="ui">保存</span> でも同じように保存されます）。</li>
+    </ul>
+    <p>同じ画面の <span class="ui">ゼッケン番号を必須にする</span> / <span class="ui">級位・段位を必須にする</span> は、一巡目にその項目が空の選手がいる間だけ <span class="ui">試合開始 ▶</span> で止めるための設定です（§2 の「当日の流れ」）。登録そのものは空のままできます。</p>
 
     <h3>終わった大会を片づける（アーカイブ）</h3>
     <p><span class="ui">最終結果</span> まで進んだ大会は <span class="ui">アーカイブ</span> にできます。上部の <span class="ui">アーカイブ ▶</span>、または大会一覧の行の <span class="ui">⋯</span> → <span class="ui">📥 アーカイブ</span> です。</p>
