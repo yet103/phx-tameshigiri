@@ -7,6 +7,26 @@
 (function() {
   var outsideClickBound = false;   // 「⋯」の外側クリック検知は document に1回だけ付ける
 
+  // 大会が持つコート一覧（基本情報の settings.courts）。desk-players.js と同じ理由で
+  // ここにも置く（courts.js はこの計画では触らない）。
+  function extraCourts(ctx) {
+    return (ctx && ctx.event && ctx.event.settings && ctx.event.settings.courts) || [];
+  }
+
+  // コート別のカードの材料。Courts.courtProgress は選手から導かれたコートしか返さないので、
+  // 大会が持つコート（選手がまだ 1 人もいないコート）を 0 / 0 の行として補う。
+  // 並びは Courts.listFrom に合わせる（昇順・未分類は末尾）。
+  // コート名が 'constructor' でも壊れないよう Object.create(null) + hasOwnProperty で引く。
+  function courtCards(ctx, round) {
+    var byCourt = Object.create(null);
+    Courts.courtProgress(ctx.players, round).forEach(function(r) { byCourt[r.court] = r; });
+    return Courts.listFrom(ctx.players, extraCourts(ctx)).map(function(c) {
+      return Object.prototype.hasOwnProperty.call(byCourt, c)
+        ? byCourt[c]
+        : { court: c, total: 0, scored: 0 };
+    });
+  }
+
   // --- 描画 ---
 
   function render(container, ctx) {
@@ -107,7 +127,7 @@
       '「↻ 最新に更新」を押すと読み直します。';
     wrap.appendChild(note);
 
-    var rows = Courts.courtProgress(ctx.players, round);
+    var rows = courtCards(ctx, round);
     if (rows.length === 0) {
       var none = document.createElement('p');
       none.className = 'desk-empty';
