@@ -97,21 +97,23 @@ var Home = (function() {
   var FLOW_CAPTIONS = {
     draft: '大会を作る・選手登録',
     round1: 'コート端末で採点',
-    round1_done: '二巡目を生成・技入力',
+    round1_done: '二巡目の形を確かめる',
     round2: 'コート端末で採点',
+    round2_final: '暫定ベスト8 が最後に斬る',
     round2_done: '順位を確認',
     final: '発表・共有',
     archived: '保管'
   };
 
-  // 「全体の流れ」= 7段階を横一列の帯で出す（desk.js の上部の段階表示と同じ調子）。
-  // 状態そのものは変わらない静的な内容なので、DOMContentLoaded で一度だけ描く。
+  // 「全体の流れ」= EventStatus.STATES の段数を横一列の帯で出す（desk.js の上部の
+  // 段階表示と同じ調子）。状態そのものは変わらない静的な内容なので、
+  // DOMContentLoaded で一度だけ描く。
   function renderFlow() {
     var band = document.getElementById('homeFlowBand');
     if (!band) return;
     band.innerHTML = '';
     band.setAttribute('role', 'list');
-    band.setAttribute('aria-label', '大会の状態（7段階）');
+    band.setAttribute('aria-label', '大会の状態（' + EventStatus.STATES.length + '段階）');
 
     EventStatus.STATES.forEach(function(s, i) {
       var step = document.createElement('div');
