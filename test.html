@@ -456,6 +456,16 @@
     var pcImpP1 = pcImported.players.filter(function(p) { return p.name === '複製 一郎'; })[0];
     assert('importBundle: bib/rank/rental を復元する', [pcImpP1.bib, pcImpP1.rank, pcImpP1.rental], [21, '弐段', true]);
 
+    // sanitizeCourtList（コピー・バンドル取り込みの寛容な取り込み）は不正・重複コートを黙って落とす。
+    // 通常の経路では settings.courts は常に妥当な値しか保存できないので、バンドルを直接
+    // 改ざんして確かめる（取り込み系 API は他の不正値も 400 にせず黙って落とす流儀に合わせる）。
+    var badCourtsBundle = JSON.parse(JSON.stringify(pcBundle));
+    badCourtsBundle.event.settings.courts = ['A', 'A', 'bad-name', 123, '', '未分類', 'B'];
+    var badCourtsImportRes = await Api.importBundle(badCourtsBundle);
+    var badCourtsImported = await Api.loadEvent(badCourtsImportRes.id);
+    assert('importBundle: sanitizeCourtList は不正・重複コートを落とす', badCourtsImported.settings.courts, ['A', 'B']);
+    await Api.deleteEvent(badCourtsImportRes.id);
+
     await Api.deleteEvent(pcSrc.id);
     await Api.deleteEvent(pcRes.id);
     await Api.deleteEvent(pcImportRes.id);
@@ -508,6 +518,16 @@
         return [rows.filter(function(p) { return !p.isFemale; }).length, rows.filter(function(p) { return p.isFemale; }).length];
       }),
       [[5, 5], [5, 5]]);
+    // order は「コート-性別-巡目-番号」（buildOrder）。A-男子-1-1〜5, A-女子-1-1〜5,
+    // B-男子-1-1〜5, B-女子-1-1〜5 の4区分×5番で、重複が無いこと。
+    var ftOrderPattern = /^[AB]-(男子|女子)-1-[1-5]$/;
+    assert('from-template systest: order は「コート-性別-1-番号」の形式',
+      ftSysPlayers.every(function(p) { return ftOrderPattern.test(p.order); }), true);
+    var ftOrderCounts = {};
+    ftSysPlayers.forEach(function(p) { ftOrderCounts[p.order] = (ftOrderCounts[p.order] || 0) + 1; });
+    assert('from-template systest: order に重複がない',
+      Object.keys(ftOrderCounts).every(function(k) { return ftOrderCounts[k] === 1; }), true);
+    assert('from-template systest: order は20通り（4区分×5番の連番）', Object.keys(ftOrderCounts).length, 20);
     var ftSysTechNames = ftSysEvent.techniques.map(function(t) { return t.name; });
     ftSysPlayers.forEach(function(p) {
       [p.tech1, p.tech2, p.tech3].forEach(function(name) {
