@@ -32,3 +32,7 @@ body {
 .share-head h1 { font-family: var(--mincho); letter-spacing: .04em; color: var(--gold-light); font-size: 20px; }
 .share-section h2 { color: var(--gold-light); border-bottom-color: var(--gold); font-family: var(--mincho); }
 .share-rank { color: var(--gold-light); }
+
+/* ===== 決戦（暫定） ===== */
+.share-finale li.pending { color: var(--text-muted); }
+.share-finale .share-rank { color: var(--accent); }

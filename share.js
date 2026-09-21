@@ -111,8 +111,48 @@ var Share = (function() {
     elHead.appendChild(meta);
   }
 
-  function renderBody(rankings) {
+  // 決戦（暫定ベスト8）の表。finale が無ければ何も足さない。
+  // 順位の上に出す（いま会場で進んでいるのは決戦なので、参加者が最初に見たいもの）。
+  function renderFinale(finale) {
+    if (!finale || !Array.isArray(finale.rows) || finale.rows.length === 0) return null;
+    var section = document.createElement('section');
+    section.className = 'share-section share-finale';
+
+    var h2 = document.createElement('h2');
+    h2.textContent = '決戦（暫定）';
+    section.appendChild(h2);
+
+    var ul = document.createElement('ul');
+    ul.className = 'share-list';
+    finale.rows.forEach(function(r) {
+      var li = document.createElement('li');
+      if (!r.scored) li.className = 'pending';
+
+      var rankEl = document.createElement('span');
+      rankEl.className = 'share-rank';
+      rankEl.textContent = r.rank === null ? String(r.order) + '番' : String(r.rank);
+      li.appendChild(rankEl);
+
+      var nameEl = document.createElement('span');
+      nameEl.className = 'share-name';
+      nameEl.textContent = r.name;
+      li.appendChild(nameEl);
+
+      var scoreEl = document.createElement('span');
+      scoreEl.className = 'share-score';
+      scoreEl.textContent = r.scored ? String(r.total) : '—';
+      li.appendChild(scoreEl);
+
+      ul.appendChild(li);
+    });
+    section.appendChild(ul);
+    return section;
+  }
+
+  function renderBody(rankings, finale) {
     elBody.textContent = '';
+    var fin = renderFinale(finale);
+    if (fin) elBody.appendChild(fin);
     for (var i = 0; i < CATEGORIES.length; i++) {
       var cat = CATEGORIES[i];
       var list = (rankings && rankings[cat.key]) || [];
@@ -193,7 +233,7 @@ var Share = (function() {
         lastUpdatedAt = updatedAt;
         rendered = true;
         renderHead(result.data.event || {});
-        renderBody(result.data.rankings || {});
+        renderBody(result.data.rankings || {}, result.data.finale);
       }
 
       if (isFirstSuccess && result.data.event && result.data.event.name) {
