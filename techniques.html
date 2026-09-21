@@ -76,6 +76,7 @@
   <script src="api.js"></script>
   <script src="storage.js"></script>
   <script src="courts.js"></script>
+  <script src="status.js"></script>
   <script src="techedit.js"></script>
   <script>
     // 配点は大会ごと（大会 JSON の techniques）。この画面は
@@ -132,7 +133,10 @@
       var ev = eventById(id);
       handle = TechEdit.mount(editor, id, {
         events: eventsCache,
-        title: ev ? (ev.name || '(名称未設定)') : id
+        title: ev ? (ev.name || '(名称未設定)') : id,
+        // 確定済み（final/archived）の大会は読み取り専用にする。雛形（id === ''）は
+        // 大会の状態を持たないので常に編集できる。
+        readOnly: !!ev && EventStatus.isLocked(EventStatus.of(ev))
       });
     }
 
