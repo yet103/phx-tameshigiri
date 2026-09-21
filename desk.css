@@ -32,7 +32,11 @@ a { color: var(--accent); }
   color: var(--gold-light); text-decoration: none;
 }
 .desk-title:hover { filter: brightness(1.15); }
-.desk-icon-btn { width: 36px; height: 36px; font-size: 18px; background: transparent; color: var(--band-text); }
+.desk-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; font-size: 18px; background: transparent; color: var(--band-text);
+  border-radius: 4px; text-decoration: none;
+}
 .desk-icon-btn:hover { background: var(--band-bg-2); }
 
 /* ===== 大会の見出しと段階表示 ===== */
