@@ -273,6 +273,18 @@ var Courts = (function() {
       .sort(function(a, b) { return compareOrder(a.player, b.player); });
   }
 
+  // 決戦（暫定ベスト8）の行を試技順（番号順）に並べて返す。
+  // 誰が決戦かの判定は status.js（サーバーと共有）にあり、ここは並べるだけ。
+  function finalists(players) {
+    return EventStatus.finalists(players).slice().sort(compareOrder);
+  }
+
+  // 決戦コートの名前。判定は status.js に一本化してあるので、ここは呼び直すだけ
+  // （courts.js しか読まない画面から使えるようにするための入口）。
+  function finalCourtOf(event) {
+    return EventStatus.finalCourtOf(event);
+  }
+
   // 二巡目生成 API の 409 応答（reason: 'unscored' | 'exists'）を確認文言にする。
   // 採点画面（app.js）と運営画面（admin-round.js）で同じ文言を使う。
   // fixHint: コート未設定の選手をどこで直すかの案内（画面ごとに違う）
@@ -351,6 +363,12 @@ var Courts = (function() {
   //   round2_done 以降         → 出さない（数えるものが無い）
   function stageCountText(status, players) {
     var list = players || [];
+    // 決戦 進行中は決戦の行だけを数える（他のコートはもう斬り終わっている）。
+    // scoringRound('round2_final') は 2 を返すので、必ずこの分岐を先に置くこと。
+    if (status === 'round2_final') {
+      var fin = EventStatus.finalists(list);
+      return '決戦 採点済み ' + fin.filter(isScored).length + ' / ' + fin.length;
+    }
     var r = EventStatus.scoringRound(status);
     if (r) {
       var rows = list.filter(function(p) { return roundOf(p) === r; });
@@ -394,6 +412,17 @@ var Courts = (function() {
     }
     if (from === 'round1_done' && to === 'final') {
       return '二巡目を行わずに最終結果にします。\nよろしいですか？';
+    }
+    if (from === 'round2' && to === 'round2_final') {
+      // 決戦に出ない選手（暫定ベスト8 以外）が全員斬り終わっているかを数える
+      var others = round(2).filter(function(p) { return p.finalist !== true; });
+      return countPhrase('決戦以外の未採点', others.filter(function(p) { return !isScored(p); }).length) +
+        '\n決戦を開始しますか？';
+    }
+    if (from === 'round2_final' && to === 'round2_done') {
+      return countPhrase('決戦の未採点',
+        EventStatus.finalists(list).filter(function(p) { return !isScored(p); }).length) +
+        '\n二巡目を終了しますか？';
     }
     if (from === 'round2' && to === 'round2_done') {
       return countPhrase('二巡目の未採点', round(2).filter(function(p) { return !isScored(p); }).length) +
@@ -773,6 +802,8 @@ var Courts = (function() {
     progressRound: progressRound,
     courtProgress: courtProgress,
     livePlayerName: livePlayerName,
+    finalists: finalists,
+    finalCourtOf: finalCourtOf,
     techCopyTargets: techCopyTargets,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage,

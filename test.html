@@ -2661,6 +2661,62 @@
     assert('statusConfirmMessage: archived から final への復元は確定の文言にならない',
       Courts.statusConfirmMessage('archived', 'final', tcP), '最終結果に戻します。よろしいですか？');
 
+    // ---- 決戦（暫定ベスト8）の並び ----
+    var finP = [
+      { id: 'a', order: 'A-男子-1-1', score: 30 },
+      { id: 'b', order: '決戦-男子-2-2', finalist: true, name: '二郎' },
+      { id: 'c', order: '決戦-男子-2-1', finalist: true, name: '一郎' },
+      { id: 'd', order: 'A-男子-2-1', name: '三郎' }
+    ];
+    assert('Courts.finalists: 決戦の行を番号順に返す',
+      Courts.finalists(finP).map(function(p) { return p.name; }), ['一郎', '二郎']);
+    assert('Courts.finalists: 決戦が無ければ空配列', Courts.finalists([{ order: 'A-男子-2-1' }]), []);
+    assert('Courts.finalCourtOf: 既定は「決戦」', Courts.finalCourtOf({}), '決戦');
+    assert('Courts.finalCourtOf: settings.finalCourt があればそれ',
+      Courts.finalCourtOf({ settings: { finalCourt: '決勝' } }), '決勝');
+
+    // ---- 決戦を挟む遷移の確認文言 ----
+    var cfP = [
+      { order: 'A-男子-1-1', score: 30, result: '1    ' },
+      { order: 'A-男子-2-1', score: 0, result: '' },
+      { order: 'A-男子-2-2', score: 12, result: '1    ' },
+      { order: '決戦-男子-2-1', finalist: true, score: 0, result: '' },
+      { order: '決戦-男子-2-2', finalist: true, score: 20, result: '1    ' }
+    ];
+    assert('statusConfirmMessage: round2 → round2_final は決戦以外の未採点を数える',
+      Courts.statusConfirmMessage('round2', 'round2_final', cfP),
+      '決戦以外の未採点が 1名います。\n決戦を開始しますか？');
+    assert('statusConfirmMessage: round2 → round2_final で未採点0なら「いません」',
+      Courts.statusConfirmMessage('round2', 'round2_final', [
+        { order: 'A-男子-2-1', score: 12, result: '1    ' },
+        { order: '決戦-男子-2-1', finalist: true, score: 0, result: '' }
+      ]),
+      '決戦以外の未採点がいません。\n決戦を開始しますか？');
+    assert('statusConfirmMessage: round2_final → round2_done は決戦の未採点を数える',
+      Courts.statusConfirmMessage('round2_final', 'round2_done', cfP),
+      '決戦の未採点が 1名います。\n二巡目を終了しますか？');
+    assert('statusConfirmMessage: round2_final → round2 は戻す文言',
+      Courts.statusConfirmMessage('round2_final', 'round2', cfP),
+      '二巡目 進行中に戻します。よろしいですか？');
+    assert('statusConfirmMessage: round2_done → round2_final は戻す文言',
+      Courts.statusConfirmMessage('round2_done', 'round2_final', cfP),
+      '決戦 進行中に戻します。よろしいですか？');
+    assert('statusConfirmMessage: 決戦の無い大会の round2 → round2_done は従来どおり',
+      Courts.statusConfirmMessage('round2', 'round2_done',
+        [{ order: 'A-男子-2-1', score: 0, result: '' }]),
+      '二巡目の未採点が 1名います。\n二巡目を終了しますか？');
+
+    // ---- 段階表示の件数 ----
+    assert('stageCountText: round2_final は決戦だけを数える',
+      Courts.stageCountText('round2_final', cfP), '決戦 採点済み 1 / 2');
+    assert('stageCountText: round2 は二巡目全体を数える（従来どおり）',
+      Courts.stageCountText('round2', cfP), '採点済み 2 / 4');
+    assert('progressRound: round2_final は二巡目', Courts.progressRound('round2_final', cfP), 2);
+
+    // ---- 試合開始を止める条件は決戦で変わらない ----
+    assert('startBlockers: round2_final の状態でも判定は選手データだけで決まる',
+      Courts.startBlockers({ settings: {} }, cfP), []);
+
     // ---- 技の性別による絞り込み・解決（設計書「技の選択肢を性別で絞る」テスト 1〜2） ----
     // data.js の既定リストで 胸尽くし/水月/破図味 が (男)/(女) の組。
     function techNames(list) { return list.map(function(t) { return t.name; }); }
