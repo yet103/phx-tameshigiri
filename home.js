@@ -357,9 +357,14 @@ var Home = (function() {
     return found.length ? found[0] : null;
   }
 
+  // フォームの世代。「作成」を押して通信を待っている間に「← 選び直す」で戻られたら、
+  // 遅れて届いた結果に対して alert も遷移もしない（戻った後の画面を汚さない）。
+  var formSeq = 0;
+
   // 2 段目。4 経路で違うのは「注記」「コピー元のセレクト」「選手も複製するのチェック」
   // 「作成のときに呼ぶ API」の 4 つだけ。ほかは共通。
   function renderNewForm(box) {
+    var mySeq = ++formSeq;
     var isCopy = (newRoute === 'copy-prev' || newRoute === 'copy-pick');
 
     var back = document.createElement('button');
@@ -367,6 +372,7 @@ var Home = (function() {
     back.className = 'home-btn-sub';
     back.textContent = '← 選び直す';
     back.addEventListener('click', function() {
+      formSeq++;   // このフォームは無効に（通信中の結果が届いても無視する）
       // テンプレートの 3 枚から来たときは 3 枚に戻す（4 枚まで戻さない）
       if (newRoute === 'template') newTemplate = '';
       else newRoute = '';
@@ -471,7 +477,9 @@ var Home = (function() {
       if (!name) { alert('大会名を入力してください。'); return; }
       btnCreate.disabled = true;
       var result = await create(name);
-      // 待っている間に画面を離れていたら何も出さない（alert も出さない）
+      // 待っている間に画面を離れていたら何も出さない（alert も出さない）。
+      // 「← 選び直す」で同じ #new のまま前段に戻っていた場合も mySeq がずれて弾かれる。
+      if (mySeq !== formSeq) return;
       if (paneFor(location.hash) !== 'new') return;
       btnCreate.disabled = false;
       if (!result) {
