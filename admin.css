@@ -218,6 +218,20 @@ main { padding: 8px 12px 16px; }
 .field-note:empty { display: none; }
 .tech-dup-note { color: var(--cell-fail-text); font-weight: bold; }
 
+/* 基本情報シート（⋯メニュー）のコート一覧。PC 運営 desk.css の .desk-chip 相当
+   （desk.css はこの計画で触らないファイルなのでここに複製する）。 */
+.court-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.court-item {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px;
+  border-radius: 4px; background: var(--bg-secondary); border: 1px solid var(--border); font-size: 13px;
+}
+.court-item.fixed { color: var(--text-muted); }
+.court-item button {
+  min-width: 22px; min-height: 22px; padding: 0; background: transparent;
+  color: var(--text-muted); font-size: 14px; line-height: 1;
+}
+.btn-sub { min-height: 40px; padding: 0 12px; background: transparent; border: 1px dashed var(--border); color: var(--accent); }
+
 /* 技チップ */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {

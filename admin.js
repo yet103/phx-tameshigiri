@@ -371,6 +371,18 @@ var Admin = (function() {
     btnHome.textContent = '🏠 トップ';
     body.appendChild(btnHome);
 
+    // 基本情報（名前・日付・会場・必須設定・コート一覧）はスマホ運営にタブが無いので、
+    // ⋯ メニューから開くシートで編集する（Storage.mapHash の #setup → #players の
+    // 対応は変えない。設計書「モードの切り替え」）。選択中の大会があるときだけ出す。
+    var btnSetup = null;
+    if (currentEventId()) {
+      btnSetup = document.createElement('button');
+      btnSetup.type = 'button';
+      btnSetup.className = 'menu-item';
+      btnSetup.textContent = '📝 基本情報';
+      body.appendChild(btnSetup);
+    }
+
     var btnScoring = document.createElement('button');
     btnScoring.type = 'button';
     btnScoring.className = 'menu-item';
@@ -419,6 +431,12 @@ var Admin = (function() {
       sheet.close();
       location.href = 'index.html';
     });
+    if (btnSetup) {
+      btnSetup.addEventListener('click', function() {
+        sheet.close();
+        openEventInfoSheet(currentEventId());
+      });
+    }
     btnScoring.addEventListener('click', function() {
       sheet.close();
       location.href = scoringHref(currentEventId(), '');
@@ -465,6 +483,220 @@ var Admin = (function() {
         toast('ファイルに保存しました');
       });
     }
+  }
+
+  // --- 基本情報シート（⋯メニュー） ---
+  // PC 運営の desk-setup.js と同じ流れ・同じ文言。名前・日付・会場・必須2つ・コート一覧を
+  // 編集し、保存は Api.updateEventInfo(eventId, { name, date, venue, settings }) の1本
+  // （大会ファイルを丸ごと送り直す Api.saveEvent は使わない。techniques を持たない大会が
+  // 自前の技リストを持つ大会に変わってしまうのを避けるため）。
+  async function openEventInfoSheet(eventId) {
+    var evResult = await Api.loadEventResult(eventId);
+    if (currentEventId() !== eventId) return;   // 開いている間に大会を切り替えられた
+    if (!evResult.ok) {
+      if (evResult.status === 404) {
+        alert('この大会は削除されています');
+        clearLast();
+        redirect('events');
+      } else {
+        alert('大会データを取得できませんでした。通信を確認してください。');
+      }
+      return;
+    }
+    var ev = evResult.event;
+    var locked = EventStatus.isLocked(EventStatus.of(ev));
+    var players = ev.players || [];
+    var settings = ev.settings || {};
+    // 画面で編集中のコート一覧（保存するのはこの配列）。選手から導かれるコートは
+    // ここに入れない（外せないものを保存し直さない。desk-setup.js と同じ規約）。
+    var extra = Array.isArray(settings.courts) ? settings.courts.slice() : [];
+
+    var body = document.createElement('div');
+
+    if (ev.test === true) {
+      var testNote = document.createElement('p');
+      testNote.className = 'field-note';
+      testNote.textContent = 'テスト大会です（トップの「作成済みの大会」では既定で隠れます）。';
+      body.appendChild(testNote);
+    }
+    if (locked) {
+      var warn = document.createElement('p');
+      warn.className = 'admin-warn';
+      warn.textContent = 'この大会は最終結果を確定済みです。上部の「戻す」を押すと編集できます。';
+      body.appendChild(warn);
+    }
+
+    function addField(labelText, type) {
+      var wrap = document.createElement('div');
+      wrap.className = 'field';
+      var label = document.createElement('label');
+      label.textContent = labelText;
+      var input = document.createElement('input');
+      input.type = type;
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      body.appendChild(wrap);
+      return input;
+    }
+    var inName = addField('大会名', 'text');
+    inName.value = ev.name || '';
+    var inDate = addField('日付', 'date');
+    inDate.value = ev.date || '';
+    var inVenue = addField('会場', 'text');
+    inVenue.value = ev.venue || '';
+
+    function addCheck(labelText, checked) {
+      var wrap = document.createElement('div');
+      wrap.className = 'field';
+      var label = document.createElement('label');
+      label.className = 'toggle';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = checked === true;
+      var span = document.createElement('span');
+      span.textContent = labelText;
+      label.appendChild(input);
+      label.appendChild(span);
+      wrap.appendChild(label);
+      body.appendChild(wrap);
+      return input;
+    }
+    var chkBib = addCheck('ゼッケン番号を必須にする', settings.requireBib === true);
+    var chkRank = addCheck('級位・段位を必須にする', settings.requireRank === true);
+
+    var reqNote = document.createElement('p');
+    reqNote.className = 'field-note';
+    reqNote.textContent =
+      'チェックを入れても、選手の登録は空のままできます。' +
+      '一巡目にその項目が空の選手がいる間だけ「試合開始」で止まり、人数と名前が出ます。';
+    body.appendChild(reqNote);
+
+    // --- コート一覧 ---
+    var courtField = document.createElement('div');
+    courtField.className = 'field';
+    var courtLabel = document.createElement('label');
+    courtLabel.textContent = 'コート';
+    courtField.appendChild(courtLabel);
+    var courtNote = document.createElement('p');
+    courtNote.className = 'field-note';
+    courtNote.textContent =
+      'ここで足したコートは、選手が1人もいなくても選手登録のコート候補に出ます。' +
+      '選手あり（灰色）のコートは選手のコート指定から決まったもので、ここでは外せません。';
+    courtField.appendChild(courtNote);
+    var courtList = document.createElement('div');
+    courtList.className = 'court-list';
+    courtField.appendChild(courtList);
+    body.appendChild(courtField);
+
+    function playerCourts() {
+      return Courts.listFrom(players).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    }
+    function allCourts() {
+      return Courts.listFrom(players, extra).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    }
+    function renderCourts() {
+      courtList.innerHTML = '';
+      var fixed = playerCourts();
+      var names = allCourts();
+      if (names.length === 0) {
+        var empty = document.createElement('span');
+        empty.className = 'field-note';
+        empty.textContent = 'コートがまだありません。';
+        courtList.appendChild(empty);
+      }
+      names.forEach(function(c) {
+        var hasPlayers = fixed.indexOf(c) !== -1;
+        var item = document.createElement('span');
+        item.className = 'court-item' + (hasPlayers ? ' fixed' : '');
+        var label = document.createElement('span');
+        label.textContent = hasPlayers ? (c + '（選手あり）') : c;
+        item.appendChild(label);
+        if (!hasPlayers && !locked) {
+          var x = document.createElement('button');
+          x.type = 'button';
+          x.textContent = '×';
+          x.setAttribute('aria-label', c + ' を外す');
+          x.addEventListener('click', function() {
+            var i = extra.indexOf(c);
+            if (i !== -1) extra.splice(i, 1);
+            renderCourts();
+          });
+          item.appendChild(x);
+        }
+        courtList.appendChild(item);
+      });
+    }
+    renderCourts();
+
+    if (!locked) {
+      var btnAddCourt = document.createElement('button');
+      btnAddCourt.type = 'button';
+      btnAddCourt.className = 'btn-sub';
+      btnAddCourt.textContent = '＋ コートを足す';
+      btnAddCourt.addEventListener('click', function() {
+        var name = prompt('コート名を入力してください（例: A）', '');
+        if (name === null) return;
+        name = String(name).trim();
+        // 名前の規則はサーバーの PATCH と同じ（Courts.validateCourtList）。
+        // 既にあるコートと合わせて検証するので、重複も件数超もここで弾ける。
+        var err = Courts.validateCourtList(allCourts().concat([name]));
+        if (err) { alert(err); return; }
+        extra.push(name);
+        renderCourts();
+      });
+      courtField.appendChild(btnAddCourt);
+    }
+
+    var btnCancel = document.createElement('button');
+    btnCancel.type = 'button';
+    btnCancel.className = 'btn';
+    btnCancel.textContent = '閉じる';
+    var btnSave = document.createElement('button');
+    btnSave.type = 'button';
+    btnSave.className = 'btn primary';
+    btnSave.textContent = '保存';
+
+    if (locked) {
+      inName.disabled = true;
+      inDate.disabled = true;
+      inVenue.disabled = true;
+      chkBib.disabled = true;
+      chkRank.disabled = true;
+      btnSave.disabled = true;
+    }
+
+    var sheet = openSheet('基本情報', body, [btnCancel, btnSave]);
+    btnCancel.addEventListener('click', sheet.close);
+
+    btnSave.addEventListener('click', async function() {
+      var name = inName.value.trim();
+      if (!name) { alert('大会名を入力してください。'); return; }
+      var courtErr = Courts.validateCourtList(extra);
+      if (courtErr) { alert(courtErr); return; }
+      btnSave.disabled = true;
+      sheet.lock(true);
+      var result = await Api.updateEventInfo(eventId, {
+        name: name, date: inDate.value, venue: inVenue.value.trim(),
+        settings: {
+          requireBib: chkBib.checked,
+          requireRank: chkRank.checked,
+          courts: extra.slice()
+        }
+      });
+      sheet.lock(false);
+      btnSave.disabled = false;
+      if (!result || !result.ok) {
+        if (result && result.reason === 'locked') {
+          alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else {
+          alert((result && result.error) || '保存できませんでした。通信を確認してください。');
+        }
+        return;
+      }
+      sheet.close();
+      toast('基本情報を保存しました');
+      if (currentEventId() === eventId) await reloadEvent();
+    });
   }
 
   // --- テーマ ---
