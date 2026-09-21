@@ -48,7 +48,7 @@
       <li><span class="ui">▶ 作成済みの大会</span> … いまある大会の一覧です。行を押すと、その大会の運営画面が直接開きます。</li>
     </ul>
     <p>一覧は <span class="term">採点中 → 準備中・巡目終了 → 最終結果</span> の順に並び、5 件まで出ます。残りは <span class="ui">すべて見る</span> で開きます。アーカイブ済みの大会は下の <span class="ui">▸ アーカイブ（n 件）</span> に畳まれます。<span class="ui">システムテスト用</span> のテンプレートで作った大会は既定で隠れていて、<span class="ui">テストも表示</span> にチェックを入れると <span class="ui">テスト</span> の印付きで出ます。</p>
-    <p>入口の下の小さなリンクから <span class="ui">採点画面</span>・<span class="ui">順位表示</span>・<span class="ui">ヘルプ</span> へ行けます。コート端末の方はここから採点画面へ入ってください。アプリの説明と 7 段階の流れは <span class="ui">▸ このアプリについて</span> に畳まれています。</p>
+    <p>入口の下の小さなリンクから <span class="ui">採点画面</span>・<span class="ui">順位表示</span>・<span class="ui">ヘルプ</span> へ行けます。コート端末の方はここから採点画面へ入ってください。アプリの説明と 8 段階の流れは <span class="ui">▸ このアプリについて</span> に畳まれています。</p>
     <p>右上の <span class="ui">🖥</span> / <span class="ui">📱</span> は、運営画面の行き先を PC 用（<code>desk.html</code>）とスマホ用（<code>admin.html</code>）で切り替えるボタンです。押した端末に控えられるので、次に開いたときも同じほうが出ます。</p>
     <div class="note">以前のアドレス（採点画面が <code>index.html</code> だった頃のブックマーク）を開くと、自動で <code>scoring.html</code> に移ります。コートのタブレットのブックマークは貼り替えなくて構いません。</div>
 
@@ -59,16 +59,18 @@
     <ol class="status-steps">
       <li><span class="ui">準備中</span> — 技と配点・選手を自由に入れられます。採点はまだできません。</li>
       <li><span class="ui">一巡目 進行中</span> — コートの端末で一巡目を採点します。</li>
-      <li><span class="ui">一巡目終了</span> — 二巡目を作り、技を入れます。</li>
-      <li><span class="ui">二巡目 進行中</span> — コートの端末で二巡目を採点します。</li>
+      <li><span class="ui">二巡目準備（形の登録）</span> — 一巡目を終了すると、二巡目の行が自動でできます（形は一巡目と同じ）。自己申告があった選手の形だけ直します。</li>
+      <li><span class="ui">二巡目 進行中</span> — コートの端末で二巡目を採点します。暫定ベスト8（決戦）はまだ斬りません。</li>
+      <li><span class="ui">決戦 進行中</span> — 暫定ベスト8 が決戦コートで1人ずつ斬ります。採点できるのは決戦コートだけです。</li>
       <li><span class="ui">二巡目終了</span> — 順位を確かめます。直したいことがあれば1つ前に戻せます。</li>
       <li><span class="ui">最終結果</span> — 得点・選手・技を編集できなくなります。発表・共有・ファイル保存はできます。</li>
       <li><span class="ui">アーカイブ</span> — 見るだけ。大会一覧の「アーカイブ」欄に移り、採点画面の選択肢から消えます。</li>
     </ol>
-    <div class="note">二巡目を行わない大会は、<span class="ui">一巡目終了</span> の <span class="ui">二巡目なしで終了</span>（PC 用は上部の帯のボタン、スマホ用は ⋯ メニュー）で <span class="ui">最終結果</span> へ進めます。どの状態からも <span class="ui">戻す</span>（PC 用は上部の帯のボタン、スマホ用は ⋯ メニュー）で1つ前に戻せます。</div>
+    <div class="note">暫定ベスト8（一般男子・一巡目の得点の上位8名。8位が同点なら全員）がいない大会は、<span class="ui">二巡目 進行中</span> から直接 <span class="ui">二巡目を終了 ▶</span> に進めます。</div>
+    <div class="note">二巡目を行わない大会は、<span class="ui">二巡目準備（形の登録）</span> の <span class="ui">二巡目なしで終了</span>（PC 用は上部の帯のボタン、スマホ用は ⋯ メニュー）で <span class="ui">最終結果</span> へ進めます。どの状態からも <span class="ui">戻す</span>（PC 用は上部の帯のボタン、スマホ用は ⋯ メニュー）で1つ前に戻せます。</div>
 
     <div class="diagram">
-      <svg viewBox="0 0 360 698" role="img" aria-label="大会の7段階。準備中、一巡目 進行中、一巡目終了、二巡目 進行中、二巡目終了、最終結果、アーカイブの順に、運営者がボタンで1段ずつ進める流れ図。端末の役割は、運営者の PC とスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク、配信PC（OBS）が配信用ボード。">
+      <svg viewBox="0 0 360 772" role="img" aria-label="大会の8段階。準備中、一巡目 進行中、二巡目準備（形の登録）、二巡目 進行中、決戦 進行中、二巡目終了、最終結果、アーカイブの順に、運営者がボタンで1段ずつ進める流れ図。端末の役割は、運営者の PC とスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク、配信PC（OBS）が配信用ボード。">
         <defs>
           <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
@@ -91,8 +93,8 @@
 
         <g transform="translate(10,154)">
           <rect class="d-box" width="340" height="52" rx="8"/>
-          <text class="d-title" x="14" y="23">一巡目終了</text>
-          <text class="d-sub" x="14" y="42">二巡目を生成・技を入力（運営画面）</text>
+          <text class="d-title" x="14" y="23">二巡目準備（形の登録）</text>
+          <text class="d-sub" x="14" y="42">形を確かめる・直す（運営画面）</text>
         </g>
         <line class="d-line" x1="180" y1="209" x2="180" y2="225" marker-end="url(#ah)"/>
 
@@ -105,44 +107,51 @@
 
         <g transform="translate(10,302)">
           <rect class="d-box" width="340" height="52" rx="8"/>
-          <text class="d-title" x="14" y="23">二巡目終了</text>
-          <text class="d-sub" x="14" y="42">順位を確かめる（運営画面）</text>
+          <text class="d-title" x="14" y="23">決戦 進行中</text>
+          <text class="d-sub" x="14" y="42">暫定ベスト8 が決戦コートで斬る</text>
         </g>
         <line class="d-line" x1="180" y1="357" x2="180" y2="373" marker-end="url(#ah)"/>
 
         <g transform="translate(10,376)">
-          <rect class="d-box-key" width="340" height="52" rx="8"/>
-          <text class="d-title-key" x="14" y="23">最終結果</text>
-          <text class="d-sub-key" x="14" y="42">編集できなくなる。発表・共有</text>
+          <rect class="d-box" width="340" height="52" rx="8"/>
+          <text class="d-title" x="14" y="23">二巡目終了</text>
+          <text class="d-sub" x="14" y="42">順位を確かめる（運営画面）</text>
         </g>
         <line class="d-line" x1="180" y1="431" x2="180" y2="447" marker-end="url(#ah)"/>
 
         <g transform="translate(10,450)">
+          <rect class="d-box-key" width="340" height="52" rx="8"/>
+          <text class="d-title-key" x="14" y="23">最終結果</text>
+          <text class="d-sub-key" x="14" y="42">編集できなくなる。発表・共有</text>
+        </g>
+        <line class="d-line" x1="180" y1="505" x2="180" y2="521" marker-end="url(#ah)"/>
+
+        <g transform="translate(10,524)">
           <rect class="d-box" width="340" height="52" rx="8"/>
           <text class="d-title" x="14" y="23">アーカイブ</text>
           <text class="d-sub" x="14" y="42">見るだけ。一覧のアーカイブ欄へ</text>
         </g>
 
-        <line class="d-line" x1="10" y1="524" x2="350" y2="524"/>
-        <text class="d-title" x="10" y="546">端末の役割</text>
+        <line class="d-line" x1="10" y1="598" x2="350" y2="598"/>
+        <text class="d-title" x="10" y="620">端末の役割</text>
 
-        <text class="d-legend" x="10"  y="576" font-weight="bold">運営者の PC</text>
-        <text class="d-sub"    x="10"  y="595">運営画面</text>
-        <text class="d-legend" x="190" y="576" font-weight="bold">運営者のスマホ</text>
-        <text class="d-sub"    x="190" y="595">運営画面</text>
-        <text class="d-legend" x="10"  y="624" font-weight="bold">コートのタブレット</text>
-        <text class="d-sub"    x="10"  y="643">採点画面（A・B）</text>
-        <text class="d-legend" x="190" y="624" font-weight="bold">会場の大画面</text>
-        <text class="d-sub"    x="190" y="643">発表モード</text>
-        <text class="d-legend" x="10"  y="672" font-weight="bold">参加者のスマホ</text>
-        <text class="d-sub"    x="10"  y="691">共有リンク</text>
-        <text class="d-legend" x="190" y="672" font-weight="bold">配信 PC（OBS）</text>
-        <text class="d-sub"    x="190" y="691">配信用ボード</text>
+        <text class="d-legend" x="10"  y="650" font-weight="bold">運営者の PC</text>
+        <text class="d-sub"    x="10"  y="669">運営画面</text>
+        <text class="d-legend" x="190" y="650" font-weight="bold">運営者のスマホ</text>
+        <text class="d-sub"    x="190" y="669">運営画面</text>
+        <text class="d-legend" x="10"  y="698" font-weight="bold">コートのタブレット</text>
+        <text class="d-sub"    x="10"  y="717">採点画面（A・B）</text>
+        <text class="d-legend" x="190" y="698" font-weight="bold">会場の大画面</text>
+        <text class="d-sub"    x="190" y="717">発表モード</text>
+        <text class="d-legend" x="10"  y="746" font-weight="bold">参加者のスマホ</text>
+        <text class="d-sub"    x="10"  y="765">共有リンク</text>
+        <text class="d-legend" x="190" y="746" font-weight="bold">配信 PC（OBS）</text>
+        <text class="d-sub"    x="190" y="765">配信用ボード</text>
       </svg>
     </div>
 
     <p>大会のデータはサーバーに1つだけあります。運営者の PC もスマホも、各コートのタブレットも、同じ大会を読み書きします。</p>
-    <p>図の各段が、上に並べた 7 つの状態です。段と段の間は、運営画面の <span class="ui">次へ進む</span> のボタン（<span class="ui">試合開始 ▶</span> <span class="ui">一巡目を終了 ▶</span> …）で進みます。<span class="term">運営画面で状態を進めないと、コートの端末は採点できません</span>。</p>
+    <p>図の各段が、上に並べた 8 つの状態です。段と段の間は、運営画面の <span class="ui">次へ進む</span> のボタン（<span class="ui">試合開始 ▶</span> <span class="ui">一巡目を終了 ▶</span> …）で進みます。<span class="term">運営画面で状態を進めないと、コートの端末は採点できません</span>。</p>
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
   </section>
 
@@ -456,14 +465,14 @@
     </div>
     <ol start="2">
       <li><span class="term">コート別の状況を見る</span> — <span class="ui">試合進行</span> の区画に、コートごとのカードが並びます（下の節）。</li>
-      <li><span class="ui">一巡目を終了 ▶</span> — 全コートの採点が済んだら押します。ここで初めて <span class="ui">二巡目を生成</span> が押せます。</li>
-      <li><span class="ui">二巡目を生成</span> — 全コート分の二巡目の行ができます。</li>
-      <li><span class="term">技を入れる</span> — できた表で、行ごとに技1〜3を選びます（下の節）。</li>
-      <li><span class="ui">二巡目を開始 ▶</span> — <span class="ui">二巡目 進行中</span> になります。コートの端末で大会を選び直すと二巡目の選手が出ます。</li>
+      <li><span class="ui">一巡目を終了 ▶</span> — 全コートの採点が済んだら押します。<span class="term">押した時点で二巡目の行が自動でできます</span>（形は一巡目と同じ。暫定ベスト8 は決戦コートに移ります）。</li>
+      <li><span class="term">形を直す</span> — <span class="ui">二巡目の形登録</span> の表で、自己申告があった選手の形だけ直します（下の節）。</li>
+      <li><span class="ui">二巡目を開始 ▶</span> — <span class="ui">二巡目 進行中</span> になります。コートの端末で大会を選び直すと二巡目の選手が出ます。決戦コートはまだ採点できません。</li>
+      <li><span class="ui">決戦を開始 ▶</span> — 決戦以外が全員斬り終わったら押します。<span class="ui">決戦 進行中</span> になり、採点できるのは決戦コートだけになります。</li>
       <li><span class="ui">二巡目を終了 ▶</span> — <span class="ui">結果確認</span> の区画で順位を確かめます。</li>
       <li><span class="ui">最終結果を確定 ▶</span> — 得点・選手・技を編集できなくなります。そのあと <span class="ui">アーカイブ ▶</span> で片づけます。</li>
     </ol>
-    <div class="note">押し間違えても <span class="ui">◀ …に戻す</span>（PC 用は上部、スマホ用は ⋯ メニュー）で1つ前に戻せます。<span class="ui">最終結果</span> のあとも戻せば編集できます。二巡目を行わない大会は <span class="ui">一巡目終了</span> のときの <span class="ui">二巡目なしで終了</span> で <span class="ui">最終結果</span> へ進めます。</div>
+    <div class="note">押し間違えても <span class="ui">◀ …に戻す</span>（PC 用は上部、スマホ用は ⋯ メニュー）で1つ前に戻せます。<span class="ui">最終結果</span> のあとも戻せば編集できます。二巡目を行わない大会は <span class="ui">二巡目準備（形の登録）</span> のときの <span class="ui">二巡目なしで終了</span> で <span class="ui">最終結果</span> へ進めます。</div>
 
     <h3>コート別の状況を見る（PC 用の「試合進行」）</h3>
     <p>PC 用の <span class="ui">試合進行</span> の区画には、コートごとにカードが1枚ずつ並びます。</p>
@@ -518,12 +527,11 @@
     <p>採点できない状態のときは <span class="ui">確定</span> <span class="ui">形成功</span> <span class="ui">失敗</span> と得点・補正点・備考の入力が無効になります。前後の選手の移動・タイマー・<span class="ui">CSVエクスポート</span>・<span class="ui">HTML保存</span> は使えます。</p>
     <div class="note">状態は端末どうしで自動には伝わりません。運営者が状態を変えたら、コートの端末では<span class="term">大会を選び直して</span>ください（選手を足したときと同じです）。</div>
 
-    <h3>二巡目に進む</h3>
-    <p>一巡目が終わったら <span class="ui">一巡目を終了 ▶</span> を押してから二巡目を作ります。<span class="term">状態が <span class="ui">一巡目終了</span> でないと <span class="ui">二巡目を生成</span> は押せません</span>（ボタンが灰色のままです）。</p>
+    <h3>二巡目の形を直す</h3>
+    <p><span class="ui">一巡目を終了 ▶</span> を押すと、二巡目の行が自動でできます（形は一巡目と同じ）。ここでは <span class="term">自己申告があった選手の形だけ</span> 直します。</p>
     <ol>
       <li>上に <span class="ui">採点済み 8 / 8</span> のように進み具合が出ます。全員終わっているか確かめてから <span class="ui">一巡目を終了 ▶</span> を押します。</li>
-      <li><span class="ui">二巡目を生成</span> を押す。<span class="msg">一巡目 採点済み x / y。全コート分の二巡目を作ります（採点画面にも反映されます）。よろしいですか？</span> の確認で <span class="ui">OK</span> を押すと、全コート分の二巡目の行ができます。</li>
-      <li>できた表で技を入れます。3つ入れるのが基本です。</li>
+      <li>できた表で、自己申告があった選手の技を直します。3つ入れるのが基本です。</li>
     </ol>
     <p>PC 用では、二巡目が <span class="term">巡・No.・名前・一巡目の得点・技1・技2・技3</span> の表になります。</p>
     <ul>
@@ -532,15 +540,15 @@
       <li>表の上の <span class="ui">全員に一巡目と同じ技をコピー（n 名）</span> で、まとめて入れられます。対象は<span class="term">技が3つとも空で、まだ採点していない行</span>だけです（途中まで入れた行と採点済みの行は上書きしません。件数がボタンに出ています）。</li>
       <li><span class="ui">二巡目 8名　技 未入力 3</span> で、技がまだの人数が分かります。0 になると緑になります。</li>
     </ul>
-    <div class="note">技を直せるのは <span class="ui">一巡目終了</span> のときだけです。<span class="ui">二巡目を開始</span> のあとは表が読み取り専用になります。直したいときは <span class="ui">◀ 一巡目終了 に戻す</span> で戻してください。採点済みの選手の技を変えるときは <span class="msg">この選手は採点済みです（n点）。…</span> の確認が出ます。</div>
+    <div class="note">技を直せるのは <span class="ui">二巡目準備（形の登録）</span> のときだけです。<span class="ui">二巡目を開始</span> のあとは表が読み取り専用になります。直したいときは <span class="ui">◀ 二巡目準備（形の登録） に戻す</span> で戻してください。採点済みの選手の技を変えるときは <span class="msg">この選手は採点済みです（n点）。…</span> の確認が出ます。</div>
     <p>技が入ると、各コートの採点画面の選手一覧に二巡目の選手が並びます。</p>
     <p>スマホ用の <span class="ui">試合進行</span> タブでも同じことができます。こちらは1人1枚のカードで、<span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> の枠をタップして技を選びます。</p>
 
     <h3>二巡目の並び順</h3>
     <p>二巡目の番号は、<span class="term">同じコート・同じ性別の中で、一巡目の得点が低い人から</span> 1番・2番…と付きます。男子と女子は別々に数えます（例: <span class="ui">A-男子-2-1</span> は A コートの男子で一巡目がいちばん低かった人）。一巡目とは出番の順が変わるので、番号を読み上げるときは気をつけてください。</p>
     <p>並び方は画面で違います。コートの端末の<span class="term">選手一覧では二巡目の女子が先</span>に並び、<span class="term">運営画面の試合進行タブ・選手登録タブ・PC の試合進行では男子が先</span>に並びます。どちらも中身は同じで、出番はコートの端末の選手一覧の順です。</p>
-    <div class="note">未採点が残ったまま <span class="ui">二巡目を生成</span> を押すと <span class="msg">未採点が n 名います。このまま生成すると、あとから入る一巡目の得点は二巡目の並び順に反映されません。</span> と確認が出ます。並び順を正しくするため、全員の採点が終わってから押してください。</div>
-    <p>コートが決まっていない選手の二巡目は作れません。生成のあとのトーストに <span class="msg">（コート未設定の n 名は作っていません）</span> と出ます。選手登録タブでコートを設定してから、もう一度生成してください。</p>
+    <div class="note">未採点が残ったまま <span class="ui">一巡目を終了 ▶</span> を押すと、並び順を正しくするための確認が出ます。並び順を正しくするため、なるべく全員の採点を終えてから押してください。</div>
+    <p>コートが決まっていない選手の二巡目は作れません。選手登録タブでコートを設定してから、あらためて確かめてください。</p>
 
     <figure class="shot-mobile">
       <img src="help/img/admin_round.png" loading="lazy" alt="運営画面の試合進行タブ。一巡目の採点済み数、「二巡目を生成」「採点画面へ」、コート絞り込み、二巡目の選手と技の枠。">
@@ -551,6 +559,15 @@
       <img src="help/img/admin_round_court_b.png" loading="lazy" alt="試合進行タブでBコートに絞り込んだ状態。Bコートの選手だけが並び、技が入った枠は黒くなっている。">
       <figcaption><span class="ui">B コート</span> のチップで絞り込んだところ。技が入った枠は黒くなり、技名が出ます。この状態で <span class="ui">採点画面へ</span> を押すと、B コートの採点画面が開きます。</figcaption>
     </figure>
+
+    <h3>決戦（暫定ベスト8）</h3>
+    <p>一巡目を終了したとき、<span class="term">一般男子（新人を含む）の一巡目の得点の上位8名</span>を <span class="term">決戦</span> として専用のコートに移します。8位が同点のときは同点の全員が入ります。得点が0点の選手は入りません。一般女子は決戦には入りません。</p>
+    <ul>
+      <li>決戦コートの名前は <span class="ui">基本情報</span> の <span class="ui">決戦コートの名前</span> で変えられます（既定は <span class="ui">決戦</span>）。</li>
+      <li>決戦の試技順は <span class="term">一巡目の得点が低い順</span>です（最後に斬るのが一巡目の1位）。</li>
+      <li>決戦の1本で最終得点が決まります（3本目はありません）。</li>
+      <li>決戦の暫定順位は <span class="ui">発表モード</span> の <span class="ui">決戦</span>、<span class="ui">配信用ボード</span>（決戦コートを映しているとき）、<span class="ui">共有リンク</span> に出ます。斬った人から順に埋まります。</li>
+    </ul>
 
     <h3>通信が切れても続けられます</h3>
     <p>採点はいったん端末に貯めてからサーバーへ送ります。電波が弱くても、採点そのものは止まりません。</p>
@@ -672,6 +689,7 @@
       <li>URL は <code>share.html#（トークン）</code> の形です。大会ごとに1本で、何度押しても同じ URL が返ります。</li>
       <li>受け取った人は、ログインなしで順位だけを見られます。採点や書き換えはできません。</li>
       <li>ページを開いたままにしておくと、60秒ごとに自動で最新の順位に変わります。配り直す必要はありません。</li>
+      <li><span class="ui">決戦 進行中</span> は、部門ごとの順位の上に <span class="ui">決戦（暫定）</span> の表が出ます。斬った人から合計と順位が埋まります。</li>
     </ul>
 
     <figure class="shot-mobile">
@@ -681,7 +699,7 @@
 
     <h3>会場の大画面で見せる（発表モード）</h3>
     <p>結果確認タブで <span class="ui">発表モードで開く</span> を押すと、新しいタブで発表モードが開きます。会場のプロジェクターやテレビにつないだ端末で押してください。</p>
-    <p>上に <span class="ui">掲示</span> <span class="ui">発表</span> <span class="ui">更新</span> <span class="ui">全画面</span> のボタンがあります。</p>
+    <p>上に <span class="ui">掲示</span> <span class="ui">発表</span> <span class="ui">決戦</span> <span class="ui">更新</span> <span class="ui">全画面</span> のボタンがあります。<span class="ui">決戦 進行中</span> の大会は、開いた時点で自動的に <span class="ui">決戦</span> モードになります。</p>
 
     <h3>掲示</h3>
     <ul>
@@ -709,6 +727,12 @@
 
     <div class="note">発表の直前には <span class="ui">更新</span> を押して、最新の順位になっているか確かめてください。<span class="ui">全画面</span> でメニューを消せます。</div>
 
+    <h3>決戦</h3>
+    <ul>
+      <li>暫定ベスト8 が試技順に並びます。斬った人から合計と暫定順位が埋まり、まだの人は「n番」と「—」のままです。</li>
+      <li>60秒ごとに自動で取り直します。<span class="ui">掲示</span>・<span class="ui">発表</span> に切り替えても、あとで <span class="ui">決戦</span> に戻れます。一度自分でモードを選ぶと、決戦が終わるまでは自動では切り替わりません。</li>
+    </ul>
+
     <h3>YouTube 配信（OBS）に映す</h3>
     <p>コートで今どの選手を採点しているかを、配信の画面にそのまま映せます。A コート・B コートで1つずつ、<span class="term">配信用ボード</span>というページを OBS の <span class="ui">ブラウザソース</span> として並べます。見るだけのページなので、配信 PC から採点が書き換わることはありません。</p>
 
@@ -727,6 +751,7 @@
       <li>そのコートでまだ誰も開いていないときは <span class="msg">待機中</span> と出ます。採点画面でその大会とコートを選べば映り始めます。</li>
       <li>採点が <span class="ui">確定</span> 済みの選手は、得点と合計が青くなり <span class="ui">確定</span> の札が付きます。</li>
       <li>通信が途切れても直前の表示は消えません。右下に小さく <span class="msg">更新できません</span> と出るだけで、つながれば自動で戻ります。</li>
+      <li>決戦コートを映しているボード（<code>board.html#（トークン）/決戦</code> など）は、採点表の下に <span class="ui">決戦（暫定）</span> の順位表も出ます。決戦以外のコートには出ません。</li>
     </ul>
 
     <div class="note">配信用ボードのアドレスは共有リンクと同じトークンを使います。配信に映すだけなら誰にも配る必要はありません（URL を知られると順位も見られます）。</div>
@@ -778,8 +803,8 @@
     </ol>
     <p>技名は完全に一致したものを探します。前後に空白が入っていると別の技として扱われ、配点が0になります。</p>
 
-    <h3>二巡目を生成できない</h3>
-    <p>一巡目の選手が1人も登録されていないか、通信が切れています。選手登録タブと端末の通信を確かめてください。コートが決まっていない選手の扱いは §2「二巡目の並び順」を見てください（その選手の二巡目は作られず、トーストに人数が出ます）。</p>
+    <h3>二巡目ができていない</h3>
+    <p><span class="ui">一巡目を終了 ▶</span> を押すと自動でできます。できていなければ一巡目に戻してもう一度押してください。一巡目の選手が1人も登録されていないか、通信が切れている場合もできません。選手登録タブと端末の通信を確かめてください。コートが決まっていない選手の扱いは §2「二巡目の並び順」を見てください（その選手の二巡目は作られません）。</p>
 
     <h3>大会のファイルを取り込めない</h3>
     <ul>
