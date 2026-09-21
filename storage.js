@@ -227,7 +227,8 @@ var Storage = (function() {
   }
 
   // --- HTML生成 ---
-  // 列は CSV エクスポート（server/index.js の export）と同じ15列に揃える。
+  // 列は CSV エクスポート（server/index.js の export）と同じ18列に揃える
+  // （選手の追加項目 ゼッケン・級位段位・レンタルを末尾に足す）。
   function buildPlayersHtml(players) {
     var rows = players.map(function(p) {
       var adj = Array.isArray(p.adjust) ? p.adjust : [0, 0, 0];
@@ -236,7 +237,8 @@ var Storage = (function() {
         esc(String(p.score !== undefined ? p.score : '')), p.isNewFace ? '○' : '', p.isFemale ? '○' : '',
         esc(p.result),
         esc(String(Number(adj[0]) || 0)), esc(String(Number(adj[1]) || 0)), esc(String(Number(adj[2]) || 0)),
-        esc(String(Number(p.totalAdjust) || 0)), esc(p.note), p.confirmed === true ? '○' : ''
+        esc(String(Number(p.totalAdjust) || 0)), esc(p.note), p.confirmed === true ? '○' : '',
+        (typeof p.bib === 'number') ? esc(String(p.bib)) : '', esc(p.rank), p.rental === true ? '○' : ''
       ].join('</td><td>') + '</td></tr>';
     });
     return '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
@@ -244,7 +246,8 @@ var Storage = (function() {
       'th{background:#eee}</style></head><body>' +
       '<table><tr><th>選手名</th><th>順番</th><th>技1</th><th>技2</th><th>技3</th>' +
       '<th>得点</th><th>新人</th><th>女子</th><th>結果</th>' +
-      '<th>補正点1</th><th>補正点2</th><th>補正点3</th><th>全体補正</th><th>備考</th><th>確定</th></tr>' +
+      '<th>補正点1</th><th>補正点2</th><th>補正点3</th><th>全体補正</th><th>備考</th><th>確定</th>' +
+      '<th>ゼッケン</th><th>級位段位</th><th>レンタル</th></tr>' +
       rows.join('') + '</table></body></html>';
   }
 
