@@ -404,6 +404,47 @@
       (await Api.loadEvent(stEvent.id)).settings.courts, ['A', 'B', '稽古']);
     await Api.deleteEvent(stEvent.id);
 
+    // ---- 決戦コートの名前（settings.finalCourt。設計書 2026-09-22） ----
+    var fcEvent = await Api.saveEvent({ name: '決戦コート設定', date: '2026-09-22', venue: '', players: [] });
+    var fcSet = await Api.updateEventInfo(fcEvent.id, {
+      name: '決戦コート設定', settings: { requireBib: false, requireRank: false, courts: ['A'], finalCourt: '決勝' }
+    });
+    assert('PATCH: finalCourt を保存する', fcSet.ok && fcSet.event.settings.finalCourt, '決勝');
+    assert('PATCH: 保存後に読み直しても残る',
+      (await Api.loadEvent(fcEvent.id)).settings.finalCourt, '決勝');
+    var fcKeep = await Api.updateEventInfo(fcEvent.id, { name: '決戦コート設定2' });
+    assert('PATCH: settings を送らなければ finalCourt は据え置き',
+      fcKeep.ok && (await Api.loadEvent(fcEvent.id)).settings.finalCourt, '決勝');
+    var fcPartial = await Api.updateEventInfo(fcEvent.id, {
+      name: '決戦コート設定2', settings: { requireBib: true }
+    });
+    assert('PATCH: settings に finalCourt を含めなければ据え置き',
+      fcPartial.ok && (await Api.loadEvent(fcEvent.id)).settings.finalCourt, '決勝');
+    var fcBad = await Api.updateEventInfo(fcEvent.id, {
+      name: '決戦コート設定2', settings: { finalCourt: 'A-B' }
+    });
+    assert('PATCH: 「-」を含む決戦コート名は 400', [fcBad.ok, fcBad.status], [false, 400]);
+    assert('PATCH: 断られた後も前の値が残る',
+      (await Api.loadEvent(fcEvent.id)).settings.finalCourt, '決勝');
+    var fcClear = await Api.updateEventInfo(fcEvent.id, {
+      name: '決戦コート設定2', settings: { finalCourt: '' }
+    });
+    assert('PATCH: 空文字は既定（決戦）に戻す＝キーを持たない',
+      fcClear.ok && (await Api.loadEvent(fcEvent.id)).settings.finalCourt, undefined);
+
+    await Api.updateEventInfo(fcEvent.id, { name: '決戦コート設定2', settings: { finalCourt: '決勝' } });
+    var fcCopy = await Api.copyEvent(fcEvent.id, { name: '決戦コピー', date: '2026-09-22', venue: '' });
+    assert('copyEvent: finalCourt を複製する',
+      (await Api.loadEvent(fcCopy.id)).settings.finalCourt, '決勝');
+    var fcBundle = JSON.parse(await Api.exportBundle(fcEvent.id));
+    assert('bundle: finalCourt を書き出す', fcBundle.event.settings.finalCourt, '決勝');
+    var fcImported = await Api.importBundle(fcBundle);
+    assert('bundle: finalCourt を取り込む',
+      (await Api.loadEvent(fcImported.id)).settings.finalCourt, '決勝');
+    await Api.deleteEvent(fcEvent.id);
+    await Api.deleteEvent(fcCopy.id);
+    await Api.deleteEvent(fcImported.id);
+
     // コピー・バンドルの往復・二巡目複製（settings・drawn・bib・rank・rental）
     var pcSrc = await Api.saveEvent({ name: '追加項目コピー元', date: '2026-09-19', venue: '', players: [] });
     await Api.updateEventInfo(pcSrc.id, { settings: { requireBib: true, requireRank: false, courts: ['A', 'B'] } });

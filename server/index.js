@@ -265,6 +265,13 @@ function sanitizeCourtList(list) {
   return out.slice(0, 20);
 }
 
+// settings.finalCourt（決戦コートの名前）の寛容な取り込み。
+// コート名の規則（isValidCourt）を通らない値は落として既定（EventStatus.finalCourtOf の
+// '決戦'）に任せる。取り込み系 API が他の項目を黙って落とすのと同じ流儀。
+function sanitizeFinalCourt(name) {
+  return isValidCourt(name) ? name : '';
+}
+
 // 同一の コート×性別×巡目 における次の番号。該当が無ければ 1。
 // 件数+1 ではなく最大+1 を使う（削除で欠番があっても衝突しない）。
 function nextOrderNumber(players, court, gender, round) {
@@ -637,6 +644,8 @@ app.post('/api/events', (req, res) => {
       const courtsErr = validateCourtList(courtsInput);
       if (courtsErr) return res.status(400).json({ error: courtsErr });
       event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courtsInput.slice() };
+      const fc = sanitizeFinalCourt(s.finalCourt);
+      if (fc) event.settings.finalCourt = fc;
     } else if (prev && prev.settings && typeof prev.settings === 'object' && !Array.isArray(prev.settings)) {
       event.settings = prev.settings;
     }
@@ -706,7 +715,20 @@ app.patch('/api/events/:id', (req, res) => {
         if (courtsErr) return res.status(400).json({ error: courtsErr });
         courts = s.courts.slice();
       }
+      // 決戦コートの名前。courts と同じく、指定が無ければ既存の値を残す
+      // （name だけの部分更新で決戦コートが消えないように）。
+      // 空文字は「既定（決戦）に戻す」意味なのでキーごと落とす。
+      let finalCourt = (event.settings && typeof event.settings.finalCourt === 'string')
+        ? event.settings.finalCourt : '';
+      if (s.finalCourt !== undefined) {
+        const name = typeof s.finalCourt === 'string' ? s.finalCourt.trim() : '';
+        if (name && !isValidCourt(name)) {
+          return res.status(400).json({ error: 'コート名「' + s.finalCourt + '」は使えません' });
+        }
+        finalCourt = name;
+      }
       event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courts };
+      if (finalCourt) event.settings.finalCourt = finalCourt;
     }
 
     event.updatedAt = new Date().toISOString();
@@ -830,6 +852,8 @@ app.post('/api/events/:id/copy', (req, res) => {
         requireRank: src.settings.requireRank === true,
         courts: sanitizeCourtList(src.settings.courts)
       };
+      const fc = sanitizeFinalCourt(src.settings.finalCourt);
+      if (fc) event.settings.finalCourt = fc;
     }
     writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
     res.status(201).json({ success: true, id: id, playerCount: players.length });
@@ -2087,6 +2111,8 @@ app.get('/api/events/:id/bundle', (req, res) => {
         requireRank: event.settings.requireRank === true,
         courts: sanitizeCourtList(event.settings.courts)
       };
+      const fc = sanitizeFinalCourt(event.settings.finalCourt);
+      if (fc) bundle.event.settings.finalCourt = fc;
     }
     // status（大会の状態）。status を持たない大会（この機能より前に作られた・取り込んだ大会）は
     // 書き出さない＝取り込み側は従来どおり選手から推定する。EventStatus.of の推定値を書いて
@@ -2223,6 +2249,8 @@ app.post('/api/events/import', (req, res) => {
         requireRank: src.settings.requireRank === true,
         courts: sanitizeCourtList(src.settings.courts)
       };
+      const fc = sanitizeFinalCourt(src.settings.finalCourt);
+      if (fc) event.settings.finalCourt = fc;
     }
     // status（大会の状態）。STATES にある値ならそのまま採用する（final/archived を含む。
     // 取り込み後もロックが効くようにするため）。無い・不正なバンドル（古いバンドル）は
