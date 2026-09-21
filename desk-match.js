@@ -35,12 +35,14 @@
 
     container.appendChild(buildHead(ctx));
     container.appendChild(buildCourts(st, ctx));
+    // 決戦 進行中のときだけ、決戦コートのカード（buildCourts）の直後に暫定順位を出す
+    // （非同期。あとから差し込む。レビュー指摘E。以前は container の末尾に出ていて、
+    // 二巡目の形登録の表を挟んで離れた場所に見えていた）。
+    if (st === 'round2_final') renderFinaleTable(container, ctx);
     // 準備中・一巡目 進行中は二巡目の話をまだしない（形はサーバーが一巡目終了で作る）。
     if (st !== 'draft' && st !== 'round1') {
       container.appendChild(buildRound2(st, ctx));
     }
-    // 決戦 進行中のときだけ、コートのカードの下に暫定順位を出す（非同期。あとから差し込む）。
-    if (st === 'round2_final') renderFinaleTable(container, ctx);
   }
 
   function buildHead(ctx) {
@@ -278,7 +280,15 @@
   }
 
   // 二巡目の表を1つ作る（決戦とそれ以外で同じ作り）。
+  // rows が0件（全員が決戦に入ったときの「決戦以外」など）なら、見出しだけの空表を
+  // 出さず buildCourtGrid と同じ空メッセージにする（レビュー指摘F）。
   function buildRound2Table(rows, ctx, editable, techniques) {
+    if (rows.length === 0) {
+      var none = document.createElement('p');
+      none.className = 'desk-empty';
+      none.textContent = 'まだ選手がいません。「選手」の区画で登録してください。';
+      return none;
+    }
     var table = document.createElement('table');
     table.className = 'desk-table desk-match-table';
     table.innerHTML =
@@ -349,6 +359,26 @@
       warn.textContent = '技術リストを取得できませんでした。大会を開き直してください。';
       wrap.appendChild(warn);
       editable = false;
+    }
+
+    // 「全員に一巡目と同じ技をコピー」。初期値は既に一巡目の複製なので、通常は出番が無い。
+    // CSV 由来（sourcePlayerId が無い）の行や、生成後に一巡目へ選手を足した行など、
+    // 技が複製されていない行が残っているときだけの逃げ道として、対象が1名以上のときだけ
+    // ボタンを出す（レビュー指摘D）。
+    if (editable) {
+      var copyTargets = Courts.techCopyTargets(ctx.players);
+      if (copyTargets.length > 0) {
+        var copyBar = document.createElement('div');
+        copyBar.className = 'desk-match-bar';
+        var btnCopyAll = document.createElement('button');
+        btnCopyAll.type = 'button';
+        btnCopyAll.className = 'desk-btn';
+        btnCopyAll.id = 'btnMatchCopyAll';
+        btnCopyAll.textContent = '全員に一巡目と同じ技をコピー（' + copyTargets.length + ' 名）';
+        btnCopyAll.addEventListener('click', function() { onCopyAll(ctx, btnCopyAll); });
+        copyBar.appendChild(btnCopyAll);
+        wrap.appendChild(copyBar);
+      }
     }
 
     var finalRows = Courts.finalists(ctx.players);
@@ -631,6 +661,27 @@
     var ok = await saveTech(p, arr, selects, ctx, tr);
     if (ctx.isStale()) return;
     if (ok) Desk.toast('一巡目と同じ形に戻しました');
+  }
+
+  // 「全員に一巡目と同じ技をコピー」（レビュー指摘D）。対象は Courts.techCopyTargets
+  // （技が3枠とも空で未採点、一巡目の行が残っていて技が入っている行だけ）。
+  // 行ごとの保存（saveTech）を順番に呼ぶ（同時に何件も PATCH を投げない）。
+  async function onCopyAll(ctx, btn) {
+    var targets = Courts.techCopyTargets(ctx.players);
+    if (targets.length === 0) return;
+    if (!confirm('技が空の ' + targets.length + ' 名に、一巡目と同じ技をコピーします。よろしいですか？')) return;
+    btn.disabled = true;
+    for (var i = 0; i < targets.length; i++) {
+      var t = targets[i];
+      var tr = document.querySelector('tr[data-player-id="' + t.player.id + '"]');
+      var selects = tr ? Array.prototype.slice.call(tr.querySelectorAll('select')) : [];
+      if (selects.length !== 3) continue;   // 描画が古い・行が見つからない
+      var arr = [t.source.tech1 || '', t.source.tech2 || '', t.source.tech3 || ''];
+      await saveTech(t.player, arr, selects, ctx, tr);
+      if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
+    }
+    btn.disabled = false;
+    Desk.toast('技をコピーしました');
   }
 
   Desk.registerTab('match', { render: render });
