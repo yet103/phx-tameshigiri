@@ -65,6 +65,8 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px
 /* accent-text は accent（濃い地）の上で読める色。band-muted は帯の上の前提の色なので、
    暗いテーマで accent（金地）に乗ると読みにくい。本文と同じ色の不透明度を落として弱める。 */
 .home-entry.primary .home-entry-sub { color: var(--accent-text); opacity: 0.8; }
+.home-entry-note { display: block; margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+.home-entry.primary .home-entry-note { color: var(--accent-text); opacity: 0.8; }
 
 /* 小さなリンクの行 */
 .home-links { margin-top: 14px; font-size: 13px; color: var(--text-muted); }

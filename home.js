@@ -164,9 +164,10 @@ var Home = (function() {
 
   // 運営画面へ向かうリンクの行き先をいまのモードで作り直す。
   // 大会の行は描き直さず href だけ差し替える（読み込み中の一覧を消さないため）。
+  // 入口カードの下の一言も同じところで更新する（🖥/📱 を押すといまのモードが見える）。
   function updateAdminLinks() {
-    var link = document.getElementById('linkAdmin');
-    if (link) link.href = Storage.adminHref('#events');
+    var note = document.getElementById('homeEntryMode');
+    if (note) note.textContent = '運営画面: ' + (Storage.currentMode() === 'pc' ? 'PC 用' : 'スマホ用');
     var rows = document.querySelectorAll('[data-event-id]');
     for (var i = 0; i < rows.length; i++) {
       rows[i].href = Storage.adminHref('#players/' + encodeURIComponent(rows[i].getAttribute('data-event-id')));
