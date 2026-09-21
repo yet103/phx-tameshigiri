@@ -51,6 +51,17 @@
       </table>
     </div>
 
+    <!-- 決戦（暫定ベスト8）の順位。決戦コートを映しているときだけ出す（board.js） -->
+    <div class="board-finale is-hidden" id="boardFinale">
+      <div class="board-finale-caption">決戦（暫定）</div>
+      <table class="board-finale-table">
+        <thead>
+          <tr><th>順</th><th>名前</th><th class="c-num">一巡目</th><th class="c-num">二巡目</th><th class="c-num">合計</th></tr>
+        </thead>
+        <tbody id="boardFinaleBody"></tbody>
+      </table>
+    </div>
+
     <footer class="board-foot" id="boardFoot">
       <span class="board-badge is-hidden" id="boardConfirmed">確定</span>
       <span class="board-total" id="boardTotal">合計 0 点</span>

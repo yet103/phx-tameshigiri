@@ -4330,6 +4330,18 @@
     assert('hasNoDetail: 選手が null でも false',
       Board.hasNoDetail(null), false);
 
+    // ---- 決戦の暫定順位（配信ボード） ----
+    var bfData = { court: '決戦', status: 'round2_final', rows: [
+      { name: 'A', order: 1, r1: 10, r2: 20, total: 30, scored: true, rank: 2 },
+      { name: 'B', order: 2, r1: 40, r2: null, total: 40, scored: false, rank: null }
+    ] };
+    assert('Board.finaleFor: 決戦コートを映していれば行を返す',
+      Board.finaleFor(bfData, '決戦').map(function(r) { return r.name; }), ['A', 'B']);
+    assert('Board.finaleFor: 別のコートを映していれば空',
+      Board.finaleFor(bfData, 'A'), []);
+    assert('Board.finaleFor: finale が無ければ空', Board.finaleFor(null, '決戦'), []);
+    assert('Board.finaleFor: コート未指定なら空', Board.finaleFor(bfData, ''), []);
+
     // storage.js テスト（大会ファイルのファイル名。純粋関数）
     var h2s = document.createElement('h2');
     h2s.textContent = 'storage.js';

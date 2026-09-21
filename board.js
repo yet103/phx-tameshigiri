@@ -7,6 +7,7 @@
 var Board = (function() {
   var REFRESH_MS = 2000;
   var TICK_MS = 500;
+  var FINALE_REFRESH_MS = 10000;   // 順位は2秒ごとに要らない。10秒でじゅうぶん
   // 連続でこの回数しくじったら右下に「更新できません」を出す。
   // 1回の取りこぼしで注意書きが点滅すると配信で目障りなので 2 回から。
   var NOTICE_AFTER = 2;
@@ -16,6 +17,8 @@ var Board = (function() {
   var pollSeq = 0;
   var pollTimer = null;
   var tickTimer = null;
+  var finaleSeq = 0;
+  var finaleTimer = null;
   var failCount = 0;
   var live = null;       // 直近に描いたコートの状態 { updatedAt, timer, player }
   // サーバーとこの端末の時計のずれ（サーバー - 端末）。
@@ -57,6 +60,16 @@ var Board = (function() {
       var values = decoded[i].values;
       return { techName: name, values: values, failedAt: Scoring.failedAt(values), adjust: decoded[i].adjust };
     });
+  }
+
+  // 決戦の表に出す行。決戦コートを映しているときだけ返す。
+  // finale は GET /api/links/:token/ranking の応答（サーバーが計算した暫定順位）。
+  // board.html は status.js を読まない（無認証で配信するページ）ので、
+  // 状態の判定はサーバーが入れた finale.status / finale.court に任せる。
+  function finaleFor(finale, court) {
+    if (!finale || !court) return [];
+    if (finale.court !== court) return [];
+    return Array.isArray(finale.rows) ? finale.rows : [];
   }
 
   // URL のハッシュ（#<トークン>/<コート>）を分解する。
@@ -246,18 +259,61 @@ var Board = (function() {
     el.confirmed.classList.toggle('is-hidden', !confirmed);
   }
 
+  // 決戦の表を描く。0件（決戦コートを映していない・finale が無い）なら隠す。
+  function renderFinale(rows) {
+    if (rows.length === 0) {
+      el.finale.classList.add('is-hidden');
+      el.finaleBody.textContent = '';
+      return;
+    }
+    el.finale.classList.remove('is-hidden');
+    el.finaleBody.textContent = '';
+    rows.forEach(function(r) {
+      var tr = document.createElement('tr');
+      if (!r.scored) tr.className = 'pending';
+      var rank = document.createElement('td');
+      rank.className = 'rank';
+      rank.textContent = r.rank === null ? '—' : String(r.rank);
+      tr.appendChild(rank);
+      var name = document.createElement('td');
+      name.textContent = r.name;
+      tr.appendChild(name);
+      [String(r.r1), r.r2 === null ? '—' : String(r.r2), r.scored ? String(r.total) : '—']
+        .forEach(function(v) {
+          var td = document.createElement('td');
+          td.className = 'num';
+          td.textContent = v;
+          tr.appendChild(td);
+        });
+      el.finaleBody.appendChild(tr);
+    });
+  }
+
   // --- 取得 ---
 
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (finaleTimer) { clearInterval(finaleTimer); finaleTimer = null; }
   }
 
   function showInvalid() {
     // 400/404 はトークンが無効と確定しているので、叩き続けない。
     stopPolling();
+    finaleSeq++;
     renderIdle('');
     el.name.textContent = 'このリンクは無効です';
     setNotice('');
+    renderFinale([]);
+  }
+
+  // 決戦の暫定順位は2秒ごとに要らない（順位表の更新は10秒でじゅうぶん）ので、
+  // 採点表のポーリング（poll）とは別に緩い周期で回す。
+  async function pollFinale() {
+    var mySeq = ++finaleSeq;
+    var result = await Api.fetchSharedRanking(token);
+    if (mySeq !== finaleSeq) return;          // 追い越された
+    if (!result.ok) return;                   // 失敗は前の表をそのまま残す
+    renderFinale(finaleFor(result.data.finale, court));
   }
 
   async function poll() {
@@ -299,8 +355,10 @@ var Board = (function() {
       return;
     }
     poll();
+    pollFinale();
     stopPolling();
     pollTimer = setInterval(poll, REFRESH_MS);
+    finaleTimer = setInterval(pollFinale, FINALE_REFRESH_MS);
   }
 
   function init() {
@@ -321,7 +379,9 @@ var Board = (function() {
       totalAdjust: document.getElementById('boardTotalAdjust'),
       total: document.getElementById('boardTotal'),
       confirmed: document.getElementById('boardConfirmed'),
-      notice: document.getElementById('boardNotice')
+      notice: document.getElementById('boardNotice'),
+      finale: document.getElementById('boardFinale'),
+      finaleBody: document.getElementById('boardFinaleBody')
     };
 
     // 応答が届く前に findTechnique が呼ばれても落ちないように空で初期化する
@@ -340,7 +400,8 @@ var Board = (function() {
 
     window.addEventListener('hashchange', function() {
       stopPolling();
-      pollSeq++;   // 切替前に投げた応答は捨てる
+      pollSeq++;     // 切替前に投げた応答は捨てる
+      finaleSeq++;   // 同上（決戦の順位）
       var next = parseHash(location.hash);
       token = next.token;
       court = next.court;
@@ -356,6 +417,7 @@ var Board = (function() {
     remaining: remaining,
     rowsFor: rowsFor,
     parseHash: parseHash,
-    hasNoDetail: hasNoDetail
+    hasNoDetail: hasNoDetail,
+    finaleFor: finaleFor
   };
 })();

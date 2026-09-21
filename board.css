@@ -179,6 +179,27 @@ body.is-transparent { background: transparent; }
 
 .is-hidden { display: none !important; }
 
+/* ===== 決戦（暫定ベスト8）の順位 ===== */
+/* board.css は --accent を使わず、見出しの強調には --gold-light（.board-total と同じ）を
+   使っているのでそれに合わせる。表そのものは .board-table を真似た最小限の見た目。 */
+.board-finale { margin-top: 12px; }
+.board-finale.is-hidden { display: none; }
+.board-finale-caption {
+  font-family: var(--mincho);
+  color: var(--gold-light);
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.board-finale-table { width: 100%; border-collapse: collapse; }
+.board-finale-table th,
+.board-finale-table td { padding: 2px 6px; }
+.board-finale-table th { color: var(--band-muted); font-weight: normal; }
+.board-finale-table td.num,
+.board-finale-table th.c-num { text-align: right; font-variant-numeric: tabular-nums; }
+.board-finale-table td.rank { color: var(--gold-light); font-weight: bold; }
+.board-finale-table tr.pending { color: var(--text-muted); }
+
 /* 右下の小さな注意書き（更新できません／このリンクは無効です） */
 .board-notice {
   position: fixed;
