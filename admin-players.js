@@ -5,6 +5,12 @@
   var filter = null;
   var sort = null;
   var stateOwner = null;   // filter / sort がどの大会のものか
+
+  // 大会が持つコート一覧（基本情報で編集する settings.courts）。desk-players.js と
+  // 同じ理由でここにも置く（courts.js はこの計画では触らないので 3 行の重複は許す）。
+  function extraCourts(ctx) {
+    return (ctx && ctx.event && ctx.event.settings && ctx.event.settings.courts) || [];
+  }
   // 技リストは大会ごと（大会 JSON の techniques）。render のたびに ctx.techniques で
   // 入れ替える。どの大会のものかを一緒に覚えて、大会をまたいで前の大会の配点を使わない。
   var techCache = null;
@@ -279,8 +285,9 @@
   function buildCommonFields(ctx, player, onSexChange) {
     var el = document.createElement('div');
 
-    // 既存のコート一覧（未分類はサーバーが受け付けないので候補に出さない）
-    var courts = Courts.listFrom(ctx.players).filter(function(c) {
+    // 既存のコート一覧（未分類はサーバーが受け付けないので候補に出さない）。
+    // 大会が持つコート（基本情報の settings.courts）も候補に含める。
+    var courts = Courts.listFrom(ctx.players, extraCourts(ctx)).filter(function(c) {
       return c !== Courts.UNASSIGNED;
     });
     var court = player ? Courts.courtOf(player) : (courts[0] || '');

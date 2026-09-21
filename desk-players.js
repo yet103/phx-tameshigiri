@@ -11,6 +11,15 @@
   var sort = null;
   var stateOwner = null;
 
+  // 大会が持つコート一覧（基本情報で編集する settings.courts）。
+  // 選手が 1 人もいないコートも候補に出したいので、Courts.listFrom の第 2 引数に渡す
+  // （設計書 2026-09-21-home-launcher-design.md「コート一覧」）。
+  // 絞り込み（courtPop・render 冒頭の整理）では使わない。あそこは「いまいる選手の
+  // コート」を出す場所なので、選手 0 人のコートを混ぜても空の表になるだけ。
+  function extraCourts(ctx) {
+    return (ctx && ctx.event && ctx.event.settings && ctx.event.settings.courts) || [];
+  }
+
   // いま描いている表。行の追加・削除や並べ替えで表だけを描き直すために覚えておく。
   // render のたびに入れ替える（古い ctx の DOM を触らない）。
   var view = null;   // { chips, wrap, ctx, locked }
@@ -802,7 +811,8 @@
   // コートの選択肢。既存のコート＋その選手の今のコート＋「新しいコート…」。
   function fillCourtOptions(sel, ctx, current) {
     sel.innerHTML = '';
-    var list = Courts.listFrom(ctx.players).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    var list = Courts.listFrom(ctx.players, extraCourts(ctx))
+      .filter(function(c) { return c !== Courts.UNASSIGNED; });
     if (current && list.indexOf(current) === -1) list.push(current);   // 未分類のままの選手も表示する
     list.forEach(function(c) { addOption(sel, c, c); });
     addOption(sel, NEW_COURT, '新しいコート…');
@@ -1057,7 +1067,8 @@
   function draftSeed(ctx) {
     var rows = Courts.sortBy(Courts.applyFilter(ctx.players || [], filter), sort);
     var last = rows.length ? rows[rows.length - 1] : null;
-    var courts = Courts.listFrom(ctx.players).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    var courts = Courts.listFrom(ctx.players, extraCourts(ctx))
+      .filter(function(c) { return c !== Courts.UNASSIGNED; });
     var court = last ? Courts.courtOf(last) : '';
     if (!court || court === Courts.UNASSIGNED) court = courts[0] || 'A';
     return {
@@ -1406,7 +1417,8 @@
     courtLabel.textContent = 'コートが空の行に使うコート';
     var selDefault = document.createElement('select');
     selDefault.setAttribute('aria-label', 'コートが空の行に使うコート');
-    var courtList = Courts.listFrom(ctx.players).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    var courtList = Courts.listFrom(ctx.players, extraCourts(ctx))
+      .filter(function(c) { return c !== Courts.UNASSIGNED; });
     addOption(selDefault, '', '（指定しない）');
     courtList.forEach(function(c) { addOption(selDefault, c, c); });
     addOption(selDefault, NEW_COURT, '新しいコート…');
