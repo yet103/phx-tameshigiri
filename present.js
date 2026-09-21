@@ -435,6 +435,10 @@ var Present = (function() {
       revealNext();
       return;
     }
+    // 決戦モードはカテゴリを持たない単一の画面なので、送りは何もしない
+    // （レビュー指摘G。放っておくと catIndex だけが進み、掲示モードに戻ったときに
+    // 表示するカテゴリがずれる）。
+    if (mode === 'finale') return;
     catIndex = (catIndex + 1) % CATEGORIES.length;
     render();
   }
@@ -445,6 +449,7 @@ var Present = (function() {
       revealPrev();
       return;
     }
+    if (mode === 'finale') return;
     catIndex = (catIndex - 1 + CATEGORIES.length) % CATEGORIES.length;
     render();
   }
