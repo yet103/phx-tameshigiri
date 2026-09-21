@@ -389,6 +389,15 @@ a { color: var(--accent); }
   padding: 10px 14px;
   margin-bottom: 16px;
 }
+/* --gold-deep は生成りの紙の上で読める濃さに寄せた色なので、ダークテーマの黒地では
+   沈んで見える。ダークでは明るい --gold にする（レビュー指摘N。system の既定と
+   明示的な切り替えの両方を見る、他の画面と同じ作法）。 */
+@media (prefers-color-scheme: dark) {
+  .desk-match-finale,
+  .desk-match-finale-rank { border-color: var(--gold); }
+}
+[data-theme="dark"] .desk-match-finale,
+[data-theme="dark"] .desk-match-finale-rank { border-color: var(--gold); }
 .desk-match-caption { margin: 0 0 8px; font-size: 14px; font-weight: bold; }
 .desk-match-others { margin-bottom: 16px; }
 .desk-match-others > summary { cursor: pointer; color: var(--text-muted); padding: 4px 0; }

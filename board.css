@@ -194,7 +194,9 @@ body.is-transparent { background: transparent; }
 .board-finale-table { width: 100%; border-collapse: collapse; }
 .board-finale-table th,
 .board-finale-table td { padding: 2px 6px; }
-.board-finale-table th { color: var(--band-muted); font-weight: normal; }
+/* th は既定で中央寄せ（ブラウザ既定）だが td は左寄せなので、見出しと値がずれる。
+   まず左寄せを基本にし、数値列だけ th.c-num（既存）で右に揃え直す（レビュー指摘M）。 */
+.board-finale-table th { color: var(--band-muted); font-weight: normal; text-align: left; }
 .board-finale-table td.num,
 .board-finale-table th.c-num { text-align: right; font-variant-numeric: tabular-nums; }
 .board-finale-table td.rank { color: var(--gold-light); font-weight: bold; }

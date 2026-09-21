@@ -35,4 +35,8 @@ body {
 
 /* ===== 決戦（暫定） ===== */
 .share-finale li.pending { color: var(--text-muted); }
-.share-finale .share-rank { color: var(--accent); }
+.share-finale .share-rank { color: var(--gold-light); }
+/* .share-rank は要素に直接色を付けているので、親の li.pending の color は継承されない
+   （特異度ではなく「継承より自分への指定が勝つ」ため）。pending 行の順位だけ
+   明示的に打ち消す（レビュー指摘L）。 */
+.share-finale li.pending .share-rank { color: var(--text-muted); }
