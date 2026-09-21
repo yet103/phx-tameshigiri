@@ -134,14 +134,22 @@ var Board = (function() {
   var CIRCLED = ['①', '②', '③'];
   var DETAIL_COLS = 7;   // 技・初〜四ノ太刀・補正・得点（board.html の <thead> と同じ列数）
 
+  // 「内訳なし」を出すべきか。result が今の技数と合わない（技を差し替えた後など）
+  // 採点済みの選手だけを対象にする（合計は保存済み score をそのまま出す）。
+  // 未採点の選手は result が空で当然 canDecode が false になるので、ここで
+  // Courts.isScored も見て弾かないと、まだ誰も採点していない選手まで
+  // 「内訳なし」になってしまう（採点画面 app.js の
+  // `Scoring.canDecode(...) || !Courts.isScored(player)` と同じ判定）。
+  function hasNoDetail(player) {
+    var p = player || {};
+    var names = [p.tech1, p.tech2, p.tech3].filter(Boolean);
+    return Courts.isScored(p) && !Scoring.canDecode(String(p.result || ''), names.length);
+  }
+
   function renderRows(player) {
     el.body.textContent = '';
     var p = player || {};
-    var names = [p.tech1, p.tech2, p.tech3].filter(Boolean);
-    // result が今の技数と合わない（技を差し替えた後など）選手は、内訳をでたらめな
-    // 配点で描かず「内訳なし」にする（合計は保存済み score をそのまま出す。
-    // 採点画面 Scoring.canDecode と同じ判定）。
-    if (!Scoring.canDecode(String(p.result || ''), names.length)) {
+    if (hasNoDetail(p)) {
       var tr0 = document.createElement('tr');
       var td0 = document.createElement('td');
       td0.className = 'no-detail';
@@ -347,6 +355,7 @@ var Board = (function() {
   return {
     remaining: remaining,
     rowsFor: rowsFor,
-    parseHash: parseHash
+    parseHash: parseHash,
+    hasNoDetail: hasNoDetail
   };
 })();

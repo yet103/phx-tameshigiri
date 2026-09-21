@@ -3881,6 +3881,15 @@
     assert('parseHash: URL エンコードされたコート名を戻す',
       Board.parseHash('#abc/' + encodeURIComponent('東')), { token: 'abc', court: '東' });
 
+    assert('hasNoDetail: 未採点なら false（技の行「未」を描く。レビュー指摘1）',
+      Board.hasNoDetail({ tech1: '真', tech2: '連', result: '', score: 0 }), false);
+    assert('hasNoDetail: 採点済みで技数と合わない result は true',
+      Board.hasNoDetail({ tech1: '真', tech2: '連', tech3: '斬', result: '11   10   ', score: 5 }), true);
+    assert('hasNoDetail: 採点済みで技数と合う result は false',
+      Board.hasNoDetail({ tech1: '真', tech2: '連', result: '11   10   ', score: 5 }), false);
+    assert('hasNoDetail: 選手が null でも false',
+      Board.hasNoDetail(null), false);
+
     // storage.js テスト（大会ファイルのファイル名。純粋関数）
     var h2s = document.createElement('h2');
     h2s.textContent = 'storage.js';

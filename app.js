@@ -190,8 +190,9 @@ var App = (function() {
     // 大会管理イベント
     document.getElementById('eventSelect').addEventListener('change', function() {
       if (!confirmLeave()) { this.value = currentEvent ? currentEvent.id : ''; return; }
+      var prevCourt = currentCourt;   // 通信断で失敗したとき元へ戻すため退避
       currentCourt = '';   // 大会が変われば担当コートも選び直す
-      onEventSelect(this.value, '');
+      onEventSelect(this.value, '', prevCourt);
     });
     courtSelect.addEventListener('change', function() {
       if (!confirmLeave()) { this.value = currentCourt; return; }
@@ -478,7 +479,7 @@ var App = (function() {
       : 'techniques.html';
   }
 
-  async function onEventSelect(eventId, court) {
+  async function onEventSelect(eventId, court, prevCourt) {
     var seq = ++loadSeq;
     if (!eventId) {
       // 大会を離れることを配信用ボードへ伝える（ボードは「待機中」に戻る）。
@@ -523,7 +524,12 @@ var App = (function() {
         document.getElementById('eventSelect').value = '';
         await onEventSelect('');
       } else {
+        // 通信断。控え（Route・localStorage）も選手データも触らず、今の画面のまま戻す。
+        // change ハンドラが選択前に eventSelect の値と currentCourt を先に書き換えて
+        // いるため、ここで元に戻さないと「選び直したのに切り替わっていない」表示になる。
         alert('大会データを取得できませんでした。通信を確認してください。');
+        document.getElementById('eventSelect').value = currentEvent ? currentEvent.id : '';
+        if (prevCourt !== undefined) currentCourt = prevCourt;
       }
       return;
     }
