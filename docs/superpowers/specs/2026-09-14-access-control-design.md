@@ -76,8 +76,8 @@
 
 | 区分 | ファイル |
 |---|---|
-| **公開** | `share.html` `present.html` `board.html` `help.html` / `theme.css` `share.css` `present.css` `board.css` `help.css` / `api.js` `share.js` `present.js` `board.js` `scoring.js` / `help/img/*` `fonts/*` |
-| **認証必須** | `index.html`（`/` を含む）`admin.html` `ranking.html` `techniques.html` / `style.css` `admin.css` / `app.js` `admin.js` `admin-events.js` `admin-players.js` `admin-round.js` `admin-results.js` `courts.js` `data.js` `outbox.js` `route.js` `storage.js` `techpicker.js` |
+| **公開** | `share.html` `present.html` `board.html` `help.html` / `theme.css` `share.css` `present.css` `board.css` `help.css` / `api.js` `share.js` `present.js` `board.js` `scoring.js` `courts.js`（配信ボードの採点済み判定に使う。2026-09-22 に公開側へ移動） / `help/img/*` `fonts/*` |
+| **認証必須** | `index.html`（`/` を含む）`admin.html` `ranking.html` `techniques.html` / `style.css` `admin.css` / `app.js` `admin.js` `admin-events.js` `admin-players.js` `admin-round.js` `admin-results.js` `data.js` `outbox.js` `route.js` `storage.js` `techpicker.js` |
 | **開発時のみ・認証必須** | `test.html`（`NODE_ENV !== 'production'` のときだけ配信。本番から破壊的テストページが消える） |
 | **配信しない（404）** | 上記以外の全て。`deploy.sh` `Dockerfile` `docker-compose.yml` `package.json` `.gitignore` `.dockerignore` `docs/*` `server/*` など |
 

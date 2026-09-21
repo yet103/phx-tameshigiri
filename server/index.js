@@ -511,7 +511,8 @@ function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
     tech1: typeof p.tech1 === 'string' ? p.tech1.trim().slice(0, 50) : '',
     tech2: typeof p.tech2 === 'string' ? p.tech2.trim().slice(0, 50) : '',
     tech3: typeof p.tech3 === 'string' ? p.tech3.trim().slice(0, 50) : '',
-    score: (Number.isInteger(p.score) && p.score >= -9999 && p.score <= 9999) ? p.score : 0,
+    // 得点は整数。小数（旧 CSV 取り込みの名残）は切り捨て、範囲外や数値でないものは 0
+    score: (Number.isFinite(p.score) && p.score >= -9999 && p.score <= 9999) ? Math.trunc(p.score) : 0,
     isNewFace: p.isNewFace === true,
     isFemale: p.isFemale === true,
     // 結果は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード。それ以外は捨てる

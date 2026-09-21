@@ -689,9 +689,9 @@ var Admin = (function() {
       });
       // 保存中に大会を切り替えられていたら、もう閉じているシートを操作しない
       // （PC 運営 desk-setup.js の ctx.isStale() と同じ扱い）。
-      if (currentEventId() !== eventId) return;
       sheet.lock(false);
       btnSave.disabled = false;
+      if (currentEventId() !== eventId) return;
       if (!result || !result.ok) {
         if (result && result.reason === 'locked') {
           alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');

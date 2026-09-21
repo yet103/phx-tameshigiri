@@ -4,11 +4,13 @@
 // 新しい HTML / JS / CSS を足したらここに追加する。忘れると 404 になるのですぐ気付く。
 const path = require('path');
 
-// 無認証で配信する（観客が共有リンクで開くページとその依存）
+// 無認証で配信する（観客が共有リンクで開くページとその依存）。
+// 公開ページ（share/present/board/help）の <script>/<link> に足したファイルは必ずここにも足す。
+// protected のままだと本番（認証あり）で 401 になり、開発サーバー（認証なし）では気付けない。
 const PUBLIC_FILES = new Set([
   'share.html', 'present.html', 'board.html', 'help.html',
   'theme.css', 'share.css', 'present.css', 'board.css', 'help.css',
-  'api.js', 'share.js', 'present.js', 'board.js', 'scoring.js'
+  'api.js', 'share.js', 'present.js', 'board.js', 'scoring.js', 'courts.js'
 ]);
 // 配下のファイルを無認証で配信するディレクトリ（末尾スラッシュなし）
 const PUBLIC_DIRS = ['help/img', 'fonts'];
@@ -21,7 +23,7 @@ const PROTECTED_FILES = new Set([
   'admin.js', 'admin-events.js', 'admin-players.js', 'admin-round.js', 'admin-results.js',
   'desk.js', 'desk-events.js', 'desk-setup.js', 'desk-techniques.js',
   'desk-players.js', 'desk-match.js', 'desk-results.js', 'techedit.js',
-  'courts.js', 'data.js', 'outbox.js', 'route.js', 'status.js', 'storage.js', 'techpicker.js'
+  'data.js', 'outbox.js', 'route.js', 'status.js', 'storage.js', 'techpicker.js'
 ]);
 // 開発時だけ配信する（認証必須）。本番から破壊的テストページを消す
 const DEV_ONLY_PROTECTED_FILES = new Set(['test.html']);

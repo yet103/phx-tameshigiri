@@ -107,7 +107,7 @@ const { classify } = require('./static-policy');
 test('classify: 観客用ページとそのアセットは public', () => {
   for (const p of ['/share.html', '/present.html', '/board.html', '/help.html',
                    '/theme.css', '/share.css', '/present.css', '/board.css', '/help.css',
-                   '/api.js', '/share.js', '/present.js', '/board.js', '/scoring.js',
+                   '/api.js', '/share.js', '/present.js', '/board.js', '/scoring.js', '/courts.js',
                    '/help/img/admin_bulk.png', '/fonts/ShipporiMinchoB1-Bold.woff2']) {
     assert.strictEqual(classify(p, { production: true }), 'public', p);
   }
@@ -117,7 +117,7 @@ test('classify: 運営用ページとそのアセットは protected', () => {
   for (const p of ['/', '/index.html', '/scoring.html', '/admin.html', '/ranking.html', '/techniques.html',
                    '/style.css', '/admin.css', '/home.css',
                    '/app.js', '/home.js', '/admin.js', '/admin-events.js', '/admin-players.js', '/admin-round.js',
-                   '/admin-results.js', '/courts.js', '/data.js', '/outbox.js', '/route.js',
+                   '/admin-results.js', '/data.js', '/outbox.js', '/route.js',
                    '/storage.js', '/techpicker.js']) {
     assert.strictEqual(classify(p, { production: true }), 'protected', p);
   }
