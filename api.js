@@ -63,8 +63,9 @@ var Api = (function() {
     // PATCH /api/events/:eventId （基本情報の保存専用。name / date / venue / settings だけを送る）
     // 大会ファイルを丸ごと送り直す saveEvent と違い、techniques / players / status には
     // 一切触れない（techniques を持たない大会の技リストを固定してしまわないため）。
-    // settings は { requireBib, requireRank }（ゼッケン・級位段位を必須にするか。設計書
-    // 「選手の追加項目」）。他のキーが混ざっていてもサーバーが無視する。
+    // settings は { requireBib, requireRank, courts }。courts を省くと既存を保つ
+    // （ゼッケン・級位段位は設計書「選手の追加項目」、courts は設計書「コート一覧」）。
+    // 他のキーが混ざっていてもサーバーが無視する。
     // 戻り値: { ok: true, event: { id, name, date, venue, updatedAt, settings } }
     //       | { ok: false, status: HTTPステータス, reason, error }（400 / 404 / 409。
     //         409 の reason は 'locked'）

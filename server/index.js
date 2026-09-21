@@ -622,7 +622,9 @@ app.patch('/api/events/:id', (req, res) => {
     if (body.settings !== undefined) {
       const s = (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings))
         ? body.settings : {};
-      let courts = [];
+      // courts を省いた PATCH は部分更新（name だけ・requireBib だけ、等）として使われるので、
+      // 指定が無ければ既存のコート一覧を残す（[] にすると消えてしまう）。
+      let courts = (event.settings && Array.isArray(event.settings.courts)) ? event.settings.courts.slice() : [];
       if (s.courts !== undefined) {
         const courtsErr = validateCourtList(s.courts);
         if (courtsErr) return res.status(400).json({ error: courtsErr });

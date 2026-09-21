@@ -396,6 +396,12 @@
     assert('PATCH: 21件は400', stCourts21.error, 'コートは20件までです');
     assert('PATCH: 400のあとも courts は変わらない（保存されない）',
       (await Api.loadEvent(stEvent.id)).settings.courts, ['A', 'B', '稽古']);
+    // courts を省いた settings の部分更新（例: requireBib だけ変える）は既存の courts を消さない
+    var stCourtsOmit = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: true } });
+    assert('PATCH: courts を省くと requireBib だけ変わり courts は残る',
+      stCourtsOmit.event.settings, { requireBib: true, requireRank: false, courts: ['A', 'B', '稽古'] });
+    assert('PATCH: courts を省いた更新後も保存された courts が残る',
+      (await Api.loadEvent(stEvent.id)).settings.courts, ['A', 'B', '稽古']);
     await Api.deleteEvent(stEvent.id);
 
     // コピー・バンドルの往復・二巡目複製（settings・drawn・bib・rank・rental）
