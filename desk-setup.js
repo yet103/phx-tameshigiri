@@ -184,14 +184,19 @@
     inFinal.id = 'setupFinalCourt';
     inFinal.placeholder = EventStatus.finalCourtOf({});   // '決戦'
     inFinal.value = (typeof settings.finalCourt === 'string') ? settings.finalCourt : '';
-    inFinal.disabled = locked;
+    // 決戦の行がすでにあると、名前を変えても決戦コートに移した選手をどのコート端末でも
+    // 採点できなくなる（サーバーも PATCH で 400 にする。レビュー指摘B）。
+    var hasFinalRows = EventStatus.hasFinalists(ctx.players);
+    inFinal.disabled = locked || hasFinalRows;
     container.appendChild(finalWrap);
 
     var finalNote = document.createElement('p');
     finalNote.className = 'desk-note';
-    finalNote.textContent = '一巡目を終了したときに、暫定ベスト8（一般男子・一巡目の得点上位）を' +
-      'このコートへ移します。空欄なら「' + EventStatus.finalCourtOf({}) + '」になります。' +
-      '名前の規則は他のコートと同じです（「-」と「未分類」は使えません）。';
+    finalNote.textContent = hasFinalRows
+      ? '決戦の行ができた後は変えられません。'
+      : ('一巡目を終了したときに、暫定ベスト8（一般男子・一巡目の得点上位）を' +
+        'このコートへ移します。空欄なら「' + EventStatus.finalCourtOf({}) + '」になります。' +
+        '名前の規則は他のコートと同じです（「-」と「未分類」は使えません）。');
     container.appendChild(finalNote);
 
     var chipWrap = document.createElement('div');
