@@ -19,6 +19,13 @@
   // 絞り込み（Courts.applyFilter）と並べ替え（Courts.sortBy）は courts.js の純粋関数。
   // 並び順の既定は巡目 → コート → 性別 → 番号（試合進行タブ admin-round.js と同じ compareOrder）。
 
+  // この大会が確定済み（final/archived）か。PC 運営の desk-players.js と同じ判定
+  // （EventStatus.isLocked(EventStatus.of(ctx.event))）。確定済みでは選手の追加・編集・
+  // 削除・CSV取り込み・一括登録をすべて止める。
+  function isLocked(ctx) {
+    return EventStatus.isLocked(EventStatus.of(ctx.event));
+  }
+
   function adoptTechniques(ctx) {
     techOwner = ctx.eventId;
     techCache = (Array.isArray(ctx.techniques) && ctx.techniques.length > 0) ? ctx.techniques : null;
@@ -55,6 +62,8 @@
     if (filter.court && Courts.listFrom(ctx.players).indexOf(filter.court) === -1) filter.court = '';
     if (filter.round && Courts.roundsOf(ctx.players).indexOf(filter.round) === -1) filter.round = 0;
 
+    var locked = isLocked(ctx);
+
     container.innerHTML = '';
 
     var head = document.createElement('div');
@@ -67,12 +76,19 @@
     btnMenu.type = 'button';
     btnMenu.className = 'icon-btn';
     btnMenu.textContent = '⋯';
-    btnMenu.addEventListener('click', function() { openMenu(ctx); });
+    btnMenu.addEventListener('click', function() { openMenu(ctx, locked); });
 
     head.appendChild(h2);
     head.appendChild(spacer);
     head.appendChild(btnMenu);
     container.appendChild(head);
+
+    if (locked) {
+      var warn = document.createElement('p');
+      warn.className = 'admin-warn';
+      warn.textContent = 'この大会は最終結果を確定済みです。上部の「戻す」を押すと編集できます。';
+      container.appendChild(warn);
+    }
 
     // 1 段目: コート
     var courtChips = document.createElement('div');
@@ -99,12 +115,15 @@
     wrap.className = 'players-table-wrap';
     container.appendChild(wrap);
 
-    var fab = document.createElement('button');
-    fab.type = 'button';
-    fab.className = 'fab';
-    fab.textContent = '＋';
-    fab.addEventListener('click', function() { openAddSheet(ctx); });
-    container.appendChild(fab);
+    // 確定済みでは選手を追加できない（PC 運営の「＋ 行を追加」非表示と同じ）
+    if (!locked) {
+      var fab = document.createElement('button');
+      fab.type = 'button';
+      fab.className = 'fab';
+      fab.textContent = '＋';
+      fab.addEventListener('click', function() { openAddSheet(ctx); });
+      container.appendChild(fab);
+    }
 
     // チップを押したらチップの帯と表を描き直す（検索欄は作り直さない。入力中の文字を保つ）
     function redraw() {
@@ -169,8 +188,9 @@
 
   function renderTable(wrap, ctx) {
     wrap.innerHTML = '';
+    var locked = isLocked(ctx);
     if (ctx.players.length === 0) {
-      wrap.appendChild(emptyMessage('選手がまだいません。右下の「＋」で追加してください。'));
+      wrap.appendChild(emptyMessage(locked ? '選手がいません。' : '選手がまだいません。右下の「＋」で追加してください。'));
       return;
     }
     var rows = Courts.sortBy(Courts.applyFilter(ctx.players, filter), sort);
@@ -270,11 +290,16 @@
     cell(p.isNewFace ? '●' : '');
     cell(String(p.score || 0), 'col-score');
 
-    tr.tabIndex = 0;
-    tr.addEventListener('click', function() { openEditSheet(ctx, p); });
-    tr.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditSheet(ctx, p); }
-    });
+    // 確定済みでは編集シートを開かせない（PC 運営の desk-players.js が
+    // セルの入力を disabled にするのと同じ理由。行の削除もこのシートからしか
+    // できないので、ここで止めれば削除も一緒に止まる）。
+    if (!isLocked(ctx)) {
+      tr.tabIndex = 0;
+      tr.addEventListener('click', function() { openEditSheet(ctx, p); });
+      tr.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditSheet(ctx, p); }
+      });
+    }
     return tr;
   }
 
@@ -852,20 +877,32 @@
   }
 
   // 「⋯」メニュー。主導線は1人ずつの登録で、CSV は一括登録用の二次導線。
-  function openMenu(ctx) {
+  // 確定済みでは選手を増やす手段（一括登録・CSV取り込み）を出さない。
+  function openMenu(ctx, locked) {
     var body = document.createElement('div');
 
-    var btnBulk = document.createElement('button');
-    btnBulk.type = 'button';
-    btnBulk.className = 'menu-item';
-    btnBulk.textContent = '👥 複数人をまとめて登録';
-    body.appendChild(btnBulk);
+    if (locked) {
+      var note = document.createElement('p');
+      note.className = 'admin-warn';
+      note.textContent = 'この大会は最終結果を確定済みです。上部の「戻す」を押すと編集できます。';
+      body.appendChild(note);
+    }
 
-    var btnCsv = document.createElement('button');
-    btnCsv.type = 'button';
-    btnCsv.className = 'menu-item';
-    btnCsv.textContent = '📄 CSVインポート';
-    body.appendChild(btnCsv);
+    var btnBulk = null;
+    var btnCsv = null;
+    if (!locked) {
+      btnBulk = document.createElement('button');
+      btnBulk.type = 'button';
+      btnBulk.className = 'menu-item';
+      btnBulk.textContent = '👥 複数人をまとめて登録';
+      body.appendChild(btnBulk);
+
+      btnCsv = document.createElement('button');
+      btnCsv.type = 'button';
+      btnCsv.className = 'menu-item';
+      btnCsv.textContent = '📄 CSVインポート';
+      body.appendChild(btnCsv);
+    }
 
     var btnCancel = document.createElement('button');
     btnCancel.type = 'button';
@@ -874,6 +911,8 @@
 
     var sheet = Admin.openSheet('メニュー', body, [btnCancel]);
     btnCancel.addEventListener('click', sheet.close);
+
+    if (!btnCsv) return;
 
     btnCsv.addEventListener('click', function() {
       sheet.close();

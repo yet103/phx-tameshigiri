@@ -78,6 +78,12 @@ main { padding: 8px 12px 16px; }
 .head-btn { min-height: 44px; padding: 0 12px; background: var(--accent); color: var(--accent-text); }
 .icon-btn { min-width: 44px; min-height: 44px; font-size: 18px; }
 .empty { color: var(--text-muted); padding: 16px 4px; }
+/* 確定済み（final/archived）の警告。PC 運営 desk.css の .desk-warn と同じ見た目
+   （desk.css はこの計画で触らないファイルなのでここに複製する）。 */
+.admin-warn {
+  padding: 8px 10px; border-radius: 4px; font-size: 13px; margin-bottom: 12px;
+  background: var(--card-bg); border: 1px solid var(--warn); color: var(--warn);
+}
 
 /* ===== コート絞り込みチップ =====
    コートが増えても body の横スクロールを作らないよう、この帯の中だけで横に流す */
