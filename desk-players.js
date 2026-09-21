@@ -99,6 +99,12 @@
     var locked = EventStatus.isLocked(EventStatus.of(ctx.event));
     if (stateOwner !== ctx.eventId) {
       filter = newFilter();
+      // 二巡目準備（形の登録）の段階で開いたら、見たいのは二巡目の行。
+      // 大会を切り替えたときの初期値だけで、運営者が自分で変えた絞り込みは上書きしない。
+      if (EventStatus.of(ctx.event) === 'round1_done' &&
+          Courts.roundsOf(ctx.players).indexOf(2) !== -1) {
+        filter.round = 2;
+      }
       sort = Courts.defaultSort();
       draft = null;
       stateOwner = ctx.eventId;
@@ -142,6 +148,21 @@
     }
     head.appendChild(buildHeadMenu(ctx, locked));
     container.appendChild(head);
+
+    // 二巡目準備の段階は、やることが「形を直す」なので試合進行へ誘導する。
+    if (EventStatus.of(ctx.event) === 'round1_done') {
+      var guide = document.createElement('p');
+      guide.className = 'desk-note';
+      guide.id = 'playersRound1DoneGuide';
+      guide.appendChild(document.createTextNode('いまは二巡目の形登録の段階です。'));
+      var go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'desk-btn-sub';
+      go.textContent = '試合進行へ →';
+      go.addEventListener('click', function() { Desk.navigate('match', ctx.eventId); });
+      guide.appendChild(go);
+      container.appendChild(guide);
+    }
 
     if (locked) {
       var warn = document.createElement('p');
