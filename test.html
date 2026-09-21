@@ -3397,6 +3397,44 @@
           players: [ { order: 'A-男子-1-1', score: 10 }, { order: 'A-男子-1-2', score: 0 } ] }
       ]).map(function(ev) { return ev.id; }), ['y', 'x']);
 
+    // 「前回の大会」（設計書 2026-09-21-home-launcher-design.md「純粋関数」）。
+    // トップの作成画面の「前回の大会をコピー」が元にする 1 件。
+    // テスト大会とアーカイブ済みは選ばない（コピー元として不適切なので）。
+    var prevEvents = [
+      { id: 'old',  updatedAt: '2026-09-10T00:00:00.000Z' },
+      { id: 'test', updatedAt: '2026-09-20T00:00:00.000Z', test: true },
+      { id: 'arc',  updatedAt: '2026-09-19T00:00:00.000Z', status: 'archived' },
+      { id: 'new',  updatedAt: '2026-09-18T00:00:00.000Z' }
+    ];
+    assert('pickPrevious: テストとアーカイブを除いた中で updatedAt が最新',
+      (Home.pickPrevious(prevEvents) || {}).id, 'new');
+    assert('pickPrevious: テスト大会しか無ければ null',
+      Home.pickPrevious([{ id: 't', test: true, updatedAt: '2026-09-20T00:00:00.000Z' }]), null);
+    assert('pickPrevious: アーカイブしか無ければ null',
+      Home.pickPrevious([{ id: 'a', status: 'archived', updatedAt: '2026-09-20T00:00:00.000Z' }]), null);
+    assert('pickPrevious: 0 件は null', Home.pickPrevious([]), null);
+    assert('pickPrevious: null でも落ちない', Home.pickPrevious(null), null);
+    assert('pickPrevious: updatedAt が無い大会だけでも先頭を返す',
+      (Home.pickPrevious([{ id: 'x' }, { id: 'y' }]) || {}).id, 'x');
+    assert('pickPrevious: 元の配列を書き換えない',
+      (function() {
+        var src = prevEvents.slice();
+        Home.pickPrevious(src);
+        return src.map(function(ev) { return ev.id; });
+      })(), ['old', 'test', 'arc', 'new']);
+
+    // テンプレートの表示用の文言（作る中身はサーバーが決める。ここは画面の文言だけ）
+    assert('templateSpec: 稽古用', Home.templateSpec('practice').name, '稽古用');
+    assert('templateSpec: 大会用', Home.templateSpec('tournament').name, '大会用');
+    assert('templateSpec: システムテスト用', Home.templateSpec('systest').name, 'システムテスト用');
+    assert('templateSpec: 説明が空でない',
+      Home.templateSpec('practice').description.length > 0, true);
+    assert('templateSpec: 知らない名前は null', Home.templateSpec('foo'), null);
+    assert('templateSpec: 空文字は null', Home.templateSpec(''), null);
+    assert('templateSpec: null でも落ちない', Home.templateSpec(null), null);
+    assert('templateSpec: プロトタイプの名前を拾わない',
+      Home.templateSpec('constructor'), null);
+
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';
     results.appendChild(h2r);

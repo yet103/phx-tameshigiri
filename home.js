@@ -59,6 +59,37 @@ var Home = (function() {
     return rows.map(function(r) { return r.ev; });
   }
 
+  // --- 作成画面の材料（純粋関数）---
+
+  // 「前回の大会」= 作成画面の「前回の大会をコピー」が元にする 1 件。
+  // テスト大会（test）とアーカイブ済みは選ばない（前者は本物でなく、後者は片づけた大会なので、
+  // 「前回」として勝手に選ぶと事故になる）。該当が無ければ null で、画面はその項目を出さない。
+  // 同着（updatedAt が同じ）は先に出てきた方を残す。元の配列は書き換えない。
+  function pickPrevious(events) {
+    var best = null;
+    (events || []).forEach(function(ev) {
+      if (!ev || ev.test === true) return;
+      if (EventStatus.of(ev) === 'archived') return;
+      if (!best || String(ev.updatedAt || '') > String(best.updatedAt || '')) best = ev;
+    });
+    return best;
+  }
+
+  // テンプレートの表示名と 1 行説明。作る中身はサーバー（POST /api/events/from-template）が
+  // 決めるので、ここに持つのは画面に出す文言だけ。知らない名前なら null。
+  // 'constructor' などプロトタイプの名前で拾わないよう hasOwnProperty で引く。
+  var TEMPLATES = {
+    practice:   { name: '稽古用',          description: '技と配点は雛形のまま。コートは「稽古」の 1 つだけ。選手はあとから登録します。' },
+    tournament: { name: '大会用',          description: '技と配点は雛形のまま。コートは A・B の 2 つ。ゼッケン番号を必須にします。' },
+    systest:    { name: 'システムテスト用', description: 'ダミーの選手 20 名（男女 10 名ずつ・技入り）で、採点から発表まで試せます。一覧では既定で隠れます。' }
+  };
+
+  function templateSpec(template) {
+    var key = String(template == null ? '' : template);
+    if (!Object.prototype.hasOwnProperty.call(TEMPLATES, key)) return null;
+    return { name: TEMPLATES[key].name, description: TEMPLATES[key].description };
+  }
+
   // --- 描画 ---
 
   // 「全体の流れ」の帯に添える一言。ラベル自体は EventStatus.LABELS から取るので
@@ -231,6 +262,8 @@ var Home = (function() {
   return {
     redirectTarget: redirectTarget,
     redirectIfScoring: redirectIfScoring,
-    sortForHome: sortForHome
+    sortForHome: sortForHome,
+    pickPrevious: pickPrevious,
+    templateSpec: templateSpec
   };
 })();
