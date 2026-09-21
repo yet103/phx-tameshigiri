@@ -204,18 +204,142 @@ var Home = (function() {
     if (pane === 'new') openNew();
   }
 
-  // Task B5 で中身を入れる。いまは器を空にするだけ。
+  // --- 大会を新規作成（#new）---
+
+  // 読み込みの世代とキャッシュは #list の節で宣言（#list と #new のどちらも
+  // 一覧を使うので、世代は 1 つで足りる）。
+  var eventsSeq = 0;
+  var eventsCache = null;   // 直近に取れた一覧。null は「まだ取れていない・取れなかった」
+
+  // 1 段目で選ぶ「経路」。2 段目のフォームの中身がこれで変わる。
+  //   'copy-prev'  前回の大会をコピー（Home.pickPrevious が選んだ 1 件）
+  //   'template'   テンプレートから（newTemplate に practice / tournament / systest）
+  //   'copy-pick'  作成済みの大会からコピー（2 段目のセレクトで選ぶ）
+  //   'blank'      完全新規
+  var newRoute = '';
+  var newTemplate = '';
+  var copySource = '';      // コピー元の大会ID
+
+  var TEMPLATE_ORDER = ['practice', 'tournament', 'systest'];
+
+  // #new に入るたびに 1 段目から始める（前に開いたときの選択を引きずらない）。
   function openNew() {
-    document.getElementById('newBody').innerHTML = '';
+    newRoute = '';
+    newTemplate = '';
+    copySource = '';
+    renderNew();
+  }
+
+  function renderNew() {
+    var box = document.getElementById('newBody');
+    box.innerHTML = '';
+    if (!newRoute) { renderNewStep1(box).catch(function(e) { console.error(e); }); return; }
+    if (newRoute === 'template' && !newTemplate) { renderNewTemplates(box); return; }
+    renderNewForm(box);
+  }
+
+  // 押せるカード 1 枚。
+  function newCard(main, sub, onClick) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'home-card';
+    var m = document.createElement('span');
+    m.className = 'home-card-main';
+    m.textContent = main;
+    var s = document.createElement('span');
+    s.className = 'home-card-sub';
+    s.textContent = sub;
+    b.appendChild(m);
+    b.appendChild(s);
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  // 1 段目。「前回の大会をコピー」と「作成済みの大会からコピー」は一覧が要るので、
+  // 4 枚とも取れてからまとめて描く（先に 2 枚だけ出すと並びが崩れる）。
+  async function renderNewStep1(box) {
+    var loading = document.createElement('p');
+    loading.className = 'home-note';
+    loading.textContent = '読み込み中…';
+    box.appendChild(loading);
+
+    var seq = ++eventsSeq;
+    var events = await Api.listEvents();
+    if (seq !== eventsSeq) return;
+    if (paneFor(location.hash) !== 'new' || newRoute) return;   // 待っている間に画面が変わった
+    eventsCache = events;
+    box.innerHTML = '';
+
+    if (events === null) {
+      // 通信に失敗しても、コピーを使わない 2 枚は使える。作成そのものは進められる。
+      var warn = document.createElement('p');
+      warn.className = 'home-note';
+      warn.textContent = 'コピー元にできる大会を取得できませんでした。テンプレートと完全新規は使えます。';
+      box.appendChild(warn);
+      events = [];
+    }
+
+    var cards = document.createElement('div');
+    cards.className = 'home-cards';
+    box.appendChild(cards);
+
+    var prev = pickPrevious(events);
+    if (prev) {
+      cards.appendChild(newCard('前回の大会をコピー',
+        '「' + (prev.name || '(名称未設定)') + '」の技・配点・コートを引き継ぎます。',
+        function() { newRoute = 'copy-prev'; copySource = prev.id; renderNew(); }));
+    }
+
+    cards.appendChild(newCard('テンプレートから',
+      '稽古用・大会用・システムテスト用の雛形から作ります。',
+      function() { newRoute = 'template'; renderNew(); }));
+
+    if (events.length > 0) {
+      cards.appendChild(newCard('作成済みの大会からコピー',
+        '元にする大会を選びます（アーカイブ済みも選べます）。',
+        function() { newRoute = 'copy-pick'; copySource = ''; renderNew(); }));
+    }
+
+    cards.appendChild(newCard('完全新規',
+      '名前・日付・会場だけの空の大会を作ります。技と配点は雛形から入ります。',
+      function() { newRoute = 'blank'; renderNew(); }));
+  }
+
+  // 1 段目でテンプレートを選んだあとの 3 枚。文言は Home.templateSpec に持つ。
+  function renderNewTemplates(box) {
+    var back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'home-btn-sub';
+    back.textContent = '← 選び直す';
+    back.addEventListener('click', function() { newRoute = ''; renderNew(); });
+    box.appendChild(back);
+
+    var cards = document.createElement('div');
+    cards.className = 'home-cards';
+    box.appendChild(cards);
+
+    TEMPLATE_ORDER.forEach(function(key) {
+      var spec = templateSpec(key);
+      cards.appendChild(newCard(spec.name, spec.description, function() {
+        newTemplate = key;
+        renderNew();
+      }));
+    });
+  }
+
+  // Task B6 で中身を入れる。
+  function renderNewForm(box) {
+    var p = document.createElement('p');
+    p.className = 'home-note';
+    p.textContent = '経路: ' + newRoute + ' / テンプレート: ' + (newTemplate || '—') +
+      ' / コピー元: ' + (copySource || '—');
+    box.appendChild(p);
   }
 
   // --- 作成済みの大会（#list）---
+  // eventsSeq / eventsCache は上の節（#new）で宣言。#list と #new のどちらも
+  // 一覧を使うので、世代は 1 つで足りる。
 
-  // 読み込みの世代。あとから始めた読み込みが先に返ることがあるので、
-  // 古い応答では DOM に触らない（他の画面の renderSeq と同じ作法）。
-  // #list と #new のどちらも一覧を使うので、世代は 1 つで足りる。
-  var eventsSeq = 0;
-  var eventsCache = null;   // 直近に取れた一覧。null は「まだ取れていない・取れなかった」
   var showTest = false;     // 「テストも表示」のチェック
   var listExpanded = false; // 「すべて見る」を押したか
   var LIST_LIMIT = 5;       // 畳む前に出す件数（設計書「作成済みの大会」）
