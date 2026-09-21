@@ -334,6 +334,59 @@ function rejectIfLocked(res, event) {
   return true;
 }
 
+// 決戦（暫定ベスト8）の表。決戦の行が無ければ null（設計書 2026-09-22）。
+// rows は試技順（決戦コートの番号順）。r1 は一巡目の得点（sourcePlayerId で引く）、
+// r2 は斬った人だけ（未採点は null）、rank も斬った人だけの中での暫定順位
+// （合計降順・同点同順位。1, 1, 3）。
+// ○×の生データ（result）は返さない（共有リンクから無認証で読まれるため）。
+function computeFinale(event) {
+  const players = ((event && event.players) || []);
+  const finalRows = EventStatus.finalists(players);
+  if (finalRows.length === 0) return null;
+
+  const byId = Object.create(null);
+  players.forEach(p => { if (p && typeof p.id === 'string') byId[p.id] = p; });
+  const numberOf = p => {
+    const parsed = parseOrder(p && p.order);
+    return parsed ? parsed.number : 0;
+  };
+
+  const rows = finalRows.slice()
+    .sort((a, b) => numberOf(a) - numberOf(b))
+    .map(p => {
+      const srcRow = (p.sourcePlayerId && Object.prototype.hasOwnProperty.call(byId, p.sourcePlayerId))
+        ? byId[p.sourcePlayerId] : null;
+      const r1 = (srcRow && typeof srcRow.score === 'number') ? srcRow.score : 0;
+      const scored = EventStatus.isScored(p);
+      const r2 = scored ? ((typeof p.score === 'number') ? p.score : 0) : null;
+      return {
+        name: String(p.name || '').trim(),
+        order: numberOf(p),
+        r1: r1,
+        r2: r2,
+        total: r1 + (r2 === null ? 0 : r2),
+        scored: scored,
+        rank: null
+      };
+    });
+
+  // 暫定順位は斬った人だけで付ける。rows の要素をそのまま並べ替えて書き込む。
+  const done = rows.filter(r => r.scored).sort((a, b) => b.total - a.total || a.order - b.order);
+  let current = 1;
+  let prevTotal = null;
+  done.forEach((r, i) => {
+    if (prevTotal !== null && r.total !== prevTotal) current = i + 1;
+    prevTotal = r.total;
+    r.rank = current;
+  });
+
+  return {
+    court: EventStatus.finalCourtOf(event),
+    status: EventStatus.of(event),
+    rows: rows
+  };
+}
+
 // 順位の集計。順位ロジックの唯一の実装。
 // 行ごとに isFemale で男女に振り分け、isNewFace なら新人にも入れる。
 // 氏名で合算する（一巡目＋二巡目）。得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
@@ -381,7 +434,10 @@ function computeRanking(event) {
       male: rank(male),
       female: rank(female),
       newFace: rank(newFace)
-    }
+    },
+    // 決戦（暫定ベスト8）の表。決戦の行が無ければ null。
+    // 順位の集計（rankings）は変えない（氏名で合算、一般男子／新人／一般女子）。
+    finale: computeFinale(event)
   };
 }
 
