@@ -272,6 +272,24 @@ function sanitizeFinalCourt(name) {
   return isValidCourt(name) ? name : '';
 }
 
+// 決戦コート以外で使われているコート名（settings.courts と選手の order のコート名。
+// Courts.listFrom 相当）。決戦の行（finalist === true）自身のコート名は「通常のコート」に
+// 数えない（PATCH /api/events/:id の決戦コート名の衝突チェック用。レビュー指摘C）。
+function nonFinalCourtNames(players, courts) {
+  const seen = Object.create(null);   // コート名が '__proto__' などでも壊れないように
+  const out = [];
+  function add(c) {
+    if (!c || c === '未分類') return;
+    if (!seen[c]) { seen[c] = true; out.push(c); }
+  }
+  (Array.isArray(players) ? players : []).forEach(p => {
+    if (p && p.finalist === true) return;
+    add(courtOf(p));
+  });
+  (Array.isArray(courts) ? courts : []).forEach(add);
+  return out;
+}
+
 // 同一の コート×性別×巡目 における次の番号。該当が無ければ 1。
 // 件数+1 ではなく最大+1 を使う（削除で欠番があっても衝突しない）。
 function nextOrderNumber(players, court, gender, round) {
@@ -781,7 +799,29 @@ app.patch('/api/events/:id', (req, res) => {
         if (name && !isValidCourt(name)) {
           return res.status(400).json({ error: 'コート名「' + s.finalCourt + '」は使えません' });
         }
+        // 決戦の行がすでにあるときに名前をいまと違う値に変えると、決戦コートに移した選手を
+        // どのコート端末でも採点できなくなる（レビュー指摘B）。実際に値が変わるときだけ止める。
+        const nextFinal = EventStatus.finalCourtOf({ settings: { finalCourt: name } });
+        if (nextFinal !== EventStatus.finalCourtOf(event) && EventStatus.hasFinalists(event.players)) {
+          return res.status(400).json({
+            error: '決戦の行がすでにあるため、決戦コートの名前は変えられません',
+            reason: 'finale_exists'
+          });
+        }
         finalCourt = name;
+      }
+      // 決戦コートの名前が通常のコート（settings.courts や選手の order のコート名）と
+      // かぶると、どちらのコート端末で採点すべきか判定できなくなる（レビュー指摘C）。
+      // 決戦コート自身の行（finalist の行）はここでは「通常のコート」に数えない。
+      if (s.finalCourt !== undefined || s.courts !== undefined) {
+        const effectiveFinal = EventStatus.finalCourtOf({ settings: { finalCourt: finalCourt } });
+        const otherCourts = nonFinalCourtNames(event.players, courts);
+        if (otherCourts.indexOf(effectiveFinal) !== -1) {
+          return res.status(400).json({
+            error: 'コート名「' + effectiveFinal + '」は通常のコートと同じ名前のため決戦コートに使えません',
+            reason: 'court_conflict'
+          });
+        }
       }
       event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courts };
       if (finalCourt) event.settings.finalCourt = finalCourt;
@@ -1082,9 +1122,30 @@ app.post('/api/events/:id/status', (req, res) => {
       if (players.filter(p => EventStatus.roundOf(p) === 1).length === 0) {
         return res.status(409).json({ error: '一巡目の選手がいません', reason: 'empty' });
       }
-      // 未採点の確認はクライアントが済ませているので force 扱いで呼ぶ
-      // （既に二巡目があれば差分だけ追加される）。
-      const gen = generateRound2(event, true);
+      // CSV 由来など追跡できない（sourcePlayerId を持たない）二巡目の行が既にあるときに
+      // force で進めると、その行とは別に自動生成の行が重複して増える（レビュー指摘A）。
+      // force: true が来ていなければ、いったん止めて件数だけ返す。
+      const bodyForce = !!(req.body && req.body.force === true);
+      const existingRound2 = players.filter(p => EventStatus.roundOf(p) === 2);
+      const untrackedCount = existingRound2.filter(p => p && !p.sourcePlayerId).length;
+      if (untrackedCount > 0 && !bodyForce) {
+        const round1Candidates = players.filter(p => p && EventStatus.roundOf(p) === 1);
+        const validRound1 = round1Candidates.filter(p => {
+          const parsed = parseOrder(p && p.order);
+          return parsed !== null && isValidCourt(parsed.court);
+        });
+        return res.status(409).json({
+          error: '追跡できない二巡目の行があります。このまま進めますか？',
+          reason: 'exists',
+          existingCount: existingRound2.length,
+          untrackedCount: untrackedCount,
+          unassignedCount: round1Candidates.length - validRound1.length
+        });
+      }
+      // 未採点の確認はクライアントが済ませているので force 扱いで呼ぶ（既に二巡目があれば
+      // 差分だけ追加される。誰も採点していなければ暫定ベスト8と番号を現在の一巡目の
+      // 得点から付け直す。レビュー指摘J）。
+      const gen = generateRound2(event, true, true);
       if (!gen.ok) {
         return res.status(409).json({
           error: gen.body.error || '二巡目を生成できませんでした', reason: 'generate_failed'
@@ -1094,7 +1155,7 @@ app.post('/api/events/:id/status', (req, res) => {
       round2Info = {
         created: gen.created, skipped: gen.skipped, existingCount: gen.existingCount,
         untrackedCount: gen.untrackedCount, unassignedCount: gen.unassignedCount,
-        finalistCount: gen.finalistCount
+        finalistCount: gen.finalistCount, reordered: !!gen.reordered
       };
     }
 
@@ -2473,10 +2534,15 @@ function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
 // （force での差分追加時に意味を持つ）。sourcePlayerId を持たない二巡目行は
 // CSV インポート由来で、force するとそれとは別に重複生成されてしまうため
 // untrackedCount として件数を返し、クライアントが force 前に警告できるようにする。
+// allowReorder: true のときだけ、誰も採点していない二巡目を「作り直す」分岐（レビュー指摘J）
+// に入ってよい。POST …/rounds/2/generate（運営者が明示的に差分追加を求める操作）は
+// 常に false で呼び、既存の行の並び・添字を変えない今までどおりの差分追加だけを行う。
+// round1 → round1_done の遷移（サーバーが自動で呼ぶ）だけ true で呼ぶ。
 // 戻り値:
-//   { ok: true, players, created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount }
+//   { ok: true, players, created, skipped, existingCount, untrackedCount, unassignedCount,
+//     finalistCount, reordered }
 //   { ok: false, code: 400 | 409, body: { error, reason?, … } }
-function generateRound2(event, force) {
+function generateRound2(event, force, allowReorder) {
   const players = Array.isArray(event.players) ? event.players : [];
   const round1Candidates = players.filter(p => p && EventStatus.roundOf(p) === 1);
   // '未分類' コートの行（order が解析できても isValidCourt を通らない）からは作らない。
@@ -2503,6 +2569,18 @@ function generateRound2(event, force) {
       error: '二巡目は既に生成されています', reason: 'exists',
       unscoredCount: unscored.length, existingCount: existing.length,
       untrackedCount: untrackedCount, unassignedCount: unassignedCount } };
+  }
+
+  // 二巡目の行が1つも採点されておらず、すべて sourcePlayerId で一巡目の行を
+  // 追跡できるなら、一巡目の得点を戻して直したあとの「二巡目を終了」で暫定ベスト8が
+  // 入れ替わらない不具合を防ぐため、行の入れ物（id・技・ゼッケン・級位段位・レンタル）を
+  // 保ったまま、暫定ベスト8の印とコート内の番号だけを現在の一巡目の得点から付け直す
+  // （レビュー指摘J）。採点済みの行が1つでもあれば、この分岐には入らず従来どおり
+  // 差分追加だけを行う（採点結果を勝手に組み替えない）。
+  const base = players.filter(p => !(p && EventStatus.roundOf(p) === 2));
+  if (allowReorder && force && existing.length > 0 && untrackedCount === 0 &&
+      existing.every(p => !EventStatus.isScored(p))) {
+    return reorderRound2(event, src, existing, base, unassignedCount);
   }
 
   // force のときは未生成の一巡目行だけを差分追加する。既存の二巡目行には触れない。
@@ -2532,7 +2610,67 @@ function generateRound2(event, force) {
     existingCount: existing.length,
     untrackedCount: untrackedCount,
     unassignedCount: unassignedCount,
-    finalistCount: finals.length
+    finalistCount: finals.length,
+    reordered: false
+  };
+}
+
+// generateRound2 の「誰も採点していない二巡目を作り直す」分岐（レビュー指摘J）。
+// src（現在の一巡目の得点）から暫定ベスト8とコート内の番号を付け直し、既存の二巡目行
+// （sourcePlayerId で対応が取れるもの）は id・技・ゼッケン・級位段位・レンタルを保ったまま
+// 並べ直す。対応する既存行が無い src（前回の生成より後に増えた一巡目の選手）は新規に作る。
+// 対応する src が無くなった既存行（一巡目から削除された選手）は落とす。
+function reorderRound2(event, src, existing, base, unassignedCount) {
+  const bySource = Object.create(null);
+  existing.forEach(p => { if (p && p.sourcePlayerId) bySource[p.sourcePlayerId] = p; });
+
+  const finalistIds = pickFinalists(src);
+  const plain = src.filter(p => !finalistIds[p.id]).sort(compareForRound2);
+  const finals = src.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
+  const finalCourt = EventStatus.finalCourtOf(event);
+
+  const newRows = [];
+  let reused = 0;
+  function place(p, court, isFemale, finalist) {
+    const old = bySource[p.id];
+    let row;
+    if (old) {
+      reused++;
+      row = {
+        id: old.id,
+        name: p.name || '',
+        order: buildOrder(court, isFemale, 2, nextOrderNumber(base.concat(newRows), court, isFemale ? '女子' : '男子', 2)),
+        tech1: typeof old.tech1 === 'string' ? old.tech1 : '',
+        tech2: typeof old.tech2 === 'string' ? old.tech2 : '',
+        tech3: typeof old.tech3 === 'string' ? old.tech3 : '',
+        score: 0,
+        isNewFace: p.isNewFace === true,
+        isFemale: isFemale,
+        result: '',
+        sourcePlayerId: p.id,
+        rank: typeof old.rank === 'string' ? old.rank : '',
+        rental: old.rental === true
+      };
+      if (Number.isInteger(old.bib)) row.bib = old.bib;
+    } else {
+      row = buildRound2Row(base, newRows, p, court, isFemale, false);
+    }
+    if (finalist) row.finalist = true;
+    newRows.push(row);
+  }
+  plain.forEach(p => place(p, courtOf(p), p.isFemale === true, false));
+  finals.forEach(p => place(p, finalCourt, false, true));
+
+  return {
+    ok: true,
+    players: base.concat(newRows),
+    created: newRows.length - reused,
+    skipped: reused,
+    existingCount: existing.length,
+    untrackedCount: 0,
+    unassignedCount: unassignedCount,
+    finalistCount: finals.length,
+    reordered: true
   };
 }
 
@@ -2569,7 +2707,8 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
       existingCount: result.existingCount,
       untrackedCount: result.untrackedCount,
       unassignedCount: result.unassignedCount,
-      finalistCount: result.finalistCount
+      finalistCount: result.finalistCount,
+      reordered: !!result.reordered
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

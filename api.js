@@ -68,7 +68,9 @@ var Api = (function() {
     // 他のキーが混ざっていてもサーバーが無視する。
     // 戻り値: { ok: true, event: { id, name, date, venue, updatedAt, settings } }
     //       | { ok: false, status: HTTPステータス, reason, error }（400 / 404 / 409。
-    //         409 の reason は 'locked'）
+    //         409 の reason は 'locked'。400 の reason は決戦コートの名前を変えるときだけ
+    //         'finale_exists'（決戦の行がすでにある）/ 'court_conflict'（通常のコートと
+    //         同じ名前）が入ることがある。レビュー指摘B・C）
     //       | null（通信そのものの失敗）
     try {
       var res = await fetch('/api/events/' + eventId, {
@@ -144,24 +146,29 @@ var Api = (function() {
     }
   }
 
-  async function changeStatus(eventId, to) {
+  async function changeStatus(eventId, to, opts) {
     // POST /api/events/:eventId/status
-    // Body: { to: 'round1' }
+    // Body: { to: 'round1', force: true }
     // 戻り値: { ok: true, status: 新しい状態, round2: 生成の結果 | null }
     //       | { ok: false, status: HTTPステータス, reason, error }（400 / 404 / 409）
     //       | null（通信そのものの失敗）
     // 409 の reason は 'transition' | 'empty' | 'no_round2' | 'no_finale' |
-    //   'finale_pending' | 'generate_failed'。画面はこれで「読み直す」「先に決戦を開始する」
-    //   などの次の行動を出し分けるので、error だけでなく reason も返す（他の API と違って
+    //   'finale_pending' | 'generate_failed' | 'exists'（round1 → round1_done で追跡できない
+    //   二巡目の行がある。opts.force: true で再送すると越えられる。レビュー指摘A）。
+    //   画面はこれで「読み直す」「先に決戦を開始する」「force で確認して進む」などの
+    //   次の行動を出し分けるので、error だけでなく reason も返す（他の API と違って
     //   ok:false に理由を載せるのはこのため）。
     // round2 は round1 → round1_done のときだけ入る
-    //   { created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount }。
-    //   サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
+    //   { created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount,
+    //     reordered }。サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
+    //   reordered: true は、誰も採点していなかったため暫定ベスト8と番号を現在の
+    //   一巡目の得点から付け直したことを表す（レビュー指摘J）。
+    // opts.force: true を渡すと、追跡できない二巡目の行があっても確認済みとして進める。
     try {
       var res = await fetch('/api/events/' + eventId + '/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: to })
+        body: JSON.stringify({ to: to, force: !!(opts && opts.force) })
       });
       if (!res.ok) {
         var errJson = null;
@@ -171,7 +178,11 @@ var Api = (function() {
           status: res.status,
           reason: (errJson && errJson.reason) || '',
           error: (errJson && errJson.error) ||
-                 ('サーバーがエラーを返しました（' + res.status + '）')
+                 ('サーバーがエラーを返しました（' + res.status + '）'),
+          // reason: 'exists' のときだけ意味を持つ（Courts.nextRoundConflictMessage に渡す）。
+          existingCount: (errJson && errJson.existingCount) || 0,
+          untrackedCount: (errJson && errJson.untrackedCount) || 0,
+          unassignedCount: (errJson && errJson.unassignedCount) || 0
         };
       }
       var json = await res.json();
@@ -434,7 +445,10 @@ var Api = (function() {
   async function generateNextRound(eventId, force) {
     // POST /api/events/:eventId/rounds/2/generate
     // 戻り値:
-    //   { success: true, created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount }
+    //   { success: true, created, skipped, existingCount, untrackedCount, unassignedCount,
+    //     finalistCount, reordered }
+    //     reordered: true は、誰も採点していなかったため暫定ベスト8と番号を現在の
+    //       一巡目の得点から付け直したことを表す（レビュー指摘J）
     //     created: 新規に作った二巡目行数
     //     skipped: source（order が解析できる一巡目）のうち既に二巡目行を生成済みだった人数
     //              （force での差分追加時に意味を持つ。それ以外は 0）
@@ -637,7 +651,9 @@ var Api = (function() {
   async function loadRanking(eventId) {
     // GET /api/events/:eventId/ranking
     // 戻り値: { event: { name, date, venue, updatedAt },
-    //          rankings: { male: [{ rank, name, score }], female: [...], newFace: [...] } }
+    //          rankings: { male: [{ rank, name, score }], female: [...], newFace: [...] },
+    //          finale: { court, status, rows: [{ name, order, r1, r2, total, scored, rank }] }
+    //                  | null（決戦の行が無ければ null。設計書 2026-09-22） }
     //       | null（400/404/通信失敗）
     try {
       var res = await fetch('/api/events/' + eventId + '/ranking');
