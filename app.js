@@ -508,17 +508,26 @@ var App = (function() {
       removeStaleRescuedOptions('');
       return;
     }
-    var loaded = await Api.loadEvent(eventId);
+    // 404（大会が削除されている）と通信断を区別する（運営画面 desk.js / admin.js の
+    // 大会読み込みと同じ出し分け）。404 だけ控え（Route・localStorage）を消して
+    // 未選択状態まで戻す。通信断は控えを残し、今の画面もそのまま保つ（再送・再読み込みで
+    // 直る見込みがあるものを、勝手に「削除された」扱いにしないため）。
+    var evResult = await Api.loadEventResult(eventId);
     if (seq !== loadSeq) return;   // 追い越された。古い応答は捨てる
-    if (!loaded) {
-      // 復元しようとした大会が既に削除されている。
-      // 前の大会の選手や得点が画面に残らないよう、未選択状態まで戻す。
-      currentEvent = null;
-      document.getElementById('eventSelect').value = '';
-      await onEventSelect('');
+    if (!evResult.ok) {
+      if (evResult.status === 404) {
+        // 復元しようとした大会が既に削除されている。
+        // 前の大会の選手や得点が画面に残らないよう、未選択状態まで戻す。
+        alert('この大会は削除されています');
+        currentEvent = null;
+        document.getElementById('eventSelect').value = '';
+        await onEventSelect('');
+      } else {
+        alert('大会データを取得できませんでした。通信を確認してください。');
+      }
       return;
     }
-    adoptEvent(loaded);
+    adoptEvent(evResult.event);
     ensureEventOption(currentEvent);
     removeStaleRescuedOptions(currentEvent.id);   // 前の大会の救済分は残さない
     if (court !== undefined) currentCourt = court;
