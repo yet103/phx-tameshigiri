@@ -233,6 +233,38 @@ function isValidCourt(court) {
          court.indexOf('-') === -1 && court !== '未分類';
 }
 
+// コート一覧（大会の settings.courts）の検証。courts.js の Courts.validateCourtList と同じ規則
+// （個々の名前は isValidCourt と同じ。重複なし・最大20件）。
+// 戻り値: エラー文字列 or null（妥当。validateTechniques と同じ規則）。
+function validateCourtList(list) {
+  if (!Array.isArray(list)) return 'コート一覧の形式が不正です';
+  if (list.length > 20) return 'コートは20件までです';
+  const seen = Object.create(null);   // コート名が '__proto__' などでも壊れないように
+  for (let i = 0; i < list.length; i++) {
+    const name = list[i];
+    if (!isValidCourt(name)) return 'コート名「' + name + '」は使えません';
+    if (seen[name]) return 'コート名「' + name + '」が重複しています';
+    seen[name] = true;
+  }
+  return null;
+}
+
+// コピー・バンドル取り込みで settings.courts を写すときの寛容な取り込み。
+// 取り込み系 API（バンドル・インポート）は他の項目（bib・rank など）も不正値を
+// 400 にはせず黙って落とすので、courts も同じ流儀に合わせる（コピーは自分自身のデータ
+// なので常に妥当なはずだが、念のため同じ関数を通す）。
+function sanitizeCourtList(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = Object.create(null);
+  const out = [];
+  list.forEach(function(c) {
+    if (!isValidCourt(c) || seen[c]) return;
+    seen[c] = true;
+    out.push(c);
+  });
+  return out.slice(0, 20);
+}
+
 // 同一の コート×性別×巡目 における次の番号。該当が無ければ 1。
 // 件数+1 ではなく最大+1 を使う（削除で欠番があっても衝突しない）。
 function nextOrderNumber(players, court, gender, round) {
@@ -426,7 +458,9 @@ app.get('/api/events', (req, res) => {
         // ファイルに status が無ければ選手から推定する（ファイルには書かない）
         status: EventStatus.of(data),
         updatedAt: data.updatedAt,
-        createdAt: data.createdAt
+        createdAt: data.createdAt,
+        // テスト大会の印（既定 false。設計書「テスト大会」。一覧では既定非表示にするための印）
+        test: data.test === true
       };
     });
     // updatedAt 降順ソート
@@ -452,6 +486,8 @@ app.get('/api/events/:id', (req, res) => {
     data.techniques = effectiveTechniques(data);
     // 状態も応答にだけ足す。status を持たない大会は選手から推定した値を返す。
     data.status = EventStatus.of(data);
+    // テスト大会の印（既定 false。ファイルに無ければ false のまま返す）。
+    data.test = data.test === true;
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -485,6 +521,9 @@ app.post('/api/events', (req, res) => {
     // ここで推定値を書き込んでしまうと、「status の無い大会」という区別が消え、
     // 以後は常にこの POST 時点の推定値に固定されてしまう。新規作成のときだけ draft。
     delete event.status;
+    // test（テスト大会の印）も同じ理由でこの経路では変えない。body に入っていても捨て、
+    // 既存の大会が test:true を持っていればそのまま引き継ぐ（テンプレート API だけが true にする）。
+    delete event.test;
     if (!fs.existsSync(eventPath)) {
       event.status = 'draft';
     } else {
@@ -495,6 +534,7 @@ app.post('/api/events', (req, res) => {
         if (EventStatus.STATES.indexOf(prevForStatus.status) !== -1) {
           event.status = prevForStatus.status;
         }
+        if (prevForStatus.test === true) event.test = true;
       } catch (e) {
         // 壊れた既存ファイルは上書きを止めない（status も付けない）
       }
@@ -576,12 +616,19 @@ app.patch('/api/events/:id', (req, res) => {
     // 長さの上限は POST /api/events/:id/copy と同じ
     if (typeof body.date === 'string') event.date = body.date.slice(0, 20);
     if (typeof body.venue === 'string') event.venue = body.venue.slice(0, 100);
-    // settings（ゼッケン・級位段位の必須。設計書「選手の追加項目」）。
-    // { requireBib, requireRank } の真偽値だけを取り出す（他のキーは無視。真偽値でなければ false）。
+    // settings（ゼッケン・級位段位の必須。設計書「選手の追加項目」。courts はコート一覧。
+    // 設計書「コート一覧」）。{ requireBib, requireRank } の真偽値だけを取り出す
+    // （他のキーは無視。真偽値でなければ false）。courts は不正なら 400 で断り、何も保存しない。
     if (body.settings !== undefined) {
       const s = (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings))
         ? body.settings : {};
-      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true };
+      let courts = [];
+      if (s.courts !== undefined) {
+        const courtsErr = validateCourtList(s.courts);
+        if (courtsErr) return res.status(400).json({ error: courtsErr });
+        courts = s.courts.slice();
+      }
+      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courts };
     }
 
     event.updatedAt = new Date().toISOString();
@@ -696,15 +743,138 @@ app.post('/api/events/:id/copy', (req, res) => {
       techniques: cloneTechniques(effectiveTechniques(src)),
       players: players
     };
-    // settings（ゼッケン・級位段位の必須）。無い大会（この機能より前に作られた大会）からは複製しない。
+    // settings（ゼッケン・級位段位の必須・コート一覧）。無い大会（この機能より前に作られた大会）
+    // からは複製しない。test（テスト大会の印）は写さない（コピー先は本物として扱う。
+    // event に test を持たせないことで既定の false のまま。設計書「テスト大会」）。
     if (src.settings && typeof src.settings === 'object' && !Array.isArray(src.settings)) {
-      event.settings = { requireBib: src.settings.requireBib === true, requireRank: src.settings.requireRank === true };
+      event.settings = {
+        requireBib: src.settings.requireBib === true,
+        requireRank: src.settings.requireRank === true,
+        courts: sanitizeCourtList(src.settings.courts)
+      };
     }
     writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
     res.status(201).json({ success: true, id: id, playerCount: players.length });
   } catch (err) {
     console.error('大会のコピーに失敗:', err);
     res.status(500).json({ error: '大会のコピーに失敗しました' });
+  }
+});
+
+// ── テンプレートから大会を作成（トップの「新規作成」） ──
+// 設計書 2026-09-21-home-launcher-design.md「テンプレートから作成」。
+// courts は雛形として渡す固定の一覧なので isValidCourt を通す必要はない（内部データ）。
+const TEMPLATE_SPECS = {
+  practice: { courts: ['稽古'], requireBib: false },
+  tournament: { courts: ['A', 'B'], requireBib: true },
+  systest: { courts: ['A', 'B'], requireBib: true }
+};
+
+// systest のダミー選手20名の技3つ。雛形の技リストを先頭から順に回す共有カーソルを
+// 呼び出しをまたいで進めながら選ぶ（「技は雛形から3つずつ順に」）。
+//   ・末尾が (男)/(女) で、その選手の性別と逆の技は飛ばす
+//   ・repeatable でない技をその選手にもう入れていたら飛ばす（2回入れない）
+//   ・採用するのは接尾辞を外した表示名（性別の接尾辞付きの技は接尾辞なしの名前で）
+// 技が極端に少ない雛形でも無限ループにならないよう、探索回数に上限を付ける。
+function buildSystestTechPicker(techniques) {
+  const list = (techniques || []).filter(t => t && typeof t.name === 'string' && t.name);
+  let cursor = 0;
+  return function(isFemale) {
+    const picked = [];
+    const usedDisplay = Object.create(null);   // 表示名が '__proto__' などでも壊れないように
+    if (list.length === 0) return ['', '', ''];
+    const otherSuffix = isFemale ? '(男)' : '(女)';
+    let guard = 0;
+    while (picked.length < 3 && guard < list.length * 4) {
+      guard++;
+      const t = list[cursor % list.length];
+      cursor++;
+      if (t.name.slice(-3) === otherSuffix) continue;   // 別の性別専用の技は飛ばす
+      const display = stripGenderSuffix(t.name);
+      if (!display) continue;
+      if (Object.prototype.hasOwnProperty.call(usedDisplay, display) && t.repeatable !== true) continue;
+      usedDisplay[display] = true;
+      picked.push(display);
+    }
+    while (picked.length < 3) picked.push('');   // 技が足りない雛形でも落ちない保険
+    return picked;
+  };
+}
+
+// systest のダミー選手20名（男子01〜10・女子01〜10）。コート A・B に交互、bib は1〜20の連番。
+function buildSystestPlayers(techniques) {
+  const pickTechs = buildSystestTechPicker(techniques);
+  const courts = ['A', 'B'];
+  const numberInCourt = { A: { 男子: 0, 女子: 0 }, B: { 男子: 0, 女子: 0 } };
+  const players = [];
+  let bib = 0;
+  [false, true].forEach(function(isFemale) {
+    const label = isFemale ? '女子' : '男子';
+    for (let i = 1; i <= 10; i++) {
+      const court = courts[(i - 1) % 2];   // 奇数番目→A、偶数番目→B（交互）
+      numberInCourt[court][label]++;
+      bib++;
+      const techs = pickTechs(isFemale);
+      players.push({
+        id: generateId(),
+        name: label + String(i).padStart(2, '0'),
+        order: buildOrder(court, isFemale, 1, numberInCourt[court][label]),
+        tech1: techs[0],
+        tech2: techs[1],
+        tech3: techs[2],
+        score: 0,
+        isNewFace: false,
+        isFemale: isFemale,
+        result: '',
+        rank: '',
+        rental: false,
+        bib: bib
+      });
+    }
+  });
+  return players;
+}
+
+// POST /api/events/from-template : テンプレートから大会を作る
+app.post('/api/events/from-template', (req, res) => {
+  try {
+    const body = req.body || {};
+    const spec = TEMPLATE_SPECS[body.template];
+    if (!spec) {
+      return res.status(400).json({ error: '不明なテンプレートです' });
+    }
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length > 100) {
+      return res.status(400).json({ error: '大会名が不正です（1〜100文字）' });
+    }
+    const now = new Date().toISOString();
+    const id = generateId();
+    const techniques = cloneTechniques(readTechniques().techniques);
+
+    const event = {
+      id: id,
+      name: name,
+      date: typeof body.date === 'string' ? body.date.slice(0, 20) : '',
+      venue: typeof body.venue === 'string' ? body.venue.slice(0, 100) : '',
+      createdAt: now,
+      updatedAt: now,
+      status: 'draft',
+      techniques: techniques,
+      settings: { requireBib: spec.requireBib === true, requireRank: false, courts: spec.courts.slice() },
+      players: []
+    };
+
+    // systest だけダミー選手20名を作り、test:true を付ける（設計書「テンプレート」）。
+    if (body.template === 'systest') {
+      event.test = true;
+      event.players = buildSystestPlayers(techniques);
+    }
+
+    writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
+    res.status(201).json({ success: true, id: id, playerCount: event.players.length });
+  } catch (err) {
+    console.error('テンプレートからの大会作成に失敗:', err);
+    res.status(500).json({ error: 'テンプレートからの大会作成に失敗しました' });
   }
 });
 
@@ -1799,9 +1969,14 @@ app.get('/api/events/:id/bundle', (req, res) => {
       },
       history: entries
     };
-    // settings（ゼッケン・級位段位の必須）。無い大会（古いバンドル）は書き出さない。
+    // settings（ゼッケン・級位段位の必須・コート一覧）。無い大会（古いバンドル）は書き出さない。
+    // test（テスト大会の印）はここに含めない＝書き出さない（設計書「テスト大会」）。
     if (event.settings && typeof event.settings === 'object' && !Array.isArray(event.settings)) {
-      bundle.event.settings = { requireBib: event.settings.requireBib === true, requireRank: event.settings.requireRank === true };
+      bundle.event.settings = {
+        requireBib: event.settings.requireBib === true,
+        requireRank: event.settings.requireRank === true,
+        courts: sanitizeCourtList(event.settings.courts)
+      };
     }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     // RFC 5987 の attr-char は英数字と一部の記号だけで、' ( ) * は含まれない。
@@ -1949,9 +2124,15 @@ app.post('/api/events/import', (req, res) => {
       techniques: techniques,
       players: players
     };
-    // settings（ゼッケン・級位段位の必須）。無いバンドル（古いバンドル）は付けない。
+    // settings（ゼッケン・級位段位の必須・コート一覧）。無いバンドル（古いバンドル）は付けない。
+    // test は bundle.event に無い（書き出していない）ので、この event には常に付かない
+    // ＝取り込み先は必ず false（設計書「テスト大会」バンドルの取り込みも false）。
     if (src.settings && typeof src.settings === 'object' && !Array.isArray(src.settings)) {
-      event.settings = { requireBib: src.settings.requireBib === true, requireRank: src.settings.requireRank === true };
+      event.settings = {
+        requireBib: src.settings.requireBib === true,
+        requireRank: src.settings.requireRank === true,
+        courts: sanitizeCourtList(src.settings.courts)
+      };
     }
 
     // 履歴はオブジェクトの要素だけ通す。キーが '__proto__' でもプロトタイプを汚さないよう

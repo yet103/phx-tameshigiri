@@ -376,16 +376,31 @@
     var stEvent = await Api.saveEvent({ name: 'settingsテスト', date: '2026-09-19', venue: '', players: [] });
     var stRes = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: true, requireRank: true, other: 'x' } });
     assert('PATCH: settings の真偽値だけを保存する（他のキーは無視）',
-      stRes.event.settings, { requireBib: true, requireRank: true });
+      stRes.event.settings, { requireBib: true, requireRank: true, courts: [] });
     assert('PATCH: 保存した settings が大会に残る',
-      (await Api.loadEvent(stEvent.id)).settings, { requireBib: true, requireRank: true });
+      (await Api.loadEvent(stEvent.id)).settings, { requireBib: true, requireRank: true, courts: [] });
     var stResBad = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: 'yes' } });
-    assert('PATCH: 真偽値でない値は false 扱い', stResBad.event.settings, { requireBib: false, requireRank: false });
+    assert('PATCH: 真偽値でない値は false 扱い', stResBad.event.settings, { requireBib: false, requireRank: false, courts: [] });
+
+    // settings.courts（コート一覧。設計書「コート一覧」。検証は Courts.validateCourtList と同じ規則）
+    var stCourtsOk = await Api.updateEventInfo(stEvent.id, { settings: { courts: ['A', 'B', '稽古'] } });
+    assert('PATCH: courts を保存する', stCourtsOk.event.settings.courts, ['A', 'B', '稽古']);
+    var stCourtsDup = await Api.updateEventInfo(stEvent.id, { settings: { courts: ['A', 'A'] } });
+    assert('PATCH: courts の重複は400', stCourtsDup.ok, false);
+    assert('PATCH: courts の重複エラー文言', stCourtsDup.error, 'コート名「A」が重複しています');
+    var stCourtsHyphen = await Api.updateEventInfo(stEvent.id, { settings: { courts: ['A-1'] } });
+    assert('PATCH: ハイフンを含むコート名は400', stCourtsHyphen.error, 'コート名「A-1」は使えません');
+    var stMany21 = [];
+    for (var mci = 0; mci < 21; mci++) stMany21.push('c' + mci);
+    var stCourts21 = await Api.updateEventInfo(stEvent.id, { settings: { courts: stMany21 } });
+    assert('PATCH: 21件は400', stCourts21.error, 'コートは20件までです');
+    assert('PATCH: 400のあとも courts は変わらない（保存されない）',
+      (await Api.loadEvent(stEvent.id)).settings.courts, ['A', 'B', '稽古']);
     await Api.deleteEvent(stEvent.id);
 
     // コピー・バンドルの往復・二巡目複製（settings・drawn・bib・rank・rental）
     var pcSrc = await Api.saveEvent({ name: '追加項目コピー元', date: '2026-09-19', venue: '', players: [] });
-    await Api.updateEventInfo(pcSrc.id, { settings: { requireBib: true, requireRank: false } });
+    await Api.updateEventInfo(pcSrc.id, { settings: { requireBib: true, requireRank: false, courts: ['A', 'B'] } });
     await Api.saveEventTechniques(pcSrc.id, [{ name: 'コピー抜刀技', strikes: [1, null, null, null], drawn: true }]);
     var pcBulk = await Api.createPlayersBulk(pcSrc.id, { rows: [
       { name: '複製 一郎', court: 'A', bib: 21, rank: '弐段', rental: true, tech1: 'コピー抜刀技' }
@@ -393,7 +408,8 @@
 
     var pcRes = await Api.copyEvent(pcSrc.id, { name: '追加項目コピー先', date: '2026-09-20', venue: '', withPlayers: true });
     var pcNew = await Api.loadEvent(pcRes.id);
-    assert('copyEvent: settings を複製する', pcNew.settings, { requireBib: true, requireRank: false });
+    assert('copyEvent: settings（courts を含む）を複製する', pcNew.settings, { requireBib: true, requireRank: false, courts: ['A', 'B'] });
+    assert('copyEvent: test は写さない（false）', pcNew.test, false);
     assert('copyEvent: techniques の drawn を複製する', pcNew.techniques[0].drawn, true);
     assert('copyEvent: withPlayers で bib/rank/rental を複製する',
       [pcNew.players[0].bib, pcNew.players[0].rank, pcNew.players[0].rental], [21, '弐段', true]);
@@ -422,19 +438,106 @@
     assert('PATCH: bib を元の21に戻せる', pcRevertBib.ok, true);
 
     var pcBundle = JSON.parse(await Api.exportBundle(pcSrc.id));
-    assert('bundle: settings を書き出す', pcBundle.event.settings, { requireBib: true, requireRank: false });
+    assert('bundle: settings（courts を含む）を書き出す', pcBundle.event.settings, { requireBib: true, requireRank: false, courts: ['A', 'B'] });
+    assert('bundle: test は書き出さない', pcBundle.event.test, undefined);
     assert('bundle: 選手の bib/rank/rental を書き出す',
       [pcBundle.event.players[0].bib, pcBundle.event.players[0].rank, pcBundle.event.players[0].rental],
       [21, '弐段', true]);
     var pcImportRes = await Api.importBundle(pcBundle);
     var pcImported = await Api.loadEvent(pcImportRes.id);
-    assert('importBundle: settings を復元する', pcImported.settings, { requireBib: true, requireRank: false });
+    assert('importBundle: settings（courts を含む）を復元する', pcImported.settings, { requireBib: true, requireRank: false, courts: ['A', 'B'] });
+    assert('importBundle: test は false のまま', pcImported.test, false);
     var pcImpP1 = pcImported.players.filter(function(p) { return p.name === '複製 一郎'; })[0];
     assert('importBundle: bib/rank/rental を復元する', [pcImpP1.bib, pcImpP1.rank, pcImpP1.rental], [21, '弐段', true]);
 
     await Api.deleteEvent(pcSrc.id);
     await Api.deleteEvent(pcRes.id);
     await Api.deleteEvent(pcImportRes.id);
+
+    // ---- POST /api/events/from-template（テンプレートから作成。設計書「テンプレートから作成」） ----
+    var ftBadTemplate = await Api.createFromTemplate('nope', { name: 'x' });
+    assert('from-template: 不明な template は理由を返す', ftBadTemplate && !!ftBadTemplate.error, true);
+    var ftEmptyName = await Api.createFromTemplate('practice', { name: '' });
+    assert('from-template: 空の name は理由を返す', ftEmptyName && !!ftEmptyName.error, true);
+    var ftLongName = await Api.createFromTemplate('practice', { name: 'あ'.repeat(101) });
+    assert('from-template: 101文字の name は理由を返す', ftLongName && !!ftLongName.error, true);
+
+    var ftPractice = await Api.createFromTemplate('practice', { name: '稽古用テンプレ', date: '2026-09-21', venue: '' });
+    assert('from-template practice: 成功して選手0名', ftPractice.playerCount, 0);
+    var ftPracticeEvent = await Api.loadEvent(ftPractice.id);
+    assert('from-template practice: 選手なし', ftPracticeEvent.players.length, 0);
+    assert('from-template practice: courts は稽古のみ', ftPracticeEvent.settings.courts, ['稽古']);
+    assert('from-template practice: requireBib は false', ftPracticeEvent.settings.requireBib, false);
+    assert('from-template practice: status は draft', ftPracticeEvent.status, 'draft');
+    assert('from-template practice: test ではない', ftPracticeEvent.test, false);
+    await Api.deleteEvent(ftPractice.id);
+
+    var ftTournament = await Api.createFromTemplate('tournament', { name: '大会用テンプレ', date: '2026-09-21', venue: '' });
+    var ftTournamentEvent = await Api.loadEvent(ftTournament.id);
+    assert('from-template tournament: courts は A・B', ftTournamentEvent.settings.courts, ['A', 'B']);
+    assert('from-template tournament: requireBib は true', ftTournamentEvent.settings.requireBib, true);
+    assert('from-template tournament: test ではない', ftTournamentEvent.test, false);
+    await Api.deleteEvent(ftTournament.id);
+
+    var ftSys = await Api.createFromTemplate('systest', { name: 'システムテスト用テンプレ', date: '2026-09-21', venue: '' });
+    assert('from-template systest: 20名作る', ftSys.playerCount, 20);
+    var ftSysEvent = await Api.loadEvent(ftSys.id);
+    var ftSysPlayers = ftSysEvent.players;
+    assert('from-template systest: 選手20名', ftSysPlayers.length, 20);
+    assert('from-template systest: test:true', ftSysEvent.test, true);
+    assert('from-template systest: courts は A・B', ftSysEvent.settings.courts, ['A', 'B']);
+    assert('from-template systest: 男女10名ずつ',
+      [ftSysPlayers.filter(function(p) { return !p.isFemale; }).length, ftSysPlayers.filter(function(p) { return p.isFemale; }).length],
+      [10, 10]);
+    assert('from-template systest: bib は1〜20の連番',
+      ftSysPlayers.map(function(p) { return p.bib; }).sort(function(a, b) { return a - b; }),
+      Array.from({ length: 20 }, function(_, i) { return i + 1; }));
+    assert('from-template systest: A・Bに交互（コートごとに男女5名ずつ）',
+      ['A', 'B'].map(function(c) {
+        var rows = ftSysPlayers.filter(function(p) { return Courts.courtOf(p) === c; });
+        return [rows.filter(function(p) { return !p.isFemale; }).length, rows.filter(function(p) { return p.isFemale; }).length];
+      }),
+      [[5, 5], [5, 5]]);
+    var ftSysTechNames = ftSysEvent.techniques.map(function(t) { return t.name; });
+    ftSysPlayers.forEach(function(p) {
+      [p.tech1, p.tech2, p.tech3].forEach(function(name) {
+        if (!name) return;
+        assert('from-template systest: 技「' + name + '」は雛形にある名前（接尾辞なし）',
+          ftSysTechNames.indexOf(name) !== -1 || ftSysTechNames.indexOf(name + '(男)') !== -1 || ftSysTechNames.indexOf(name + '(女)') !== -1,
+          true);
+      });
+    });
+    var ftDupBad = ftSysPlayers.filter(function(p) {
+      var names = [p.tech1, p.tech2, p.tech3].filter(function(n) { return n; });
+      var counts = {};
+      names.forEach(function(n) { counts[n] = (counts[n] || 0) + 1; });
+      return Object.keys(counts).some(function(n) {
+        if (counts[n] < 2) return false;
+        var t = ftSysEvent.techniques.filter(function(x) { return x.name === n || x.name === n + '(男)' || x.name === n + '(女)'; })[0];
+        return !(t && t.repeatable === true);
+      });
+    });
+    assert('from-template systest: repeatableでない同じ技を1人に2回入れない', ftDupBad.length, 0);
+    var ftCopyOfSys = await Api.copyEvent(ftSys.id, { name: 'systestのコピー', date: '2026-09-21', venue: '' });
+    var ftCopyOfSysEvent = await Api.loadEvent(ftCopyOfSys.id);
+    assert('from-template systest: コピー先は test を引き継がない', ftCopyOfSysEvent.test, false);
+    await Api.deleteEvent(ftCopyOfSys.id);
+    await Api.deleteEvent(ftSys.id);
+
+    // GET /api/events の各要素に test（設計書「データ」）
+    var ftListCheck = await Api.createFromTemplate('systest', { name: '一覧testバッジ確認', date: '2026-09-21', venue: '' });
+    var ftListRow = (await Api.listEvents()).filter(function(e) { return e.id === ftListCheck.id; })[0];
+    assert('GET /api/events: test を含む', ftListRow && ftListRow.test, true);
+    // POST /api/events の body の test は無視する（テンプレート API だけが true にできる）
+    var ftListCheckEvent = await Api.loadEvent(ftListCheck.id);
+    ftListCheckEvent.test = false;
+    await Api.saveEvent(ftListCheckEvent);
+    assert('POST /api/events: body の test は無視される（既存の値を保つ）', (await Api.loadEvent(ftListCheck.id)).test, true);
+    var ftNormalEvent = await Api.saveEvent({ name: '通常大会', date: '2026-09-21', venue: '', players: [] });
+    await Api.saveEvent({ id: ftNormalEvent.id, name: '通常大会', date: '2026-09-21', venue: '', test: true, players: [] });
+    assert('POST /api/events: 通常大会に body の test:true を送っても無視される', (await Api.loadEvent(ftNormalEvent.id)).test, false);
+    await Api.deleteEvent(ftNormalEvent.id);
+    await Api.deleteEvent(ftListCheck.id);
 
     // ---- CSV エクスポート・インポートの往復（ゼッケン・級位段位・レンタル） ----
     var csvExtEvent = await Api.saveEvent({ name: 'CSV追加項目テスト', date: '2026-09-19', venue: '', players: [] });

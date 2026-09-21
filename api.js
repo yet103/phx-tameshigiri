@@ -123,6 +123,26 @@ var Api = (function() {
     }
   }
 
+  async function createFromTemplate(template, data) {
+    // POST /api/events/from-template
+    // Body: { template: 'practice' | 'tournament' | 'systest', name, date, venue }
+    // 戻り値: { id, playerCount } | { error }（400: 理由をダイアログに出す） | null（通信失敗）
+    // systest だけダミー選手20名を作り test:true が付く（設計書「テンプレートから作成」）。
+    try {
+      var body = Object.assign({ template: template }, data || {});
+      var res = await fetch('/api/events/from-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) return { error: await readErrorMessage(res) };
+      var json = await res.json();
+      return { id: json.id, playerCount: json.playerCount || 0 };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function changeStatus(eventId, to) {
     // POST /api/events/:eventId/status
     // Body: { to: 'round1' }
@@ -682,6 +702,7 @@ var Api = (function() {
     updateEventInfo: updateEventInfo,
     deleteEvent: deleteEvent,
     copyEvent: copyEvent,
+    createFromTemplate: createFromTemplate,
     changeStatus: changeStatus,
     updatePlayer: updatePlayer,
     createPlayer: createPlayer,
