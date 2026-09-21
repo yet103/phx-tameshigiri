@@ -2044,6 +2044,14 @@ app.get('/api/events/:id/bundle', (req, res) => {
         courts: sanitizeCourtList(event.settings.courts)
       };
     }
+    // status（大会の状態）。status を持たない大会（この機能より前に作られた・取り込んだ大会）は
+    // 書き出さない＝取り込み側は従来どおり選手から推定する。EventStatus.of の推定値を書いて
+    // しまうと、取り込み先が「status を持つ大会」に変わり、以後推定し直さなくなってしまう
+    // （POST /api/events が推定値を書き込まない理由と同じ）。
+    // final/archived を含め生の値をそのまま書く（取り込み側でロックが効くようにするため）。
+    if (EventStatus.STATES.indexOf(event.status) !== -1) {
+      bundle.event.status = event.status;
+    }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     // RFC 5987 の attr-char は英数字と一部の記号だけで、' ( ) * は含まれない。
     // encodeURIComponent はこの4文字をエスケープせずに残すため、追加で %XX にする。
@@ -2199,6 +2207,12 @@ app.post('/api/events/import', (req, res) => {
         requireRank: src.settings.requireRank === true,
         courts: sanitizeCourtList(src.settings.courts)
       };
+    }
+    // status（大会の状態）。STATES にある値ならそのまま採用する（final/archived を含む。
+    // 取り込み後もロックが効くようにするため）。無い・不正なバンドル（古いバンドル）は
+    // 付けない＝従来どおり EventStatus.of が選手から推定する。
+    if (EventStatus.STATES.indexOf(src.status) !== -1) {
+      event.status = src.status;
     }
 
     // 履歴はオブジェクトの要素だけ通す。キーが '__proto__' でもプロトタイプを汚さないよう
