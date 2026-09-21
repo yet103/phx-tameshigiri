@@ -292,6 +292,21 @@ var App = (function() {
     return !!currentEvent && EventStatus.isScoringOpen(currentStatus());
   }
 
+  // いま開いている選手のコート。選手がいなければコート選択の値。
+  function currentCourtName() {
+    var p = visiblePlayers[currentIndex];
+    return p ? Courts.courtOf(p) : currentCourt;
+  }
+
+  // いま開いている選手を採点してよいか。状態が採点できることに加えて、
+  // 決戦のコート制限（EventStatus.scoringCourtFilter）も見る。
+  //   二巡目 進行中 … 決戦コートは「決戦を開始」の後
+  //   決戦 進行中   … 決戦コート以外は斬り終わっている
+  function scoringOpenHere() {
+    if (!scoringOpen()) return false;
+    return EventStatus.isCourtScorable(currentStatus(), currentEvent, currentCourtName());
+  }
+
   // 大会選択バーの下の状態バナー。採点できるかどうかと、できないときの次の手を出す。
   function renderStatusBanner() {
     var el = document.getElementById('statusBanner');
@@ -300,6 +315,14 @@ var App = (function() {
     var st = currentStatus();
     el.hidden = false;
     if (EventStatus.isScoringOpen(st)) {
+      if (!scoringOpenHere()) {
+        // 状態は採点できるが、このコートは今は採点できない（決戦のコート制限）
+        el.className = 'status-banner closed';
+        el.textContent = (st === 'round2')
+          ? '決戦コートは「決戦を開始」の後に採点します'
+          : '決戦 進行中。採点できるのは決戦コートだけです';
+        return;
+      }
       el.className = 'status-banner open';
       el.textContent = EventStatus.LABELS[st];
       return;
@@ -328,7 +351,7 @@ var App = (function() {
   }
 
   function applyScoringLock() {
-    var locked = !!currentEvent && !scoringOpen();
+    var locked = !!currentEvent && !scoringOpenHere();
     // 確定済みは「採点できる状態」のまま入力だけ止める。確定ボタンは押せる（取り消しのトグル）。
     var frozen = locked || currentConfirmed();
     document.body.classList.toggle('scoring-locked', locked);
@@ -552,7 +575,7 @@ var App = (function() {
   // 採点できない状態や、まだ何も入れていない選手では聞かない。戻り値 true なら移動してよい。
   function confirmLeave() {
     var p = visiblePlayers[currentIndex];
-    if (!p || !scoringOpen() || p.confirmed) return true;
+    if (!p || !scoringOpenHere() || p.confirmed) return true;
     if (!gridEdited && !Courts.isScored(p)) return true;
     return confirm('この選手の採点がまだ確定されていません。確定せずに移動しますか？');
   }
@@ -576,6 +599,10 @@ var App = (function() {
     // ここで別に送ると同じ内容の書き込みが二重になるので送らない。
     if (changed) resetTimer();
     updatePlayerList();
+    // 全コート表示（currentCourt が空）では選手ごとにコートが変わりうるので、
+    // バナーとロックを見直す（決戦コートの制限は選手のコートで決まる）。
+    renderStatusBanner();
+    applyScoringLock();
     // 別の選手を開いたら、他端末（運営画面や別コートの端末）の書き込みを取りに行く。
     // 通信は待たない。届いたら refreshFromServer が画面を作り直す。
     if (changed) refreshFromServer();
@@ -644,6 +671,18 @@ var App = (function() {
       playerOrderLabel.textContent = (p.order || '') + bib;
     }
     playerNameLabel.textContent = p.name || '';
+
+    // 決戦 進行中は、決戦の何人目かを順番の右に添える（設計書「採点画面」）。
+    if (currentStatus() === 'round2_final' && p.finalist === true) {
+      var fin = Courts.finalists(players);
+      var at = 0;
+      for (var fi = 0; fi < fin.length; fi++) {
+        if (fin[fi].id === p.id) { at = fi + 1; break; }
+      }
+      if (at > 0) {
+        playerOrderLabel.textContent += '　決戦 ' + at + '/' + fin.length;
+      }
+    }
   }
 
   // --- スコアグリッド描画 ---
@@ -1083,7 +1122,7 @@ var App = (function() {
   }
 
   function openNotePresetSheet() {
-    if (!scoringOpen()) return;   // ボタンは無効化してあるが、念のため
+    if (!scoringOpenHere()) return;   // ボタンは無効化してあるが、念のため
     closeNotePresetSheet();
 
     var overlay = document.createElement('div');
@@ -1185,7 +1224,7 @@ var App = (function() {
   var STRIKE_LABELS = ['初太刀', '二ノ太刀', '三ノ太刀', '四ノ太刀'];
 
   function onStrikeClick(e) {
-    if (!scoringOpen()) return;   // 採点できない状態（理由はバナーに出ている）
+    if (!scoringOpenHere()) return;   // 採点できない状態（理由はバナーに出ている）
     if (currentConfirmed()) return;   // 確定済みは触れない（確定済みボタンで取り消してから）
     var td = e.currentTarget;
     if (td.classList.contains('disabled') || td.classList.contains('voided')) return;

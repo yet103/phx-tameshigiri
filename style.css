@@ -330,6 +330,7 @@ input[type="file"] { display: none; }
 .status-banner {
   padding: 8px 12px;
   font-size: 14px;
+  line-height: 1.4;   /* 決戦の注意文が2行になっても詰まらないように */
   border-bottom: 1px solid var(--border);
 }
 .status-banner.open { background: var(--bg-secondary); color: var(--text-muted); }
