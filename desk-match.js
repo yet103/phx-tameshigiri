@@ -35,10 +35,12 @@
 
     container.appendChild(buildHead(ctx));
     container.appendChild(buildCourts(st, ctx));
-    // 準備中・一巡目 進行中は二巡目の話をまだしない（生成もできない）。
+    // 準備中・一巡目 進行中は二巡目の話をまだしない（形はサーバーが一巡目終了で作る）。
     if (st !== 'draft' && st !== 'round1') {
       container.appendChild(buildRound2(st, ctx));
     }
+    // 決戦 進行中のときだけ、コートのカードの下に暫定順位を出す（非同期。あとから差し込む）。
+    if (st === 'round2_final') renderFinaleTable(container, ctx);
   }
 
   function buildHead(ctx) {
@@ -136,6 +138,48 @@
       return wrap;
     }
 
+    var finalCourt = Courts.finalCourtOf(ctx.event);
+    var hasFinale = Courts.finalists(ctx.players).length > 0;
+    var plain = rows.filter(function(r) { return !hasFinale || r.court !== finalCourt; });
+    var finale = rows.filter(function(r) { return hasFinale && r.court === finalCourt; });
+
+    // 決戦 進行中は決戦のカードを先に、他コートは畳む（設計書「画面」）。
+    if (st === 'round2_final' && finale.length > 0) {
+      wrap.appendChild(buildCourtGrid(finale, ctx, round, '決戦'));
+      var others = document.createElement('details');
+      others.className = 'desk-match-others';
+      var sum = document.createElement('summary');
+      sum.textContent = '他のコート（' + plain.length + '）';
+      others.appendChild(sum);
+      others.appendChild(buildCourtGrid(plain, ctx, round, ''));
+      wrap.appendChild(others);
+      return wrap;
+    }
+
+    wrap.appendChild(buildCourtGrid(plain, ctx, round, ''));
+    if (finale.length > 0) {
+      // 二巡目 進行中は「決戦（開始前）」として別枠に置く。
+      wrap.appendChild(buildCourtGrid(finale, ctx, round, st === 'round2' ? '決戦（開始前）' : '決戦'));
+    }
+    return wrap;
+  }
+
+  // コート別カードのグリッドを1つ作る。caption が空でなければ見出しを先頭に置く。
+  function buildCourtGrid(rows, ctx, round, caption) {
+    var wrap = document.createElement('div');
+    if (caption) {
+      var h3 = document.createElement('h3');
+      h3.className = 'desk-match-caption';
+      h3.textContent = caption;
+      wrap.appendChild(h3);
+    }
+    if (rows.length === 0) {
+      var none = document.createElement('p');
+      none.className = 'desk-empty';
+      none.textContent = 'まだ選手がいません。「選手」の区画で登録してください。';
+      wrap.appendChild(none);
+      return wrap;
+    }
     var grid = document.createElement('div');
     grid.className = 'desk-match-courts';
     rows.forEach(function(r) { grid.appendChild(buildCourtCard(r, ctx, round)); });
@@ -233,6 +277,19 @@
     return (players || []).filter(function(q) { return q && q.id === p.sourcePlayerId; })[0] || null;
   }
 
+  // 二巡目の表を1つ作る（決戦とそれ以外で同じ作り）。
+  function buildRound2Table(rows, ctx, editable, techniques) {
+    var table = document.createElement('table');
+    table.className = 'desk-table desk-match-table';
+    table.innerHTML =
+      '<thead><tr><th>巡</th><th>No.</th><th>名前</th><th>一巡目</th>' +
+      '<th>技1</th><th>技2</th><th>技3</th>' + (editable ? '<th></th>' : '') + '</tr></thead>';
+    var tbody = document.createElement('tbody');
+    rows.forEach(function(p) { tbody.appendChild(buildRow(p, ctx, editable, techniques)); });
+    table.appendChild(tbody);
+    return table;
+  }
+
   function buildRound2(st, ctx) {
     var wrap = document.createElement('div');
     var editable = (st === 'round1_done');
@@ -241,57 +298,44 @@
     var head = document.createElement('div');
     head.className = 'desk-section-head';
     var h2 = document.createElement('h2');
-    h2.textContent = '二巡目';
+    // 形を直す段階（round1_done）だけ「二巡目の形登録」。それ以外は「二巡目」。
+    h2.textContent = editable ? '二巡目の形登録' : '二巡目';
     head.appendChild(h2);
     wrap.appendChild(head);
 
-    if (!editable) {
+    if (editable) {
+      var guide = document.createElement('p');
+      guide.className = 'desk-note';
+      guide.id = 'matchRound2Guide';
+      guide.textContent = '一巡目の形を初期値にしています。自己申告があれば直してください。' +
+        '試技順は一巡目の得点が低い順です。';
+      wrap.appendChild(guide);
+    } else {
       var note = document.createElement('p');
       note.className = 'desk-note';
-      note.textContent = '技を入れられるのは「一巡目終了」のときだけです（いまは「' +
-        EventStatus.LABELS[st] + '」）。直すときは上部の「戻す」で一巡目終了まで戻してください。';
+      note.textContent = '形を直せるのは「' + EventStatus.LABELS.round1_done + '」のときだけです（いまは「' +
+        EventStatus.LABELS[st] + '」）。直すときは上部の「戻す」で戻してください。';
       wrap.appendChild(note);
-    }
-
-    var bar = document.createElement('div');
-    bar.className = 'desk-match-bar';
-
-    if (editable) {
-      var btnGen = document.createElement('button');
-      btnGen.type = 'button';
-      btnGen.className = 'desk-btn primary';
-      btnGen.id = 'btnMatchGenRound2';
-      btnGen.textContent = '二巡目を生成';
-      btnGen.addEventListener('click', function() { onGenerate(ctx); });
-      bar.appendChild(btnGen);
-
-      var btnAll = document.createElement('button');
-      btnAll.type = 'button';
-      btnAll.className = 'desk-btn';
-      btnAll.id = 'btnMatchCopyAll';
-      btnAll.addEventListener('click', function() { onCopyAll(ctx); });
-      setCopyAllButton(btnAll, ctx);
-      bar.appendChild(btnAll);
     }
 
     // 二巡目の行が0件のときは「二巡目 0名　技 未入力 0」を出さない
     // （このあとの空メッセージと二重になるため）。
     if (rows.length > 0) {
+      var bar = document.createElement('div');
+      bar.className = 'desk-match-bar';
       var incomplete = rows.filter(Courts.isTechIncomplete).length;
       var count = document.createElement('span');
       count.className = 'desk-match-count' + (incomplete === 0 ? ' done' : '');
       count.id = 'matchRound2Count';
       count.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + incomplete;
       bar.appendChild(count);
+      wrap.appendChild(bar);
     }
-    if (bar.children.length > 0) wrap.appendChild(bar);
 
     if (rows.length === 0) {
       var none = document.createElement('p');
       none.className = 'desk-empty';
-      none.textContent = editable
-        ? '二巡目の選手はまだいません。「二巡目を生成」を押してください。'
-        : '二巡目の選手はいません。';
+      none.textContent = '二巡目の選手はいません。上部の「◀ 一巡目 進行中 に戻す」で一巡目に戻ると作り直せます。';
       wrap.appendChild(none);
       return wrap;
     }
@@ -307,18 +351,71 @@
       editable = false;
     }
 
+    var finalRows = Courts.finalists(ctx.players);
+    var plainRows = rows.filter(function(p) { return p.finalist !== true; });
+
+    // 決戦以外（元のコートで先に斬る）
+    wrap.appendChild(buildRound2Table(plainRows, ctx, editable, techniques));
+
+    // 決戦の区画（暫定ベスト8）。0 名なら節ごと出さない。
+    if (finalRows.length > 0) {
+      var finHead = document.createElement('div');
+      finHead.className = 'desk-section-head';
+      var finH2 = document.createElement('h2');
+      finH2.textContent = '決戦（暫定ベスト8）';
+      finHead.appendChild(finH2);
+      wrap.appendChild(finHead);
+
+      var finNote = document.createElement('p');
+      finNote.className = 'desk-note';
+      finNote.id = 'matchFinaleNote';
+      finNote.textContent = '暫定ベスト8（一般男子・一巡目の得点上位）。決戦コート「' +
+        Courts.finalCourtOf(ctx.event) + '」で最後に斬ります。';
+      wrap.appendChild(finNote);
+
+      var finWrap = document.createElement('div');
+      finWrap.className = 'desk-match-finale';
+      finWrap.appendChild(buildRound2Table(finalRows, ctx, editable, techniques));
+      wrap.appendChild(finWrap);
+    }
+
+    return wrap;
+  }
+
+  // 決戦 進行中のときだけ、コートのカードの下に暫定順位を出す。
+  // 順位はサーバーが計算する（computeRanking の finale）。ポーリングはしない
+  // （「↻ 最新に更新」で読み直す、というこの区画の方針を変えない）。
+  async function renderFinaleTable(container, ctx) {
+    var box = document.createElement('div');
+    box.className = 'desk-match-finale-rank';
+    box.textContent = '読み込み中…';
+    container.appendChild(box);
+    var data = await Api.loadRanking(ctx.eventId);
+    if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
+    if (!data || !data.finale) { box.textContent = '暫定順位を取得できませんでした。'; return; }
+    box.textContent = '';
+    var h3 = document.createElement('h3');
+    h3.className = 'desk-match-caption';
+    h3.textContent = '決戦の暫定順位';
+    box.appendChild(h3);
     var table = document.createElement('table');
-    table.className = 'desk-table desk-match-table';
-    table.innerHTML =
-      '<thead><tr><th>巡</th><th>No.</th><th>名前</th><th>一巡目</th>' +
-      '<th>技1</th><th>技2</th><th>技3</th>' + (editable ? '<th></th>' : '') + '</tr></thead>';
+    table.className = 'desk-table';
+    table.innerHTML = '<thead><tr><th>試技順</th><th>名前</th><th>一巡目</th><th>二巡目</th>' +
+      '<th>合計</th><th>暫定順位</th></tr></thead>';
     var tbody = document.createElement('tbody');
-    rows.forEach(function(p) {
-      tbody.appendChild(buildRow(p, ctx, editable, techniques));
+    data.finale.rows.forEach(function(r) {
+      var tr = document.createElement('tr');
+      tr.appendChild(cell(String(r.order), 'num'));
+      tr.appendChild(cell(r.name, 'desk-cell-main'));
+      tr.appendChild(cell(String(r.r1), 'num'));
+      tr.appendChild(cell(r.r2 === null ? '—' : String(r.r2), 'num'));
+      tr.appendChild(cell(r.scored ? String(r.total) : '—', 'num'));
+      tr.appendChild(cell(r.rank === null ? '—' : String(r.rank), 'num'));
+      if (!r.scored) tr.className = 'is-pending';
+      tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    wrap.appendChild(table);
-    return wrap;
+    box.appendChild(table);
   }
 
   function cell(text, cls) {
@@ -374,7 +471,9 @@
       btn.textContent = '一巡目の行がありません';
       btn.title = 'コピー元の一巡目の行が削除されています';
     } else {
-      btn.textContent = '一巡目と同じ技をコピー';
+      // 初期値が既に一巡目の複製なので「コピー」ではなく「戻す」（自己申告で直した後に
+      // 元へ戻したいときのため）。
+      btn.textContent = '一巡目と同じ形に戻す';
       btn.addEventListener('click', function() { onCopyRow(p, src, selects, ctx, tr); });
     }
     tdCopy.appendChild(btn);
@@ -504,18 +603,7 @@
     return true;
   }
 
-  // 「全員に一巡目と同じ技をコピー」ボタンの表示（件数と disabled）を作り直す。
-  // 対象は描画時に固定すると、手で入れた技を後から一括コピーで上書きしてしまうので、
-  // 呼ぶたびに Courts.techCopyTargets(ctx.players) を数え直す。
-  function setCopyAllButton(btn, ctx) {
-    var targets = Courts.techCopyTargets(ctx.players);
-    btn.textContent = '全員に一巡目と同じ技をコピー（' + targets.length + ' 名）';
-    btn.disabled = targets.length === 0;
-    btn.title = targets.length === 0 ? '技が空で未採点の二巡目の行がありません' : '';
-  }
-
-  // 帯の「二巡目 N名　技 未入力 n」と「全員にコピー」ボタンの件数を数え直す
-  // （表全体を描き直さずに済ませる）。
+  // 帯の「二巡目 N名　技 未入力 n」の件数を数え直す（表全体を描き直さずに済ませる）。
   function updateCount(ctx) {
     var el = document.getElementById('matchRound2Count');
     if (el) {
@@ -524,8 +612,6 @@
       el.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + n;
       el.className = 'desk-match-count' + (n === 0 ? ' done' : '');
     }
-    var btnAll = document.getElementById('btnMatchCopyAll');
-    if (btnAll) setCopyAllButton(btnAll, ctx);
   }
 
   function onTechChange(p, selects, ctx, tr) {
@@ -544,92 +630,7 @@
     }
     var ok = await saveTech(p, arr, selects, ctx, tr);
     if (ctx.isStale()) return;
-    if (ok) Desk.toast('一巡目の技をコピーしました');
-  }
-
-  // 「全員に一巡目と同じ技をコピー」。対象は Courts.techCopyTargets（技が3枠とも空で
-  // 未採点、かつコピー元の一巡目の行に技がある二巡目の行）。確認の直前に数え直す
-  // （ボタンの描画後に手で技を入れた行を、古い対象一覧で上書きしないため）。
-  // 1件ずつ PATCH を送り、失敗したらそこで止める（locked や通信断は次の行でも
-  // 同じように失敗するため、同じ alert を人数分出さない）。
-  // 最後に大会を読み直して表と件数を作り直す。
-  async function onCopyAll(ctx) {
-    var targets = Courts.techCopyTargets(ctx.players);
-    if (targets.length === 0) return;
-    if (!confirm('技が空の ' + targets.length + ' 名に、一巡目と同じ技をコピーします。\n' +
-        'よろしいですか？')) return;
-    var btn = document.getElementById('btnMatchCopyAll');
-    if (btn) btn.disabled = true;
-    var done = 0;
-    var failed = null;
-    for (var i = 0; i < targets.length; i++) {
-      var t = targets[i];
-      var res = await Api.updatePlayerInfo(ctx.eventId, t.player.id, {
-        tech1: t.source.tech1 || '', tech2: t.source.tech2 || '', tech3: t.source.tech3 || ''
-      });
-      if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
-      if (!res || !res.ok) {
-        failed = { player: t.player, res: res };
-        break;
-      }
-      done++;
-    }
-    if (failed) {
-      var why = (failed.res && failed.res.reason === 'locked')
-        ? 'この大会は最終結果を確定済みです。編集するには「戻す」を押してください。'
-        : '通信を確認してもう一度お試しください。';
-      alert(done + ' 名にコピーしました。\n' +
-        '「' + (failed.player.name || '(名称未設定)') + '」で失敗したので中断しました。\n' + why);
-    } else {
-      Desk.toast(done + ' 名に一巡目の技をコピーしました');
-    }
-    // reloadEvent が通信断で描き直せないことがあるので、分岐に置かず必ず戻す
-    // （成功時は直後の reloadEvent がボタンごと作り直すので無害。onGenerate と同じ作法）。
-    if (btn) btn.disabled = false;
-    await Desk.reloadEvent();
-  }
-
-  // --- 二巡目の生成 ---
-  // 番号規則はサーバーの生成 API が唯一の実装。クライアントは確認と再送だけを持つ。
-  // 確認文言・結果文言は courts.js（スマホ運営の試合進行タブと共通）。
-  async function onGenerate(ctx) {
-    var src = (ctx.players || []).filter(function(p) { return Courts.roundOf(p) === 1; });
-    var scored = src.filter(Courts.isScored).length;
-    if (!confirm('一巡目 採点済み ' + scored + ' / ' + src.length + '。\n' +
-        '全コート分の二巡目を作ります（採点画面にも反映されます）。\nよろしいですか？')) return;
-    var btn = document.getElementById('btnMatchGenRound2');
-    if (btn) btn.disabled = true;
-    var result = await Api.generateNextRound(ctx.eventId, false);
-    if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
-    if (btn) btn.disabled = false;
-    if (!result) {
-      alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。');
-      return;
-    }
-    if (result.blocked) {
-      if (result.reason === 'locked') {
-        alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
-        return;
-      }
-      if (result.reason === 'status') {
-        // 他の端末が先に状態を戻していた。サーバーの文言をそのまま出して読み直す。
-        alert(result.error);
-        await Desk.reloadEvent();
-        return;
-      }
-      // nextRoundConflictMessage は unscored / exists の文言しか持たない
-      if (!confirm(Courts.nextRoundConflictMessage(result, '「選手登録」の区画でコートを設定してください'))) return;
-      if (btn) btn.disabled = true;
-      result = await Api.generateNextRound(ctx.eventId, true);
-      if (ctx.isStale()) return;
-      if (btn) btn.disabled = false;
-      if (!result || result.blocked) {
-        alert('二巡目を生成できませんでした。一巡目の選手が登録されているか、通信を確認してください。');
-        return;
-      }
-    }
-    Desk.toast(Courts.nextRoundResultMessage(result));
-    await Desk.reloadEvent();
+    if (ok) Desk.toast('一巡目と同じ形に戻しました');
   }
 
   Desk.registerTab('match', { render: render });
