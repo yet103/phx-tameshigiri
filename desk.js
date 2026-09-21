@@ -379,6 +379,16 @@ var Desk = (function() {
     var seq = renderSeq;
     setStageButtonsDisabled(true);
     var res = await Api.changeStatus(eventId, to);
+    // 追跡できない（CSV 由来の）二巡目の行が既にあると、一巡目終了は 409 exists で
+    // いったん止まる。確認して承諾されたら force で再送する（レビュー指摘A）。
+    if (res && !res.ok && res.reason === 'exists' && from === 'round1' && to === 'round1_done') {
+      if (seq !== renderSeq || selectedEventId !== eventId) { setStageButtonsDisabled(false); return; }
+      if (!confirm(Courts.nextRoundConflictMessage(res, '選手登録でコートを設定してください'))) {
+        setStageButtonsDisabled(false);
+        return;
+      }
+      res = await Api.changeStatus(eventId, to, { force: true });
+    }
     if (seq !== renderSeq || selectedEventId !== eventId) return;   // 通信中に画面を離れた
     // 成功しても reloadEvent が通信断で描き直せないことがあるので、分岐に置かず
     // ここで必ず戻す（成功時は直後の reloadEvent が帯ごと作り直すので無害）。
@@ -398,9 +408,16 @@ var Desk = (function() {
       }
       return;
     }
-    toast(EventStatus.LABELS[to] + ' にしました' +
-      (res.round2 ? '（二巡目 ' + res.round2.created + ' 名分作りました' +
-        (res.round2.finalistCount > 0 ? '・決戦 ' + res.round2.finalistCount + ' 名）' : '）') : ''));
+    // 二巡目 0 名分のときは何も作っていないので「作りました」を出さない（レビュー指摘I）。
+    var toastMsg = EventStatus.LABELS[to] + ' にしました';
+    if (res.round2 && res.round2.created > 0) {
+      toastMsg += '（二巡目 ' + res.round2.created + ' 名分作りました' +
+        (res.round2.finalistCount > 0 ? '・決戦 ' + res.round2.finalistCount + ' 名）' : '）');
+    }
+    if (res.round2 && res.round2.untrackedCount > 0) {
+      toastMsg += '（追跡できない二巡目の行が' + res.round2.untrackedCount + '件あります）';
+    }
+    toast(toastMsg);
     // 試合開始に成功したら、コート端末で使う採点画面を別ウィンドウで開く
     if (from === 'draft' && to === 'round1') openScoring(eventId, '');
     // 一巡目を終了したら、形を直す画面（試合進行）へ自動で移る（設計書の決定）

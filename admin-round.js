@@ -61,6 +61,13 @@ var AdminRound = (function() {
     if (!confirm(Courts.statusConfirmMessage(from, to, ctx.players))) return;
     var res = await Api.changeStatus(ctx.eventId, to);
     if (ctx.isStale()) return;   // 通信中に大会やタブを切り替えられた
+    // 追跡できない（CSV 由来の）二巡目の行が既にあると、一巡目終了は 409 exists で
+    // いったん止まる。確認して承諾されたら force で再送する（レビュー指摘A）。
+    if (res && !res.ok && res.reason === 'exists' && from === 'round1' && to === 'round1_done') {
+      if (!confirm(Courts.nextRoundConflictMessage(res, '選手の区画でコートを設定してください'))) return;
+      res = await Api.changeStatus(ctx.eventId, to, { force: true });
+      if (ctx.isStale()) return;
+    }
     if (!res) {
       alert('状態を変えられませんでした。通信を確認してください。');
       return;
@@ -76,8 +83,14 @@ var AdminRound = (function() {
       }
       return;
     }
-    Admin.toast(EventStatus.LABELS[to] + ' にしました' +
-      (res.round2 ? '（二巡目 ' + res.round2.created + ' 名／決戦 ' + res.round2.finalistCount + ' 名）' : ''));
+    var toastMsg = EventStatus.LABELS[to] + ' にしました';
+    if (res.round2 && res.round2.created > 0) {
+      toastMsg += '（二巡目 ' + res.round2.created + ' 名／決戦 ' + res.round2.finalistCount + ' 名）';
+    }
+    if (res.round2 && res.round2.untrackedCount > 0) {
+      toastMsg += '（追跡できない二巡目の行が' + res.round2.untrackedCount + '件あります）';
+    }
+    Admin.toast(toastMsg);
     await Admin.reloadEvent();
   }
 
