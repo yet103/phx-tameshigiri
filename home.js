@@ -327,13 +327,186 @@ var Home = (function() {
     });
   }
 
-  // Task B6 で中身を入れる。
+  var newFieldSeq = 0;
+
+  function addField(form, labelText, type) {
+    var label = document.createElement('label');
+    var input = document.createElement('input');
+    input.type = type;
+    input.id = 'nf_' + (++newFieldSeq);
+    label.htmlFor = input.id;
+    label.textContent = labelText;
+    form.appendChild(label);
+    form.appendChild(input);
+    return input;
+  }
+
+  function addSelect(form, labelText) {
+    var label = document.createElement('label');
+    var sel = document.createElement('select');
+    sel.id = 'nf_' + (++newFieldSeq);
+    label.htmlFor = sel.id;
+    label.textContent = labelText;
+    form.appendChild(label);
+    form.appendChild(sel);
+    return sel;
+  }
+
+  function findEvent(id) {
+    var found = (eventsCache || []).filter(function(ev) { return ev.id === id; });
+    return found.length ? found[0] : null;
+  }
+
+  // 2 段目。4 経路で違うのは「注記」「コピー元のセレクト」「選手も複製するのチェック」
+  // 「作成のときに呼ぶ API」の 4 つだけ。ほかは共通。
   function renderNewForm(box) {
-    var p = document.createElement('p');
-    p.className = 'home-note';
-    p.textContent = '経路: ' + newRoute + ' / テンプレート: ' + (newTemplate || '—') +
-      ' / コピー元: ' + (copySource || '—');
-    box.appendChild(p);
+    var isCopy = (newRoute === 'copy-prev' || newRoute === 'copy-pick');
+
+    var back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'home-btn-sub';
+    back.textContent = '← 選び直す';
+    back.addEventListener('click', function() {
+      // テンプレートの 3 枚から来たときは 3 枚に戻す（4 枚まで戻さない）
+      if (newRoute === 'template') newTemplate = '';
+      else newRoute = '';
+      renderNew();
+    });
+    box.appendChild(back);
+
+    var title = document.createElement('p');
+    title.className = 'home-card-main';
+    title.textContent = formTitle();
+    box.appendChild(title);
+
+    var note = document.createElement('p');
+    note.className = 'home-note';
+    note.textContent = formNote();
+    box.appendChild(note);
+
+    var form = document.createElement('div');
+    form.className = 'home-form';
+    box.appendChild(form);
+
+    // コピー元のセレクト（「作成済みの大会からコピー」だけ）。
+    // 並びは一覧と同じにせず、更新の新しい順にする（探しやすさを優先）。
+    var selSrc = null;
+    if (newRoute === 'copy-pick') {
+      selSrc = addSelect(form, 'コピー元の大会');
+      (eventsCache || []).slice().sort(function(a, b) {
+        var x = String(a.updatedAt || ''), y = String(b.updatedAt || '');
+        if (x === y) return 0;
+        return x < y ? 1 : -1;
+      }).forEach(function(ev) {
+        var o = document.createElement('option');
+        o.value = ev.id;
+        o.textContent = (ev.name || '(名称未設定)') + '（' + (ev.date || '日付なし') + '・' +
+          (ev.playerCount || 0) + '名）';
+        selSrc.appendChild(o);
+      });
+      copySource = selSrc.value;
+    }
+
+    var inName = addField(form, '大会名', 'text');
+    var inDate = addField(form, '日付', 'date');
+    var inVenue = addField(form, '会場', 'text');
+    inDate.value = Storage.todayLocal();
+
+    // コピーは元の大会から初期値を引く（desk-events.js の openCopyDialog と同じ）。
+    function fillFromSource() {
+      var src = findEvent(copySource);
+      if (!src) return;
+      inName.value = (src.name || '(名称未設定)') + '（コピー）';
+      inVenue.value = src.venue || '';
+    }
+    if (isCopy) fillFromSource();
+    if (selSrc) {
+      selSrc.addEventListener('change', function() {
+        copySource = selSrc.value;
+        fillFromSource();
+      });
+    }
+
+    var cbPlayers = null;
+    if (isCopy) {
+      var check = document.createElement('label');
+      check.className = 'home-form-check';
+      cbPlayers = document.createElement('input');
+      cbPlayers.type = 'checkbox';
+      cbPlayers.checked = true;
+      check.appendChild(cbPlayers);
+      check.appendChild(document.createTextNode(' 選手も複製する（一巡目の行だけ。得点は消えます）'));
+      form.appendChild(check);
+    }
+
+    var actions = document.createElement('div');
+    actions.className = 'home-form-actions';
+    var btnCreate = document.createElement('button');
+    btnCreate.type = 'button';
+    btnCreate.className = 'home-btn';
+    btnCreate.textContent = '作成';
+    actions.appendChild(btnCreate);
+    form.appendChild(actions);
+    inName.focus();
+
+    // 4 経路の違いはここだけ。戻り値を { id } | { error } | null に揃える。
+    async function create(name) {
+      var date = inDate.value;
+      var venue = inVenue.value.trim();
+      if (newRoute === 'blank') {
+        var saved = await Api.saveEvent({ name: name, date: date, venue: venue, players: [] });
+        return (saved && saved.id) ? { id: saved.id } : null;
+      }
+      if (newRoute === 'template') {
+        return await Api.createFromTemplate(newTemplate, { name: name, date: date, venue: venue });
+      }
+      if (!copySource) return { error: 'コピー元の大会を選んでください。' };
+      return await Api.copyEvent(copySource, {
+        name: name, date: date, venue: venue, withPlayers: cbPlayers.checked
+      });
+    }
+
+    btnCreate.addEventListener('click', async function() {
+      var name = inName.value.trim();
+      if (!name) { alert('大会名を入力してください。'); return; }
+      btnCreate.disabled = true;
+      var result = await create(name);
+      // 待っている間に画面を離れていたら何も出さない（alert も出さない）
+      if (paneFor(location.hash) !== 'new') return;
+      btnCreate.disabled = false;
+      if (!result) {
+        alert('大会を作成できませんでした。通信を確かめてください。');
+        return;   // フォームは残す（入力し直しにならないように）
+      }
+      if (result.error) {
+        alert('大会を作成できませんでした。\n' + result.error);
+        return;
+      }
+      // 作ったら運営画面の選手登録へ（行き先は PC / スマホのモードで変わる）
+      location.href = Storage.adminHref('#players/' + encodeURIComponent(result.id));
+    });
+  }
+
+  function formTitle() {
+    if (newRoute === 'template') {
+      var spec = templateSpec(newTemplate);
+      return 'テンプレート「' + (spec ? spec.name : newTemplate) + '」から作る';
+    }
+    if (newRoute === 'copy-prev') return '前回の大会をコピーして作る';
+    if (newRoute === 'copy-pick') return '作成済みの大会からコピーして作る';
+    return '完全新規で作る';
+  }
+
+  function formNote() {
+    if (newRoute === 'template') {
+      var spec = templateSpec(newTemplate);
+      return spec ? spec.description : '';
+    }
+    if (newRoute === 'copy-prev' || newRoute === 'copy-pick') {
+      // desk-events.js のコピーのダイアログと同じ文言にそろえる
+      return '技と配点は必ず複製されます。得点・共有リンク・履歴は引き継ぎません。';
+    }
+    return '技と配点は雛形（技術リスト編集の「雛形」）から入ります。';
   }
 
   // --- 作成済みの大会（#list）---
