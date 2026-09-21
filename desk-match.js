@@ -362,9 +362,9 @@
     }
 
     // 「全員に一巡目と同じ技をコピー」。初期値は既に一巡目の複製なので、通常は出番が無い。
-    // CSV 由来（sourcePlayerId が無い）の行や、生成後に一巡目へ選手を足した行など、
+    // 旧バージョンが生成した行（sourcePlayerId あり・技が空）や、生成後に一巡目へ選手を足した行など、
     // 技が複製されていない行が残っているときだけの逃げ道として、対象が1名以上のときだけ
-    // ボタンを出す（レビュー指摘D）。
+    // ボタンを出す（レビュー指摘D）。sourcePlayerId の無い行（CSV 由来）は対象外。
     if (editable) {
       var copyTargets = Courts.techCopyTargets(ctx.players);
       if (copyTargets.length > 0) {
@@ -680,8 +680,8 @@
       await saveTech(t.player, arr, selects, ctx, tr);
       if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
     }
-    btn.disabled = false;
     Desk.toast('技をコピーしました');
+    await Desk.reloadEvent();   // 対象が 0 になったのでボタンを消す（件数を持つボタンを作り直す）
   }
 
   Desk.registerTab('match', { render: render });

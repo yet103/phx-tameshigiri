@@ -2652,6 +2652,9 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
         rental: old.rental === true
       };
       if (Number.isInteger(old.bib)) row.bib = old.bib;
+      // 二巡目準備で入れた備考と確定は付け直しても残す（採点済みの行はここに来ない）
+      if (typeof old.note === 'string' && old.note) row.note = old.note;
+      if (old.confirmed === true) row.confirmed = true;
     } else {
       row = buildRound2Row(base, newRows, p, court, isFemale, false);
     }

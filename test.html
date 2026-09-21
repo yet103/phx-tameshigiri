@@ -1664,6 +1664,8 @@
     // H2 の二巡目の行だけ、自己申告で技を直しておく（付け直した後も残ることを確かめる）。
     var reoH2Row = reoBefore.filter(function(p) { return p.name === 'H2'; })[0];
     await Api.updatePlayerInfo(reoEvent.id, reoH2Row.id, { tech1: '水月' });
+    // 備考と確定も入れておく（付け直しで落ちないことを確かめる。再確認の新規1）
+    await Api.updatePlayer(reoEvent.id, reoH2Row.id, { note: '自己申告で変更', confirmed: true });
     // 一巡目に戻り、得点を訂正する（H1 を最下位、H3 を最上位にする）。
     await Api.changeStatus(reoEvent.id, 'round1');
     var reoP1 = (await Api.loadEvent(reoEvent.id)).players;
@@ -1683,6 +1685,8 @@
       reoBefore.map(function(p) { return p.id; }).sort());
     var reoH2After = reoAfter.filter(function(p) { return p.name === 'H2'; })[0];
     assert('自己申告で直した技は残る', reoH2After.tech1, '水月');
+    assert('備考は残る', reoH2After.note, '自己申告で変更');
+    assert('確定の印は残る', reoH2After.confirmed, true);
     await Api.deleteEvent(reoEvent.id);
 
     // 一巡目が0名なら一巡目を終了できない
