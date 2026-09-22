@@ -70,7 +70,7 @@ var Share = (function() {
     stopTimer();
     if (elHead) elHead.textContent = '';
     if (elStatus) elStatus.textContent = '';
-    document.title = '順位';
+    document.title = 'PHX試し斬り 順位';
     if (elBody) {
       elBody.textContent = '';
       var div = document.createElement('div');
@@ -87,7 +87,7 @@ var Share = (function() {
       elStatus.className = 'share-status';
       elStatus.textContent = '取得できませんでした';
     }
-    document.title = '順位';
+    document.title = 'PHX試し斬り 順位';
     if (elBody) {
       elBody.textContent = '';
       var div = document.createElement('div');
@@ -237,7 +237,7 @@ var Share = (function() {
       }
 
       if (isFirstSuccess && result.data.event && result.data.event.name) {
-        document.title = result.data.event.name + ' の順位';
+        document.title = result.data.event.name + ' の順位 - PHX試し斬り';
       }
     } else if (result.status === 400 || result.status === 404) {
       showInvalid();

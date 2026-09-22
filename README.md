@@ -1,6 +1,6 @@
 # phx-tameshigiri
 
-試し斬り採点システム。運営画面（PC 用 `desk.html` / スマホ用 `admin.html`）で大会・選手・技を管理し、
+PHX試し斬り（試し斬り採点システム）。運営画面（PC 用 `desk.html` / スマホ用 `admin.html`）で大会・選手・技を管理し、
 コートの端末（`scoring.html`）で採点、`ranking.html` / `share.html` / `present.html` / `board.html` で
 結果を見せる。使い方はアプリ内のマニュアル（`help.html`）を参照。ここは開発・運用のための手引き。
 

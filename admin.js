@@ -132,7 +132,7 @@ var Admin = (function() {
 
     var seq = ++renderSeq;
     if (currentTab === 'events') {
-      setTitle('試し斬り 運営');
+      setTitle('PHX試し斬り 運営');
       renderTab(seq, { eventId: null, event: null, players: null, techniques: null });
       return;
     }
@@ -157,7 +157,7 @@ var Admin = (function() {
     }
     var ev = evResult.event;
     saveLast();
-    setTitle(ev.name || '試し斬り 運営');
+    setTitle(ev.name || 'PHX試し斬り 運営');
     renderTab(seq, {
       eventId: selectedEventId, event: ev, players: ev.players || [],
       techniques: Array.isArray(ev.techniques) ? ev.techniques : null
@@ -181,7 +181,7 @@ var Admin = (function() {
       return;
     }
     var ev = evResult.event;
-    setTitle(ev.name || '試し斬り 運営');
+    setTitle(ev.name || 'PHX試し斬り 運営');
     renderTab(seq, {
       eventId: selectedEventId, event: ev, players: ev.players || [],
       techniques: Array.isArray(ev.techniques) ? ev.techniques : null
