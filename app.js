@@ -810,6 +810,7 @@ var App = (function() {
     tr.appendChild(tdScore);
 
     applyVoiding(tr);
+    applySequence(tr);
     updateRowScore(tr, isFemale);
     return tr;
   }
@@ -861,10 +862,21 @@ var App = (function() {
       if (!cell || cell.classList.contains('disabled')) continue;
       if (idx !== -1 && s > idx) {
         var wasVoided = cell.classList.contains('voided');
+        // ○ のときの配点をそのまま表示する（無効でも元の点数が分かるように）。
+        var pts = strikePoints(cell, '○');
         cell.dataset.value = '';
         cell.classList.remove('success', 'fail', 'empty', 'reduced');
         cell.classList.add('voided');
-        cell.textContent = '—';
+        cell.textContent = '';
+        var main = document.createElement('span');
+        main.textContent = '無効';
+        cell.appendChild(main);
+        if (pts !== null) {
+          var sub = document.createElement('span');
+          sub.className = 'strike-pts';
+          sub.textContent = pts + '点';
+          cell.appendChild(sub);
+        }
         if (!wasVoided) voided = true;
       } else if (cell.classList.contains('voided')) {
         cell.classList.remove('voided');
@@ -872,6 +884,41 @@ var App = (function() {
       }
     }
     return voided;
+  }
+
+  // あるセルを「未」に戻したとき、後ろの太刀（配点のある太刀）の値も「未」に戻す。
+  // 採点は太刀の順番どおりという前提を保つため（一ノ太刀が未なのに二ノ太刀に値が
+  // 残る、という状態を新規の操作では作らない）。
+  // 戻り値: 実際に値を戻したセルが1つでもあったか。
+  function clearLaterValues(tr, strikeIndex) {
+    var cleared = false;
+    for (var s = strikeIndex + 1; s < 4; s++) {
+      var cell = tr.querySelector('[data-strike="' + s + '"]');
+      if (!cell || cell.classList.contains('disabled')) continue;
+      if ((cell.dataset.value || '') !== '') {
+        cell.dataset.value = '';
+        setCellDisplay(cell, '');
+        cleared = true;
+      }
+    }
+    return cleared;
+  }
+
+  // 採点は太刀の順番どおりに。前の太刀（配点のある太刀）が「未」のままなら、
+  // 後ろの太刀は押せない（class 'pending' を付ける）。disabled・voided のセルは
+  // 対象外（無視して数えない・pending も付けない）。
+  function applySequence(tr) {
+    var sawEmpty = false;
+    for (var s = 0; s < 4; s++) {
+      var cell = tr.querySelector('[data-strike="' + s + '"]');
+      if (!cell) continue;
+      if (cell.classList.contains('disabled') || cell.classList.contains('voided')) {
+        cell.classList.remove('pending');
+        continue;
+      }
+      cell.classList.toggle('pending', sawEmpty);
+      if ((cell.dataset.value || '') === '') sawEmpty = true;
+    }
   }
 
   // 採点できる行（技の行）が出ているか。技が未入力の選手では偽。
@@ -1227,7 +1274,8 @@ var App = (function() {
     if (!scoringOpenHere()) return;   // 採点できない状態（理由はバナーに出ている）
     if (currentConfirmed()) return;   // 確定済みは触れない（確定済みボタンで取り消してから）
     var td = e.currentTarget;
-    if (td.classList.contains('disabled') || td.classList.contains('voided')) return;
+    if (td.classList.contains('disabled') || td.classList.contains('voided') ||
+        td.classList.contains('pending')) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     // 技が無い選手は採点できない
     if (!hasScoreRows()) return;
@@ -1250,7 +1298,10 @@ var App = (function() {
     }
     td.dataset.value = next;
     setCellDisplay(td, next);
+    // 未に戻したときは、順番の前提を保つため後ろの太刀の値も未に戻す
+    var laterCleared = next === '' ? clearLaterValues(tr, strikeIndex) : false;
     var voided = applyVoiding(tr);
+    applySequence(tr);
 
     gridEdited = true;
     unconfirmIfNeeded();
@@ -1267,6 +1318,7 @@ var App = (function() {
                 (next === '○' ? '成功' : next === '×' ? '失敗' : '未');
     }
     if (voided) detail += '（以降の太刀は無効）';
+    if (laterCleared) detail += '（以降の太刀も未に）';
     Api.addHistory(currentEvent.id, {
       action: 'score_update',
       playerName: p ? p.name : '',
@@ -1370,6 +1422,7 @@ var App = (function() {
       }
     }
     applyVoiding(tr);
+    applySequence(tr);
     gridEdited = true;
     unconfirmIfNeeded();
     updateRowScore(tr, p ? p.isFemale : false);
@@ -1400,6 +1453,7 @@ var App = (function() {
     target.dataset.value = '×';
     setCellDisplay(target, '×');
     var voided = applyVoiding(tr);
+    applySequence(tr);
     gridEdited = true;
     unconfirmIfNeeded();
     updateRowScore(tr, p ? p.isFemale : false);
