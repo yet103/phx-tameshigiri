@@ -160,7 +160,7 @@ input[type="file"] { display: none; }
 }
 /* 太刀のセルの点数（未・成功は配点、減点は減点時の点、失敗は 0。常に出す） */
 .score-table td.strike-cell .strike-pts { display: block; font-size: 12px; font-weight: normal; line-height: 1.1; opacity: 0.85; }
-.score-table td.strike-cell:hover:not(.disabled):not(.voided) { opacity: 0.8; }
+.score-table td.strike-cell:hover:not(.disabled):not(.voided):not(.pending) { opacity: 0.8; }
 .score-table td.strike-cell.success {
   background: var(--cell-success);
   color: var(--cell-success-text);
@@ -179,13 +179,20 @@ input[type="file"] { display: none; }
   background: var(--cell-disabled);
   cursor: default;
 }
-/* 一つの形で途中失敗すると、それ以降の太刀（配点はある）は無効表示になり押せない */
+/* 一つの形で途中失敗すると、それ以降の太刀（配点はある）は無効表示になり押せない。
+   文字色は --text-muted だと --cell-disabled 背景でコントラストが弱いため --text を使う。 */
 .score-table td.strike-cell.voided {
   background: var(--cell-disabled);
-  color: var(--text-muted);
+  color: var(--text);
   font-weight: normal;
   font-size: 14px;
   cursor: default;
+}
+/* 採点は太刀の順番どおりに。前の太刀（配点のある太刀）が未のうちは、
+   後ろの太刀は薄く表示して押せない（cursor も変える。hover の効果も出さない） */
+.score-table td.strike-cell.pending {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .score-table td.score-col {
   color: var(--score-color);

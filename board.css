@@ -128,8 +128,9 @@ body.is-transparent { background: transparent; }
 .board-table td.reduced { background: var(--warn); color: var(--bg); font-weight: bold; }
 .board-table td.fail { background: var(--cell-fail); color: var(--cell-fail-text); font-weight: bold; }
 .board-table td.na { background: var(--cell-disabled); color: var(--text-muted); }
-/* 一つの形で途中失敗した後ろの太刀（無効）。採点画面 .strike-cell.voided と同じ見た目。 */
-.board-table td.voided { background: var(--cell-disabled); color: var(--text-muted); }
+/* 一つの形で途中失敗した後ろの太刀（無効）。採点画面 .strike-cell.voided と同じ見た目。
+   文字色は --text-muted だと --cell-disabled 背景でコントラストが弱いため --text を使う。 */
+.board-table td.voided { background: var(--cell-disabled); color: var(--text); }
 .board-table td.score { font-weight: bold; color: var(--score-color); }
 /* Scoring.canDecode が偽の選手（技を差し替えた後など）。内訳を出さず合計だけ見せる。 */
 .board-table td.no-detail { text-align: center; color: var(--text-muted); padding: 12px; }

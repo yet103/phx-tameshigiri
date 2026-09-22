@@ -113,7 +113,8 @@ var Board = (function() {
   // 太刀セル1つ分。
   //   打てない太刀（配点 null）      … 採点画面の .disabled と同じく、灰色だけで文字は出さない。
   //   一つの形で途中失敗した後ろの太刀（failedAt より後ろ）
-  //                                  … 採点画面の .voided と同じく「—」を灰色で出す。
+  //                                  … 採点画面の .voided と同じく「無効」を灰色で出す
+  //                                    （配信ボードでは点数までは出さない）。
   function strikeCell(techName, index, value, isFemale, failedAt) {
     var td = document.createElement('td');
     var tech = Scoring.findTechnique(techName, isFemale);
@@ -123,7 +124,7 @@ var Board = (function() {
     }
     if (typeof failedAt === 'number' && failedAt !== -1 && index > failedAt) {
       td.className = 'voided';
-      td.textContent = '—';
+      td.textContent = '無効';
       return td;
     }
     if (value === '○') {
