@@ -942,6 +942,14 @@ var App = (function() {
     return scoreTableBody.querySelector('tr[data-tech][data-row="' + selectedRow + '"]');
   }
 
+  // 形成功・失敗で行の採点が終わったら、次の技の行を選ぶ（ユーザー要望）。
+  // 最後の行では動かない。入力欄へフォーカスは移さない（タブレットでキーボードが出るため）。
+  function advanceRow() {
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
+    if (selectedRow < 0 || selectedRow + 1 >= rows.length) return;
+    selectRow(selectedRow + 1);
+  }
+
   // 行の補正点入力欄の値（空欄は 0）
   function rowAdjust(tr) {
     var inp = tr.querySelector('.adjust-input');
@@ -1432,6 +1440,7 @@ var App = (function() {
       action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
       techRow: parseInt(tr.dataset.row, 10), strike: 'all', value: '○', detail: '形成功'
     });
+    advanceRow();
   }
 
   // 「失敗」: 選択中の技の行の最初の「未」（配点のある太刀）を失敗にする（残りは自動で無効になる）
@@ -1464,6 +1473,7 @@ var App = (function() {
       techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×',
       detail: '未を失敗に' + (voided ? '（以降の太刀は無効）' : '')
     });
+    advanceRow();
   }
 
   // 形成功・失敗の共通ガード。対象の行（tr）を返す。操作できなければ null。
