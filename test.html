@@ -3666,6 +3666,79 @@
     assert('hasFinalists: 決戦の行があれば true', EventStatus.hasFinalists(FIN_ROWS), true);
     assert('hasFinalists: 決戦の行が無ければ false', EventStatus.hasFinalists(NOFIN_ROWS), false);
 
+    // ---- 決戦を行の印で判定する（設計書 2026-09-28。決戦コートの廃止） ----
+    var PS_FIN = { order: 'A-男子-2-9', finalist: true };
+    var PS_PLAIN = { order: 'A-男子-2-1' };
+    assert('isPlayerScorable: round2 は候補以外だけ採点できる', [
+      EventStatus.isPlayerScorable('round2', PS_PLAIN),
+      EventStatus.isPlayerScorable('round2', PS_FIN)
+    ], [true, false]);
+    assert('isPlayerScorable: round2_final は候補だけ採点できる', [
+      EventStatus.isPlayerScorable('round2_final', PS_PLAIN),
+      EventStatus.isPlayerScorable('round2_final', PS_FIN)
+    ], [false, true]);
+    assert('isPlayerScorable: round1 / round1_done は印を見ない', [
+      EventStatus.isPlayerScorable('round1', PS_FIN),
+      EventStatus.isPlayerScorable('round1', PS_PLAIN),
+      EventStatus.isPlayerScorable('round1_done', PS_FIN)
+    ], [true, true, true]);
+    assert('isPlayerScorable: 選手が無ければ true（状態だけで決める）', [
+      EventStatus.isPlayerScorable('round2', null),
+      EventStatus.isPlayerScorable('round2_final', undefined)
+    ], [true, true]);
+    assert('isPlayerScorable: finalist が true 以外（"true" など）は候補とみなさない',
+      EventStatus.isPlayerScorable('round2_final', { order: 'A-男子-2-1', finalist: 'true' }), false);
+
+    var FC_ROWS = [
+      { order: 'A-男子-1-1', score: 30 },
+      { order: 'A-男子-2-1' },
+      { order: 'A-男子-2-10', finalist: true },
+      { order: 'A-男子-2-9', finalist: true },
+      { order: 'B-男子-2-1' }
+    ];
+    assert('finaleCourt: 印のある二巡目の行のコート', EventStatus.finaleCourt(FC_ROWS), 'A');
+    assert('finaleCourt: 印が無ければ空文字', EventStatus.finaleCourt(NOFIN_ROWS), '');
+    assert('finaleCourt: players が無くても空文字', EventStatus.finaleCourt(null), '');
+    assert('finaleCourt: 一巡目に印が付いていても拾わない',
+      EventStatus.finaleCourt([{ order: 'B-男子-1-1', finalist: true }]), '');
+    assert('finaleCourt: 既存データのコート「決戦」の行ならそのコート名（移行しない）',
+      EventStatus.finaleCourt(FIN_ROWS), '決戦');
+    assert('finaleCourt: 候補が複数のコートにあれば番号順の先頭（コート → 性別 → 番号）',
+      EventStatus.finaleCourt([
+        { order: 'C-男子-2-1', finalist: true }, { order: 'B-男子-2-5', finalist: true }
+      ]), 'B');
+    assert('Courts.finaleCourt は EventStatus.finaleCourt と同じ',
+      [Courts.finaleCourt(FC_ROWS), Courts.finaleCourt(FIN_ROWS), Courts.finaleCourt([])],
+      ['A', '決戦', '']);
+
+    assert('firstCourt: 選手のコートの昇順の先頭',
+      EventStatus.firstCourt([{ order: 'B-男子-1-1' }, { order: 'A-女子-1-1' }]), 'A');
+    assert('firstCourt: settings.courts も含める',
+      EventStatus.firstCourt([{ order: 'B-男子-1-1' }], ['C', 'A']), 'A');
+    assert('firstCourt: 未分類は除く',
+      EventStatus.firstCourt([{ order: '' }, { order: 'B-男子-1-1' }]), 'B');
+    assert('firstCourt: 選手がいなければ settings.courts の先頭',
+      EventStatus.firstCourt([], ['稽古', 'B']), 'B');
+    assert('firstCourt: 何も無ければ空文字', [
+      EventStatus.firstCourt([], []), EventStatus.firstCourt(null, null),
+      EventStatus.firstCourt([{ order: '' }], 'A')
+    ], ['', '', '']);
+    // Courts.listFrom と同じ並び（先頭）になることを固定する。courts.js の listFrom を
+    // 変えたら firstCourt（status.js）も同じに変えること。
+    var FIRST_CASES = [
+      [[{ order: 'B-男子-1-1' }, { order: 'A-男子-1-1' }], undefined],
+      [[{ order: 'b-男子-1-1' }, { order: 'B-男子-1-1' }], ['a']],
+      [[{ order: '第2-男子-1-1' }, { order: '第1-男子-1-1' }], ['Z']],
+      [[{ order: '' }, { order: 'x' }], ['10', '9']],
+      [[{ order: '未分類-男子-1-1' }], []],
+      [[], ['稽古', '本番']]
+    ];
+    assert('firstCourt は Courts.listFrom の先頭（未分類を除く）と一致する',
+      FIRST_CASES.map(function(c) { return EventStatus.firstCourt(c[0], c[1]); }),
+      FIRST_CASES.map(function(c) {
+        return Courts.listFrom(c[0], c[1]).filter(function(x) { return x !== Courts.UNASSIGNED; })[0] || '';
+      }));
+
     assert('finalCourtOf: 既定は「決戦」', EventStatus.finalCourtOf({}), '決戦');
     assert('finalCourtOf: settings が無くても既定', EventStatus.finalCourtOf(null), '決戦');
     assert('finalCourtOf: settings.finalCourt があればそれ',

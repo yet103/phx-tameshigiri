@@ -279,6 +279,12 @@ var Courts = (function() {
     return EventStatus.finalists(players).slice().sort(compareOrder);
   }
 
+  // 決戦の候補がいるコートの名前（無ければ ''）。判定は status.js に一本化してあるので、
+  // ここは呼び直すだけ（courts.js を主に使う画面から使えるようにするための入口）。
+  function finaleCourt(players) {
+    return EventStatus.finaleCourt(players);
+  }
+
   // 決戦コートの名前。判定は status.js に一本化してあるので、ここは呼び直すだけ
   // （courts.js しか読まない画面から使えるようにするための入口）。
   function finalCourtOf(event) {
@@ -804,6 +810,7 @@ var Courts = (function() {
     livePlayerName: livePlayerName,
     finalists: finalists,
     finalCourtOf: finalCourtOf,
+    finaleCourt: finaleCourt,
     techCopyTargets: techCopyTargets,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage,

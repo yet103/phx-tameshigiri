@@ -80,6 +80,16 @@
     return !!Number(player.totalAdjust);
   }
 
+  // 選手のコート名（order の先頭セグメント）。courts.js の Courts.courtOf と同じ規則。
+  // 決戦の候補を置くコート（firstCourt）と、候補がいるコート（finaleCourt）の判定に使う。
+  var UNASSIGNED = '未分類';
+
+  function courtOf(player) {
+    var order = (player && typeof player.order === 'string') ? player.order : '';
+    var m = order.match(/^([^-]+)/);
+    return m ? m[1] : UNASSIGNED;
+  }
+
   function playersOf(event) {
     return (event && Array.isArray(event.players)) ? event.players : [];
   }
@@ -137,6 +147,55 @@
 
   function hasFinalists(players) {
     return finalists(players).length > 0;
+  }
+
+  // 決戦の候補がいるコートの名前（表示と配信ボードの判定用。設計書 2026-09-28）。
+  // 候補の行を（コート → 性別 → 番号）の順に並べた先頭の行のコート。候補がいなければ ''。
+  // 候補の行は生成時に先頭のコート（firstCourt）へ置くので、通常は「A」。
+  // 2026-09-22 の設計で専用コート「決戦」に置かれた既存大会では '決戦' を返す（移行しない）。
+  // finalists は二巡目（ORDER_PATTERN が解析できる行）だけを返すので、m は必ず取れる。
+  function finaleCourt(players) {
+    var best = null;
+    finalists(players).forEach(function(p) {
+      var m = p.order.match(ORDER_PATTERN);
+      var key = { court: m[1], sex: m[2] === '男子' ? 0 : 1, no: parseInt(m[4], 10) };
+      if (!best ||
+          key.court < best.court ||
+          (key.court === best.court && (key.sex < best.sex ||
+            (key.sex === best.sex && key.no < best.no)))) {
+        best = key;
+      }
+    });
+    return best ? best.court : '';
+  }
+
+  // 先頭のコート（二巡目の生成で決戦の候補の行を置くコート。設計書 2026-09-28）。
+  // Courts.listFrom と同じ規則（選手のコートと extraCourts＝settings.courts の和、
+  // 文字列の昇順、'未分類' は除く）の先頭。何も無ければ ''。
+  // 両者の一致は test.html の「firstCourt は Courts.listFrom の先頭と一致する」で固定する。
+  function firstCourt(players, extraCourts) {
+    var first = '';
+    function add(c) {
+      if (typeof c !== 'string' || !c || c === UNASSIGNED) return;
+      // Array.prototype.sort の既定（UTF-16 の符号単位順）と同じ比べ方
+      if (!first || c < first) first = c;
+    }
+    (players || []).forEach(function(p) { add(courtOf(p)); });
+    (Array.isArray(extraCourts) ? extraCourts : []).forEach(add);
+    return first;
+  }
+
+  // その選手をいま採点してよいか（状態が採点できることは isScoringOpen が見る）。
+  // 決戦かどうかはコート名ではなく行の印 finalist で判定する（設計書 2026-09-28）。
+  //   round2       … 候補以外（候補は「決戦を開始」の後）
+  //   round2_final … 候補だけ（他の選手は斬り終わっている）
+  //   それ以外     … 制限なし
+  // player が無い（コートに選手がいない）ときは true（状態だけで決める）。
+  function isPlayerScorable(status, player) {
+    if (!player) return true;
+    if (status === 'round2') return player.finalist !== true;
+    if (status === 'round2_final') return player.finalist === true;
+    return true;
   }
 
   // 「次へ進む」の行き先。二巡目 進行中からは、決戦の行があれば決戦へ、
@@ -229,6 +288,9 @@
     nextLabel: nextLabel,
     finalists: finalists,
     hasFinalists: hasFinalists,
+    finaleCourt: finaleCourt,
+    firstCourt: firstCourt,
+    isPlayerScorable: isPlayerScorable,
     finalCourtOf: finalCourtOf,
     scoringCourtFilter: scoringCourtFilter,
     isCourtScorable: isCourtScorable,
