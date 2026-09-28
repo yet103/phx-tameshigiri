@@ -505,7 +505,7 @@
     var rankList = document.createElement('datalist');
     rankList.id = 'adminRankList';
     ['無級', '十級', '九級', '八級', '七級', '六級', '五級', '四級', '三級', '二級', '一級',
-     '初段', '二段', '三段', '四段', '五段', '六段', '七段', '八段', '九段', '十段']
+     '初段', '弐段', '参段', '四段', '五段', '六段', '七段', '八段', '九段', '十段']
       .forEach(function(r) {
         var o = document.createElement('option');
         o.value = r;
