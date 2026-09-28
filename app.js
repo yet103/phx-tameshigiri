@@ -356,7 +356,10 @@ var App = (function() {
   }
 
   function applyScoringLock() {
-    var locked = !!currentEvent && !scoringOpenHere();
+    // 決戦 進行中に候補のいないコートを開いている（一覧が空）ときも、バナー（renderStatusBanner）
+    // と同じく閉じた扱いにする。
+    var empty = currentStatus() === 'round2_final' && !visiblePlayers[currentIndex];
+    var locked = !!currentEvent && (!scoringOpenHere() || empty);
     // 確定済みは「採点できる状態」のまま入力だけ止める。確定ボタンは押せる（取り消しのトグル）。
     var frozen = locked || currentConfirmed();
     document.body.classList.toggle('scoring-locked', locked);
