@@ -86,17 +86,19 @@ input[type="file"] { display: none; }
 .action-block .nav-btn {
   background: var(--accent);
   color: var(--accent-text);
-  padding: 6px 16px;
+  padding: 6px 12px;
   white-space: nowrap;
   min-height: 44px;
 }
 
-/* ===== タイマーバー ===== */
+/* ===== タイマーバー =====
+   前の選手・開始・停止・リセット・タイマー・次の選手 を左から詰めて一列に並べる（ユーザー要望。
+   タイマーを右端へ寄せない）。余白は詰める。 */
 .timer-bar {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
-  gap: 8px;
+  padding: 4px 8px;
+  gap: 6px;
   background: var(--bg-secondary);
   flex-wrap: wrap;
 }
@@ -105,14 +107,13 @@ input[type="file"] { display: none; }
   color: var(--timer-text);
   font-size: 28px;
   font-weight: bold;
-  padding: 2px 16px;
+  padding: 2px 12px;
   border-radius: 6px;
   min-width: 90px;
   text-align: center;
-  margin-left: auto;
 }
 .timer-bar button { background: var(--bg-header); color: var(--text); min-height: 44px; }
-.timer-bar button:hover { opacity: 0.8; }
+/* マウスオーバーの見た目は「大会トーン」の節（帯の上の色）で当てる */
 /* タイマー稼働中: 「開始」を押したことが見えるよう、ボタンを青にして表示を脈打たせる */
 .timer-bar #btnTimerStart.on { background: var(--btn-confirm-on); color: #fff; border-color: var(--btn-confirm-on); }
 .timer-display.running { animation: timer-pulse 1s ease-in-out infinite alternate; }
@@ -292,8 +293,8 @@ input[type="file"] { display: none; }
 .action-bar {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
-  gap: 8px;
+  padding: 4px 8px;
+  gap: 6px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
@@ -549,12 +550,26 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .save-status.retrying { color: var(--gold-light); }
 .player-nav { border-bottom: 2px solid var(--gold); }
 .action-block .nav-btn { background: var(--band-bg-2); color: var(--gold-light); border: 1px solid var(--gold); }
+/* マウスオーバーで押せることが分かるように（ユーザー要望）。帯の上のボタンは金地に反転、
+   色付きのボタン（形成功・失敗・確定）は明るくして金の内枠を出す。稼働中の「▶ 開始」（id 指定）は青のまま。 */
+.timer-bar button:hover, .action-block .nav-btn:hover {
+  background: var(--gold-deep);
+  color: var(--band-bg);
+  border-color: var(--gold-light);
+}
+.action-bar button:hover:not([disabled]) {
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 2px var(--gold-light) inset;
+}
 .player-nav .court-label { background: linear-gradient(180deg, var(--gold-light), var(--gold-deep)); color: var(--band-bg); }
 .player-nav .order-label, .player-nav .rank-label { color: var(--band-muted); }
 .player-nav #playerNameLabel { font-family: var(--mincho); letter-spacing: .04em; }
 .timer-display { box-shadow: 0 0 0 2px var(--gold) inset; }
 .score-table th { background: var(--band-bg); color: var(--gold-light); border-color: var(--gold); font-family: var(--mincho); }
 .score-table td.tech-name { font-family: var(--mincho); }
+/* 選手一覧も採点表・選手の帯と同じ明朝で揃える（ユーザー要望）。見出しは帯と同じ金文字 */
+.player-list-table { font-family: var(--mincho); }
+.player-list-table th { background: var(--band-bg); color: var(--gold-light); border-color: var(--gold); }
 .score-table td.tech-name::before { color: var(--gold-deep); }
 .score-table tr.selected td.tech-name::before { color: inherit; }
 .action-block { border-color: var(--gold); }

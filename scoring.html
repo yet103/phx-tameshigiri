@@ -90,20 +90,20 @@
   <div class="action-block">
     <!-- 1段目: 形成功・失敗・確定（右端に合計）。補正点・備考のすぐ下に採点の操作が来るように（ユーザー要望） -->
     <div class="action-bar">
-      <button class="btn-success" id="btnAllSuccess">形成功</button>
-      <button class="btn-fail"    id="btnAllFail">失敗</button>
-      <button class="btn-confirm" id="btnConfirm">確定</button>
+      <button class="btn-success" id="btnAllSuccess" title="選択中の技の太刀をすべて成功にして、次の技へ">形成功</button>
+      <button class="btn-fail"    id="btnAllFail" title="選択中の技の最初の「未」を失敗にして、次の技へ">失敗</button>
+      <button class="btn-confirm" id="btnConfirm" title="この選手の得点を確定する（もう一度押すと取り消し）">確定</button>
       <div class="total-score" id="totalScoreDisplay"><span class="total-label">合計</span><span class="total-value" id="totalScoreBox"><span id="totalScoreValue">0</span><span class="total-unit">点</span></span></div>
     </div>
 
-    <!-- 2段目: 前の選手 ｜ タイマー ｜ 次の選手 -->
+    <!-- 2段目: 前の選手・開始・停止・リセット・タイマー・次の選手 を左から詰めて一列 -->
     <div class="timer-bar">
-      <button class="nav-btn" id="btnPrev">◀ 前の選手</button>
-      <button id="btnTimerStart">▶ 開始</button>
-      <button id="btnTimerStop">■ 停止</button>
-      <button id="btnTimerReset">↺ リセット</button>
-      <div class="timer-display" id="timerDisplay">05:00</div>
-      <button class="nav-btn" id="btnNext">次の選手 ▶</button>
+      <button class="nav-btn" id="btnPrev" title="前の選手を開く（未確定なら確定するか聞きます）">◀ 前の選手</button>
+      <button id="btnTimerStart" title="タイマーを始める（5分から数えます）">▶ 開始</button>
+      <button id="btnTimerStop" title="タイマーを止める">■ 停止</button>
+      <button id="btnTimerReset" title="タイマーを 05:00 に戻す">↺ リセット</button>
+      <div class="timer-display" id="timerDisplay" title="残り時間">05:00</div>
+      <button class="nav-btn" id="btnNext" title="次の選手を開く（未確定なら確定するか聞きます）">次の選手 ▶</button>
     </div>
   </div>
 
