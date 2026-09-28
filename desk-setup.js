@@ -125,23 +125,16 @@
       if (!name) { alert('大会名を入力してください。'); return; }
       var courtErr = Courts.validateCourtList(extra);
       if (courtErr) { alert(courtErr); return; }
-      // 決戦コートの名前もコートの名前の規則に従う（サーバーも見るが、文言をここで出す）。
-      var finalName = inFinal.value.trim();
-      if (finalName) {
-        var finalErr = Courts.validateCourtList([finalName]);
-        if (finalErr) { alert(finalErr); return; }
-      }
       btn.disabled = true;
       var result = await Api.updateEventInfo(ctx.eventId, {
         name: name, date: inDate.value, venue: inVenue.value.trim(),
-        // settings はサーバーが requireBib / requireRank / courts / finalCourt だけを拾う
+        // settings はサーバーが requireBib / requireRank / courts だけを拾う
         // （他のキーは無視される）。毎回すべて送るので、外したときも保存される。
-        // finalCourt は空欄なら「既定（決戦）に戻す」意味（サーバーがキーごと落とす）。
+        // 決戦コートの名前（finalCourt）は廃止（暫定ベスト8 は先頭コートの最後に斬る。設計書 2026-09-28）。
         settings: {
           requireBib: chkBib.checked,
           requireRank: chkRank.checked,
-          courts: extra.slice(),
-          finalCourt: finalName
+          courts: extra.slice()
         }
       });
       if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
@@ -175,29 +168,6 @@
       'ここで足したコートは、選手が 1 人もいなくても選手登録のコート候補と試合進行のカードに出ます。' +
       '灰色のコートは選手のコート指定から決まったもので、外せません（外すときは「選手」の区画でコートを変えます）。';
     container.appendChild(courtNote);
-
-    // 決戦コートの名前（settings.finalCourt）。空欄なら既定の「決戦」。
-    // 一覧のコート（settings.courts）とは別に持つ（設計書「データ」）。
-    var finalWrap = document.createElement('div');
-    finalWrap.className = 'desk-form';
-    var inFinal = addField(finalWrap, '決戦コートの名前', 'text');
-    inFinal.id = 'setupFinalCourt';
-    inFinal.placeholder = EventStatus.finalCourtOf({});   // '決戦'
-    inFinal.value = (typeof settings.finalCourt === 'string') ? settings.finalCourt : '';
-    // 決戦の行がすでにあると、名前を変えても決戦コートに移した選手をどのコート端末でも
-    // 採点できなくなる（サーバーも PATCH で 400 にする。レビュー指摘B）。
-    var hasFinalRows = EventStatus.hasFinalists(ctx.players);
-    inFinal.disabled = locked || hasFinalRows;
-    container.appendChild(finalWrap);
-
-    var finalNote = document.createElement('p');
-    finalNote.className = 'desk-note';
-    finalNote.textContent = hasFinalRows
-      ? '決戦の行ができた後は変えられません。'
-      : ('一巡目を終了したときに、暫定ベスト8（一般男子・一巡目の得点上位）を' +
-        'このコートへ移します。空欄なら「' + EventStatus.finalCourtOf({}) + '」になります。' +
-        '名前の規則は他のコートと同じです（「-」と「未分類」は使えません）。');
-    container.appendChild(finalNote);
 
     var chipWrap = document.createElement('div');
     chipWrap.className = 'desk-court-chips';

@@ -17,10 +17,14 @@
   // 大会が持つコート（選手がまだ 1 人もいないコート）を 0 / 0 の行として補う。
   // 並びは Courts.listFrom に合わせる（昇順・未分類は末尾）。
   // コート名が 'constructor' でも壊れないよう Object.create(null) + hasOwnProperty で引く。
+  // 決戦（暫定ベスト8）の行は数えない（決戦は別のカードにする。設計書 2026-09-28）。
+  // コートの一覧も決戦以外の行から作る。2026-09-22 の設計で専用コート「決戦」に候補を
+  // 置いた既存大会で、「決戦 コート 0 / 0」の通常のカードが出ないように。
   function courtCards(ctx, round) {
+    var plainPlayers = (ctx.players || []).filter(function(p) { return p.finalist !== true; });
     var byCourt = Object.create(null);
-    Courts.courtProgress(ctx.players, round).forEach(function(r) { byCourt[r.court] = r; });
-    return Courts.listFrom(ctx.players, extraCourts(ctx)).map(function(c) {
+    Courts.courtProgress(plainPlayers, round).forEach(function(r) { byCourt[r.court] = r; });
+    return Courts.listFrom(plainPlayers, extraCourts(ctx)).map(function(c) {
       return Object.prototype.hasOwnProperty.call(byCourt, c)
         ? byCourt[c]
         : { court: c, total: 0, scored: 0 };
@@ -35,7 +39,7 @@
 
     container.appendChild(buildHead(ctx));
     container.appendChild(buildCourts(st, ctx));
-    // 決戦 進行中のときだけ、決戦コートのカード（buildCourts）の直後に暫定順位を出す
+    // 決戦 進行中のときだけ、決戦のカード（buildCourts）の直後に暫定順位を出す
     // （非同期。あとから差し込む。レビュー指摘E。以前は container の末尾に出ていて、
     // 二巡目の形登録の表を挟んで離れた場所に見えていた）。
     if (st === 'round2_final') renderFinaleTable(container, ctx);
@@ -140,14 +144,26 @@
       return wrap;
     }
 
-    var finalCourt = Courts.finalCourtOf(ctx.event);
-    var hasFinale = Courts.finalists(ctx.players).length > 0;
-    var plain = rows.filter(function(r) { return !hasFinale || r.court !== finalCourt; });
-    var finale = rows.filter(function(r) { return hasFinale && r.court === finalCourt; });
+    // 決戦（暫定ベスト8）は先頭コート（通常 A）の二巡目の末尾で斬る（設計書 2026-09-28）。
+    // 通常のカード（rows）は決戦の行を数えず、決戦は候補の行だけを数えるカード 1 枚にして別枠に置く。
+    // 決戦かどうかはコート名ではなく行の印 finalist で分ける。二巡目を数えるときだけ出す。
+    var plain = rows;
+    var finale = [];
+    var fin = Courts.finalists(ctx.players);
+    if (round === 2 && fin.length > 0) {
+      finale = [{
+        court: Courts.finaleCourt(ctx.players),
+        total: fin.length,
+        scored: fin.filter(Courts.isScored).length,
+        finale: true
+      }];
+    }
+    var caption = finale.length > 0
+      ? '決戦（暫定ベスト8・' + finale[0].court + ' コートの最後）' : '';
 
     // 決戦 進行中は決戦のカードを先に、他コートは畳む（設計書「画面」）。
     if (st === 'round2_final' && finale.length > 0) {
-      wrap.appendChild(buildCourtGrid(finale, ctx, round, '決戦'));
+      wrap.appendChild(buildCourtGrid(finale, ctx, round, caption));
       var others = document.createElement('details');
       others.className = 'desk-match-others';
       var sum = document.createElement('summary');
@@ -160,8 +176,9 @@
 
     wrap.appendChild(buildCourtGrid(plain, ctx, round, ''));
     if (finale.length > 0) {
-      // 二巡目 進行中は「決戦（開始前）」として別枠に置く。
-      wrap.appendChild(buildCourtGrid(finale, ctx, round, st === 'round2' ? '決戦（開始前）' : '決戦'));
+      // 二巡目 進行中は「開始前」として別枠に置く（先頭コートの通常の選手が終わってから斬る）。
+      wrap.appendChild(buildCourtGrid(finale, ctx, round,
+        st === 'round2' ? caption + '　開始前' : caption));
     }
     return wrap;
   }
@@ -206,8 +223,10 @@
 
     // 真剣レンタルの人数（いま数えている巡目の行だけ）。0 なら行ごと出さない
     // （レンタルのいない大会でカードが縦に伸びないように）。
+    // 決戦のカードは候補の行だけ、通常のカードは候補以外の行だけを数える（同じコートを分け合うため）。
     var rental = (ctx.players || []).filter(function(p) {
-      return Courts.courtOf(p) === row.court && Courts.roundOf(p) === round && p.rental === true;
+      return Courts.courtOf(p) === row.court && Courts.roundOf(p) === round && p.rental === true &&
+        (p.finalist === true) === (row.finale === true);
     }).length;
     if (rental > 0) {
       var rent = document.createElement('div');
@@ -227,7 +246,7 @@
     }
 
     var live = document.createElement('div');
-    var who = Courts.livePlayerName(ctx.event && ctx.event.live, row.court, ctx.players);
+    var who = liveNameFor(ctx, row);
     if (who) {
       live.className = 'desk-match-live';
       live.textContent = 'いま採点中: ' + who;
@@ -273,6 +292,17 @@
 
     card.appendChild(actions);
     return card;
+  }
+
+  // そのカードで「いま採点中」に出す名前。決戦のカードと先頭コートの通常のカードは同じコート
+  // （live はコートごとに 1 人）を分け合うので、採点中の選手の印がカードと合うときだけ出す
+  // （二巡目 進行中に A の通常の選手を採点しているとき、決戦のカードに名前を出さないように）。
+  function liveNameFor(ctx, row) {
+    var who = Courts.livePlayerName(ctx.event && ctx.event.live, row.court, ctx.players);
+    if (!who) return '';
+    var entry = ctx.event.live[row.court];   // livePlayerName が名前を返した＝hasOwnProperty 済み
+    var p = (ctx.players || []).filter(function(x) { return x && x.id === entry.playerId; })[0];
+    return (p && (p.finalist === true) === (row.finale === true)) ? who : '';
   }
 
   // 閲覧専用 URL（共有リンク）をクリップボードへ。desk-results.js の onCopyShare と同じ作法。
@@ -427,8 +457,8 @@
       var finNote = document.createElement('p');
       finNote.className = 'desk-note';
       finNote.id = 'matchFinaleNote';
-      finNote.textContent = '暫定ベスト8（一般男子・一巡目の得点上位）。決戦コート「' +
-        Courts.finalCourtOf(ctx.event) + '」で最後に斬ります。';
+      finNote.textContent = '暫定ベスト8（一般男子・一巡目の得点上位）。' +
+        Courts.finaleCourt(ctx.players) + ' コートの二巡目の最後に斬ります。';
       wrap.appendChild(finNote);
 
       var finWrap = document.createElement('div');
