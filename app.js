@@ -1191,6 +1191,7 @@ var App = (function() {
     if (!p) return;
     p.note = noteInput.value.trim().slice(0, 200);
     Outbox.enqueue({ eventId: currentEvent.id, playerId: p.id, note: p.note });
+    updatePlayerListNote(currentIndex, p.note);
   }
 
   // 備考の文例シート（下部固定パネル）。開いている間は全画面を覆い、
@@ -1598,11 +1599,15 @@ var App = (function() {
       '<td>' + esc(p.order || '') + '</td>' +
       // 未設定は薄い「—」（数値なので esc は要らないが、列を空にはしない）
       '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
-      '<td>' + esc(p.name || '') + '</td>' +
+      '<td class="name">' + esc(p.name || '') + '</td>' +
+      // 級位・段位は空なら空セル（ゼッケンと違い「—」は出さない）
+      '<td>' + esc(String(p.rank || '').trim()) + '</td>' +
       '<td>' + esc(p.tech1 || '') + '</td>' +
       '<td>' + esc(p.tech2 || '') + '</td>' +
       '<td>' + esc(p.tech3 || '') + '</td>' +
-      '<td class="' + (p.confirmed ? 'confirmed' : '') + '">' + (p.score || 0) + '</td>';
+      '<td class="score' + (p.confirmed ? ' confirmed' : '') + '">' + (p.score || 0) + '</td>' +
+      // 備考は残り幅を吸収する列。折り返し可
+      '<td class="note">' + esc(p.note || '') + '</td>';
     tr.addEventListener('click', function() {
       var idx = parseInt(this.dataset.index, 10);
       if (idx !== currentIndex && !confirmLeave()) return;
@@ -1651,10 +1656,8 @@ var App = (function() {
   function updatePlayerListScore(index, score) {
     if (!isPlayerListOpen()) return;
     var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
-    if (row) {
-      var cells = row.querySelectorAll('td');
-      cells[cells.length - 1].textContent = score;
-    }
+    var cell = row ? row.querySelector('td.score') : null;
+    if (cell) cell.textContent = score;
   }
 
   function updatePlayerListConfirmed(index, on) {
@@ -1662,9 +1665,17 @@ var App = (function() {
     var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
     if (row) {
       row.classList.toggle('done', on);
-      var cells = row.querySelectorAll('td');
-      cells[cells.length - 1].classList.toggle('confirmed', on);
+      var cell = row.querySelector('td.score');
+      if (cell) cell.classList.toggle('confirmed', on);
     }
+  }
+
+  // 備考を変えたとき（手入力・文例）に一覧の備考セルを書き換える
+  function updatePlayerListNote(index, note) {
+    if (!isPlayerListOpen()) return;
+    var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
+    var cell = row ? row.querySelector('td.note') : null;
+    if (cell) cell.textContent = note || '';
   }
 
   function esc(s) {
