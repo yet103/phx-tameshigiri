@@ -56,6 +56,8 @@ input[type="file"] { display: none; }
   font-weight: bold;
 }
 .player-nav .order-label { font-size: 16px; font-weight: normal; color: var(--text-muted); white-space: nowrap; }
+.player-nav .rank-label { font-size: 16px; font-weight: normal; color: var(--text-muted); white-space: nowrap; }
+.player-nav .rank-label:empty { display: none; }
 .player-nav #playerNameLabel { font-size: 34px; line-height: 1.15; overflow-wrap: anywhere; }
 /* スマホ幅: 3列グリッドだと中央列に押されてコートのバッジが縦に折れてしまうため、
    採点画面は768px以上が前提とはいえ最低限崩れないよう、素直な縦積みに戻す。 */
@@ -534,7 +536,7 @@ body.score-frozen .action-bar button[disabled] { opacity: 0.45; }
 .player-nav { border-bottom: 2px solid var(--gold); }
 .action-bar .nav-btn { background: var(--band-bg-2); color: var(--gold-light); border: 1px solid var(--gold); }
 .player-nav .court-label { background: linear-gradient(180deg, var(--gold-light), var(--gold-deep)); color: var(--band-bg); }
-.player-nav .order-label { color: var(--band-muted); }
+.player-nav .order-label, .player-nav .rank-label { color: var(--band-muted); }
 .player-nav #playerNameLabel { font-family: var(--mincho); letter-spacing: .04em; }
 .timer-display { box-shadow: 0 0 0 2px var(--gold) inset; }
 .score-table th { background: var(--band-bg); color: var(--gold-light); border-color: var(--gold); font-family: var(--mincho); }

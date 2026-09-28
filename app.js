@@ -25,6 +25,7 @@ var App = (function() {
   var courtLabel       = document.getElementById('courtLabel');
   var playerOrderLabel = document.getElementById('playerOrderLabel');
   var playerNameLabel  = document.getElementById('playerNameLabel');
+  var playerRankLabel  = document.getElementById('playerRankLabel');
   var scoreTableBody   = document.getElementById('scoreTableBody');
   var totalScoreDisplay= document.getElementById('totalScoreDisplay');
   var totalScoreValue  = document.getElementById('totalScoreValue');
@@ -269,6 +270,7 @@ var App = (function() {
         : '（選手がいません）';
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
+      playerRankLabel.textContent = '';
       clearAdjustInputs();
       // このコートに映すものが無いことを配信用ボードへ伝える（ボードは「待機中」に戻る）。
       // 選手がいる場合は selectPlayer 経由の resetTimer が送る。
@@ -519,6 +521,7 @@ var App = (function() {
       playerNameLabel.textContent = '（大会を選択してください）';
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
+      playerRankLabel.textContent = '';
       clearAdjustInputs();
       Route.clear();
       refreshPlayerList();
@@ -677,6 +680,8 @@ var App = (function() {
       playerOrderLabel.textContent = (p.order || '') + bib;
     }
     playerNameLabel.textContent = p.name || '';
+    // 級位・段位は名前の右に小さく（空なら :empty で消える）
+    playerRankLabel.textContent = String(p.rank || '').trim();
 
     // 決戦 進行中は、決戦の何人目かを順番の右に添える（設計書「採点画面」）。
     if (currentStatus() === 'round2_final' && p.finalist === true) {
