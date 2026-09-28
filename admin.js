@@ -240,6 +240,24 @@ var Admin = (function() {
     toastTimer = setTimeout(function() { el.hidden = true; }, 2000);
   }
 
+  // URL などをクリップボードへ写す。結果確認タブ（共有リンク）と試合進行タブ（閲覧専用 URL）が使う。
+  // navigator.clipboard は HTTPS か localhost でしか使えず、権限が無い環境もあるので、
+  // 失敗したら prompt に落として手で写せるようにする（PC 運営の Desk.copyText と同じ作法）。
+  // 戻り値: クリップボードに入ったら true、prompt に落ちたら false。
+  async function copyText(text, okMessage) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast(okMessage || 'コピーしました');
+        return true;
+      } catch (e) {
+        // 権限が無い・HTTPS でない等。下の prompt に落とす
+      }
+    }
+    window.prompt('このURLをコピーしてください', text);
+    return false;
+  }
+
   // シートの外枠。中身と操作ボタンを渡す。大会タブ・選手タブ・（計画3の）進行タブで共用する。
   // onClose はシートがどの経路で閉じても（✕・外側タップ・close()・closeAllSheets()）1回だけ呼ばれる。
   // onClose はハッシュ遷移（closeAllSheets）でも呼ばれる。onClose の中でサーバーに書き込まないこと
@@ -785,6 +803,7 @@ var Admin = (function() {
     reloadEvent: reloadEvent,
     currentEventId: currentEventId,
     toast: toast,
+    copyText: copyText,
     renderChips: renderChips,
     renderCourtChips: renderCourtChips,
     scoringHref: scoringHref,

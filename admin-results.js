@@ -141,17 +141,7 @@ var AdminResults = (function() {
     try {
       var token = await shareToken(eventId);
       if (!token) return;
-      var url = new URL('share.html#' + token, location.href).href;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        try {
-          await navigator.clipboard.writeText(url);
-          Admin.toast('リンクをコピーしました');
-          return;
-        } catch (e) {
-          // 権限が無い・HTTPS でない等。下の prompt に落とす
-        }
-      }
-      window.prompt('このURLをコピーしてください', url);
+      await Admin.copyText(new URL('share.html#' + token, location.href).href, 'リンクをコピーしました');
     } finally {
       btn.disabled = false;
     }
