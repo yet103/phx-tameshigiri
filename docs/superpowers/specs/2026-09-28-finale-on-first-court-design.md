@@ -20,7 +20,7 @@
 | 論点 | 決定 |
 |---|---|
 | 候補の選び方 | 変えない（一般男子・一巡目の得点上位 8 名・8 位同点は全員・0 点除外） |
-| 候補の行のコート | **先頭のコート**。`Courts.listFrom(一巡目の行, settings.courts)` の先頭（文字列昇順。通常「A」）。生成時に決める |
+| 候補の行のコート | **先頭のコート**。一巡目の行のコート名の昇順の先頭（settings.courts だけにあるコートは使わない。通常「A」）。生成時に決める |
 | 候補の行の番号 | 先頭コートの男子の二巡目の通常の行の**続き番号**（`A-男子-2-(k+1)〜(k+n)`）。並びは一巡目の得点が低い順（同点は一巡目の order 順）。通常の行を先に採番してから候補を採番する |
 | 決戦の判定 | コート名ではなく**行の印 `finalist: true`** で判定する（既に印は付いている）。`round2` は印の無い行だけ、`round2_final` は印のある行だけ採点できる |
 | `settings.finalCourt` | **廃止**。基本情報の入力欄・PATCH の検証（`finale_exists` / `court_conflict`）・複製・バンドルの書き出しを消す。PATCH や取り込みで届いても無視して保存しない |
@@ -38,7 +38,7 @@
 
 ## サーバー（`server/index.js`）
 
-- `generateRound2` / `reorderRound2`: `EventStatus.finalCourtOf(event)` の代わりに `EventStatus.firstCourt(src, event.settings && event.settings.courts)` を候補のコートにする。通常の行（`plain`）を先に `buildRound2Row` してから候補（`finals`）を採番するので、続き番号になる（`nextOrderNumber` は最大+1）。
+- `generateRound2` / `reorderRound2`: `EventStatus.finalCourtOf(event)` の代わりに `EventStatus.firstCourt(src)`（settings.courts は渡さない）を候補のコートにする。通常の行（`plain`）を先に `buildRound2Row` してから候補（`finals`）を採番するので、続き番号になる（`nextOrderNumber` は最大+1）。
 - `sanitizeFinalCourt` / `nonFinalCourtNames` と、PATCH `/api/events/:id` の `finalCourt` の取り込み・`finale_exists`・`court_conflict` を消す。`settings` は `{ requireBib, requireRank, courts }` だけ保存する。`copy` / `from-template` / `bundle` の書き出し・取り込みからも `finalCourt` を落とす。
 - `computeFinale`: `court` を `EventStatus.finaleCourt(players)` にする。他は変えない。
 - 遷移の拒否（`no_finale` / `finale_pending` / `no_round2`）は変えない。

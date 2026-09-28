@@ -1399,21 +1399,20 @@
       ['N1', 'N2']);
     await Api.deleteEvent(nf.id);
 
-    // 候補のコートは settings.courts を含めた先頭（Courts.listFrom の先頭）。
-    // 選手は B・C だけでも、settings.courts に A があれば A に置く。
+    // 候補のコートは一巡目に選手のいるコートの昇順の先頭。settings.courts だけにあるコート
+    // （選手 0 名。practice 雛形の「稽古」など）には置かない。選手は B・C、courts に A があっても B。
     var fcGen = await makeGenEvent('決戦の先頭コート',
       'C1,B-男子-1-1,真,,,50,,,1    \nC2,C-男子-1-1,真,,,40,,,1    \n');
     await Api.updateEventInfo(fcGen.id, { name: '決戦の先頭コート', settings: { courts: ['C', 'A'] } });
     await toRound1Done(fcGen.id);
     var fcGenLoaded = await Api.loadEvent(fcGen.id);
-    assert('候補のコートは settings.courts を含めた先頭（A）',
+    assert('候補のコートは一巡目に選手のいるコートの先頭（settings.courts だけのコートは使わない）',
       round2Of(fcGenLoaded.players).filter(function(p) { return p.finalist === true; })
         .sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
-      ['A-男子-2-1:C2', 'A-男子-2-2:C1']);
-    assert('候補のコートは Courts.listFrom の先頭と一致する',
+      ['B-男子-2-1:C2', 'B-男子-2-2:C1']);
+    assert('候補のコートは一巡目の行だけの Courts.listFrom の先頭と一致する',
       EventStatus.finaleCourt(fcGenLoaded.players),
-      Courts.listFrom(fcGenLoaded.players.filter(function(p) { return Courts.roundOf(p) === 1; }),
-        fcGenLoaded.settings.courts)[0]);
+      Courts.listFrom(fcGenLoaded.players.filter(function(p) { return Courts.roundOf(p) === 1; }))[0]);
     await Api.deleteEvent(fcGen.id);
 
     var genEvent = await Api.saveEvent({ name: '二巡目テスト', date: '2026-02-01', venue: '', players: [] });
@@ -2318,9 +2317,9 @@
         players: [
           { id: 'p1', name: '取込 甲', order: 'A-男子-1-1', tech1: '取込技', tech2: '', tech3: '',
             score: 9, isNewFace: true, isFemale: false, result: '1    ',
-            adjust: [1, 0, 0], totalAdjust: 2, note: 'メモ', confirmed: true, secret: 'x' },
+            adjust: [1, 0, 0], totalAdjust: 2, note: 'メモ', confirmed: true, secret: 'x', finalist: true },
           { id: 'p2', name: '取込 甲', order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '',
-            score: 0, isNewFace: true, isFemale: false, result: '', sourcePlayerId: 'p1' },
+            score: 0, isNewFace: true, isFemale: false, result: '', sourcePlayerId: 'p1', finalist: true },
           { id: '../bad', name: '取込 乙', order: 'A-男子-1-2', tech1: '', tech2: '', tech3: '',
             score: 0, isNewFace: false, isFemale: false, result: 'xx' },
           { id: 'p4', name: '取込 丙', order: 'A-男子-1-3', tech1: '', tech2: '', tech3: '',
@@ -2346,6 +2345,8 @@
     assert('許可リスト外のキーは落ちる', b3P1.secret, undefined);
     assert('有効で一意な選手IDはそのまま使う', b3P1.id, 'p1');
     assert('sourcePlayerId は取り込み後のIDを指す', b3P2.sourcePlayerId, b3P1.id);
+    assert('二巡目の行の finalist の印は取り込む（決戦は印で判定する。設計書 2026-09-28）', b3P2.finalist, true);
+    assert('一巡目の行に付いた finalist の印は取り込まない', b3P1.finalist, undefined);
     assert('不正な選手IDは振り直す', b3P3.id === '../bad', false);
     assert('振り直した選手IDも有効なID', /^[A-Za-z0-9_-]{1,64}$/.test(b3P3.id), true);
     assert('0と1と2と空白以外の result は空にする', b3P3.result, '');
@@ -2451,6 +2452,15 @@
     var rtJiro2 = rt2nd.find(function(p) { return p.sourcePlayerId === rtJiro.id; });
     assert('往復: 二巡目の一郎行が sourcePlayerId で取り込み後の一郎を指す', !!rtIchiro2, true);
     assert('往復: 二巡目の二郎行が sourcePlayerId で取り込み後の二郎を指す', !!rtJiro2, true);
+    // 男子 2 名とも得点があるので 2 名とも決戦（暫定ベスト8）。印が落ちると決戦が消える。
+    assert('往復: 書き出しに finalist の印が入る',
+      rtBundle.event.players.filter(function(p) { return p.finalist === true; }).length, 2);
+    assert('往復: 取り込み後も finalist の印が残る（決戦が消えない）',
+      [rtIchiro2.finalist, rtJiro2.finalist, EventStatus.finalists(rtLoaded.players).length], [true, true, 2]);
+    // POST /api/events（大会ファイルの保存し直し）も同じ sanitize を通るので印が残る
+    await Api.saveEvent(rtLoaded);
+    assert('往復: 大会ファイルを保存し直しても finalist の印が残る',
+      EventStatus.finalists((await Api.loadEvent(rtImportRes.id)).players).length, 2);
 
     var rtHist = await Api.loadHistory(rtImportRes.id);
     // toRound1Done（draft → round1 → round1_done）で status_change が2件増えた分を足す
@@ -4534,6 +4544,14 @@
     assert('Board.finaleFor: 既存データのコート「決戦」でも、そのコートを映していれば行を返す',
       Board.finaleFor({ court: '決戦', status: 'round2_final', rows: bfData.rows }, '決戦').length, 2);
     assert('Board.finaleFor: finale が無ければ空', Board.finaleFor(null, 'A'), []);
+    assert('Board.finaleFor: 二巡目 進行中（決戦前）は候補のコートでも空',
+      Board.finaleFor({ court: 'A', status: 'round2', rows: bfData.rows }, 'A'), []);
+    assert('Board.finaleFor: 二巡目終了・最終結果は空', [
+      Board.finaleFor({ court: 'A', status: 'round2_done', rows: bfData.rows }, 'A'),
+      Board.finaleFor({ court: 'A', status: 'final', rows: bfData.rows }, 'A')
+    ], [[], []]);
+    assert('Board.finaleFor: status の無い応答（古いサーバー）は空',
+      Board.finaleFor({ court: 'A', rows: bfData.rows }, 'A'), []);
     assert('Board.finaleFor: コート未指定なら空', Board.finaleFor(bfData, ''), []);
 
     // storage.js テスト（大会ファイルのファイル名。純粋関数）

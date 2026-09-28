@@ -589,6 +589,9 @@ function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
     if (note) out.note = note;
   }
   if (p.confirmed === true) out.confirmed = true;
+  // 決戦（暫定ベスト8）の印。決戦の判定は行の印だけで行う（設計書 2026-09-28）ので、
+  // バンドルの取り込みや大会の保存し直しで落とすと決戦が消える。二巡目の行にだけ残す。
+  if (p.finalist === true && EventStatus.roundOf(p) === 2) out.finalist = true;
   if (bib !== null && bib !== undefined) out.bib = bib;
   if (sourcePlayerId) out.sourcePlayerId = sourcePlayerId;
   return out;
@@ -2139,7 +2142,7 @@ function bundleFilename(name, date) {
 }
 
 // エクスポートに出す選手の項目。ここに無いキーは出さない。
-// adjust / totalAdjust / note / confirmed / sourcePlayerId / bib は持っている選手にだけ付ける。
+// adjust / totalAdjust / note / confirmed / sourcePlayerId / bib / finalist は持っている選手にだけ付ける。
 // rank / rental は設計書の既定値（''・false）どおり常に出す（isNewFace 等と同じ扱い）。
 function pickBundlePlayer(p) {
   const src = (p && typeof p === 'object') ? p : {};
@@ -2161,6 +2164,8 @@ function pickBundlePlayer(p) {
   if (Number.isInteger(src.totalAdjust)) out.totalAdjust = src.totalAdjust;
   if (typeof src.note === 'string' && src.note !== '') out.note = src.note;
   if (src.confirmed === true) out.confirmed = true;
+  // 決戦（暫定ベスト8）の印（取り込み側は sanitizePlayerForSave が同じ条件で残す）
+  if (src.finalist === true && EventStatus.roundOf(src) === 2) out.finalist = true;
   if (isValidId(src.sourcePlayerId)) out.sourcePlayerId = src.sourcePlayerId;
   if (Number.isInteger(src.bib)) out.bib = src.bib;
   return out;
@@ -2532,10 +2537,13 @@ function generateRound2(event, force, allowReorder) {
   const plain = targets.filter(p => !finalistIds[p.id]).sort(compareForRound2);
   const finals = targets.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
 
-  // 候補の行は先頭のコート（settings.courts を含めた昇順の先頭。通常は A）に置く。
+  // 候補の行は、一巡目に選手のいるコートの昇順の先頭（通常は A）に置く。
+  // settings.courts だけにあるコート（選手 0 名。practice 雛形の「稽古」など）は使わない
+  // （誰もいないコートに候補だけが置かれ、端末を用意していないコートで決戦をすることになるため）。
+  // そのため firstCourt に settings.courts は渡さない。
   // plain を先に採番するので、候補はそのコートの男子の二巡目の続き番号になる
   // （nextOrderNumber は最大+1）。
-  const finaleCourt = EventStatus.firstCourt(src, event.settings && event.settings.courts);
+  const finaleCourt = EventStatus.firstCourt(src);
   const newRows = [];
   plain.forEach(p => {
     newRows.push(buildRound2Row(players, newRows, p, courtOf(p), p.isFemale === true, false));
@@ -2569,8 +2577,9 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
   const finalistIds = pickFinalists(src);
   const plain = src.filter(p => !finalistIds[p.id]).sort(compareForRound2);
   const finals = src.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
-  // generateRound2 と同じく、候補は先頭のコートの男子の通常の行の後ろ（続き番号）に置く。
-  const finaleCourt = EventStatus.firstCourt(src, event.settings && event.settings.courts);
+  // generateRound2 と同じく、候補は一巡目に選手のいるコートの先頭（settings.courts だけの
+  // コートは使わない）の男子の通常の行の後ろ（続き番号）に置く。
+  const finaleCourt = EventStatus.firstCourt(src);
 
   const newRows = [];
   let reused = 0;

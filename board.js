@@ -62,13 +62,17 @@ var Board = (function() {
     });
   }
 
-  // 決戦の表に出す行。決戦の候補がいるコート（finale.court。先頭コート＝通常 A。
-  // 設計書 2026-09-28）を映しているときだけ返す。
+  // 決戦の表に出す行。決戦 進行中（finale.status === 'round2_final'）に、決戦の候補がいる
+  // コート（finale.court。先頭コート＝通常 A。設計書 2026-09-28）を映しているときだけ返す。
+  // 候補は A コートの通常の選手と同じコートに並ぶので、状態を見ないと二巡目 進行中（決戦前）や
+  // 二巡目終了の後にも A コートのボードに表が出てしまう（発表モード present.js と同じ判定）。
   // finale は GET /api/links/:token/ranking の応答（サーバーが計算した暫定順位）。
   // board.html は status.js を読まない（無認証で配信するページ）ので、
   // 状態の判定はサーバーが入れた finale.status / finale.court に任せる。
+  // status を持たない応答（古いサーバー）は出さない。
   function finaleFor(finale, court) {
     if (!finale || !court) return [];
+    if (finale.status !== 'round2_final') return [];
     if (finale.court !== court) return [];
     return Array.isArray(finale.rows) ? finale.rows : [];
   }
