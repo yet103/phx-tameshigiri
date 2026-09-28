@@ -23,7 +23,7 @@ input[type="file"] { display: none; }
 .container { max-width: 1200px; margin: 0 auto; padding: 8px 12px; }
 
 /* ===== 選手ナビゲーションバー =====
-   前後の選手ボタンは .action-bar に移したので、ここは選手名の表示だけ。
+   前後の選手ボタンは操作区画の 1 段目（.timer-bar）にあるので、ここは選手名の表示だけ。
    「Aコート」が目立ちすぎないよう、3列（コート／順番+名前／空）にして中央の組を画面中央に置く。 */
 .player-nav {
   display: grid;
@@ -477,6 +477,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 /* 備考の列は残り幅を吸収し、長ければ折り返す */
 .player-list-table th.note, .player-list-table td.note {
   width: auto;
+  min-width: 10em;   /* 狭い幅で備考が 1 文字幅の縦書き状に潰れないように（表は横スクロールになる） */
   white-space: normal;
   overflow-wrap: anywhere;
   text-align: left;
