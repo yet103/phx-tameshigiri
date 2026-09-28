@@ -252,8 +252,10 @@ var AdminRound = (function() {
       if (fin.length > 0) {
         var cap = document.createElement('div');
         cap.className = 'round-finale-caption';
-        cap.textContent = '決戦（暫定ベスト8）　決戦コート「' +
-          Courts.finalCourtOf(CTX && CTX.event) + '」で最後に斬ります';
+        // 候補は先頭コート（通常 A）の二巡目の末尾で斬る（設計書 2026-09-28）。
+        // コートで絞っていても候補のコートを出すため、大会の全選手から引く。
+        cap.textContent = '決戦（暫定ベスト8）　' +
+          Courts.finaleCourt((CTX && CTX.players) || fin) + ' コートの最後に斬ります';
         listEl.appendChild(cap);
         var box = document.createElement('div');
         box.className = 'round-finale';

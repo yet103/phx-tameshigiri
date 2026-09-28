@@ -589,25 +589,6 @@ var Admin = (function() {
       '一巡目にその項目が空の選手がいる間だけ「試合開始」で止まり、人数と名前が出ます。';
     body.appendChild(reqNote);
 
-    // 決戦コートの名前（settings.finalCourt）。空欄なら既定の「決戦」（PC 運営 desk-setup.js と同じ）。
-    var inFinal = addField('決戦コートの名前', 'text');
-    inFinal.id = 'setupFinalCourt';
-    inFinal.placeholder = EventStatus.finalCourtOf({});   // '決戦'
-    inFinal.value = (typeof settings.finalCourt === 'string') ? settings.finalCourt : '';
-    // 決戦の行がすでにあると、名前を変えても決戦コートに移した選手をどのコート端末でも
-    // 採点できなくなる（サーバーも PATCH で 400 にする。レビュー指摘B）。
-    var hasFinalRows = EventStatus.hasFinalists(players);
-    inFinal.disabled = locked || hasFinalRows;
-
-    var finalNote = document.createElement('p');
-    finalNote.className = 'field-note';
-    finalNote.textContent = hasFinalRows
-      ? '決戦の行ができた後は変えられません。'
-      : ('一巡目を終了したときに、暫定ベスト8（一般男子・一巡目の得点上位）を' +
-        'このコートへ移します。空欄なら「' + EventStatus.finalCourtOf({}) + '」になります。' +
-        '名前の規則は他のコートと同じです（「-」と「未分類」は使えません）。');
-    body.appendChild(finalNote);
-
     // --- コート一覧 ---
     var courtField = document.createElement('div');
     courtField.className = 'field';
@@ -714,22 +695,16 @@ var Admin = (function() {
       if (!name) { alert('大会名を入力してください。'); return; }
       var courtErr = Courts.validateCourtList(extra);
       if (courtErr) { alert(courtErr); return; }
-      // 決戦コートの名前もコートの名前の規則に従う（サーバーも見るが、文言をここで出す）。
-      var finalName = inFinal.value.trim();
-      if (finalName) {
-        var finalErr = Courts.validateCourtList([finalName]);
-        if (finalErr) { alert(finalErr); return; }
-      }
       btnSave.disabled = true;
       sheet.lock(true);
       var result = await Api.updateEventInfo(eventId, {
         name: name, date: inDate.value, venue: inVenue.value.trim(),
-        // finalCourt は空欄なら「既定（決戦）に戻す」意味（サーバーがキーごと落とす）。
+        // 決戦コートの名前（finalCourt）は廃止（暫定ベスト8 は先頭コートの最後に斬る。
+        // 設計書 2026-09-28）。PC 運営 desk-setup.js と同じく requireBib / requireRank / courts だけ送る。
         settings: {
           requireBib: chkBib.checked,
           requireRank: chkRank.checked,
-          courts: extra.slice(),
-          finalCourt: finalName
+          courts: extra.slice()
         }
       });
       // 保存中に大会を切り替えられていたら、もう閉じているシートを操作しない
