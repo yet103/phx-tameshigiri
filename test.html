@@ -406,87 +406,40 @@
       (await Api.loadEvent(stEvent.id)).settings.courts, ['A', 'B', '稽古']);
     await Api.deleteEvent(stEvent.id);
 
-    // ---- 決戦コートの名前（settings.finalCourt。設計書 2026-09-22） ----
-    var fcEvent = await Api.saveEvent({ name: '決戦コート設定', date: '2026-09-22', venue: '', players: [] });
-    var fcSet = await Api.updateEventInfo(fcEvent.id, {
-      name: '決戦コート設定', settings: { requireBib: false, requireRank: false, courts: ['A'], finalCourt: '決勝' }
-    });
-    assert('PATCH: finalCourt を保存する', fcSet.ok && fcSet.event.settings.finalCourt, '決勝');
-    assert('PATCH: 保存後に読み直しても残る',
-      (await Api.loadEvent(fcEvent.id)).settings.finalCourt, '決勝');
-    var fcKeep = await Api.updateEventInfo(fcEvent.id, { name: '決戦コート設定2' });
-    assert('PATCH: settings を送らなければ finalCourt は据え置き',
-      fcKeep.ok && (await Api.loadEvent(fcEvent.id)).settings.finalCourt, '決勝');
-    var fcPartial = await Api.updateEventInfo(fcEvent.id, {
-      name: '決戦コート設定2', settings: { requireBib: true }
-    });
-    assert('PATCH: settings に finalCourt を含めなければ据え置き',
-      fcPartial.ok && (await Api.loadEvent(fcEvent.id)).settings.finalCourt, '決勝');
-    var fcBad = await Api.updateEventInfo(fcEvent.id, {
-      name: '決戦コート設定2', settings: { finalCourt: 'A-B' }
-    });
-    assert('PATCH: 「-」を含む決戦コート名は 400', [fcBad.ok, fcBad.status], [false, 400]);
-    assert('PATCH: 断られた後も前の値が残る',
-      (await Api.loadEvent(fcEvent.id)).settings.finalCourt, '決勝');
-    var fcClear = await Api.updateEventInfo(fcEvent.id, {
-      name: '決戦コート設定2', settings: { finalCourt: '' }
-    });
-    assert('PATCH: 空文字は既定（決戦）に戻す＝キーを持たない',
-      fcClear.ok && (await Api.loadEvent(fcEvent.id)).settings.finalCourt, undefined);
-
-    // ---- レビュー指摘C: 決戦コートの名前が通常のコートと同じ名前になれない ----
-    var fcConflictSettings = await Api.updateEventInfo(fcEvent.id, {
-      name: '決戦コート設定2', settings: { requireBib: false, requireRank: false, courts: ['A', '決勝'], finalCourt: '決勝' }
-    });
-    assert('PATCH: 決戦コートの名前が settings.courts と同じなら400 court_conflict',
-      [fcConflictSettings.ok, fcConflictSettings.status, fcConflictSettings.reason], [false, 400, 'court_conflict']);
-    assert('PATCH: 断られても courts・finalCourt とも前の値が残る',
+    // ---- settings.finalCourt（決戦コートの名前）は廃止。届いても保存しない（設計書 2026-09-28） ----
+    var fcEvent = await Api.saveEvent({ name: '決戦コート廃止', date: '2026-09-28', venue: '',
+      settings: { requireBib: false, requireRank: false, courts: ['A'], finalCourt: '決勝' }, players: [] });
+    assert('POST /api/events: settings.finalCourt は保存しない',
       (await Api.loadEvent(fcEvent.id)).settings, { requireBib: false, requireRank: false, courts: ['A'] });
-    var fcConflictEvent = await Api.saveEvent({ name: '決戦コート衝突', date: '2026-09-22', venue: '', players: [] });
-    await Api.importCsv(fcConflictEvent.id,
-      '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\nCX1,決勝-男子-1-1,真,,,30,,,1    \n', 'replace');
-    var fcConflictPlayer = await Api.updateEventInfo(fcConflictEvent.id, {
-      name: '決戦コート衝突', settings: { finalCourt: '決勝' }
+    var fcSet = await Api.updateEventInfo(fcEvent.id, {
+      name: '決戦コート廃止', settings: { requireBib: false, requireRank: false, courts: ['A'], finalCourt: '決勝' }
     });
-    assert('PATCH: 決戦コートの名前が選手の order のコート名と同じなら400 court_conflict',
-      [fcConflictPlayer.ok, fcConflictPlayer.status, fcConflictPlayer.reason], [false, 400, 'court_conflict']);
-    await Api.deleteEvent(fcConflictEvent.id);
-
-    await Api.updateEventInfo(fcEvent.id, { name: '決戦コート設定2', settings: { finalCourt: '決勝' } });
-    var fcCopy = await Api.copyEvent(fcEvent.id, { name: '決戦コピー', date: '2026-09-22', venue: '' });
-    assert('copyEvent: finalCourt を複製する',
-      (await Api.loadEvent(fcCopy.id)).settings.finalCourt, '決勝');
+    assert('PATCH: finalCourt を送っても保存しない（settings は requireBib / requireRank / courts だけ）',
+      [fcSet.ok, fcSet.event.settings, (await Api.loadEvent(fcEvent.id)).settings],
+      [true, { requireBib: false, requireRank: false, courts: ['A'] },
+       { requireBib: false, requireRank: false, courts: ['A'] }]);
+    // 以前は 400 court_conflict / 「-」入りの名前で 400 にしていた。いまは無視するだけ。
+    var fcSame = await Api.updateEventInfo(fcEvent.id, {
+      name: '決戦コート廃止', settings: { courts: ['A', '決勝'], finalCourt: '決勝' }
+    });
+    assert('PATCH: courts と同じ名前の finalCourt を送っても 400 にならない',
+      [fcSame.ok, (await Api.loadEvent(fcEvent.id)).settings.courts], [true, ['A', '決勝']]);
+    var fcBadName = await Api.updateEventInfo(fcEvent.id, {
+      name: '決戦コート廃止', settings: { courts: ['A'], finalCourt: 'A-B' }
+    });
+    assert('PATCH: 「-」を含む finalCourt も検証せずに無視する', fcBadName.ok, true);
     var fcBundle = JSON.parse(await Api.exportBundle(fcEvent.id));
-    assert('bundle: finalCourt を書き出す', fcBundle.event.settings.finalCourt, '決勝');
+    assert('bundle: finalCourt を書き出さない', fcBundle.event.settings.finalCourt, undefined);
+    fcBundle.event.settings.finalCourt = '決勝';   // 以前のバンドル（finalCourt 入り）を模す
     var fcImported = await Api.importBundle(fcBundle);
-    assert('bundle: finalCourt を取り込む',
-      (await Api.loadEvent(fcImported.id)).settings.finalCourt, '決勝');
+    assert('bundle: 以前のバンドルの finalCourt を取り込まない',
+      (await Api.loadEvent(fcImported.id)).settings, { requireBib: false, requireRank: false, courts: ['A'] });
+    var fcCopy = await Api.copyEvent(fcEvent.id, { name: '決戦コート廃止コピー', date: '2026-09-28', venue: '' });
+    assert('copyEvent: settings に finalCourt を持たない',
+      (await Api.loadEvent(fcCopy.id)).settings, { requireBib: false, requireRank: false, courts: ['A'] });
     await Api.deleteEvent(fcEvent.id);
     await Api.deleteEvent(fcCopy.id);
     await Api.deleteEvent(fcImported.id);
-
-    // ---- レビュー指摘B: 決戦の行がすでにあると決戦コートの名前を変えられない ----
-    var fbEvent = await makeGenEvent('決戦コート名変更',
-      'FB1,A-男子-1-1,真,,,30,,,1    \nFB2,A-男子-1-2,真,,,10,,,1    \n');
-    // 生成前（round1）なら自由に変えられる。
-    var fbBefore = await Api.updateEventInfo(fbEvent.id, {
-      name: '決戦コート名変更', settings: { finalCourt: '決勝A' }
-    });
-    assert('PATCH: 決戦の行が無ければ名前を変えられる', fbBefore.ok, true);
-    await toRound1Done(fbEvent.id);
-    assert('決戦の行ができている', EventStatus.hasFinalists((await Api.loadEvent(fbEvent.id)).players), true);
-    var fbSame = await Api.updateEventInfo(fbEvent.id, {
-      name: '決戦コート名変更', settings: { finalCourt: '決勝A' }
-    });
-    assert('PATCH: 決戦の行があっても、いまと同じ値なら通る', fbSame.ok, true);
-    var fbChange = await Api.updateEventInfo(fbEvent.id, {
-      name: '決戦コート名変更', settings: { finalCourt: '決勝B' }
-    });
-    assert('PATCH: 決戦の行があると違う値には変えられない（400 finale_exists）',
-      [fbChange.ok, fbChange.status, fbChange.reason], [false, 400, 'finale_exists']);
-    assert('PATCH: 断られても元の名前が残る',
-      (await Api.loadEvent(fbEvent.id)).settings.finalCourt, '決勝A');
-    await Api.deleteEvent(fbEvent.id);
 
     // コピー・バンドルの往復・二巡目複製（settings・drawn・bib・rank・rental）
     var pcSrc = await Api.saveEvent({ name: '追加項目コピー元', date: '2026-09-19', venue: '', players: [] });
@@ -1339,7 +1292,8 @@
     // --- 二巡目の生成 ---
     // ---- 暫定ベスト8（決戦）の抽出。設計書 2026-09-22「データ」 ----
     // 一般男子（女子でない＝新人も含む）の一巡目の得点上位 8 名。0 点は含めない。
-    // 8 位が同点なら全員。決戦コートに移し、一巡目の得点が低い順に 1〜n 番。
+    // 8 位が同点なら全員。先頭のコート（通常 A）の男子の二巡目に、通常の行の続き番号で
+    // 一巡目の得点が低い順に置く（設計書 2026-09-28。決戦コートは廃止）。
     async function makeGenEvent(name, csv) {
       var ev = await Api.saveEvent({ name: name, date: '2026-09-22', venue: '', players: [] });
       await Api.importCsv(ev.id, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' + csv, 'replace');
@@ -1363,10 +1317,13 @@
     var b8Fin = b8Rows.filter(function(p) { return p.finalist === true; });
     assert('決戦は一般男子の上位8名', b8Fin.map(function(p) { return p.name; }).sort(),
       ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8']);
-    assert('決戦の order は決戦コート・男子・二巡目・得点の低い順に1から',
+    assert('決戦の order は先頭コート・男子・二巡目で、通常の行の続き番号・得点の低い順',
       b8Fin.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
-      ['決戦-男子-2-1:M8', '決戦-男子-2-2:M7', '決戦-男子-2-3:M6', '決戦-男子-2-4:M5',
-       '決戦-男子-2-5:M4', '決戦-男子-2-6:M3', '決戦-男子-2-7:M2', '決戦-男子-2-8:M1']);
+      ['A-男子-2-3:M8', 'A-男子-2-4:M7', 'A-男子-2-5:M6', 'A-男子-2-6:M5',
+       'A-男子-2-7:M4', 'A-男子-2-8:M3', 'A-男子-2-9:M2', 'A-男子-2-10:M1']);
+    assert('二巡目の行の並び（データ順）でも候補は通常の行の後ろ',
+      b8Rows.map(function(p) { return p.name; }),
+      ['F2', 'F1', 'M10', 'M9', 'M8', 'M7', 'M6', 'M5', 'M4', 'M3', 'M2', 'M1']);
     assert('決戦に入らない男子は元のコートに残る',
       b8Rows.filter(function(p) { return p.name === 'M9' || p.name === 'M10'; })
         .map(function(p) { return p.order; }).sort(), ['A-男子-2-1', 'A-男子-2-2']);
@@ -1442,15 +1399,21 @@
       ['N1', 'N2']);
     await Api.deleteEvent(nf.id);
 
-    // 決戦コートの名前は settings.finalCourt に従う
-    var fcGen = await makeGenEvent('決戦コート名',
-      'C1,A-男子-1-1,真,,,50,,,1    \n');
-    await Api.updateEventInfo(fcGen.id, { name: '決戦コート名', settings: { finalCourt: '決勝' } });
+    // 候補のコートは settings.courts を含めた先頭（Courts.listFrom の先頭）。
+    // 選手は B・C だけでも、settings.courts に A があれば A に置く。
+    var fcGen = await makeGenEvent('決戦の先頭コート',
+      'C1,B-男子-1-1,真,,,50,,,1    \nC2,C-男子-1-1,真,,,40,,,1    \n');
+    await Api.updateEventInfo(fcGen.id, { name: '決戦の先頭コート', settings: { courts: ['C', 'A'] } });
     await toRound1Done(fcGen.id);
-    await Api.generateNextRound(fcGen.id, true);
-    assert('決戦コートの名前は settings.finalCourt に従う',
-      round2Of((await Api.loadEvent(fcGen.id)).players)
-        .filter(function(p) { return p.finalist === true; })[0].order, '決勝-男子-2-1');
+    var fcGenLoaded = await Api.loadEvent(fcGen.id);
+    assert('候補のコートは settings.courts を含めた先頭（A）',
+      round2Of(fcGenLoaded.players).filter(function(p) { return p.finalist === true; })
+        .sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
+      ['A-男子-2-1:C2', 'A-男子-2-2:C1']);
+    assert('候補のコートは Courts.listFrom の先頭と一致する',
+      EventStatus.finaleCourt(fcGenLoaded.players),
+      Courts.listFrom(fcGenLoaded.players.filter(function(p) { return Courts.roundOf(p) === 1; }),
+        fcGenLoaded.settings.courts)[0]);
     await Api.deleteEvent(fcGen.id);
 
     var genEvent = await Api.saveEvent({ name: '二巡目テスト', date: '2026-02-01', venue: '', players: [] });
@@ -1477,9 +1440,11 @@
     assert('二巡目は決戦以外が先・女子が先頭・得点の低い順',
       round2.filter(function(p) { return p.finalist !== true; }).map(function(p) { return p.name; }),
       ['F2', 'F1']);
-    assert('二巡目の順番はコート×性別ごとに1から（決戦は決戦コートで1から）',
-      round2.slice().sort(Courts.compareOrder).map(function(p) { return p.order; }),
-      ['A-女子-2-1', 'A-女子-2-2', '決戦-男子-2-1', '決戦-男子-2-2', '決戦-男子-2-3', '決戦-男子-2-4']);
+    // 男子 4 名（A の M1〜M3・B の M4）は 8 名未満なので全員が候補。候補は B の M4 も含めて
+    // 先頭コート A に置く（A の男子に通常の行は無いので 1 から、一巡目の得点が低い順）。
+    assert('二巡目の順番はコート×性別ごとに1から（候補は先頭コート A の男子の続き番号）',
+      round2.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
+      ['A-男子-2-1:M2', 'A-男子-2-2:M3', 'A-男子-2-3:M1', 'A-男子-2-4:M4', 'A-女子-2-1:F2', 'A-女子-2-2:F1']);
     assert('二巡目の技は一巡目の複製',
       [round2[0].tech1, round2[0].tech2, round2[0].tech3],
       [genLoaded.players[4].tech1, genLoaded.players[4].tech2, genLoaded.players[4].tech3]);
@@ -1552,9 +1517,9 @@
     assert('差分追加の existingCount は既存の二巡目人数', diffGen.existingCount, 2);
     var diffRows = (await Api.loadEvent(diffEvent.id)).players.filter(function(p) { return Courts.roundOf(p) === 2; });
     // D1・D2・D3 は男子8名未満で全員得点0より大きいため、3名とも決戦（暫定ベスト8）に入る。
-    // 決戦コートでも番号は続き番号のまま採番される。
+    // 候補は先頭コート A に置かれ、差分追加でも番号は続き番号のまま採番される。
     assert('差分追加は既存の二巡目の続き番号', diffRows.map(function(p) { return p.order; }),
-      ['決戦-男子-2-1', '決戦-男子-2-2', '決戦-男子-2-3']);
+      ['A-男子-2-1', 'A-男子-2-2', 'A-男子-2-3']);
     assert('差分追加の行は追加した一巡目を指す', diffRows[2].sourcePlayerId, diffP3.id);
     await Api.deleteEvent(diffEvent.id);
 
@@ -1570,10 +1535,11 @@
     var unaDone = await toRound1Done(unaEvent.id);   // 遷移が二巡目を生成する
     assert('order 無し・未分類コートの選手は二巡目を作らない', unaDone.round2.created, 1);
     assert('order 無し・未分類コートの選手数を合わせて返す', unaDone.round2.unassignedCount, 2);
-    // U2（唯一の候補）は男子1名だけなので決戦（暫定ベスト8）に入り、決戦コートで採番される。
+    // U2（唯一の候補）は男子1名だけなので決戦（暫定ベスト8）に入り、先頭コート A で採番される
+    // （未分類は先頭コートの候補にもならない）。
     assert('未分類のコートを製造しない',
       (await Api.loadEvent(unaEvent.id)).players.map(function(p) { return p.order; }),
-      ['', 'A-男子-1-1', '未分類-男子-1-1', '決戦-男子-2-1']);
+      ['', 'A-男子-1-1', '未分類-男子-1-1', 'A-男子-2-1']);
     await Api.deleteEvent(unaEvent.id);
 
     assert('存在しない大会の二巡目生成は null', await Api.generateNextRound('nosuchevent', false), null);
@@ -1689,6 +1655,57 @@
     assert('確定の印は残る', reoH2After.confirmed, true);
     await Api.deleteEvent(reoEvent.id);
 
+    // ---- 付け直し（reorderRound2）の後も、候補は先頭コートの男子の通常の行の後ろに並ぶ
+    //      （設計書 2026-09-28）。A に男子 6 名、B に男子 5 名・女子 1 名 ----
+    var rfCsv = '';
+    [60, 55, 50, 45, 40, 35].forEach(function(sc, i) {
+      rfCsv += 'RA' + (i + 1) + ',A-男子-1-' + (i + 1) + ',真,,,' + sc + ',,,1    \n';
+    });
+    [58, 30, 25, 20, 15].forEach(function(sc, i) {
+      rfCsv += 'RB' + (i + 1) + ',B-男子-1-' + (i + 1) + ',真,,,' + sc + ',,,1    \n';
+    });
+    rfCsv += 'RF1,B-女子-1-1,真,,,70,,○,1    \n';
+    var rfEvent = await makeGenEvent('付け直しと先頭コート', rfCsv);
+    await toRound1Done(rfEvent.id);
+    function rfCourtRows(players, court) {
+      return round2Of(players).filter(function(p) { return Courts.courtOf(p) === court && !p.isFemale; })
+        .sort(Courts.compareOrder).map(function(p) { return p.name + (p.finalist ? '*' : ''); });
+    }
+    // 上位 8 名: RA1 60, RB1 58, RA2 55, RA3 50, RA4 45, RA5 40, RA6 35, RB2 30。
+    // A の男子は全員候補なので A の通常の行は無い。B の通常の行は RB3〜RB5。
+    assert('最初の生成: A の男子は候補 8 名（得点の低い順）',
+      rfCourtRows((await Api.loadEvent(rfEvent.id)).players, 'A'),
+      ['RB2*', 'RA6*', 'RA5*', 'RA4*', 'RA3*', 'RA2*', 'RB1*', 'RA1*']);
+    // 一巡目に戻して得点を直す: RA5・RA6 を 1・2 点に下げ、RB3・RB4 を 90・80 に上げる。
+    await Api.changeStatus(rfEvent.id, 'round1');
+    var rfP1 = (await Api.loadEvent(rfEvent.id)).players;
+    function rfId(name) {
+      return rfP1.filter(function(p) { return p.name === name && Courts.roundOf(p) === 1; })[0].id;
+    }
+    await Api.updatePlayer(rfEvent.id, rfId('RA5'), { score: 1 });
+    await Api.updatePlayer(rfEvent.id, rfId('RA6'), { score: 2 });
+    await Api.updatePlayer(rfEvent.id, rfId('RB3'), { score: 90 });
+    await Api.updatePlayer(rfEvent.id, rfId('RB4'), { score: 80 });
+    var rfAgain = await Api.changeStatus(rfEvent.id, 'round1_done');
+    assert('付け直しになる（reordered: true）', rfAgain.round2.reordered, true);
+    var rfAfter = (await Api.loadEvent(rfEvent.id)).players;
+    // 新しい上位 8 名: RB3 90, RB4 80, RA1 60, RB1 58, RA2 55, RA3 50, RA4 45, RB2 30。
+    // A の通常の行は RA5（1 点）・RA6（2 点）で 1・2 番。候補は 3 番から得点の低い順。
+    assert('付け直し後: A の男子は通常の行が先、候補が続き番号で後ろ',
+      rfCourtRows(rfAfter, 'A'),
+      ['RA5', 'RA6', 'RB2*', 'RA4*', 'RA3*', 'RA2*', 'RB1*', 'RA1*', 'RB4*', 'RB3*']);
+    assert('付け直し後: 候補の番号は A-男子-2-3〜10',
+      Courts.finalists(rfAfter).map(function(p) { return p.order; }),
+      ['A-男子-2-3', 'A-男子-2-4', 'A-男子-2-5', 'A-男子-2-6',
+       'A-男子-2-7', 'A-男子-2-8', 'A-男子-2-9', 'A-男子-2-10']);
+    assert('付け直し後: 候補の行はデータの並びでも A の通常の行の後ろ',
+      round2Of(rfAfter).filter(function(p) { return Courts.courtOf(p) === 'A'; })
+        .map(function(p) { return !!p.finalist; }),
+      [false, false, true, true, true, true, true, true, true, true]);
+    assert('付け直し後: B の男子は候補以外（RB5 だけ）', rfCourtRows(rfAfter, 'B'), ['RB5']);
+    assert('付け直し後: 候補のコートは A', EventStatus.finaleCourt(rfAfter), 'A');
+    await Api.deleteEvent(rfEvent.id);
+
     // 一巡目が0名なら一巡目を終了できない
     var trEmpty = await Api.saveEvent({ name: '遷移生成0名', date: '2026-09-22', venue: '', players: [] });
     await Api.createPlayer(trEmpty.id, { name: 'X1', court: 'A', isFemale: false });
@@ -1768,7 +1785,7 @@
     await Api.changeStatus(flEvent.id, 'round2');
     await Api.changeStatus(flEvent.id, 'round2_final');
     var flRank = await Api.loadRanking(flEvent.id);
-    assert('finale.court は決戦コートの名前', flRank.finale.court, '決戦');
+    assert('finale.court は候補がいる先頭コート', flRank.finale.court, 'A');
     assert('finale.status は今の状態', flRank.finale.status, 'round2_final');
     assert('finale.rows は試技順（番号順）で得点の低い選手が先',
       flRank.finale.rows.map(function(r) { return [r.name, r.order, r.r1, r.r2, r.total, r.scored, r.rank]; }),

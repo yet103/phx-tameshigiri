@@ -68,9 +68,9 @@ var Api = (function() {
     // 他のキーが混ざっていてもサーバーが無視する。
     // 戻り値: { ok: true, event: { id, name, date, venue, updatedAt, settings } }
     //       | { ok: false, status: HTTPステータス, reason, error }（400 / 404 / 409。
-    //         409 の reason は 'locked'。400 の reason は決戦コートの名前を変えるときだけ
-    //         'finale_exists'（決戦の行がすでにある）/ 'court_conflict'（通常のコートと
-    //         同じ名前）が入ることがある。レビュー指摘B・C）
+    //         409 の reason は 'locked'）
+    //         settings.finalCourt（決戦コートの名前）は廃止。送ってもサーバーが無視する
+    //         （設計書 2026-09-28）
     //       | null（通信そのものの失敗）
     try {
       var res = await fetch('/api/events/' + eventId, {

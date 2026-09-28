@@ -265,31 +265,6 @@ function sanitizeCourtList(list) {
   return out.slice(0, 20);
 }
 
-// settings.finalCourt（決戦コートの名前）の寛容な取り込み。
-// コート名の規則（isValidCourt）を通らない値は落として既定（EventStatus.finalCourtOf の
-// '決戦'）に任せる。取り込み系 API が他の項目を黙って落とすのと同じ流儀。
-function sanitizeFinalCourt(name) {
-  return isValidCourt(name) ? name : '';
-}
-
-// 決戦コート以外で使われているコート名（settings.courts と選手の order のコート名。
-// Courts.listFrom 相当）。決戦の行（finalist === true）自身のコート名は「通常のコート」に
-// 数えない（PATCH /api/events/:id の決戦コート名の衝突チェック用。レビュー指摘C）。
-function nonFinalCourtNames(players, courts) {
-  const seen = Object.create(null);   // コート名が '__proto__' などでも壊れないように
-  const out = [];
-  function add(c) {
-    if (!c || c === '未分類') return;
-    if (!seen[c]) { seen[c] = true; out.push(c); }
-  }
-  (Array.isArray(players) ? players : []).forEach(p => {
-    if (p && p.finalist === true) return;
-    add(courtOf(p));
-  });
-  (Array.isArray(courts) ? courts : []).forEach(add);
-  return out;
-}
-
 // 同一の コート×性別×巡目 における次の番号。該当が無ければ 1。
 // 件数+1 ではなく最大+1 を使う（削除で欠番があっても衝突しない）。
 function nextOrderNumber(players, court, gender, round) {
@@ -353,7 +328,7 @@ function rejectIfLocked(res, event) {
 }
 
 // 決戦（暫定ベスト8）の表。決戦の行が無ければ null（設計書 2026-09-22）。
-// rows は試技順（決戦コートの番号順）。r1 は一巡目の得点（sourcePlayerId で引く）、
+// rows は試技順（候補の行の番号順。候補は先頭コートの男子の二巡目の末尾に並ぶ。設計書 2026-09-28）。r1 は一巡目の得点（sourcePlayerId で引く）、
 // r2 は斬った人だけ（未採点は null）、rank も斬った人だけの中での暫定順位
 // （合計降順・同点同順位。1, 1, 3）。
 // ○×の生データ（result）は返さない（共有リンクから無認証で読まれるため）。
@@ -399,7 +374,9 @@ function computeFinale(event) {
   });
 
   return {
-    court: EventStatus.finalCourtOf(event),
+    // 候補がいるコート（通常は A。既存大会で専用コート「決戦」に置いた行ならその名前）。
+    // 配信ボードはこのコートを映しているときに決戦の表を出す。
+    court: EventStatus.finaleCourt(players),
     status: EventStatus.of(event),
     rows: rows
   };
@@ -717,9 +694,8 @@ app.post('/api/events', (req, res) => {
       const courtsInput = Array.isArray(s.courts) ? s.courts : [];
       const courtsErr = validateCourtList(courtsInput);
       if (courtsErr) return res.status(400).json({ error: courtsErr });
+      // finalCourt（2026-09-22 の決戦コートの名前）は廃止。届いても保存しない（設計書 2026-09-28）。
       event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courtsInput.slice() };
-      const fc = sanitizeFinalCourt(s.finalCourt);
-      if (fc) event.settings.finalCourt = fc;
     } else if (prev && prev.settings && typeof prev.settings === 'object' && !Array.isArray(prev.settings)) {
       event.settings = prev.settings;
     }
@@ -789,42 +765,10 @@ app.patch('/api/events/:id', (req, res) => {
         if (courtsErr) return res.status(400).json({ error: courtsErr });
         courts = s.courts.slice();
       }
-      // 決戦コートの名前。courts と同じく、指定が無ければ既存の値を残す
-      // （name だけの部分更新で決戦コートが消えないように）。
-      // 空文字は「既定（決戦）に戻す」意味なのでキーごと落とす。
-      let finalCourt = (event.settings && typeof event.settings.finalCourt === 'string')
-        ? event.settings.finalCourt : '';
-      if (s.finalCourt !== undefined) {
-        const name = typeof s.finalCourt === 'string' ? s.finalCourt.trim() : '';
-        if (name && !isValidCourt(name)) {
-          return res.status(400).json({ error: 'コート名「' + s.finalCourt + '」は使えません' });
-        }
-        // 決戦の行がすでにあるときに名前をいまと違う値に変えると、決戦コートに移した選手を
-        // どのコート端末でも採点できなくなる（レビュー指摘B）。実際に値が変わるときだけ止める。
-        const nextFinal = EventStatus.finalCourtOf({ settings: { finalCourt: name } });
-        if (nextFinal !== EventStatus.finalCourtOf(event) && EventStatus.hasFinalists(event.players)) {
-          return res.status(400).json({
-            error: '決戦の行がすでにあるため、決戦コートの名前は変えられません',
-            reason: 'finale_exists'
-          });
-        }
-        finalCourt = name;
-      }
-      // 決戦コートの名前が通常のコート（settings.courts や選手の order のコート名）と
-      // かぶると、どちらのコート端末で採点すべきか判定できなくなる（レビュー指摘C）。
-      // 決戦コート自身の行（finalist の行）はここでは「通常のコート」に数えない。
-      if (s.finalCourt !== undefined || s.courts !== undefined) {
-        const effectiveFinal = EventStatus.finalCourtOf({ settings: { finalCourt: finalCourt } });
-        const otherCourts = nonFinalCourtNames(event.players, courts);
-        if (otherCourts.indexOf(effectiveFinal) !== -1) {
-          return res.status(400).json({
-            error: 'コート名「' + effectiveFinal + '」は通常のコートと同じ名前のため決戦コートに使えません',
-            reason: 'court_conflict'
-          });
-        }
-      }
+      // finalCourt（2026-09-22 の決戦コートの名前）は廃止。届いても無視して保存しない
+      // （暫定ベスト8 は先頭コートの末尾に置く。設計書 2026-09-28）。既存の大会に残っている
+      // finalCourt キーも、settings を送る PATCH で落ちる（どこからも読まないので害は無い）。
       event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courts };
-      if (finalCourt) event.settings.finalCourt = finalCourt;
     }
 
     event.updatedAt = new Date().toISOString();
@@ -948,8 +892,6 @@ app.post('/api/events/:id/copy', (req, res) => {
         requireRank: src.settings.requireRank === true,
         courts: sanitizeCourtList(src.settings.courts)
       };
-      const fc = sanitizeFinalCourt(src.settings.finalCourt);
-      if (fc) event.settings.finalCourt = fc;
     }
     writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
     res.status(201).json({ success: true, id: id, playerCount: players.length });
@@ -2268,8 +2210,6 @@ app.get('/api/events/:id/bundle', (req, res) => {
         requireRank: event.settings.requireRank === true,
         courts: sanitizeCourtList(event.settings.courts)
       };
-      const fc = sanitizeFinalCourt(event.settings.finalCourt);
-      if (fc) bundle.event.settings.finalCourt = fc;
     }
     // status（大会の状態）。status を持たない大会（この機能より前に作られた・取り込んだ大会）は
     // 書き出さない＝取り込み側は従来どおり選手から推定する。EventStatus.of の推定値を書いて
@@ -2406,8 +2346,6 @@ app.post('/api/events/import', (req, res) => {
         requireRank: src.settings.requireRank === true,
         courts: sanitizeCourtList(src.settings.courts)
       };
-      const fc = sanitizeFinalCourt(src.settings.finalCourt);
-      if (fc) event.settings.finalCourt = fc;
     }
     // status（大会の状態）。STATES にある値ならそのまま採用する（final/archived を含む。
     // 取り込み後もロックが効くようにするため）。無い・不正なバンドル（古いバンドル）は
@@ -2524,7 +2462,8 @@ function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
 
 // 二巡目の行を生成する（純粋関数）。
 // 並べ替えは 決戦以外→女子先→得点昇順→同点は order 順、決戦は得点昇順→同点は order 順。
-// 採番は コート×性別ごとに1から（決戦は決戦コートで1から）。
+// 採番は コート×性別ごとに1から。決戦の候補は先頭のコート（EventStatus.firstCourt）の
+// 男子に、通常の行を採番し終えてから続き番号で置く（A-男子-2-(k+1)〜。設計書 2026-09-28）。
 // 一巡目の行は一切変更せず、新規行を末尾に追記するだけにする。
 // source は order が解析できる一巡目の行だけ（parseOrder できない選手は
 // コートが決まらないので二巡目を作れない。'未分類' を製造すると isValidCourt と
@@ -2593,13 +2532,16 @@ function generateRound2(event, force, allowReorder) {
   const plain = targets.filter(p => !finalistIds[p.id]).sort(compareForRound2);
   const finals = targets.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
 
-  const finalCourt = EventStatus.finalCourtOf(event);
+  // 候補の行は先頭のコート（settings.courts を含めた昇順の先頭。通常は A）に置く。
+  // plain を先に採番するので、候補はそのコートの男子の二巡目の続き番号になる
+  // （nextOrderNumber は最大+1）。
+  const finaleCourt = EventStatus.firstCourt(src, event.settings && event.settings.courts);
   const newRows = [];
   plain.forEach(p => {
     newRows.push(buildRound2Row(players, newRows, p, courtOf(p), p.isFemale === true, false));
   });
   finals.forEach(p => {
-    newRows.push(buildRound2Row(players, newRows, p, finalCourt, false, true));
+    newRows.push(buildRound2Row(players, newRows, p, finaleCourt, false, true));
   });
 
   return {
@@ -2627,7 +2569,8 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
   const finalistIds = pickFinalists(src);
   const plain = src.filter(p => !finalistIds[p.id]).sort(compareForRound2);
   const finals = src.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
-  const finalCourt = EventStatus.finalCourtOf(event);
+  // generateRound2 と同じく、候補は先頭のコートの男子の通常の行の後ろ（続き番号）に置く。
+  const finaleCourt = EventStatus.firstCourt(src, event.settings && event.settings.courts);
 
   const newRows = [];
   let reused = 0;
@@ -2662,7 +2605,7 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
     newRows.push(row);
   }
   plain.forEach(p => place(p, courtOf(p), p.isFemale === true, false));
-  finals.forEach(p => place(p, finalCourt, false, true));
+  finals.forEach(p => place(p, finaleCourt, false, true));
 
   return {
     ok: true,
