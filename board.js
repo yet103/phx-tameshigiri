@@ -62,7 +62,8 @@ var Board = (function() {
     });
   }
 
-  // 決戦の表に出す行。決戦コートを映しているときだけ返す。
+  // 決戦の表に出す行。決戦の候補がいるコート（finale.court。先頭コート＝通常 A。
+  // 設計書 2026-09-28）を映しているときだけ返す。
   // finale は GET /api/links/:token/ranking の応答（サーバーが計算した暫定順位）。
   // board.html は status.js を読まない（無認証で配信するページ）ので、
   // 状態の判定はサーバーが入れた finale.status / finale.court に任せる。
@@ -260,7 +261,7 @@ var Board = (function() {
     el.confirmed.classList.toggle('is-hidden', !confirmed);
   }
 
-  // 決戦の表を描く。0件（決戦コートを映していない・finale が無い）なら隠す。
+  // 決戦の表を描く。0件（候補のコートを映していない・finale が無い）なら隠す。
   function renderFinale(rows) {
     if (rows.length === 0) {
       el.finale.classList.add('is-hidden');
