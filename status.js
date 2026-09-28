@@ -48,9 +48,6 @@
     archived: ['final']
   };
 
-  // 決戦コートの既定名。event.settings.finalCourt で変えられる（設計書「データ」）。
-  var DEFAULT_FINAL_COURT = '決戦';
-
   // ---- courts.js と同じ規則の私物コピー ----
   // derive はサーバーでも動く必要があり、サーバーは courts.js（IIFE のブラウザ用）を読めない。
   // そこで order の解析と採点済み判定をここに複製する。両者が一致することは
@@ -126,14 +123,6 @@
     var i = STATES.indexOf(status);
     if (i <= 0) return null;
     return STATES[i - 1];
-  }
-
-  // 決戦コートの名前。settings に無ければ既定の「決戦」。
-  // 読み出しはここだけを通す（保存のときに書くのは基本情報の PATCH だけ）。
-  function finalCourtOf(event) {
-    var s = (event && event.settings) || {};
-    var name = (typeof s.finalCourt === 'string') ? s.finalCourt.trim() : '';
-    return name || DEFAULT_FINAL_COURT;
   }
 
   // 暫定ベスト8（決戦に出る選手）の行。二巡目の行に付いた finalist の印で判定する。
@@ -214,7 +203,8 @@
     return label === undefined ? null : label;
   }
 
-  // コート端末で得点を送れる状態か。決戦 進行中も採点できる（決戦コートだけ）。
+  // コート端末で得点を送れる状態か。決戦 進行中も採点できる（決戦の選手だけ。
+  // 選手ごとの判定は isPlayerScorable）。
   function isScoringOpen(status) {
     return status === 'round1' || status === 'round2' || status === 'round2_final';
   }
@@ -224,25 +214,6 @@
     if (status === 'round1') return 1;
     if (status === 'round2' || status === 'round2_final') return 2;
     return null;
-  }
-
-  // その状態で採点してよいコートの絞り込み（設計書「状態モデル」）。
-  //   round2       … 決戦コート以外（決戦は「決戦を開始」の後）
-  //   round2_final … 決戦コートだけ
-  //   それ以外     … 制限なし
-  // 採点画面（app.js）と配信ボードが同じ判定を使えるよう、素の値だけを返す。
-  function scoringCourtFilter(status, event) {
-    if (status === 'round2') return { mode: 'exclude', court: finalCourtOf(event) };
-    if (status === 'round2_final') return { mode: 'only', court: finalCourtOf(event) };
-    return { mode: 'all', court: '' };
-  }
-
-  // そのコートで採点してよいか。scoringCourtFilter の判定を1つの真偽値にしたもの。
-  function isCourtScorable(status, event, court) {
-    var f = scoringCourtFilter(status, event);
-    if (f.mode === 'exclude') return court !== f.court;
-    if (f.mode === 'only') return court === f.court;
-    return true;
   }
 
   // 得点・選手・技の書き込みをサーバーが拒む状態か。
@@ -291,9 +262,6 @@
     finaleCourt: finaleCourt,
     firstCourt: firstCourt,
     isPlayerScorable: isPlayerScorable,
-    finalCourtOf: finalCourtOf,
-    scoringCourtFilter: scoringCourtFilter,
-    isCourtScorable: isCourtScorable,
     isScoringOpen: isScoringOpen,
     scoringRound: scoringRound,
     isLocked: isLocked,

@@ -285,12 +285,6 @@ var Courts = (function() {
     return EventStatus.finaleCourt(players);
   }
 
-  // 決戦コートの名前。判定は status.js に一本化してあるので、ここは呼び直すだけ
-  // （courts.js しか読まない画面から使えるようにするための入口）。
-  function finalCourtOf(event) {
-    return EventStatus.finalCourtOf(event);
-  }
-
   // 二巡目生成 API の 409 応答（reason: 'unscored' | 'exists'）を確認文言にする。
   // 採点画面（app.js）と運営画面（admin-round.js）で同じ文言を使う。
   // fixHint: コート未設定の選手をどこで直すかの案内（画面ごとに違う）
@@ -809,7 +803,6 @@ var Courts = (function() {
     courtProgress: courtProgress,
     livePlayerName: livePlayerName,
     finalists: finalists,
-    finalCourtOf: finalCourtOf,
     finaleCourt: finaleCourt,
     techCopyTargets: techCopyTargets,
     nextRoundConflictMessage: nextRoundConflictMessage,

@@ -3087,9 +3087,12 @@
     assert('Courts.finalists: 決戦の行を番号順に返す',
       Courts.finalists(finP).map(function(p) { return p.name; }), ['一郎', '二郎']);
     assert('Courts.finalists: 決戦が無ければ空配列', Courts.finalists([{ order: 'A-男子-2-1' }]), []);
-    assert('Courts.finalCourtOf: 既定は「決戦」', Courts.finalCourtOf({}), '決戦');
-    assert('Courts.finalCourtOf: settings.finalCourt があればそれ',
-      Courts.finalCourtOf({ settings: { finalCourt: '決勝' } }), '決勝');
+    assert('Courts.finalists: 先頭コートの続き番号でも番号順に返す',
+      Courts.finalists([
+        { order: 'A-男子-2-10', finalist: true, name: '十' },
+        { order: 'A-男子-2-9', finalist: true, name: '九' },
+        { order: 'A-男子-2-1', name: '一' }
+      ]).map(function(p) { return p.name; }), ['九', '十']);
 
     // ---- 決戦を挟む遷移の確認文言 ----
     var cfP = [
@@ -3684,6 +3687,10 @@
     assert('hasFinalists: 決戦の行が無ければ false', EventStatus.hasFinalists(NOFIN_ROWS), false);
 
     // ---- 決戦を行の印で判定する（設計書 2026-09-28。決戦コートの廃止） ----
+    assert('決戦コートの関数（finalCourtOf / scoringCourtFilter / isCourtScorable）は無い', [
+      typeof EventStatus.finalCourtOf, typeof EventStatus.scoringCourtFilter,
+      typeof EventStatus.isCourtScorable, typeof Courts.finalCourtOf
+    ], ['undefined', 'undefined', 'undefined', 'undefined']);
     var PS_FIN = { order: 'A-男子-2-9', finalist: true };
     var PS_PLAIN = { order: 'A-男子-2-1' };
     assert('isPlayerScorable: round2 は候補以外だけ採点できる', [
@@ -3755,34 +3762,6 @@
       FIRST_CASES.map(function(c) {
         return Courts.listFrom(c[0], c[1]).filter(function(x) { return x !== Courts.UNASSIGNED; })[0] || '';
       }));
-
-    assert('finalCourtOf: 既定は「決戦」', EventStatus.finalCourtOf({}), '決戦');
-    assert('finalCourtOf: settings が無くても既定', EventStatus.finalCourtOf(null), '決戦');
-    assert('finalCourtOf: settings.finalCourt があればそれ',
-      EventStatus.finalCourtOf({ settings: { finalCourt: '決勝' } }), '決勝');
-    assert('finalCourtOf: 空白だけの指定は既定に戻す',
-      EventStatus.finalCourtOf({ settings: { finalCourt: '  ' } }), '決戦');
-    assert('finalCourtOf: 文字列でない指定は既定に戻す',
-      EventStatus.finalCourtOf({ settings: { finalCourt: 3 } }), '決戦');
-
-    // ---- 採点できるコートの絞り込み ----
-    var FIN_EVENT = { settings: { finalCourt: '決戦' } };
-    assert('scoringCourtFilter: round2 は決戦コート以外',
-      EventStatus.scoringCourtFilter('round2', FIN_EVENT), { mode: 'exclude', court: '決戦' });
-    assert('scoringCourtFilter: round2_final は決戦コートだけ',
-      EventStatus.scoringCourtFilter('round2_final', FIN_EVENT), { mode: 'only', court: '決戦' });
-    assert('scoringCourtFilter: round1 は制限なし',
-      EventStatus.scoringCourtFilter('round1', FIN_EVENT), { mode: 'all', court: '' });
-    assert('isCourtScorable: round2 は決戦コートだけ false', [
-      EventStatus.isCourtScorable('round2', FIN_EVENT, 'A'),
-      EventStatus.isCourtScorable('round2', FIN_EVENT, '決戦')
-    ], [true, false]);
-    assert('isCourtScorable: round2_final は決戦コートだけ true', [
-      EventStatus.isCourtScorable('round2_final', FIN_EVENT, 'A'),
-      EventStatus.isCourtScorable('round2_final', FIN_EVENT, '決戦')
-    ], [false, true]);
-    assert('isCourtScorable: round1 はどのコートも true',
-      EventStatus.isCourtScorable('round1', FIN_EVENT, '決戦'), true);
 
     // ---- 3. derive ----
     function derivePlayers(list) { return EventStatus.derive({ players: list }); }
@@ -4544,15 +4523,17 @@
       Board.hasNoDetail(null), false);
 
     // ---- 決戦の暫定順位（配信ボード） ----
-    var bfData = { court: '決戦', status: 'round2_final', rows: [
-      { name: 'A', order: 1, r1: 10, r2: 20, total: 30, scored: true, rank: 2 },
-      { name: 'B', order: 2, r1: 40, r2: null, total: 40, scored: false, rank: null }
+    var bfData = { court: 'A', status: 'round2_final', rows: [
+      { name: '甲', order: 9, r1: 10, r2: 20, total: 30, scored: true, rank: 2 },
+      { name: '乙', order: 10, r1: 40, r2: null, total: 40, scored: false, rank: null }
     ] };
-    assert('Board.finaleFor: 決戦コートを映していれば行を返す',
-      Board.finaleFor(bfData, '決戦').map(function(r) { return r.name; }), ['A', 'B']);
+    assert('Board.finaleFor: 候補のコート（A）を映していれば行を返す',
+      Board.finaleFor(bfData, 'A').map(function(r) { return r.name; }), ['甲', '乙']);
     assert('Board.finaleFor: 別のコートを映していれば空',
-      Board.finaleFor(bfData, 'A'), []);
-    assert('Board.finaleFor: finale が無ければ空', Board.finaleFor(null, '決戦'), []);
+      Board.finaleFor(bfData, 'B'), []);
+    assert('Board.finaleFor: 既存データのコート「決戦」でも、そのコートを映していれば行を返す',
+      Board.finaleFor({ court: '決戦', status: 'round2_final', rows: bfData.rows }, '決戦').length, 2);
+    assert('Board.finaleFor: finale が無ければ空', Board.finaleFor(null, 'A'), []);
     assert('Board.finaleFor: コート未指定なら空', Board.finaleFor(bfData, ''), []);
 
     // storage.js テスト（大会ファイルのファイル名。純粋関数）
