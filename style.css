@@ -80,8 +80,9 @@ input[type="file"] { display: none; }
   margin: 4px 12px 0;
   overflow: hidden;
 }
-/* コート端末は指で操作するので、押せるものはすべて 44px 以上にする */
-.action-bar .nav-btn {
+/* コート端末は指で操作するので、押せるものはすべて 44px 以上にする。
+   前後の選手は 1 段目（タイマーの列）に置く（.timer-bar button より後ろで詳細度も高いので勝つ） */
+.action-block .nav-btn {
   background: var(--accent);
   color: var(--accent-text);
   padding: 6px 16px;
@@ -349,10 +350,10 @@ input[type="file"] { display: none; }
 .status-banner.closed { background: var(--warn); color: var(--bg); font-weight: bold; }
 /* 採点できない状態。太刀のセルは押せなくし、全体を薄く見せる */
 body.scoring-locked .strike-cell { pointer-events: none; opacity: 0.55; }
-body.scoring-locked .action-bar button[disabled] { opacity: 0.45; }
+body.scoring-locked .action-block button[disabled] { opacity: 0.45; }
 /* 確定済み: 太刀のセルを押せなくする（採点できない状態と同じ見せ方。確定ボタンだけは押せる） */
 body.score-frozen .score-table td.strike-cell { pointer-events: none; }
-body.score-frozen .action-bar button[disabled] { opacity: 0.45; }
+body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 
 /* ===== ページリンクバー ===== */
 .page-links {
@@ -545,7 +546,7 @@ body.score-frozen .action-bar button[disabled] { opacity: 0.45; }
 .save-status.sending { color: var(--band-muted); }
 .save-status.retrying { color: var(--gold-light); }
 .player-nav { border-bottom: 2px solid var(--gold); }
-.action-bar .nav-btn { background: var(--band-bg-2); color: var(--gold-light); border: 1px solid var(--gold); }
+.action-block .nav-btn { background: var(--band-bg-2); color: var(--gold-light); border: 1px solid var(--gold); }
 .player-nav .court-label { background: linear-gradient(180deg, var(--gold-light), var(--gold-deep)); color: var(--band-bg); }
 .player-nav .order-label, .player-nav .rank-label { color: var(--band-muted); }
 .player-nav #playerNameLabel { font-family: var(--mincho); letter-spacing: .04em; }
