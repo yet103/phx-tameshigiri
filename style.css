@@ -23,7 +23,7 @@ input[type="file"] { display: none; }
 .container { max-width: 1200px; margin: 0 auto; padding: 8px 12px; }
 
 /* ===== 選手ナビゲーションバー =====
-   前後の選手ボタンは操作区画の 1 段目（.timer-bar）にあるので、ここは選手名の表示だけ。
+   前後の選手ボタンは操作区画の 2 段目（.timer-bar）にあるので、ここは選手名の表示だけ。
    「Aコート」が目立ちすぎないよう、3列（コート／順番+名前／空）にして中央の組を画面中央に置く。 */
 .player-nav {
   display: grid;
@@ -73,7 +73,8 @@ input[type="file"] { display: none; }
 }
 
 /* ===== 前の選手・次の選手・タイマー・採点操作をまとめる区画 =====
-   .timer-bar（1段目）と .action-bar（2段目）を .action-block で囲み、枠と背景で1つの区画に見せる。 */
+   .action-bar（1段目: 形成功・失敗・確定）と .timer-bar（2段目: 前後の選手とタイマー）を .action-block で囲み、
+   枠と背景で1つの区画に見せる。 */
 .action-block {
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -81,7 +82,7 @@ input[type="file"] { display: none; }
   overflow: hidden;
 }
 /* コート端末は指で操作するので、押せるものはすべて 44px 以上にする。
-   前後の選手は 1 段目（タイマーの列）に置く（.timer-bar button より後ろで詳細度も高いので勝つ） */
+   前後の選手は 2 段目（タイマーの列）に置く（.timer-bar button より後ろで詳細度も高いので勝つ） */
 .action-block .nav-btn {
   background: var(--accent);
   color: var(--accent-text);
@@ -97,7 +98,6 @@ input[type="file"] { display: none; }
   padding: 8px 12px;
   gap: 8px;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 .timer-display {
@@ -287,13 +287,14 @@ input[type="file"] { display: none; }
 .btn-confirm.on { background: var(--btn-confirm-on); color: #fff; }  /* 確定済み＝青 */
 
 /* ===== アクションバー =====
-   .action-block（.timer-bar の直下）に収まる2段目。区画の境界線は .action-block と
-   .timer-bar の border-bottom が受け持つので、ここでは付けない。 */
+   .action-block の1段目（補正点・備考のすぐ下）。2段目の .timer-bar との境界線はここの
+   border-bottom が受け持つ（区画の外枠は .action-block）。 */
 .action-bar {
   display: flex;
   align-items: center;
   padding: 8px 12px;
   gap: 8px;
+  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 .action-bar button { min-height: 44px; }
