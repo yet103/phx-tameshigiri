@@ -294,19 +294,13 @@ var App = (function() {
     return !!currentEvent && EventStatus.isScoringOpen(currentStatus());
   }
 
-  // いま開いている選手のコート。選手がいなければコート選択の値。
-  function currentCourtName() {
-    var p = visiblePlayers[currentIndex];
-    return p ? Courts.courtOf(p) : currentCourt;
-  }
-
   // いま開いている選手を採点してよいか。状態が採点できることに加えて、
-  // 決戦のコート制限（EventStatus.scoringCourtFilter）も見る。
-  //   二巡目 進行中 … 決戦コートは「決戦を開始」の後
-  //   決戦 進行中   … 決戦コート以外は斬り終わっている
+  // 決戦の制限（EventStatus.isPlayerScorable。行の印 finalist で判定。設計書 2026-09-28）も見る。
+  //   二巡目 進行中 … 決戦（暫定ベスト8）の行は「決戦を開始」の後
+  //   決戦 進行中   … 決戦の行だけ（他の選手は斬り終わっている）
   function scoringOpenHere() {
     if (!scoringOpen()) return false;
-    return EventStatus.isCourtScorable(currentStatus(), currentEvent, currentCourtName());
+    return EventStatus.isPlayerScorable(currentStatus(), visiblePlayers[currentIndex]);
   }
 
   // 大会選択バーの下の状態バナー。採点できるかどうかと、できないときの次の手を出す。
@@ -318,11 +312,20 @@ var App = (function() {
     el.hidden = false;
     if (EventStatus.isScoringOpen(st)) {
       if (!scoringOpenHere()) {
-        // 状態は採点できるが、このコートは今は採点できない（決戦のコート制限）
+        // 状態は採点できるが、この選手は今は採点できない（決戦の制限。行の印で判定）
         el.className = 'status-banner closed';
         el.textContent = (st === 'round2')
-          ? '決戦コートは「決戦を開始」の後に採点します'
-          : '決戦 進行中。採点できるのは決戦コートだけです';
+          ? 'この選手は決戦（暫定ベスト8）です。他の選手が終わり、運営画面で「決戦を開始」を押すと採点できます'
+          : '決戦 進行中。採点できるのは決戦（暫定ベスト8）の選手だけです';
+        return;
+      }
+      // 決戦 進行中に、決戦の選手がいないコートを開いている（一覧が空）。
+      // 緑の「決戦 進行中」を出すと採点できるように見えるので、候補のコートを案内する。
+      if (st === 'round2_final' && !visiblePlayers[currentIndex]) {
+        var finCourt = Courts.finaleCourt(players);
+        el.className = 'status-banner closed';
+        el.textContent = '決戦 進行中。採点できるのは決戦（暫定ベスト8）の選手だけです' +
+          (finCourt ? '（' + finCourt + ' コート）' : '');
         return;
       }
       el.className = 'status-banner open';
@@ -373,10 +376,24 @@ var App = (function() {
 
   // 表示する選手。進行中ならその巡目だけに絞る（コートの絞り込みと併用）。
   // 進行中でなければ全巡目を出す（見直し・確認のため）。
+  // 決戦（暫定ベスト8）は先頭コートの二巡目の末尾で斬る（設計書 2026-09-28）ので、
+  //   二巡目 進行中 … 全員を出し、決戦の行を末尾に寄せる（採点はできない。一覧で薄く出す）。
+  //                   生成した順ですでに末尾のはずだが、差分追加などで崩れても末尾に来るよう
+  //                   印の有無で安定に並べ直す。
+  //   決戦 進行中   … 決戦の行だけを出す。
   function filterForStatus(list) {
-    var round = currentEvent ? EventStatus.scoringRound(currentStatus()) : null;
+    var st = currentEvent ? currentStatus() : null;
+    var round = st ? EventStatus.scoringRound(st) : null;
     if (!round) return list;
-    return list.filter(function(p) { return Courts.roundOf(p) === round; });
+    var rows = list.filter(function(p) { return Courts.roundOf(p) === round; });
+    if (st === 'round2_final') {
+      return rows.filter(function(p) { return p.finalist === true; });
+    }
+    if (st === 'round2') {
+      return rows.filter(function(p) { return p.finalist !== true; })
+        .concat(rows.filter(function(p) { return p.finalist === true; }));
+    }
+    return rows;
   }
 
   // --- 大会管理 ---
@@ -609,7 +626,7 @@ var App = (function() {
     if (changed) resetTimer();
     updatePlayerList();
     // 全コート表示（currentCourt が空）では選手ごとにコートが変わりうるので、
-    // バナーとロックを見直す（決戦コートの制限は選手のコートで決まる）。
+    // バナーとロックを見直す（決戦の制限は選手の印 finalist で決まる）。
     renderStatusBanner();
     applyScoringLock();
     // 別の選手を開いたら、他端末（運営画面や別コートの端末）の書き込みを取りに行く。
@@ -1594,9 +1611,13 @@ var App = (function() {
     tr.dataset.index = index;
     if (index === currentIndex) tr.classList.add('current-player');
     if (p.confirmed) tr.classList.add('done');   // 確定済みの行はグレー（ユーザー要望）
+    // 決戦（暫定ベスト8）の行は番号の右に「決戦」の印。二巡目 進行中はまだ採点できないので
+    // 薄く出す（tr.finale。設計書 2026-09-28）。
+    var isFinale = p.finalist === true && Courts.roundOf(p) === 2;
+    if (isFinale && currentStatus() === 'round2') tr.classList.add('finale');
     var hasBib = (typeof p.bib === 'number');
     tr.innerHTML =
-      '<td>' + esc(p.order || '') + '</td>' +
+      '<td>' + esc(p.order || '') + (isFinale ? ' <span class="finale-mark">決戦</span>' : '') + '</td>' +
       // 未設定は薄い「—」（数値なので esc は要らないが、列を空にはしない）
       '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
       '<td class="name">' + esc(p.name || '') + '</td>' +
