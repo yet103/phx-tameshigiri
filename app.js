@@ -572,12 +572,18 @@ var App = (function() {
 
   // --- 選手切り替え ---
   // 採点を入れたのに確定していない選手から離れようとしたら、一度だけ聞く（ユーザー要望）。
+  // OK なら確定してから移動、キャンセルなら留まる。確定できない状態（技未入力・内訳復元不可）
+  // のときだけ従来どおり「確定せずに移動」を聞く。
   // 採点できない状態や、まだ何も入れていない選手では聞かない。戻り値 true なら移動してよい。
   function confirmLeave() {
     var p = visiblePlayers[currentIndex];
     if (!p || !scoringOpenHere() || p.confirmed) return true;
     if (!gridEdited && !Courts.isScored(p)) return true;
-    return confirm('この選手の採点がまだ確定されていません。確定せずに移動しますか？');
+    if (!canConfirmCurrent()) {
+      return confirm('この選手の採点がまだ確定されていません。確定せずに移動しますか？');
+    }
+    if (!confirm('この選手の採点がまだ確定されていません。確定して次へでよいですか？')) return false;
+    return confirmCurrent(true);
   }
 
   function movePlayer(delta) {
@@ -1107,13 +1113,29 @@ var App = (function() {
       });
       return;
     }
+    confirmCurrent(false);
+  }
+
+  // 表示中の選手を確定できるか（技があり、内訳が復元できている）。
+  // confirmLeave はこれで「確定して移動」か「確定せずに移動」かの文言を選ぶ。
+  function canConfirmCurrent() {
+    if (!hasScoreRows()) return false;
+    if (!gridRestorable && !gridDirty) return false;
+    return true;
+  }
+
+  // 表示中の選手を確定する。確定ボタンと、未確定で移動するときの「確定して次へ」から呼ぶ。
+  // quiet が true のときは理由の alert を出さない。確定できたら true。
+  function confirmCurrent(quiet) {
+    var p = visiblePlayers[currentIndex];
+    if (!p || !currentEvent) return false;
     if (!hasScoreRows()) {
-      alert('技が未入力のため確定できません。');
-      return;
+      if (!quiet) alert('技が未入力のため確定できません。');
+      return false;
     }
     if (!gridRestorable && !gridDirty) {
-      alert('内訳を復元できない選手は、採点し直してから確定してください。');
-      return;
+      if (!quiet) alert('内訳を復元できない選手は、採点し直してから確定してください。');
+      return false;
     }
     p.confirmed = true;
     gridEdited = true;
@@ -1125,6 +1147,7 @@ var App = (function() {
       playerName: p.name || '',
       detail: '確定（' + (p.score || 0) + '点）'
     });
+    return true;
   }
 
   // 補正点の欄に入れる表示文字列（0 と非数は空欄）
