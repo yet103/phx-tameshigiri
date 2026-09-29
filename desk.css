@@ -317,6 +317,11 @@ a { color: var(--accent); }
 .tech-table th { background: var(--bg-header); font-size: 13px; }
 .tech-table td.col-name { font-weight: bold; }   /* 技名も中央そろえ（techniques.html と同じ） */
 .tech-table td.col-total { font-weight: bold; }   /* 配点の合計（自動計算・編集不可） */
+/* 初太刀〜四ノ太刀（3〜6 列目）の間の縦線だけ薄くして細く見せる。border-collapse では隣り合う
+   2 つのセルの線が競い、同じ幅・同じ種類なら左のセルの色が勝つので、右側の border-left と
+   左側の border-right の両方に同じ薄い色を当てる（ユーザー要望） */
+.tech-table th:nth-child(n+4):nth-child(-n+6), .tech-table td:nth-child(n+4):nth-child(-n+6) { border-left-color: color-mix(in srgb, var(--border) 40%, transparent); }
+.tech-table th:nth-child(n+3):nth-child(-n+5), .tech-table td:nth-child(n+3):nth-child(-n+5) { border-right-color: color-mix(in srgb, var(--border) 40%, transparent); }
 .tech-table th.col-note, .tech-table td.col-note { width: auto; min-width: 8em; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .tech-table td.col-note input[type="text"] { width: 100%; min-width: 8em; text-align: left; }
 .tech-table input[type="text"], .tech-table input[type="number"] { width: 70px; min-height: 28px; text-align: center; }
