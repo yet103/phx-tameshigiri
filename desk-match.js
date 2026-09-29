@@ -244,20 +244,7 @@
     prog.textContent = '採点済み ' + row.scored + ' / ' + row.total;
     card.appendChild(prog);
 
-    // 真剣レンタルの人数（いま数えている巡目の行だけ）。0 なら行ごと出さない
-    // （レンタルのいない大会でカードが縦に伸びないように）。
-    // 決戦のカードは候補の行だけ、通常のカードは候補以外の行だけを数える（同じコートを分け合うため）。
-    var rental = (ctx.players || []).filter(function(p) {
-      return Courts.courtOf(p) === row.court && Courts.roundOf(p) === round && p.rental === true &&
-        (p.finalist === true) === (row.finale === true) &&
-        (typeof row.female !== 'boolean' || (p.isFemale === true) === row.female);
-    }).length;
-    if (rental > 0) {
-      var rent = document.createElement('div');
-      rent.className = 'desk-match-rental';
-      rent.textContent = '真剣レンタル ' + rental + ' 名';
-      card.appendChild(rent);
-    }
+    // 真剣レンタルの人数はカードに出さない（ユーザー要望 2026-09-30。選手表のレンタル列で分かる）
 
     // コートの決まっていない選手は採点画面のコート絞り込みに載せられない
     // （サーバーの isValidCourt が「未分類」を弾く）。カードは出すが操作は置かない。
