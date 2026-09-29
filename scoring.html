@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="style.css">
   <style>
     /* 色（黒金の帯）は style.css の「大会トーン」節が当てる。ここはレイアウトだけ */
+    /* PC・タブレットでも横幅はスマホ程度（660px）までにして左に寄せる（ユーザー要望。
+       横に広げると太刀のセルや一覧が間延びして押しにくい）。狭い画面では従来どおり全幅。 */
+    body { max-width: 660px; margin: 0; }
     .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--gold); flex-wrap:wrap; }
     .event-bar select { padding:4px 8px; }
     /* 指で押す前提のタップ目標（style.css のバー類と同じ 44px） */
