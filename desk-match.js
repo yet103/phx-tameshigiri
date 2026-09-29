@@ -20,14 +20,22 @@
   // 決戦（暫定ベスト8）の行は数えない（決戦は別のカードにする。設計書 2026-09-28）。
   // コートの一覧も決戦以外の行から作る。2026-09-22 の設計で専用コート「決戦」に候補を
   // 置いた既存大会で、「決戦 コート 0 / 0」の通常のカードが出ないように。
-  function courtCards(ctx, round) {
-    var plainPlayers = (ctx.players || []).filter(function(p) { return p.finalist !== true; });
+  // female が真偽値なら、その性別の行だけを数える（男子の部・女子の部でカードを分ける。
+  // ユーザー要望 2026-09-30）。カードに female を持たせ、レンタル人数もその性別で数える。
+  function courtCards(ctx, round, female) {
+    var plainPlayers = (ctx.players || []).filter(function(p) {
+      if (p.finalist === true) return false;
+      if (typeof female === 'boolean' && (p.isFemale === true) !== female) return false;
+      return true;
+    });
     var byCourt = Object.create(null);
     Courts.courtProgress(plainPlayers, round).forEach(function(r) { byCourt[r.court] = r; });
     return Courts.listFrom(plainPlayers, extraCourts(ctx)).map(function(c) {
-      return Object.prototype.hasOwnProperty.call(byCourt, c)
+      var row = Object.prototype.hasOwnProperty.call(byCourt, c)
         ? byCourt[c]
         : { court: c, total: 0, scored: 0 };
+      if (typeof female === 'boolean') row.female = female;
+      return row;
     });
   }
 
@@ -135,8 +143,16 @@
       '「↻ 最新に更新」を押すと読み直します。';
     wrap.appendChild(note);
 
-    var rows = courtCards(ctx, round);
-    if (rows.length === 0) {
+    // 男子の部・女子の部でカードの組を分ける（0 名の部は出さない）。見出しは「男子の部 一巡目」のように巡目を添える。
+    var roundLabel = (round === 1 ? '一巡目' : '二巡目');
+    var groups = [];
+    [[false, '男子の部'], [true, '女子の部']].forEach(function(g) {
+      var cards = courtCards(ctx, round, g[0]);
+      if (cards.some(function(r) { return r.total > 0; })) {
+        groups.push({ caption: g[1] + ' ' + roundLabel, rows: cards });
+      }
+    });
+    if (groups.length === 0) {
       var none = document.createElement('p');
       none.className = 'desk-empty';
       none.textContent = 'まだ選手がいません。「選手」の区画で登録してください。';
@@ -147,7 +163,6 @@
     // 決戦（暫定ベスト8）は先頭コート（通常 A）の二巡目の末尾で斬る（設計書 2026-09-28）。
     // 通常のカード（rows）は決戦の行を数えず、決戦は候補の行だけを数えるカード 1 枚にして別枠に置く。
     // 決戦かどうかはコート名ではなく行の印 finalist で分ける。二巡目を数えるときだけ出す。
-    var plain = rows;
     var finale = [];
     var fin = Courts.finalists(ctx.players);
     if (round === 2 && fin.length > 0) {
@@ -167,14 +182,14 @@
       var others = document.createElement('details');
       others.className = 'desk-match-others';
       var sum = document.createElement('summary');
-      sum.textContent = '他のコート（' + plain.length + '）';
+      sum.textContent = '他のコート';
       others.appendChild(sum);
-      others.appendChild(buildCourtGrid(plain, ctx, round, ''));
+      groups.forEach(function(g) { others.appendChild(buildCourtGrid(g.rows, ctx, round, g.caption)); });
       wrap.appendChild(others);
       return wrap;
     }
 
-    wrap.appendChild(buildCourtGrid(plain, ctx, round, ''));
+    groups.forEach(function(g) { wrap.appendChild(buildCourtGrid(g.rows, ctx, round, g.caption)); });
     if (finale.length > 0) {
       // 二巡目 進行中は「開始前」として別枠に置く（先頭コートの通常の選手が終わってから斬る）。
       wrap.appendChild(buildCourtGrid(finale, ctx, round,
@@ -226,7 +241,8 @@
     // 決戦のカードは候補の行だけ、通常のカードは候補以外の行だけを数える（同じコートを分け合うため）。
     var rental = (ctx.players || []).filter(function(p) {
       return Courts.courtOf(p) === row.court && Courts.roundOf(p) === round && p.rental === true &&
-        (p.finalist === true) === (row.finale === true);
+        (p.finalist === true) === (row.finale === true) &&
+        (typeof row.female !== 'boolean' || (p.isFemale === true) === row.female);
     }).length;
     if (rental > 0) {
       var rent = document.createElement('div');
