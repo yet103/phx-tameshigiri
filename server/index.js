@@ -329,6 +329,13 @@ function rejectIfLocked(res, event) {
   return true;
 }
 
+// 確定の印を見ずに全行の得点を数える大会か。「確定」の機能より前に作られた、status を持たない大会だけ
+// （旧データの互換。QA 指摘 2026-09-30）。状態を持つ大会は、最終結果のあとも確定済みの行だけを数える
+// （確定の瞬間に順位が跳ねないように。未確定の行は「最終結果を確定」の前に確認で知らせる）。
+function countsAllScores(event) {
+  return !(event && typeof event.status === 'string');
+}
+
 // 決戦（暫定ベスト8）の表。決戦の行が無ければ null（設計書 2026-09-22）。
 // rows は試技順（候補の行の番号順。候補は先頭コートの男子の二巡目の末尾に並ぶ。設計書 2026-09-28）。r1 は一巡目の得点（sourcePlayerId で引く）、
 // r2 は斬った人だけ（未採点は null）、rank も斬った人だけの中での暫定順位
@@ -336,8 +343,7 @@ function rejectIfLocked(res, event) {
 // ○×の生データ（result）は返さない（共有リンクから無認証で読まれるため）。
 function computeFinale(event) {
   const players = ((event && event.players) || []);
-  // 最終結果・アーカイブ済みの大会は全行を確定扱い（確定の印が無い過去のデータも順位に出す。2026-09-30）
-  const lockedEvent = EventStatus.isLocked(EventStatus.of(event));
+  const lockedEvent = countsAllScores(event);   // 旧データ（status 無し）だけ全行を数える
   const finalRows = EventStatus.finalists(players);
   if (finalRows.length === 0) return null;
 
@@ -353,7 +359,8 @@ function computeFinale(event) {
     .map(p => {
       const srcRow = (p.sourcePlayerId && Object.prototype.hasOwnProperty.call(byId, p.sourcePlayerId))
         ? byId[p.sourcePlayerId] : null;
-      const r1 = (srcRow && typeof srcRow.score === 'number') ? srcRow.score : 0;
+      // 一巡目の得点も確定済みだけ（順位と同じ基準。QA 指摘 2026-09-30）
+      const r1 = (srcRow && (srcRow.confirmed === true || lockedEvent) && typeof srcRow.score === 'number') ? srcRow.score : 0;
       // 斬った＝確定済み（採点途中の値は暫定順位に出さない。ユーザー要望 2026-09-30）
       const scored = (p.confirmed === true || lockedEvent) && EventStatus.isScored(p);
       const r2 = scored ? ((typeof p.score === 'number') ? p.score : 0) : null;
@@ -392,8 +399,7 @@ function computeFinale(event) {
 // 氏名で合算する（一巡目＋二巡目）。得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
 // ○×の生データ（result）や order は返さない（共有リンクから無認証で読まれるため）。
 function computeRanking(event) {
-  // 最終結果・アーカイブ済みの大会は全行を確定扱い（確定の印が無い過去のデータも順位に出す。2026-09-30）
-  const lockedEvent = EventStatus.isLocked(EventStatus.of(event));
+  const lockedEvent = countsAllScores(event);   // 旧データ（status 無し）だけ全行を数える
   // 選手名が __proto__ / constructor などでも壊れないよう、プロトタイプ無しの辞書を使う
   const male = Object.create(null);
   const female = Object.create(null);
@@ -2495,8 +2501,9 @@ function scoreOf(p) {
 // 戻り値: { <playerId>: true }（選手 id が '__proto__' でも壊れない辞書）
 function pickFinalists(src) {
   const out = Object.create(null);
+  // 選考に使うのは確定済みの得点だけ（順位・決戦の表と同じ基準。QA 指摘 2026-09-30）
   const males = src
-    .filter(p => p.isFemale !== true && scoreOf(p) > 0)
+    .filter(p => p.isFemale !== true && p.confirmed === true && scoreOf(p) > 0)
     .slice()
     .sort((a, b) => scoreOf(b) - scoreOf(a) || (a.order || '').localeCompare(b.order || ''));
   if (males.length === 0) return out;
@@ -2584,7 +2591,8 @@ function generateRound2(event, force, allowReorder) {
 
   const existing = players.filter(p => p && EventStatus.roundOf(p) === 2);
   const untrackedCount = existing.filter(p => !p.sourcePlayerId).length;
-  const unscored = src.filter(p => !EventStatus.isScored(p));
+  // 「未採点」は確定していない行（確定だけを反映する基準にそろえる。QA 指摘 2026-09-30）
+  const unscored = src.filter(p => p.confirmed !== true);
   if (unscored.length > 0 && !force) {
     return { ok: false, code: 409, body: {
       error: '一巡目に未採点の選手がいます', reason: 'unscored',

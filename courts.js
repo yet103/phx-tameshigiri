@@ -401,6 +401,7 @@ var Courts = (function() {
     return n > 0 ? prefix + 'が ' + n + '名います。' : prefix + 'がいません。';
   }
 
+  // 「未確定」= 確定の印が無い行（得点は確定で初めて反映されるので、進める前の確認もこの基準で数える。QA 指摘 2026-09-30）
   function statusConfirmMessage(from, to, players) {
     var list = players || [];
     function round(n) { return list.filter(function(p) { return roundOf(p) === n; }); }
@@ -411,7 +412,7 @@ var Courts = (function() {
       return '⚠ 技が未入力の選手が ' + missing + '名います。\nこのまま試合を開始しますか？';
     }
     if (from === 'round1' && to === 'round1_done') {
-      return countPhrase('一巡目の未採点', round(1).filter(function(p) { return !isScored(p); }).length) +
+      return countPhrase('一巡目の未確定', round(1).filter(function(p) { return !isConfirmed(p); }).length) +
         '\n一巡目を終了しますか？';
     }
     if (from === 'round1_done' && to === 'round2') {
@@ -425,16 +426,16 @@ var Courts = (function() {
     if (from === 'round2' && to === 'round2_final') {
       // 決戦に出ない選手（暫定ベスト8 以外）が全員斬り終わっているかを数える
       var others = round(2).filter(function(p) { return p.finalist !== true; });
-      return countPhrase('決戦以外の未採点', others.filter(function(p) { return !isScored(p); }).length) +
+      return countPhrase('決戦以外の未確定', others.filter(function(p) { return !isConfirmed(p); }).length) +
         '\n決戦を開始しますか？';
     }
     if (from === 'round2_final' && to === 'round2_done') {
-      return countPhrase('決戦の未採点',
-        EventStatus.finalists(list).filter(function(p) { return !isScored(p); }).length) +
+      return countPhrase('決戦の未確定',
+        EventStatus.finalists(list).filter(function(p) { return !isConfirmed(p); }).length) +
         '\n二巡目を終了しますか？';
     }
     if (from === 'round2' && to === 'round2_done') {
-      return countPhrase('二巡目の未採点', round(2).filter(function(p) { return !isScored(p); }).length) +
+      return countPhrase('二巡目の未確定', round(2).filter(function(p) { return !isConfirmed(p); }).length) +
         '\n二巡目を終了しますか？';
     }
     if (from === 'archived' && to === 'final') {

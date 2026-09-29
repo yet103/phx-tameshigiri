@@ -815,7 +815,7 @@
 
     // 採点が始まっている段階では、No. が採点画面の呼び出し順なので一度聞く（レビュー指摘。準備中は聞かない）
     if (EventStatus.isScoringOpen(EventStatus.of(ctx.event)) &&
-        !confirm('採点中です。順番を入れ替えると採点画面の呼び出し順（No.）が変わります。'+chr(10)+'入れ替えますか？')) return;
+        !confirm('採点中です。順番を入れ替えると採点画面の呼び出し順（No.）が変わります。\n入れ替えますか？')) return;
     target.parentNode.insertBefore(moving, after ? target.nextSibling : target);
     renumberShown(ids);
 

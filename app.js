@@ -259,7 +259,7 @@ var App = (function() {
 
   // 絞り込みを適用して画面を作り直す
   function applyCourtFilter() {
-    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt)).sort(Courts.compareOrder);   // 男子の部→女子の部、No. 順（登録順ではなく試技順）
+    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt).sort(Courts.compareOrder));   // 試技順（男子の部→女子の部、No. 順）に並べてから状態で絞る（候補を末尾に寄せる処理を保つ）
     currentIndex = -1;
     if (visiblePlayers.length > 0) {
       selectPlayer(0);
@@ -659,7 +659,7 @@ var App = (function() {
     var keepRow = selectedRow;
     adoptEvent(loaded);
     refreshCourtList();
-    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt)).sort(Courts.compareOrder);   // 男子の部→女子の部、No. 順（登録順ではなく試技順）
+    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt).sort(Courts.compareOrder));   // 試技順（男子の部→女子の部、No. 順）に並べてから状態で絞る（候補を末尾に寄せる処理を保つ）
     var idx = -1;
     for (var i = 0; i < visiblePlayers.length; i++) {
       if (visiblePlayers[i].id === currentId) { idx = i; break; }
@@ -1179,7 +1179,7 @@ var App = (function() {
     // 未の太刀が残っていたら、すべて失敗にしてよいか聞く（ユーザー要望 2026-09-30）。
     // OK なら各行の最初の「未」を失敗にする（以降の太刀は無効になる）。キャンセルなら確定しない。
     if (hasEmptyStrikes()) {
-      if (!confirm('未の太刀が残っています。'+BS+'nすべて失敗にして確定しますか？')) return false;
+      if (!confirm('未の太刀が残っています。\nすべて失敗にして確定しますか？')) return false;
       failRemainingStrikes(p);
     }
     p.confirmed = true;

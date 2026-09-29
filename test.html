@@ -54,6 +54,16 @@
       await Api.changeStatus(eventId, 'round1');
       return await Api.changeStatus(eventId, 'round1_done');
     }
+    // 取り込みで得点が入った行を確定にする。順位・暫定ベスト8 の選考・二巡目生成の判定は
+    // 確定した行だけを見る（2026-09-30）ので、9 列 CSV で入れた得点はこれで確定にしてから使う。
+    async function confirmScored(eventId) {
+      var ps = (await Api.loadEvent(eventId)).players;
+      for (var ci = 0; ci < ps.length; ci++) {
+        if (Courts.isScored(ps[ci]) && ps[ci].confirmed !== true) {
+          await Api.updatePlayer(eventId, ps[ci].id, { confirmed: true });
+        }
+      }
+    }
 
     // 技術APIテスト
     var techData = await Api.loadTechniques();
@@ -1403,6 +1413,7 @@
     async function makeGenEvent(name, csv) {
       var ev = await Api.saveEvent({ name: name, date: '2026-09-22', venue: '', players: [] });
       await Api.importCsv(ev.id, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' + csv, 'replace');
+      await confirmScored(ev.id);   // 得点の入った行は確定済みとして扱う
       return ev;
     }
     function round2Of(players) {
@@ -1530,6 +1541,7 @@
                  'F2,A-女子-1-2,真,,,5,,○,1    \n' +
                  'M4,B-男子-1-1,真,,,40,,,1    \n';
     await Api.importCsv(genEvent.id, genCsv, 'replace');
+    await confirmScored(genEvent.id);
     var beforeIds = (await Api.loadEvent(genEvent.id)).players.map(function(p) { return p.id; });
 
     var genRes = await toRound1Done(genEvent.id);
@@ -1576,6 +1588,7 @@
                  'S2,A-男子-1-2,真,,,0,,,\n' +
                  'S3,A-男子-1-3,真,,,0,,,\n';
     await Api.importCsv(unsEvent.id, unsCsv, 'replace');
+    await confirmScored(unsEvent.id);
     await toRound1Done(unsEvent.id);   // 遷移が force 扱いで二巡目を生成済み（未採点があっても進む）
     var unscored = await Api.generateNextRound(unsEvent.id, false);
     assert('未採点があれば拒否される', unscored.reason, 'unscored');
@@ -1601,6 +1614,7 @@
     var goneEvent = await Api.saveEvent({ name: '全消しテスト', date: '2026-02-01', venue: '', players: [] });
     await Api.importCsv(goneEvent.id,
       '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\nG1,A-男子-1-1,真,,,30,,,1    \n', 'replace');
+    await confirmScored(goneEvent.id);
     await toRound1Done(goneEvent.id);
     var goneP = (await Api.loadEvent(goneEvent.id)).players[0];
     await Api.deletePlayer(goneEvent.id, goneP.id, true);
@@ -1613,6 +1627,7 @@
                   'D1,A-男子-1-1,真,,,30,,,1    \n' +
                   'D2,A-男子-1-2,真,,,10,,,1    \n';
     await Api.importCsv(diffEvent.id, diffCsv, 'replace');
+    await confirmScored(diffEvent.id);
     await toRound1Done(diffEvent.id);   // 遷移が二巡目を生成する
     var diffP3 = await Api.createPlayer(diffEvent.id, { name: 'D3', court: 'A', isFemale: false });
     await Api.updatePlayer(diffEvent.id, diffP3.id, { score: 20, result: '1    ' });
@@ -1655,6 +1670,7 @@
       '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n' +
       'T1,A-男子-1-1,真,,,30,,,1    \n' +
       'T2,A-男子-1-2,真,,,10,,,1    \n', 'replace');
+    await confirmScored(stGenEvent.id);
     var genDraft = await Api.generateNextRound(stGenEvent.id, false);
     assert('準備中では二巡目を生成できない', [genDraft.blocked, genDraft.reason], [true, 'status']);
     await Api.changeStatus(stGenEvent.id, 'round1');
@@ -1686,7 +1702,7 @@
     // 従来の差分追加と同じだが、暫定ベスト8の番号は新しい得点順に付け直される）。
     await Api.changeStatus(trEvent.id, 'round1');
     var trAdd = await Api.createPlayer(trEvent.id, { name: 'R4', court: 'A', isFemale: false });
-    await Api.updatePlayer(trEvent.id, trAdd.id, { score: 5, result: '1    ' });
+    await Api.updatePlayer(trEvent.id, trAdd.id, { score: 5, result: '1    ', confirmed: true });   // 選考は確定済みだけを見る
     var trAgain = await Api.changeStatus(trEvent.id, 'round1_done');
     assert('二度目の一巡目終了は差分だけ追加する',
       [trAgain.round2.created, trAgain.round2.skipped], [1, 3]);
@@ -1707,6 +1723,7 @@
       'U3,A-男子-1-3,真,,,20,,,1    \nU4,A-男子-1-4,真,,,10,,,1    \n' +
       'U1,A-男子-2-1,真,,,0,,,\nU2,A-男子-2-2,真,,,0,,,\n' +
       'U3,A-男子-2-3,真,,,0,,,\nU4,A-男子-2-4,真,,,0,,,\n', 'replace');
+    await confirmScored(trkEvent.id);
     await Api.changeStatus(trkEvent.id, 'round1');
     var trkBlocked = await Api.changeStatus(trkEvent.id, 'round1_done');
     assert('追跡できない二巡目の行があると一巡目終了は409 exists',
@@ -1882,12 +1899,12 @@
     assert('順位の項目は rank/name/score だけ',
       Object.keys(ranking.rankings.male[0]), ['rank', 'name', 'score']);
     assert('順位に result は含まれない', ranking.rankings.male[0].result, undefined);
-    // 最終結果・アーカイブ済みの大会は、確定の印が無い得点も順位に出る（過去のデータの互換。2026-09-30）
+    // 状態を持つ大会は、最終結果にしても確定の印が無い得点は順位に出ない（確定の瞬間に順位が跳ねないように。2026-09-30）
     var lkEvent = await Api.saveEvent({ name: '確定なし順位', date: '2026-03-01', venue: '', players: [] });
     await Api.importCsv(lkEvent.id, '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果' + String.fromCharCode(10) + '甲,A-男子-1-1,真,,,25,,,1    ' + String.fromCharCode(10), 'replace');
     assert('順位: 進行前は確定の印が無い得点を数えない', (await Api.loadRanking(lkEvent.id)).rankings.male[0].score, 0);
     await Api.changeStatus(lkEvent.id, 'round1'); await Api.changeStatus(lkEvent.id, 'round1_done'); await Api.changeStatus(lkEvent.id, 'final');
-    assert('順位: 最終結果の大会は確定の印が無い得点も数える', (await Api.loadRanking(lkEvent.id)).rankings.male[0].score, 25);
+    assert('順位: 状態を持つ大会は最終結果でも確定の印が無い得点を数えない（数えるのは status の無い旧データだけ）', (await Api.loadRanking(lkEvent.id)).rankings.male[0].score, 0);
     await Api.deleteEvent(lkEvent.id);
     assert('存在しない大会の順位は null', await Api.loadRanking('nosuchevent'), null);
     await Api.deleteEvent(rankEvent.id);
@@ -2572,13 +2589,13 @@
     assert('往復: 二巡目の二郎行が sourcePlayerId で取り込み後の二郎を指す', !!rtJiro2, true);
     // 男子 2 名とも得点があるので 2 名とも決戦（暫定ベスト8）。印が落ちると決戦が消える。
     assert('往復: 書き出しに finalist の印が入る',
-      rtBundle.event.players.filter(function(p) { return p.finalist === true; }).length, 2);
+      rtBundle.event.players.filter(function(p) { return p.finalist === true; }).length, 1);   // 二郎は未確定なので候補は一郎だけ（選考は確定済みを見る）
     assert('往復: 取り込み後も finalist の印が残る（決戦が消えない）',
-      [rtIchiro2.finalist, rtJiro2.finalist, EventStatus.finalists(rtLoaded.players).length], [true, true, 2]);
+      [rtIchiro2.finalist, rtJiro2.finalist, EventStatus.finalists(rtLoaded.players).length], [true, undefined, 1]);
     // POST /api/events（大会ファイルの保存し直し）も同じ sanitize を通るので印が残る
     await Api.saveEvent(rtLoaded);
     assert('往復: 大会ファイルを保存し直しても finalist の印が残る',
-      EventStatus.finalists((await Api.loadEvent(rtImportRes.id)).players).length, 2);
+      EventStatus.finalists((await Api.loadEvent(rtImportRes.id)).players).length, 1);
 
     var rtHist = await Api.loadHistory(rtImportRes.id);
     // toRound1Done（draft → round1 → round1_done）で status_change が2件増えた分を足す
@@ -3177,12 +3194,12 @@
       '試合を開始しますか？');
     assert('statusConfirmMessage: 未採点が 0 名なら「いません」',
       Courts.statusConfirmMessage('round1', 'round1_done', [
-        { order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 10, result: '1    ' }
+        { order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 10, result: '1    ', confirmed: true }
       ]),
-      '一巡目の未採点がいません。\n一巡目を終了しますか？');
+      '一巡目の未確定がいません。\n一巡目を終了しますか？');
     assert('statusConfirmMessage: round1 → round1_done',
       Courts.statusConfirmMessage('round1', 'round1_done', tcP),
-      '一巡目の未採点が 1名います。\n一巡目を終了しますか？');
+      '一巡目の未確定が 1名います。\n一巡目を終了しますか？');
     assert('statusConfirmMessage: round1_done → round2',
       Courts.statusConfirmMessage('round1_done', 'round2', tcP),
       '二巡目 1名。技が未入力の選手が 1名います。\n二巡目を開始しますか？');
@@ -3191,7 +3208,7 @@
       '二巡目を行わずに最終結果にします。\nよろしいですか？');
     assert('statusConfirmMessage: round2 → round2_done',
       Courts.statusConfirmMessage('round2', 'round2_done', tcP),
-      '二巡目の未採点が 1名います。\n二巡目を終了しますか？');
+      '二巡目の未確定が 1名います。\n二巡目を終了しますか？');
     assert('statusConfirmMessage: round2_done → final',
       Courts.statusConfirmMessage('round2_done', 'final', tcP),
       '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？');
@@ -3232,16 +3249,16 @@
     ];
     assert('statusConfirmMessage: round2 → round2_final は決戦以外の未採点を数える',
       Courts.statusConfirmMessage('round2', 'round2_final', cfP),
-      '決戦以外の未採点が 1名います。\n決戦を開始しますか？');
+      '決戦以外の未確定が 1名います。\n決戦を開始しますか？');
     assert('statusConfirmMessage: round2 → round2_final で未採点0なら「いません」',
       Courts.statusConfirmMessage('round2', 'round2_final', [
-        { order: 'A-男子-2-1', score: 12, result: '1    ' },
+        { order: 'A-男子-2-1', score: 12, result: '1    ', confirmed: true },
         { order: '決戦-男子-2-1', finalist: true, score: 0, result: '' }
       ]),
-      '決戦以外の未採点がいません。\n決戦を開始しますか？');
+      '決戦以外の未確定がいません。\n決戦を開始しますか？');
     assert('statusConfirmMessage: round2_final → round2_done は決戦の未採点を数える',
       Courts.statusConfirmMessage('round2_final', 'round2_done', cfP),
-      '決戦の未採点が 1名います。\n二巡目を終了しますか？');
+      '決戦の未確定が 1名います。\n二巡目を終了しますか？');
     assert('statusConfirmMessage: round2_final → round2 は戻す文言',
       Courts.statusConfirmMessage('round2_final', 'round2', cfP),
       '二巡目 進行中に戻します。よろしいですか？');
@@ -3251,7 +3268,7 @@
     assert('statusConfirmMessage: 決戦の無い大会の round2 → round2_done は従来どおり',
       Courts.statusConfirmMessage('round2', 'round2_done',
         [{ order: 'A-男子-2-1', score: 0, result: '' }]),
-      '二巡目の未採点が 1名います。\n二巡目を終了しますか？');
+      '二巡目の未確定が 1名います。\n二巡目を終了しますか？');
 
     // ---- 段階表示の件数 ----
     assert('stageCountText: round2_final は決戦だけを数える',
