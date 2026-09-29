@@ -611,7 +611,7 @@ var Desk = (function() {
       applyTheme(next);
     });
     document.getElementById('btnMobile').addEventListener('click', toMobile);
-    document.getElementById('btnNarrowSwitch').addEventListener('click', toMobile);
+    // 狭い幅の案内（btnNarrowSwitch）は撤去した（スマホでも PC 版を出す。2026-09-30）。切り替えは上部の 📱 だけ
 
     window.addEventListener('hashchange', function() { applyRoute().catch(function(e) { console.error(e); }); });
     applyRoute().catch(function(e) { console.error(e); });

@@ -357,16 +357,8 @@ a { color: var(--accent); }
   background: var(--bg-secondary); color: var(--text);
 }
 
-/* ===== 狭い幅（スマホ運営への案内） ===== */
-.desk-narrow { display: none; }
-@media (max-width: 1023px) {
-  .desk-narrow {
-    display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
-    margin: 16px; padding: 16px; border: 1px solid var(--warn); border-radius: 6px;
-    background: var(--card-bg); color: var(--warn);
-  }
-  .desk-head, .desk-body { display: none; }
-}
+/* 狭い幅でも PC 版をそのまま出す（スマホでは viewport 幅 1100px の紙面を縮小表示。2026-09-30）。
+   以前あった「1024px 未満はスマホ運営へ」の案内は撤去した。 */
 
 /* ===== 試合の区画（desk-match.js。計画5） ===== */
 .desk-match-courts {

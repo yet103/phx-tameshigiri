@@ -2,7 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- スマホでも PC 版のレイアウトをそのまま（縮小して）見せる（ユーザー要望 2026-09-30）。
+       幅 1100px の紙面として描き、端末側でピンチ拡大する。スマホ運営（admin.html）は上部の 📱 で切り替え -->
+  <meta name="viewport" content="width=1100">
   <title>PHX試し斬り PC運営</title>
   <meta name="application-name" content="PHX試し斬り">
   <meta name="apple-mobile-web-app-title" content="PHX試し斬り">
@@ -17,12 +19,6 @@
     <button id="btnTheme" class="desk-icon-btn" aria-label="テーマ切り替え">🌙</button>
     <button id="btnMobile" class="desk-icon-btn" aria-label="スマホ運営に切り替える" title="スマホ運営に切り替える">📱</button>
   </header>
-
-  <!-- 1024px 未満でだけ出す案内（desk.css のメディアクエリ） -->
-  <div class="desk-narrow" id="deskNarrow">
-    <p>この画面は幅 1024px 以上の PC 向けです。スマホでは運営画面のスマホ版をお使いください。</p>
-    <button type="button" class="desk-btn primary" id="btnNarrowSwitch">スマホ運営（admin.html）に切り替える</button>
-  </div>
 
   <div class="desk-head" id="deskHead" hidden></div>
 
