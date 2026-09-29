@@ -521,6 +521,27 @@ a { color: var(--accent); }
 .filter-btn { color: var(--gold-light); }
 .filter-btn.on { color: var(--gold); }
 
+/* 選手表の配色を技得点表と同じ作法にする（ユーザー要望 2026-09-30）。本文は端末の明朝（通常の太さ）、
+   名前だけ web フォント（太字）。列を組に分けて地色を付け、組の境目に金の太線を引く。
+   組: 1 巡・No.・名前（金の薄い地）｜2 ゼッケン・級位段位・レンタル（灰みの地）｜3 コート・性別・新人（白）
+   ｜4 技1〜3（白。列番号 10〜12）｜5 得点（金の薄い地）｜⋯。列を足したら nth-child の番号も直すこと。 */
+.desk-players-table { font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; border: 2px solid var(--gold); }
+.desk-players-table td { background: var(--card-bg); }
+.desk-players-table td.col-round, .desk-players-table td.col-no, .desk-players-table td.col-name, .desk-players-table td.col-score {
+  background: color-mix(in srgb, var(--gold) 14%, var(--card-bg));
+}
+.desk-players-table td.col-bib, .desk-players-table td.col-rank, .desk-players-table td.col-rental {
+  background: color-mix(in srgb, var(--border) 22%, var(--card-bg));
+}
+.desk-players-table td.col-name { font-family: var(--mincho); }
+.desk-players-table th.col-bib, .desk-players-table td.col-bib,
+.desk-players-table th.col-court, .desk-players-table td.col-court,
+.desk-players-table th:nth-child(10), .desk-players-table td:nth-child(10),
+.desk-players-table th.col-score, .desk-players-table td.col-score { border-left: 2px solid var(--gold); }
+/* 追加中の下書き行と、ホバーした名前列（sticky）は従来の色を保つ（上の組の地色より後ろに置いて勝たせる） */
+.desk-players-table .desk-draft-row td { background: var(--bg-header); }
+.desk-players-table tbody tr:hover td.col-name { background: var(--row-selected); }
+
 /* 区画の見出し */
 .desk-section-head h2 { font-family: var(--mincho); padding-bottom: 3px; border-bottom: 1px solid var(--gold); }
 
