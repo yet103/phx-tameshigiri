@@ -4287,6 +4287,17 @@
     assert('scoringHref: PC 運営も未分類とスペースをエンコードする',
       Desk.scoringHref('a b', '未分類'), 'scoring.html#event/a%20b/' + encodeURIComponent('未分類'));
 
+    // 上部の状態バーは 5 段（準備中 → 一巡目 → 形登録 → 二巡目 → 最終結果）。状態値は変えず見せ方だけまとめる
+    assert('stageOf: 状態ごとの段の添字（全状態を 5 段のどれかに入れる）',
+      EventStatus.STATES.map(function(s) { return Desk.stageOf(s).index; }), [0, 1, 2, 3, 3, 3, 4, 4]);
+    assert('stageOf: 段の名前',
+      ['draft', 'round1', 'round1_done', 'round2', 'final'].map(function(s) { return Desk.stageOf(s).label; }),
+      ['準備中', '一巡目', '形登録', '二巡目', '最終結果']);
+    assert('stageOf: 決戦・二巡目終了・アーカイブは段の補足文で示す',
+      ['round2_final', 'round2_done', 'archived', 'final', 'draft'].map(function(s) { return Desk.stageOf(s).note; }),
+      ['決戦 進行中', '二巡目終了', 'アーカイブ', '', '']);
+    assert('stageOf: 知らない状態は -1', Desk.stageOf('zzz').index, -1);
+
     var h2home = document.createElement('h2');
     h2home.textContent = 'home.js';
     results.appendChild(h2home);

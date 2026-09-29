@@ -23,9 +23,22 @@ var Desk = (function() {
   ];
   var TABS = NAV.map(function(n) { return n.tab; });
 
-  // 上部に並べる段階。archived は並べない（アーカイブは final の「次へ進む」で、
-  // 戻すときは prev が final を返す）。決戦（round2_final）も1段として並べる。
-  var STAGE_STEPS = ['draft', 'round1', 'round1_done', 'round2', 'round2_final', 'round2_done', 'final'];
+  // 上部の状態バーの 5 段（ユーザー要望 2026-09-30）。EventStatus の状態値と遷移はそのままで、
+  // 見せ方だけをまとめる。決戦・二巡目終了・アーカイブは段の中の補足文（STAGE_NOTES）で示す。
+  var STAGE_GROUPS = [
+    { label: '準備中',   states: ['draft'] },
+    { label: '一巡目',   states: ['round1'] },
+    { label: '形登録',   states: ['round1_done'] },
+    { label: '二巡目',   states: ['round2', 'round2_final', 'round2_done'] },
+    { label: '最終結果', states: ['final', 'archived'] }
+  ];
+  var STAGE_NOTES = {
+    round1: '進行中',
+    round2: '進行中',
+    round2_final: '決戦 進行中',
+    round2_done: '二巡目終了',
+    archived: 'アーカイブ'
+  };
 
   var defs = {};
   var activeDef = null;    // いま描いている区画（DOM から外す前に destroy を呼ぶ）
@@ -286,92 +299,65 @@ var Desk = (function() {
     head.appendChild(buildStage(EventStatus.of(event), event.players || []));
   }
 
-  // 段階の帯。現在の状態を強調し、通過した状態を塗る。右に「戻す」「次へ進む」。
+  // 上部の状態バー。現在の段階を金で塗り、通過した段階を塗る（表示だけ。進める・戻すのボタンは
+  // 試合進行の工程表の下にだけ置く。ユーザー要望 2026-09-30「段階の遷移ボタンは 1 か所に」）。
+  // 決戦・二巡目終了・アーカイブは、現在の段の補足文（stageOf の note）で示す。
   function buildStage(st, players) {
     var wrap = document.createElement('div');
     wrap.className = 'desk-stage';
+    wrap.title = '現在の状態: ' + (EventStatus.LABELS[st] || st);
 
     var steps = document.createElement('div');
     steps.className = 'desk-stage-steps';
-    var cur = STAGE_STEPS.indexOf(st);   // archived は -1（全部を通過済みとして塗る）
-    var currentEl = null;                // 現在の段階の要素。操作ボタンをこの隣に置く（ユーザー要望 2026-09-30）
-    STAGE_STEPS.forEach(function(s, i) {
+    steps.id = 'deskStageSteps';
+    var view = stageOf(st);
+    STAGE_GROUPS.forEach(function(g, i) {
       if (i > 0) {
         var sep = document.createElement('span');
         sep.className = 'desk-stage-sep';
         sep.textContent = '─';
         steps.appendChild(sep);
       }
-      var isCurrent = (s === st);
-      var isPast = (cur === -1) || (i < cur);   // 通過済み（archived のときは全段階）
+      var isCurrent = (i === view.index);
+      var isPast = (i < view.index);
       var el = document.createElement('span');
       el.className = 'desk-stage-step' + (isCurrent ? ' on' : '') + (isPast ? ' done' : '');
       // 通過済みと現在は塗り（●）、未到達は空（○）
-      el.textContent = (isCurrent || isPast ? '●' : '○') + EventStatus.LABELS[s];
+      el.textContent = (isCurrent || isPast ? '●' : '○') + g.label;
+      if (isCurrent && view.note) {
+        var note = document.createElement('span');
+        note.className = 'desk-stage-note';
+        note.id = 'deskStageNote';
+        note.textContent = view.note;
+        el.appendChild(note);
+      }
       steps.appendChild(el);
-      if (isCurrent) currentEl = el;
     });
     wrap.appendChild(steps);
-
-    if (st === 'archived') {
-      var badge = document.createElement('span');
-      badge.className = 'desk-stage-archived';
-      badge.textContent = EventStatus.LABELS.archived;
-      wrap.appendChild(badge);
-    }
 
     var count = document.createElement('span');
     count.className = 'desk-stage-count';
     count.id = 'deskStageCount';
     count.textContent = Courts.stageCountText(st, players);
     wrap.appendChild(count);
-
-    var actions = document.createElement('div');
-    actions.className = 'desk-stage-actions';
-
-    var back = EventStatus.prev(st, players);
-    if (back) {
-      var btnBack = document.createElement('button');
-      btnBack.type = 'button';
-      btnBack.className = 'desk-btn';
-      btnBack.id = 'btnDeskBack';
-      btnBack.textContent = '◀ ' + EventStatus.LABELS[back] + ' に戻す';
-      btnBack.addEventListener('click', function() { applyStatus(st, back); });
-      actions.appendChild(btnBack);
-    }
-
-    // 「次へ進む」の行き先は選手データで変わる（二巡目 進行中は、決戦の行があれば
-    // 決戦へ、無ければ二巡目終了へ）。ラベルも同じ判定で決める。
-    var nx = EventStatus.nextStep(st, players);
-    if (nx) {
-      var btnNext = document.createElement('button');
-      btnNext.type = 'button';
-      btnNext.className = 'desk-btn primary';
-      btnNext.id = 'btnDeskNext';
-      btnNext.textContent = EventStatus.nextLabel(st, players) + ' ▶';
-      btnNext.addEventListener('click', function() { applyStatus(st, nx); });
-      actions.appendChild(btnNext);
-    }
-
-    // 二巡目を行わずに最終結果へ（一巡目終了のときだけ）。「二巡目を開始」の右に小さく出す。
-    if (st === 'round1_done') {
-      var btnSkip = document.createElement('button');
-      btnSkip.type = 'button';
-      btnSkip.className = 'desk-btn desk-btn-sub';
-      btnSkip.id = 'btnDeskSkipRound2';
-      btnSkip.textContent = '二巡目なしで終了';
-      btnSkip.addEventListener('click', function() { applyStatus(st, 'final'); });
-      actions.appendChild(btnSkip);
-    }
-    // 「試合開始 ▶」「戻す」は現在の段階（●準備中 など）のすぐ隣に置く。見つからなければ末尾
-    if (currentEl) currentEl.insertAdjacentElement('afterend', actions);
-    else wrap.appendChild(actions);
     return wrap;
   }
 
-  // 段階表示の遷移ボタン（次へ進む・戻す・二巡目なしで終了）。通信中は連打・二重送信を
-  // 防ぐため無効にする。成功時は reloadEvent が上部を描き直す（ボタンごと作り直されるので
-  // 戻し忘れにならない）。失敗時・通信断のときだけここで明示的に戻す。
+  // 状態 → 状態バーの段（STAGE_GROUPS の添字・段の名前・補足文）。未知の状態は index -1。
+  function stageOf(st) {
+    for (var i = 0; i < STAGE_GROUPS.length; i++) {
+      if (STAGE_GROUPS[i].states.indexOf(st) !== -1) {
+        return { index: i, label: STAGE_GROUPS[i].label,
+          note: Object.prototype.hasOwnProperty.call(STAGE_NOTES, st) ? STAGE_NOTES[st] : '' };
+      }
+    }
+    return { index: -1, label: '', note: '' };
+  }
+
+  // 段階の遷移ボタン（次へ進む・戻す・二巡目を行わず最終結果へ。試合進行の工程表の下にある。
+  // desk-match.js の buildSteps）。通信中は連打・二重送信を防ぐため無効にする。成功時は
+  // reloadEvent が区画を描き直す（ボタンごと作り直されるので戻し忘れにならない）。
+  // 失敗時・通信断のときだけここで明示的に戻す。
   function setStageButtonsDisabled(flag) {
     ['btnDeskNext', 'btnDeskBack', 'btnDeskSkipRound2'].forEach(function(id) {
       var el = document.getElementById(id);
@@ -639,6 +625,8 @@ var Desk = (function() {
     registerTab: registerTab,
     navigate: navigate,
     reloadEvent: reloadEvent,
+    applyStatus: applyStatus,
+    stageOf: stageOf,
     currentEventId: currentEventId,
     toast: toast,
     openDialog: openDialog,

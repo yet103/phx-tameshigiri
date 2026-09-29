@@ -54,6 +54,7 @@
     var st = EventStatus.of(ctx.event);
 
     container.appendChild(buildHead(ctx));
+    container.appendChild(buildSteps(st, ctx));
     container.appendChild(buildCourts(st, ctx));
     // 決戦 進行中のときだけ、決戦のカード（buildCourts）の直後に暫定順位を出す
     // （非同期。あとから差し込む。レビュー指摘E）。二巡目の形登録の表は desk-round2.js に移した。
@@ -80,6 +81,132 @@
 
     head.appendChild(buildMenu(ctx));
     return head;
+  }
+
+  // --- 工程表（ユーザー要望 2026-09-30） ---
+  // 試合進行の先頭に「① 一巡目 → ② 二巡目の形登録 → ③ 二巡目（決戦を含む）」の 3 段を置き、
+  // 現在の段を金で塗って、その段階でやることを 1 行で示す。下に、その段階に関係する遷移ボタン
+  // （進める・戻す。二巡目準備なら「二巡目を行わず最終結果へ」も）を置く。段階の遷移ボタンは
+  // ここだけ（上部の状態バーは表示だけ）。押したときの確認と通信は Desk.applyStatus（desk.js）。
+  var MATCH_STEPS = [
+    { label: '① 一巡目',               states: ['round1'] },
+    { label: '② 二巡目の形登録',       states: ['round1_done'] },
+    { label: '③ 二巡目（決戦を含む）', states: ['round2', 'round2_final', 'round2_done'] }
+  ];
+
+  // 工程表の現在の段の添字。準備中は -1（まだ①の前）、最終結果・アーカイブは 3（全部済み）。
+  function matchStepIndex(st) {
+    if (st === 'final' || st === 'archived') return MATCH_STEPS.length;
+    for (var i = 0; i < MATCH_STEPS.length; i++) {
+      if (MATCH_STEPS[i].states.indexOf(st) !== -1) return i;
+    }
+    return -1;
+  }
+
+  // その段階でやること（1 行）。ボタンの文言は EventStatus.nextLabel と同じものを引く。
+  function stepTodo(st, players) {
+    var nx = EventStatus.nextLabel(st, players);
+    switch (st) {
+      case 'draft':
+        return '準備中です。選手と技をそろえたら「' + nx + '」を押します（採点画面が別のウィンドウで開きます）。';
+      case 'round1':
+        return '各コートで一巡目を採点しています。全コートの確定がそろったら「' + nx + '」を押します。';
+      case 'round1_done':
+        return '二巡目の行ができました。自己申告があった選手の形を形登録で直してから「' + nx + '」を押します。';
+      case 'round2':
+        return EventStatus.hasFinalists(players)
+          ? '各コートで二巡目を採点しています。決戦以外が斬り終わったら「' + nx + '」を押します。'
+          : '各コートで二巡目を採点しています。全コートの確定がそろったら「' + nx + '」を押します。';
+      case 'round2_final':
+        return '決戦 進行中です（' + Courts.finaleCourt(players) + ' コートの最後）。斬り終わったら「' + nx + '」を押します。';
+      case 'round2_done':
+        return '二巡目終了です。結果確認で順位を確かめてから「' + nx + '」を押します。';
+      case 'final':
+        return '最終結果です（得点・選手・技は編集できません）。発表・共有・書き出しは結果確認から。';
+      case 'archived':
+        return 'アーカイブ済みです（見るだけ）。';
+      default:
+        return '';
+    }
+  }
+
+  function buildSteps(st, ctx) {
+    var players = ctx.players || [];
+    var box = document.createElement('div');
+    box.className = 'desk-steps';
+    box.id = 'matchSteps';
+
+    var row = document.createElement('div');
+    row.className = 'desk-steps-row';
+    var cur = matchStepIndex(st);
+    MATCH_STEPS.forEach(function(s, i) {
+      if (i > 0) {
+        var arrow = document.createElement('span');
+        arrow.className = 'desk-steps-arrow';
+        arrow.textContent = '→';
+        row.appendChild(arrow);
+      }
+      var el = document.createElement('span');
+      el.className = 'desk-steps-step' + (i === cur ? ' on' : '') + (i < cur ? ' done' : '');
+      el.textContent = s.label;
+      row.appendChild(el);
+    });
+    box.appendChild(row);
+
+    var todo = document.createElement('p');
+    todo.className = 'desk-steps-todo';
+    todo.id = 'matchStepsTodo';
+    todo.appendChild(document.createTextNode(stepTodo(st, players)));
+    // 形登録（②）と結果確認への近道
+    if (st === 'round1_done') {
+      todo.appendChild(jumpButton('btnMatchGoRound2', '形登録へ →', 'round2', ctx));
+    } else if (st === 'round2_done' || st === 'final' || st === 'archived') {
+      todo.appendChild(jumpButton('btnMatchGoResults', '結果確認へ →', 'results', ctx));
+    }
+    box.appendChild(todo);
+
+    var actions = document.createElement('div');
+    actions.className = 'desk-steps-actions';
+
+    // 「次へ進む」の行き先は選手データで変わる（二巡目 進行中は、決戦の行があれば
+    // 決戦へ、無ければ二巡目終了へ）。ラベルも同じ判定で決める。
+    var nx = EventStatus.nextStep(st, players);
+    if (nx) {
+      actions.appendChild(stepButton('btnDeskNext', 'desk-btn primary',
+        EventStatus.nextLabel(st, players) + ' ▶', st, nx));
+    }
+    var back = EventStatus.prev(st, players);
+    if (back) {
+      actions.appendChild(stepButton('btnDeskBack', 'desk-btn',
+        '◀ ' + EventStatus.LABELS[back] + ' に戻す', st, back));
+    }
+    // 二巡目を行わずに最終結果へ（二巡目準備のときだけ）
+    if (st === 'round1_done') {
+      actions.appendChild(stepButton('btnDeskSkipRound2', 'desk-btn desk-btn-sub',
+        '二巡目を行わず最終結果へ', st, 'final'));
+    }
+    if (actions.childNodes.length > 0) box.appendChild(actions);
+    return box;
+  }
+
+  function stepButton(id, cls, label, from, to) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.id = id;
+    b.className = cls;
+    b.textContent = label;
+    b.addEventListener('click', function() { Desk.applyStatus(from, to); });
+    return b;
+  }
+
+  function jumpButton(id, label, tab, ctx) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.id = id;
+    b.className = 'desk-btn-sub';
+    b.textContent = label;
+    b.addEventListener('click', function() { Desk.navigate(tab, ctx.eventId); });
+    return b;
   }
 
   // details/summary の外側をクリックしたら閉じる。document への登録は1回だけ

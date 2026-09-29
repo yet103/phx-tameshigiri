@@ -51,12 +51,9 @@ a { color: var(--accent); }
 .desk-stage-step.done { color: var(--text); }
 .desk-stage-step.on { color: var(--accent); font-weight: bold; font-size: 14px; }
 .desk-stage-sep { color: var(--text-muted); }
-.desk-stage-archived {
-  padding: 1px 8px; border-radius: 10px; font-size: 12px;
-  border: 1px solid var(--warn); color: var(--warn);
-}
 .desk-stage-count { font-size: 13px; color: var(--text-muted); }
-.desk-stage-actions { margin: 0 4px; display: inline-flex; gap: 6px; vertical-align: middle; }   /* 現在の段階のすぐ隣に置く */
+/* 現在の段の補足文（決戦 進行中・二巡目終了・アーカイブなど。desk.js の STAGE_NOTES） */
+.desk-stage-note { margin-left: 6px; font-size: 12px; font-weight: normal; }
 
 /* ===== ボタン ===== */
 .desk-btn {
@@ -67,7 +64,7 @@ a { color: var(--accent); }
 .desk-btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
 .desk-btn.danger { background: var(--btn-fail); color: #fff; border-color: var(--btn-fail); }
 .desk-btn:disabled { opacity: .5; cursor: not-allowed; }
-/* 小さめの二次ボタン（例: 段階表示の「二巡目なしで終了」）。主ボタンの隣に添える控えめな見た目。 */
+/* 小さめの二次ボタン（例: 工程表の「二巡目を行わず最終結果へ」）。主ボタンの隣に添える控えめな見た目。 */
 .desk-btn-sub {
   min-height: 28px; padding: 0 10px; font-size: 12px;
   background: transparent; color: var(--text-muted);
@@ -404,7 +401,34 @@ a { color: var(--accent); }
 .desk-match-table tbody tr.current td.score { color: var(--accent-text); }
 .desk-match-live.done { background: transparent; color: var(--text-muted); padding-left: 0; }
 
-/* 二巡目の帯（生成・全員にコピー・件数） */
+/* 試合進行の工程表（desk-match.js の buildSteps。ユーザー要望 2026-09-30）。
+   黒地に金の帯のトーン。現在の段を金で塗り、通過した段は金の文字、未到達は薄い文字。
+   帯の色なのでテーマに依らず band- と gold- の変数だけを使う。 */
+.desk-steps {
+  margin-bottom: 12px; padding: 10px 14px; border-radius: 6px;
+  background: var(--band-bg); color: var(--band-text); border: 1px solid var(--gold-deep);
+}
+.desk-steps-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.desk-steps-step {
+  padding: 3px 14px; border-radius: 14px; white-space: nowrap;
+  font-family: var(--mincho); font-size: 15px;
+  color: var(--band-muted); border: 1px solid var(--gold-deep);
+}
+.desk-steps-step.done { color: var(--gold-light); }
+.desk-steps-step.on {
+  background: linear-gradient(180deg, var(--gold-light), var(--gold-deep));
+  color: var(--band-bg); border-color: var(--gold); font-weight: bold;
+}
+.desk-steps-arrow { color: var(--gold); font-weight: bold; }
+.desk-steps-todo {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 8px; font-size: 14px; color: var(--band-text);
+}
+.desk-steps-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.desk-steps .desk-btn-sub { color: var(--band-muted); border: 1px solid var(--gold-deep); }
+.desk-steps .desk-btn-sub:hover:not(:disabled) { color: var(--gold-light); border-color: var(--gold); }
+
+/* 二巡目の帯（形登録の区画の全員にコピー・件数。desk-round2.js） */
 .desk-match-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .desk-match-count { font-size: 13px; color: var(--cell-fail-text); }
 .desk-match-count.done { color: var(--cell-success-text); font-weight: bold; }
@@ -507,10 +531,7 @@ a { color: var(--accent); }
   color: var(--band-bg); padding: 1px 10px; border-radius: 10px;
 }
 .desk-stage-sep { color: var(--gold-deep); }
-.desk-stage-archived { color: var(--gold-light); border-color: var(--gold-deep); }
 .desk-stage-count { color: var(--band-muted); }
-.desk-head .desk-btn-sub { color: var(--band-muted); }
-.desk-head .desk-btn-sub:hover:not(:disabled) { color: var(--gold-light); border-color: var(--gold); }
 
 /* 左の区画ナビ。ページリンクと同じ黒地に金 */
 .desk-nav { background: var(--band-bg); }
