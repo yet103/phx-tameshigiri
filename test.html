@@ -3065,13 +3065,13 @@
 
     assert('statusConfirmMessage: draft → round1',
       Courts.statusConfirmMessage('draft', 'round1', tcP),
-      '一巡目 2名。技が未入力の選手が 1名います。\n試合を開始しますか？');
+      '⚠ 技が未入力の選手が 1名います。\nこのまま試合を開始しますか？');
     // 0 名のときは「0名います」ではなく「いません」（ユーザー要望）
     assert('statusConfirmMessage: 未入力が 0 名なら「いません」',
       Courts.statusConfirmMessage('draft', 'round1', [
         { order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 0 }
       ]),
-      '一巡目 1名。技が未入力の選手がいません。\n試合を開始しますか？');
+      '試合を開始しますか？');
     assert('statusConfirmMessage: 未採点が 0 名なら「いません」',
       Courts.statusConfirmMessage('round1', 'round1_done', [
         { order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 10, result: '1    ' }

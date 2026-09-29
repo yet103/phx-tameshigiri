@@ -280,6 +280,7 @@ var Desk = (function() {
     var steps = document.createElement('div');
     steps.className = 'desk-stage-steps';
     var cur = STAGE_STEPS.indexOf(st);   // archived は -1（全部を通過済みとして塗る）
+    var currentEl = null;                // 現在の段階の要素。操作ボタンをこの隣に置く（ユーザー要望 2026-09-30）
     STAGE_STEPS.forEach(function(s, i) {
       if (i > 0) {
         var sep = document.createElement('span');
@@ -294,6 +295,7 @@ var Desk = (function() {
       // 通過済みと現在は塗り（●）、未到達は空（○）
       el.textContent = (isCurrent || isPast ? '●' : '○') + EventStatus.LABELS[s];
       steps.appendChild(el);
+      if (isCurrent) currentEl = el;
     });
     wrap.appendChild(steps);
 
@@ -347,7 +349,9 @@ var Desk = (function() {
       btnSkip.addEventListener('click', function() { applyStatus(st, 'final'); });
       actions.appendChild(btnSkip);
     }
-    wrap.appendChild(actions);
+    // 「試合開始 ▶」「戻す」は現在の段階（●準備中 など）のすぐ隣に置く。見つからなければ末尾
+    if (currentEl) currentEl.insertAdjacentElement('afterend', actions);
+    else wrap.appendChild(actions);
     return wrap;
   }
 

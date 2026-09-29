@@ -56,7 +56,7 @@ a { color: var(--accent); }
   border: 1px solid var(--warn); color: var(--warn);
 }
 .desk-stage-count { font-size: 13px; color: var(--text-muted); }
-.desk-stage-actions { margin-left: 12px; display: flex; gap: 8px; }   /* 状態の並びのすぐ右に置く（左寄せ） */
+.desk-stage-actions { margin: 0 4px; display: inline-flex; gap: 6px; vertical-align: middle; }   /* 現在の段階のすぐ隣に置く */
 
 /* ===== ボタン ===== */
 .desk-btn {

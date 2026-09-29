@@ -402,9 +402,10 @@ var Courts = (function() {
     var list = players || [];
     function round(n) { return list.filter(function(p) { return roundOf(p) === n; }); }
     if (from === 'draft' && to === 'round1') {
-      var r1 = round(1);
-      return '一巡目 ' + r1.length + '名。' +
-        countPhrase('技が未入力の選手', r1.filter(isTechIncomplete).length) + '\n試合を開始しますか？';
+      // 技が全員入っていれば短く聞くだけ。未入力がいるときだけ注意を出す（ユーザー要望 2026-09-30）
+      var missing = round(1).filter(isTechIncomplete).length;
+      if (missing === 0) return '試合を開始しますか？';
+      return '⚠ 技が未入力の選手が ' + missing + '名います。\nこのまま試合を開始しますか？';
     }
     if (from === 'round1' && to === 'round1_done') {
       return countPhrase('一巡目の未採点', round(1).filter(function(p) { return !isScored(p); }).length) +
