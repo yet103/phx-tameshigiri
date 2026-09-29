@@ -233,16 +233,17 @@ var App = (function() {
   // 現在の大会の選手からコート選択肢を作り直す
   function refreshCourtList() {
     var list = Courts.listFrom(players);
-    courtSelect.innerHTML = '<option value="">全コート</option>';
+    // コートは必ず 1 つ選ぶ（「全コート」は無くした。ユーザー要望 2026-09-30: 一覧に他コートや他の部が混ざらないように）
+    courtSelect.innerHTML = '';
     for (var i = 0; i < list.length; i++) {
       var opt = document.createElement('option');
       opt.value = list[i];
       opt.textContent = courtOptionLabel(list[i]);
       courtSelect.appendChild(opt);
     }
-    // 名簿が入っている大会で、選択中のコートがそこに無ければ全コートへ戻す
-    if (currentCourt && players.length > 0 && list.indexOf(currentCourt) === -1) {
-      currentCourt = '';
+    // 名簿が入っている大会で、選択中のコートが無い（未選択・そこに無い）なら先頭のコートにする
+    if (players.length > 0 && list.length > 0 && list.indexOf(currentCourt) === -1) {
+      currentCourt = list[0];
     }
     // 名簿がまだ入っていない場合は、配布されたURLのコート指定を落とさない。
     // 「先に端末を配ってURLを開かせ、後から名簿を入れる」段取りがあるため、
@@ -1637,7 +1638,20 @@ var App = (function() {
 
   function renderPlayerList() {
     playerListBody.innerHTML = '';
+    // 男子の部・女子の部の帯で分ける（並びは visiblePlayers のまま。性別が切り替わる所に帯を入れる）
+    var lastSex = null;
     for (var i = 0; i < visiblePlayers.length; i++) {
+      var sex = visiblePlayers[i].isFemale === true ? '女子の部' : '男子の部';
+      if (sex !== lastSex) {
+        var band = document.createElement('tr');
+        band.className = 'player-list-band';
+        var td = document.createElement('td');
+        td.colSpan = 9;
+        td.textContent = sex;
+        band.appendChild(td);
+        playerListBody.appendChild(band);
+        lastSex = sex;
+      }
       playerListBody.appendChild(buildPlayerListRow(i));
     }
   }

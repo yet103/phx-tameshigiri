@@ -523,6 +523,12 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
   overflow-wrap: anywhere;
   text-align: left;
 }
+/* 男子の部・女子の部の帯の行（黒地に金） */
+.player-list-table tr.player-list-band td {
+  background: var(--band-bg-2); color: var(--gold-light); font-family: var(--mincho); font-weight: bold;
+  text-align: left; padding: 2px 8px; cursor: default;
+}
+.player-list-table tr.player-list-band:hover td { opacity: 1; }
 /* ゼッケンが未設定の行（「—」）。入っている行と見分けられるように薄くする。
    選択中の行は .player-list-table tr.current-player td のほうが詳細度が高いので、
    反転した文字色が勝つ（薄いまま読めなくなることはない）。 */
