@@ -548,6 +548,11 @@ a { color: var(--accent); }
   text-align: left; padding: 3px 10px; border-left: none;
 }
 .desk-players-table tbody tr.desk-sex-row:hover td { background: var(--band-bg-2); }
+/* 男子の部と女子の部の間の空き行 */
+.desk-players-table tbody tr.desk-sex-gap { height: 18px; }
+.desk-players-table tr.desk-sex-gap td, .desk-players-table tbody tr.desk-sex-gap:hover td {
+  background: var(--bg); border-left: none; border-right: none; padding: 0;
+}
 /* 表の中のテキスト入力欄（名前・ゼッケン・級位段位）は白地に黒字（技得点表の入力欄と同じ。ユーザー要望 2026-09-30） */
 .desk-players-table .desk-cell-input { background: #fff; color: #111; border-color: var(--border); }
 .desk-players-table .desk-cell-input:focus { background: #fff; }

@@ -523,6 +523,16 @@
     return tr;
   }
 
+  // 部と部の間の空き行（枠線なし・紙面の地色）
+  function gapRow() {
+    var tr = document.createElement('tr');
+    tr.className = 'desk-sex-gap';
+    var td = document.createElement('td');
+    td.colSpan = COLUMNS.length;
+    tr.appendChild(td);
+    return tr;
+  }
+
   function noMatchRow() {
     var tr = document.createElement('tr');
     var td = document.createElement('td');
@@ -597,8 +607,11 @@
     // 両方に同じように効き、それぞれの先頭に帯の行（部の名前と人数）を置く。0 名の部は出さない。
     var male = rows.filter(function(p) { return p.isFemale !== true; });
     var female = rows.filter(function(p) { return p.isFemale === true; });
+    var shown = 0;
     [['男子の部', male], ['女子の部', female]].forEach(function(g) {
       if (g[1].length === 0) return;
+      // 2 つ目の部の前に少し間を空ける（ユーザー要望 2026-09-30）
+      if (shown++ > 0) tbody.appendChild(gapRow());
       tbody.appendChild(sexRow(g[0] + '　' + g[1].length + ' 名'));
       g[1].forEach(function(p) { tbody.appendChild(buildRow(ctx, p, locked)); });
     });
