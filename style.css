@@ -326,6 +326,12 @@ body { max-width: var(--page-max-width); margin: 0; }
   font-weight: bold;
   color: var(--score-color);
 }
+/* 「未確定」の印。確定するまで合計の左に出す（得点は確定で初めて反映されることを示す）。確定済みでは消す */
+.total-score .total-flag {
+  font-size: 12px; font-weight: normal; padding: 1px 6px; margin-right: 6px; border-radius: 3px;
+  border: 1px solid var(--gold-deep); color: var(--gold-light); align-self: center;
+}
+.total-score.confirmed .total-flag { display: none; }
 /* 合計の数字。min-width は app.js の syncTotalWidth が表の「得点」列の幅に合わせる（数字が得点列の真下で中央にそろう） */
 .total-score .total-value { display: inline-block; min-width: 60px; text-align: center; font-size: 28px; line-height: 1; }
 .total-score .total-unit { font-size: 14px; margin-left: 2px; }

@@ -336,6 +336,8 @@ function rejectIfLocked(res, event) {
 // ○×の生データ（result）は返さない（共有リンクから無認証で読まれるため）。
 function computeFinale(event) {
   const players = ((event && event.players) || []);
+  // 最終結果・アーカイブ済みの大会は全行を確定扱い（確定の印が無い過去のデータも順位に出す。2026-09-30）
+  const lockedEvent = EventStatus.isLocked(EventStatus.of(event));
   const finalRows = EventStatus.finalists(players);
   if (finalRows.length === 0) return null;
 
@@ -353,7 +355,7 @@ function computeFinale(event) {
         ? byId[p.sourcePlayerId] : null;
       const r1 = (srcRow && typeof srcRow.score === 'number') ? srcRow.score : 0;
       // 斬った＝確定済み（採点途中の値は暫定順位に出さない。ユーザー要望 2026-09-30）
-      const scored = p.confirmed === true && EventStatus.isScored(p);
+      const scored = (p.confirmed === true || lockedEvent) && EventStatus.isScored(p);
       const r2 = scored ? ((typeof p.score === 'number') ? p.score : 0) : null;
       return {
         name: String(p.name || '').trim(),
@@ -390,6 +392,8 @@ function computeFinale(event) {
 // 氏名で合算する（一巡目＋二巡目）。得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
 // ○×の生データ（result）や order は返さない（共有リンクから無認証で読まれるため）。
 function computeRanking(event) {
+  // 最終結果・アーカイブ済みの大会は全行を確定扱い（確定の印が無い過去のデータも順位に出す。2026-09-30）
+  const lockedEvent = EventStatus.isLocked(EventStatus.of(event));
   // 選手名が __proto__ / constructor などでも壊れないよう、プロトタイプ無しの辞書を使う
   const male = Object.create(null);
   const female = Object.create(null);
@@ -402,7 +406,7 @@ function computeRanking(event) {
     const name = String((p && p.name) || '').trim();
     if (!name) return;
     // 得点は「確定」された行だけ数える（採点途中の値は順位に出さない。ユーザー要望 2026-09-30）
-    const score = (p.confirmed === true && typeof p.score === 'number') ? p.score : 0;
+    const score = ((p.confirmed === true || lockedEvent) && typeof p.score === 'number') ? p.score : 0;
     if (p.isFemale) add(female, name, score);
     else add(male, name, score);
     if (p.isNewFace) add(newFace, name, score);
