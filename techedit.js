@@ -136,10 +136,10 @@ var TechEdit = (function() {
       cell.textContent = String(strikesTotal(strikes));
     }
 
-    // 閲覧モードの行（文字だけ。打たない太刀は「—」）
+    // 閲覧モードの行（文字だけ。打たない太刀は半角の「-」）
     function viewRowHtml(t) {
       function num(v) {
-        return (v !== null && v !== undefined) ? Storage.esc(String(v)) : '<span class="view-empty">—</span>';
+        return (v !== null && v !== undefined) ? Storage.esc(String(v)) : '<span class="view-empty">-</span>';
       }
       return '<td class="col-name">' + Storage.esc(t.name) + '</td>' +
         '<td class="col-total">' + strikesTotal(t.strikes) + '</td>' +
