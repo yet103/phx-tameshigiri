@@ -22,7 +22,7 @@ const PROTECTED_FILES = new Set([
   'app.js', 'home.js',
   'admin.js', 'admin-events.js', 'admin-players.js', 'admin-round.js', 'admin-results.js',
   'desk.js', 'desk-events.js', 'desk-setup.js', 'desk-techniques.js',
-  'desk-players.js', 'desk-match.js', 'desk-results.js', 'techedit.js',
+  'desk-players.js', 'desk-match.js', 'desk-round2.js', 'desk-results.js', 'techedit.js',
   'data.js', 'outbox.js', 'route.js', 'status.js', 'storage.js', 'techpicker.js'
 ]);
 // 開発時だけ配信する（認証必須）。本番から破壊的テストページを消す
