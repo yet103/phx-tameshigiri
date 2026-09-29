@@ -51,10 +51,13 @@ body {
 .page-links strong { color: var(--band-text); }
 
 /* ===== 本文 ===== */
+/* 画面幅は theme.css のマスタ設定。採点画面と同じく左に寄せる */
+body { max-width: var(--page-max-width); margin: 0; }
+.page-links { padding-left: var(--page-gutter); padding-right: var(--page-gutter); }
 .help-main {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 16px 12px 64px;
+  max-width: none;
+  margin: 0;
+  padding: 16px var(--page-gutter) 64px;
 }
 
 /* ===== 目次 ===== */

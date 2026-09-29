@@ -20,7 +20,9 @@ button {
 input[type="file"] { display: none; }
 
 /* ===== レイアウト ===== */
-.container { max-width: 1200px; margin: 0 auto; padding: 8px 12px; }
+/* 画面幅は theme.css のマスタ設定（--page-max-width / --page-gutter）。採点画面と同じく左に寄せる */
+body { max-width: var(--page-max-width); margin: 0; }
+.container { max-width: none; margin: 0; padding: 8px var(--page-gutter); }
 
 /* ===== 選手ナビゲーションバー =====
    前後の選手ボタンは操作区画の 2 段目（.timer-bar）にあるので、ここは選手名の表示だけ。
@@ -358,7 +360,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .page-links {
   display: flex;
   gap: 12px;
-  padding: 6px 12px;
+  padding: 6px var(--page-gutter);
   background: var(--bg-header);
   border-bottom: 1px solid var(--border);
   font-size: 13px;

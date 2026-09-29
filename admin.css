@@ -454,9 +454,13 @@ input[type="search"]:focus {
     border-top: none; border-bottom: 3px solid transparent;
   }
   .tabbar button.on { border-bottom-color: var(--gold); }
-  main { max-width: 960px; margin: 0 auto; }
-  .sheet-overlay, .tp-overlay { justify-content: center; }
-  .sheet, .tp-sheet { max-width: 960px; }
+  main { max-width: var(--page-max-width); margin: 0; }
+  .sheet-overlay, .tp-overlay { justify-content: flex-start; }
+  .sheet, .tp-sheet { max-width: var(--page-max-width); }
   .fab { bottom: 24px; }
   #toast { bottom: 92px; }
 }
+
+/* 画面幅は theme.css のマスタ設定。上下の固定バーも同じ幅で左に寄せる（採点画面と同じ） */
+body { max-width: var(--page-max-width); margin: 0; }
+.topbar, .tabbar { max-width: var(--page-max-width); }

@@ -32,6 +32,12 @@
   --vermilion:    #b3261e;
   --mincho:       "Shippori Mincho B1", "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
 
+  /* 画面幅のマスタ設定（ユーザー要望 2026-09-30）。採点画面を基準に、トップ・技得点表・順位表示・ヘルプ・
+     スマホ運営・共有ページも同じ最大幅で左に寄せ、左右の余白をそろえる。ここを変えると全画面が変わる。
+     PC 運営（desk.html）は表の幅（1039px）の都合で対象外。 */
+  --page-max-width: 660px;
+  --page-gutter:    20px;
+
   /* ライトテーマ（既定）: 生成りの紙 */
   --bg:           #f7f2e6;
   --bg-secondary: #efe7d2;

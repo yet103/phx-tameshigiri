@@ -12,10 +12,10 @@
     /* 色（黒金の帯）は style.css の「大会トーン」節が当てる。ここはレイアウトだけ */
     /* PC・タブレットでも横幅はスマホ程度（660px）までにして左に寄せる（ユーザー要望。
        横に広げると太刀のセルや一覧が間延びして押しにくい）。狭い画面では従来どおり全幅。 */
-    body { max-width: 660px; margin: 0; }
+    body { max-width: var(--page-max-width); margin: 0; }
     /* 左右の余白は全ブロック共通（--gutter）。帯（黒地）は body の幅いっぱいに敷き、中身の左右端を
        20px でそろえる。表・補正段・操作区画・選手一覧も同じ 20px の内側に置く（端がそろい、詰まりすぎない）。 */
-    :root { --gutter: 20px; }
+    :root { --gutter: var(--page-gutter); }
     .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .player-list-toggle {
       padding-left: var(--gutter); padding-right: var(--gutter);
     }
