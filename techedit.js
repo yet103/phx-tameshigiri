@@ -87,9 +87,9 @@ var TechEdit = (function() {
     // （col-label-full / col-label-short を CSS 側の @media で出し分ける）。
     table.innerHTML =
       '<thead><tr>' +
-      // 技分類は左端（任意の分類名。得点には関わらない）
-      '<th class="col-category" title="技の分類（任意、20文字まで）">技分類</th>' +
       '<th class="col-name">技名</th>' +
+      // 合計点は配点（初太刀〜四ノ太刀）の合計。自動計算で編集はできない（ユーザー要望）
+      '<th class="col-total" title="初太刀〜四ノ太刀の配点の合計（自動計算）">合計点</th>' +
       '<th class="col-strike">初太刀</th><th class="col-strike">二ノ太刀</th>' +
       '<th class="col-strike">三ノ太刀</th><th class="col-strike">四ノ太刀</th>' +
       '<th class="col-drawn" title="抜刀してからの形。レンタルの選手が選べる形">抜刀状態</th>' +
@@ -104,18 +104,45 @@ var TechEdit = (function() {
     scroll.appendChild(table);
     container.appendChild(scroll);
 
-    tbody.addEventListener('input', function() { dirty = true; });
+    tbody.addEventListener('input', function(e) {
+      dirty = true;
+      // 配点の欄を変えたら、その行の合計点（自動計算）を描き直す
+      var inp = e.target;
+      if (inp && inp.dataset && inp.dataset.field === 'strike') {
+        var tr = inp.closest('tr');
+        if (tr) updateRowTotal(tr);
+      }
+    });
     // チェックボックスは環境によって input が来ないことがあるので change も見る
     // （dirty が立たないと、対象を切り替えるときの「破棄しますか？」が出なくなる）。
     tbody.addEventListener('change', function() { dirty = true; });
+
+    // 配点の合計（null＝打たない太刀は 0 として足す）
+    function strikesTotal(strikes) {
+      var sum = 0;
+      (strikes || []).forEach(function(v) { if (Number.isInteger(v)) sum += v; });
+      return sum;
+    }
+
+    // 編集中に配点を変えたら、その行の合計点を描き直す
+    function updateRowTotal(tr) {
+      var cell = tr.querySelector('td.col-total');
+      if (!cell) return;
+      var strikes = [0,1,2,3].map(function(s) {
+        var inp = tr.querySelector('[data-strike="' + s + '"]');
+        var n = inp ? parseInt(inp.value, 10) : NaN;
+        return isNaN(n) ? null : n;
+      });
+      cell.textContent = String(strikesTotal(strikes));
+    }
 
     // 閲覧モードの行（文字だけ。打たない太刀は「—」）
     function viewRowHtml(t) {
       function num(v) {
         return (v !== null && v !== undefined) ? Storage.esc(String(v)) : '<span class="view-empty">—</span>';
       }
-      return '<td class="col-category">' + Storage.esc(typeof t.category === 'string' ? t.category : '') + '</td>' +
-        '<td class="col-name">' + Storage.esc(t.name) + '</td>' +
+      return '<td class="col-name">' + Storage.esc(t.name) + '</td>' +
+        '<td class="col-total">' + strikesTotal(t.strikes) + '</td>' +
         [0,1,2,3].map(function(s) { return '<td class="col-strike">' + num(t.strikes[s]) + '</td>'; }).join('') +
         '<td class="col-drawn">' + (t.drawn === true ? '○' : '') + '</td>' +
         '<td class="col-repeatable">' + (t.repeatable === true ? '○' : '') + '</td>' +
@@ -140,9 +167,8 @@ var TechEdit = (function() {
 
     // 編集モードの行（入力欄）
     function editRowHtml(t, i) {
-      return '<td class="col-category"><input type="text" maxlength="20" data-field="category" data-idx="' + i + '"' +
-          ' value="' + Storage.esc(typeof t.category === 'string' ? t.category : '') + '"></td>' +
-        '<td class="col-name"><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
+      return '<td class="col-name"><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
+        '<td class="col-total">' + strikesTotal(t.strikes) + '</td>' +
           [0,1,2,3].map(function(s) {
             var v = (t.strikes[s] !== null && t.strikes[s] !== undefined) ? Storage.esc(String(t.strikes[s])) : '';
             return '<td class="col-strike"><input type="number" min="0" max="99" value="' + v +
@@ -198,7 +224,6 @@ var TechEdit = (function() {
         var repeatableEl = tr.querySelector('[data-field="repeatable"]');
         var reducedEl = tr.querySelector('[data-field="reducedFirst"]');
         var noteEl = tr.querySelector('[data-field="note"]');
-        var categoryEl = tr.querySelector('[data-field="category"]');
         var reducedVal = reducedEl ? reducedEl.value : '';
         var reducedFirst = null;
         if (reducedVal !== '') {
@@ -210,8 +235,7 @@ var TechEdit = (function() {
           drawn: !!(drawnEl && drawnEl.checked),
           repeatable: !!(repeatableEl && repeatableEl.checked),
           reducedFirst: reducedFirst,
-          note: noteEl ? noteEl.value.trim().slice(0, 100) : '',
-          category: categoryEl ? categoryEl.value.trim().slice(0, 20) : ''
+          note: noteEl ? noteEl.value.trim().slice(0, 100) : ''
         });
       });
       return techs;

@@ -316,8 +316,7 @@ a { color: var(--accent); }
 .tech-table th, .tech-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; white-space: nowrap; width: 1%; }
 .tech-table th { background: var(--bg-header); font-size: 13px; }
 .tech-table td.col-name { text-align: left; font-weight: bold; }
-.tech-table td.col-category { text-align: left; }
-.tech-table td.col-category input[type="text"] { width: 6em; text-align: left; }
+.tech-table td.col-total { font-weight: bold; }   /* 配点の合計（自動計算・編集不可） */
 .tech-table th.col-note, .tech-table td.col-note { width: auto; min-width: 8em; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .tech-table td.col-note input[type="text"] { width: 100%; min-width: 8em; text-align: left; }
 .tech-table input[type="text"], .tech-table input[type="number"] { width: 70px; min-height: 28px; text-align: center; }
