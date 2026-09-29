@@ -158,7 +158,7 @@
     head.appendChild(btnCsv);
     container.appendChild(head);
 
-    // 二巡目準備の段階は、やることが「形を直す」なので試合進行へ誘導する。
+    // 二巡目準備の段階は、やることが「形を直す」なので二巡目の形登録の区画へ誘導する。
     if (EventStatus.of(ctx.event) === 'round1_done') {
       var guide = document.createElement('p');
       guide.className = 'desk-note';
@@ -167,8 +167,8 @@
       var go = document.createElement('button');
       go.type = 'button';
       go.className = 'desk-btn-sub';
-      go.textContent = '試合進行へ →';
-      go.addEventListener('click', function() { Desk.navigate('match', ctx.eventId); });
+      go.textContent = '形登録へ →';
+      go.addEventListener('click', function() { Desk.navigate('round2', ctx.eventId); });
       guide.appendChild(go);
       container.appendChild(guide);
     }

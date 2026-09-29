@@ -35,6 +35,7 @@ var Storage = (function() {
 
   // ハッシュをそのモードの語彙に読み替える（設計書「モードの切り替え」の対応表）。
   //   #round/<id>（スマホ） ⇔ #match/<id>（PC）
+  //   #round2/<id>（PC の二巡目の形登録） → スマホでは #round/<id>（形登録は試合進行タブにある）
   //   #setup/<id> #techniques/<id>（PC にしか無い） → スマホでは #players/<id>
   //   知らない区画・大会IDの無い区画・空 → #events
   // 大会IDはエンコードされたまま持ち回る（デコードして組み直すと二重エンコードになる）。
@@ -48,9 +49,9 @@ var Storage = (function() {
     if (!id) return '#events';
     if (mode === 'pc') {
       if (tab === 'round') tab = 'match';
-      if (['setup', 'techniques', 'players', 'match', 'results'].indexOf(tab) === -1) return '#events';
+      if (['setup', 'techniques', 'players', 'match', 'round2', 'results'].indexOf(tab) === -1) return '#events';
     } else {
-      if (tab === 'match') tab = 'round';
+      if (tab === 'match' || tab === 'round2') tab = 'round';
       if (tab === 'setup' || tab === 'techniques') tab = 'players';
       if (['players', 'round', 'results'].indexOf(tab) === -1) return '#events';
     }

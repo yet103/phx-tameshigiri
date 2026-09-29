@@ -4719,6 +4719,8 @@
       ['#results/e1', '#results/e1']);
     assert('mapHash: スマホの #round は PC の #match', Storage.mapHash('#round/e1', 'pc'), '#match/e1');
     assert('mapHash: PC の #match はスマホの #round', Storage.mapHash('#match/e1', 'mobile'), '#round/e1');
+    assert('mapHash: PC の #round2（二巡目の形登録）は PC ではそのまま', Storage.mapHash('#round2/e1', 'pc'), '#round2/e1');
+    assert('mapHash: PC の #round2 はスマホの #round（形登録は試合進行タブ）', Storage.mapHash('#round2/e1', 'mobile'), '#round/e1');
     assert('mapHash: #setup は PC ではそのまま', Storage.mapHash('#setup/e1', 'pc'), '#setup/e1');
     assert('mapHash: PC にしか無い #setup はスマホでは #players',
       Storage.mapHash('#setup/e1', 'mobile'), '#players/e1');

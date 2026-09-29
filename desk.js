@@ -4,18 +4,22 @@
 // 構造はスマホ運営の admin.js と同じ（registerTab / applyRoute / renderSeq /
 // ctx.isStale / 控え / reloadEvent / トースト / 共通ダイアログ）。違うのはハッシュと見た目だけ。
 //
-// ハッシュ体系: #events / #setup/<id> / #techniques/<id> / #players/<id> / #match/<id> / #results/<id>
+// ハッシュ体系: #events / #setup/<id> / #techniques/<id> / #players/<id> / #match/<id> / #round2/<id> / #results/<id>
 // 選択中の大会は localStorage の tmg_desk_last に控える（スマホ運営の tmg_admin_last、
 // 採点画面の tmg_last とは分ける。別の端末で別の大会を見ていることがある）。
 var Desk = (function() {
   var LAST_KEY = 'tmg_desk_last';
+  // when: その状態のときだけ左メニューに出す（省略時は常に出す）。二巡目の形登録は
+  // 「二巡目準備（形の登録）」のときだけ（ユーザー要望 2026-09-30）。
   var NAV = [
-    { tab: 'events',     label: '大会一覧' },
-    { tab: 'setup',      label: '基本情報' },
-    { tab: 'techniques', label: '技得点表' },
-    { tab: 'players',    label: '選手登録' },
-    { tab: 'match',      label: '試合進行' },
-    { tab: 'results',    label: '結果確認' }
+    { tab: 'events',     id: 'navEvents',     label: '大会一覧' },
+    { tab: 'setup',      id: 'navSetup',      label: '基本情報' },
+    { tab: 'techniques', id: 'navTechniques', label: '技得点表' },
+    { tab: 'players',    id: 'navPlayers',    label: '選手登録' },
+    { tab: 'match',      id: 'navMatch',      label: '試合進行' },
+    { tab: 'round2',     id: 'navRound2',     label: '二巡目の形登録',
+      when: function(st) { return st === 'round1_done'; } },
+    { tab: 'results',    id: 'navResults',    label: '結果確認' }
   ];
   var TABS = NAV.map(function(n) { return n.tab; });
 
@@ -29,6 +33,7 @@ var Desk = (function() {
   var currentTab = 'events';
   var selectedEventId = null;
   var currentEvent = null;   // 最後に読んだ大会（上部の見出しと段階表示が使う）
+  var currentEventLoadedId = null;   // currentEvent がどの大会IDで読んだものか（左メニューの出し分けに使う）
   var toastTimer = null;
 
   // 開いているダイアログのハンドル。ハッシュ遷移で古い ctx のまま残らないよう、
@@ -154,6 +159,8 @@ var Desk = (function() {
       currentEvent = null;
       saveLast();
     }
+    // 別の大会へ移るときは、読み終わるまで前の大会の状態で左メニューを出し分けない
+    if (currentEventLoadedId !== selectedEventId) currentEvent = null;
     renderNav();
 
     var seq = ++renderSeq;
@@ -182,7 +189,7 @@ var Desk = (function() {
       return;
     }
     var ev = evResult.event;
-    currentEvent = ev;
+    setCurrentEvent(ev);
     saveLast();
     renderHead(ev);
     renderTab(seq, {
@@ -208,7 +215,7 @@ var Desk = (function() {
       return;
     }
     var ev = evResult.event;
-    currentEvent = ev;
+    setCurrentEvent(ev);
     renderHead(ev);
     renderTab(seq, {
       eventId: selectedEventId, event: ev, players: ev.players || [],
@@ -246,6 +253,13 @@ var Desk = (function() {
 
   function currentEventId() {
     return selectedEventId || null;
+  }
+
+  // 読み終えた大会を控え、状態で出し分ける左メニュー（二巡目の形登録）を描き直す
+  function setCurrentEvent(ev) {
+    currentEvent = ev;
+    currentEventLoadedId = selectedEventId;
+    renderNav();
   }
 
   // --- 画面の共通部品 ---
@@ -424,9 +438,10 @@ var Desk = (function() {
     toast(toastMsg);
     // 試合開始に成功したら、コート端末で使う採点画面を別ウィンドウで開く
     if (from === 'draft' && to === 'round1') openScoring(eventId, '');
-    // 一巡目を終了したら、形を直す画面（試合進行）へ自動で移る（設計書の決定）
+    // 一巡目を終了したら、形を直す画面（二巡目の形登録）へ自動で移る（設計書の決定。
+    // 2026-09-30 に形登録を試合進行から独立した区画に分けた）
     if (from === 'round1' && to === 'round1_done') {
-      navigate('match', eventId);
+      navigate('round2', eventId);
       return;
     }
     await reloadEvent();
@@ -434,7 +449,10 @@ var Desk = (function() {
 
   function renderNav() {
     nav.innerHTML = '';
+    var st = currentEvent ? EventStatus.of(currentEvent) : null;
     NAV.forEach(function(item, i) {
+      // 状態で出し分ける項目。いま開いている区画なら（段階が変わった直後でも）残す
+      if (item.when && item.tab !== currentTab && !(st && item.when(st))) return;
       if (i === 1) {
         var sep = document.createElement('div');
         sep.className = 'desk-nav-sep';
@@ -443,6 +461,7 @@ var Desk = (function() {
       var b = document.createElement('button');
       b.type = 'button';
       b.className = (item.tab === currentTab) ? 'on' : '';
+      b.id = item.id;
       b.textContent = item.label;
       // 大会を開くまでは大会一覧しか使えない（どの大会を描くのか決まらない）
       if (item.tab !== 'events' && !selectedEventId) {
