@@ -58,6 +58,12 @@ input[type="file"] { display: none; }
 .player-nav .order-label { font-size: 16px; font-weight: normal; color: var(--text-muted); white-space: nowrap; }
 .player-nav .rank-label { font-size: 16px; font-weight: normal; color: var(--text-muted); white-space: nowrap; }
 .player-nav .rank-label:empty { display: none; }
+/* 部・巡目・コートの行。帯の全幅に金で大きく出す（どの部・巡目・コートを採点しているかを一目で） */
+.player-nav .stage-label {
+  grid-column: 1 / -1; text-align: center; font-family: var(--mincho); font-size: 20px;
+  color: var(--gold-light); letter-spacing: .08em; padding-bottom: 2px;
+}
+.player-nav .stage-label:empty { display: none; }
 .player-nav #playerNameLabel { font-size: 34px; line-height: 1.15; overflow-wrap: anywhere; }
 /* スマホ幅: 3列グリッドだと中央列に押されてコートのバッジが縦に折れてしまうため、
    採点画面は768px以上が前提とはいえ最低限崩れないよう、素直な縦積みに戻す。 */

@@ -26,6 +26,7 @@ var App = (function() {
   var playerOrderLabel = document.getElementById('playerOrderLabel');
   var playerNameLabel  = document.getElementById('playerNameLabel');
   var playerRankLabel  = document.getElementById('playerRankLabel');
+  var playerStageLabel = document.getElementById('playerStageLabel');
   var scoreTableBody   = document.getElementById('scoreTableBody');
   var totalScoreDisplay= document.getElementById('totalScoreDisplay');
   var totalScoreValue  = document.getElementById('totalScoreValue');
@@ -269,6 +270,7 @@ var App = (function() {
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
       playerRankLabel.textContent = '';
+      playerStageLabel.textContent = '';
       clearAdjustInputs();
       // このコートに映すものが無いことを配信用ボードへ伝える（ボードは「待機中」に戻る）。
       // 選手がいる場合は selectPlayer 経由の resetTimer が送る。
@@ -540,6 +542,7 @@ var App = (function() {
       courtLabel.textContent = '';
       playerOrderLabel.textContent = '';
       playerRankLabel.textContent = '';
+      playerStageLabel.textContent = '';
       clearAdjustInputs();
       Route.clear();
       refreshPlayerList();
@@ -691,9 +694,18 @@ var App = (function() {
     // （未設定の選手に「No.」だけが残らないよう、数値のときだけ足す）。
     var bib = (typeof p.bib === 'number') ? '　No.' + p.bib : '';
     if (m) {
-      courtLabel.textContent = m[1] + 'コート';
-      playerOrderLabel.textContent = m[2] + ' ' + m[3] + '巡目 ' + m[4] + '番' + bib;
+      // 部・巡目・コートは帯の 1 行目に大きく出す（「男子の部　一巡目　A コート」）。
+      // 左端のコートのバッジは同じ内容の重複になるので出さない。
+      var roundName = m[3] === '1' ? '一巡目' : (m[3] === '2' ? '二巡目' : m[3] + '巡目');
+      var stage = m[2] + 'の部　' + roundName + '　' + m[1] + ' コート';
+      if (currentStatus() === 'round2_final' && p.finalist === true) {
+        stage = '決戦（暫定ベスト8）　' + m[1] + ' コート';
+      }
+      playerStageLabel.textContent = stage;
+      courtLabel.textContent = '';
+      playerOrderLabel.textContent = m[4] + '番' + bib;
     } else {
+      playerStageLabel.textContent = '';
       courtLabel.textContent = '';
       playerOrderLabel.textContent = (p.order || '') + bib;
     }
