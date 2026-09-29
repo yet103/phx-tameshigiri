@@ -318,20 +318,6 @@ input[type="file"] { display: none; }
 .total-score .total-value { display: inline-block; min-width: 60px; text-align: center; font-size: 28px; line-height: 1; }
 .total-score .total-unit { font-size: 14px; margin-left: 2px; }
 
-/* ===== ツールバー ===== */
-.toolbar {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  gap: 6px;
-  background: var(--bg-secondary);
-  border-top: 2px solid var(--border);
-  flex-wrap: wrap;
-}
-.toolbar button { background: var(--bg-header); color: var(--text); min-height: 44px; }
-.toolbar button.active { background: var(--accent); color: var(--accent-text); }
-.toolbar .theme-btn { margin-left: auto; }
-
 /* ===== 大会バーの運営画面リンク・状態バナー =====
    大会の作成と削除は運営画面だけに置く（コート端末から全コートのデータを消せないようにする）。
    状態バナーは大会バーのすぐ下で「いま採点できるか」を言葉で出す。 */
@@ -586,7 +572,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
    見出しの帯（ページリンク・大会バー・選手名・タイマー・ツールバー・表の見出し）は
    テーマに依らず黒地に金。作業面の色は theme.css の変数に任せる。
    ここは上書き専用の節なので、上の各節より後ろに置くこと。 */
-.page-links, .event-bar, .player-nav, .timer-bar, .toolbar, .action-bar {
+.page-links, .event-bar, .player-nav, .timer-bar, .action-bar {
   background: var(--band-bg);
   color: var(--band-text);
   border-color: var(--gold);
@@ -594,7 +580,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .page-links { border-bottom: 1px solid var(--gold); }
 .page-links a { color: var(--gold-light); }
 .page-links strong { color: var(--band-text); }
-.event-bar select, .event-bar button, .timer-bar button, .toolbar button {
+.event-bar select, .event-bar button, .timer-bar button {
   background: var(--band-bg-2);
   color: var(--band-text);
   border: 1px solid var(--gold-deep);

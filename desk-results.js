@@ -30,6 +30,11 @@
     bar.appendChild(makeBtn('btnDeskResultsShare', '🔗 共有リンクをコピー', 'desk-btn', function() {
       onCopyShare(this, ctx);
     }));
+    // 成績表（HTML）の保存。採点画面の「HTML保存」をここへ移した（コート端末には置かない。2026-09-29）。
+    // CSV エクスポートは試合進行の ⋯ にある。
+    bar.appendChild(makeBtn('btnDeskResultsHtml', '📄 成績表（HTML）を保存', 'desk-btn', function() {
+      onDownloadHtml(this, ctx);
+    }));
     container.appendChild(bar);
 
     var cols = document.createElement('div');
@@ -176,6 +181,22 @@
         return;
       }
       w.location = url;
+    } finally {
+      if (!ctx.isStale()) btn.disabled = false;
+    }
+  }
+
+  // 成績表（HTML）。手元の ctx.players は開いた時点のものなので、必ずサーバーから取り直す
+  // （他コートの端末がその後つけた得点を入れるため）。
+  async function onDownloadHtml(btn, ctx) {
+    btn.disabled = true;
+    try {
+      var latest = await Api.loadEvent(ctx.eventId);
+      if (ctx.isStale()) return;
+      if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
+      var all = latest.players || [];
+      if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
+      Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
     } finally {
       if (!ctx.isStale()) btn.disabled = false;
     }

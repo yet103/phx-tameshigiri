@@ -180,8 +180,6 @@ var App = (function() {
     document.getElementById('btnAllSuccess').addEventListener('click', setAllSuccess);
     document.getElementById('btnAllFail').addEventListener('click', setAllFail);
 
-    document.getElementById('btnExport').addEventListener('click', onCsvExport);
-    document.getElementById('btnDownloadHtml').addEventListener('click', onDownloadHtml);
     document.getElementById('btnPlayerListToggle').addEventListener('click', togglePlayerList);
     btnConfirm.addEventListener('click', onConfirm);
     totalAdjustInput.addEventListener('change', onTotalAdjustChange);
@@ -1540,35 +1538,8 @@ var App = (function() {
     return tr;
   }
 
-  // --- CSV エクスポート ---
-  async function onCsvExport() {
-    if (!currentEvent) { alert('大会を選択してください。'); return; }
-    if (players.length === 0) { alert('エクスポートするデータがありません。'); return; }
-    // await をまたぐので、対象の大会をここで固定する。
-    // 通信中に大会を切り替えられると、別の大会のCSVを保存してしまう。
-    var eventId = currentEvent.id;
-    var csvText = await Api.exportCsv(eventId);
-    if (!csvText) { alert('エクスポートに失敗しました。'); return; }
-    if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
-    Storage.downloadCsv('players.csv', csvText);
-  }
-
-  async function onDownloadHtml() {
-    if (!currentEvent) { alert('大会を選択してください。'); return; }
-    // 手元の players は自分が大会を開いた時点のもので、他コートの端末が
-    // その後つけた得点が入っていない。成績表なので必ず取り直す。
-    // await をまたぐので、対象の大会をここで固定する。
-    // 通信中に大会を切り替えられると、別の大会の内容を出力してしまう。
-    var eventId = currentEvent.id;
-    var latest = await Api.loadEvent(eventId);
-    if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
-    if (!currentEvent || currentEvent.id !== eventId) return;  // 追い越された
-    var all = latest.players || [];
-    // この端末の未送信分もキューが正なので反映する
-    Outbox.applyPending(eventId, all);
-    if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
-    Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
-  }
+  // CSV エクスポート・成績表（HTML）の保存は運営画面へ移した（試合進行の ⋯ と結果確認。2026-09-29）。
+  // コート端末は目の前の選手の採点だけを受け持つ。
 
   // --- 選手一覧（ページ下部・開閉） ---
   // 初期状態: 端末の記憶があればそれ、無ければ画面幅 768px 以上で開く

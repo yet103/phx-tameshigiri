@@ -16,7 +16,7 @@
     /* 左右の余白は全ブロック共通（--gutter）。帯（黒地）は body の幅いっぱいに敷き、中身の左右端を
        20px でそろえる。表・補正段・操作区画・選手一覧も同じ 20px の内側に置く（端がそろい、詰まりすぎない）。 */
     :root { --gutter: 20px; }
-    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .toolbar, .player-list-toggle {
+    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .player-list-toggle {
       padding-left: var(--gutter); padding-right: var(--gutter);
     }
     .score-table-wrap { padding-left: var(--gutter); padding-right: var(--gutter); }
@@ -131,12 +131,8 @@
     </div>
   </div>
 
-  <!-- ツールバー -->
-  <!-- CSVインポートと二巡目生成は運営画面（admin.html）にある — 全コートのデータを書き換える操作なのでコート端末には置かない -->
-  <div class="toolbar">
-    <button id="btnExport">CSVエクスポート</button>
-    <button id="btnDownloadHtml">HTML保存</button>
-  </div>
+  <!-- CSV エクスポート・成績表（HTML）の保存は運営画面（試合進行の ⋯ と結果確認）にある。
+       大会全体を出力する運営の操作なので、コート端末（この画面）には置かない（2026-09-29 のユーザー判断） -->
 
   <!-- 選手一覧（ページ下部に常設。見出しで開閉） -->
   <section class="player-list-section" id="playerListSection">

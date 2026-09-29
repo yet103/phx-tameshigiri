@@ -23,6 +23,8 @@ var AdminResults = (function() {
     bar.appendChild(makeBtn('btnResultsReload', '最新に更新', onReload));
     bar.appendChild(makeBtn('btnResultsPresent', '発表モードで開く', onPresent));
     bar.appendChild(makeBtn('btnResultsCopy', '共有リンクをコピー', onCopy));
+    // 成績表（HTML）の保存。採点画面の「HTML保存」をここへ移した（2026-09-29）。CSV は試合進行の ⋯ にある
+    bar.appendChild(makeBtn('btnResultsHtml', '成績表（HTML）を保存', onDownloadHtml));
     container.appendChild(bar);
 
     var body = document.createElement('div');
@@ -125,6 +127,26 @@ var AdminResults = (function() {
         return;
       }
       w.location = url;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // 成績表（HTML）。必ずサーバーから取り直す（他コートの端末がその後つけた得点を入れるため）
+  async function onDownloadHtml() {
+    var eventId = Admin.currentEventId();
+    if (!eventId) {
+      alert('大会を選んでください。');
+      return;
+    }
+    var btn = this;
+    btn.disabled = true;
+    try {
+      var latest = await Api.loadEvent(eventId);
+      if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
+      var all = latest.players || [];
+      if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
+      Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
     } finally {
       btn.disabled = false;
     }
