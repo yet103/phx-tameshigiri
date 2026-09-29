@@ -387,6 +387,14 @@ a { color: var(--accent); }
 .desk-match-rental { font-size: 13px; font-weight: bold; }
 .desk-match-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .desk-match-actions .desk-btn { min-height: 32px; padding: 0 10px; font-size: 13px; }
+/* カードの中の選手の表（順番・ゼッケン・選手名・級位段位・得点・備考）。表が入るのでカードは広め（2 列） */
+.desk-match-courts { grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); }
+.desk-match-table { width: 100%; font-size: 13px; margin: 4px 0 6px; }
+.desk-match-table th, .desk-match-table td { padding: 2px 8px; text-align: center; white-space: nowrap; width: 1%; }
+.desk-match-table th.note, .desk-match-table td.note { width: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.desk-match-table td.name { font-family: var(--mincho); font-weight: bold; }
+.desk-match-table td.score { color: var(--score-color); font-weight: bold; }
+.desk-match-table td.score.confirmed { color: var(--score-confirmed); }
 
 /* 二巡目の帯（生成・全員にコピー・件数） */
 .desk-match-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }

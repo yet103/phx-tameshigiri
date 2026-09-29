@@ -272,6 +272,10 @@
     }
     card.appendChild(live);
 
+    // そのカードの選手の表（順番・ゼッケン・選手名・級位段位・得点・備考。ユーザー要望 2026-09-30）。
+    // 数えている行（同じコート・巡目・性別・決戦の印）を試技順に並べる。
+    card.appendChild(buildCardTable(ctx, row, round));
+
     var actions = document.createElement('div');
     actions.className = 'desk-match-actions';
 
@@ -283,17 +287,6 @@
       Desk.openScoring(ctx.eventId, row.court);
     });
     actions.appendChild(btnOpen);
-
-    var btnCopy = document.createElement('button');
-    btnCopy.type = 'button';
-    btnCopy.className = 'desk-btn';
-    btnCopy.textContent = '採点 URL をコピー';
-    btnCopy.addEventListener('click', function() {
-      // コートの端末にメッセージで送れるよう、相対ではなく絶対 URL にする
-      var url = new URL(Desk.scoringHref(ctx.eventId, row.court), location.href).href;
-      Desk.copyText(url, row.court + ' コートの採点画面の URL をコピーしました');
-    });
-    actions.appendChild(btnCopy);
 
     // 閲覧専用 URL（共有リンク share.html#<token>）。採点画面の URL と並べて取れるようにする（ユーザー要望）。
     // 大会で 1 つなのでどのコートのカードから押しても同じ URL。トークンは冪等（Api.createShareLink）。
@@ -308,6 +301,49 @@
 
     card.appendChild(actions);
     return card;
+  }
+
+  // カードの中の選手の表
+  function buildCardTable(ctx, row, round) {
+    var list = (ctx.players || []).filter(function(p) {
+      return Courts.courtOf(p) === row.court && Courts.roundOf(p) === round &&
+        (p.finalist === true) === (row.finale === true) &&
+        (typeof row.female !== 'boolean' || (p.isFemale === true) === row.female);
+    }).sort(Courts.compareOrder);
+    var table = document.createElement('table');
+    table.className = 'desk-table desk-match-table';
+    var thead = document.createElement('thead');
+    var htr = document.createElement('tr');
+    ['順番', 'ゼッケン', '選手名', '級位・段位', '得点', '備考'].forEach(function(label, i) {
+      var th = document.createElement('th');
+      th.textContent = label;
+      if (i === 5) th.className = 'note';
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    list.forEach(function(p) {
+      var tr = document.createElement('tr');
+      var m = (p.order || '').match(/-(\d+)$/);
+      var scored = Courts.isScored(p);
+      [
+        [m ? m[1] : (p.order || ''), 'num'],
+        [Number.isInteger(p.bib) ? String(p.bib) : '', 'num'],
+        [p.name || '', 'name'],
+        [Courts.rankLabel(p.rank), ''],
+        [scored ? String(p.score || 0) : '', 'num score' + (p.confirmed === true ? ' confirmed' : '')],
+        [p.note || '', 'note']
+      ].forEach(function(c) {
+        var td = document.createElement('td');
+        td.textContent = c[0];
+        if (c[1]) td.className = c[1];
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    return table;
   }
 
   // そのカードで「いま採点中」に出す名前。決戦のカードと先頭コートの通常のカードは同じコート
