@@ -500,7 +500,7 @@
     var inRank = document.createElement('input');
     inRank.type = 'text';
     inRank.setAttribute('list', 'adminRankList');
-    inRank.value = (player && typeof player.rank === 'string') ? player.rank : '';
+    inRank.value = player ? Courts.rankLabel(player.rank) : '';
     if (isRound2) { inRank.disabled = true; inRank.title = ROUND2_NOTE; }
     var rankList = document.createElement('datalist');
     rankList.id = 'adminRankList';

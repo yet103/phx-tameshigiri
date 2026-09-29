@@ -238,7 +238,10 @@ var Storage = (function() {
         esc(p.result),
         esc(String(Number(adj[0]) || 0)), esc(String(Number(adj[1]) || 0)), esc(String(Number(adj[2]) || 0)),
         esc(String(Number(p.totalAdjust) || 0)), esc(p.note), p.confirmed === true ? '○' : '',
-        Number.isInteger(p.bib) ? esc(String(p.bib)) : '', esc(p.rank), p.rental === true ? '○' : ''
+        // 級位・段位は表示の表記（弐段・参段）にそろえる。courts.js を読まないページでは素のまま
+        Number.isInteger(p.bib) ? esc(String(p.bib)) : '',
+        esc((typeof Courts !== 'undefined' && Courts.rankLabel) ? Courts.rankLabel(p.rank) : (p.rank || '')),
+        p.rental === true ? '○' : ''
       ].join('</td><td>') + '</td></tr>';
     });
     return '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +

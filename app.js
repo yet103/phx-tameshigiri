@@ -699,7 +699,7 @@ var App = (function() {
     }
     playerNameLabel.textContent = p.name || '';
     // 級位・段位は名前の右に小さく（空なら :empty で消える）
-    playerRankLabel.textContent = String(p.rank || '').trim();
+    playerRankLabel.textContent = Courts.rankLabel(p.rank);
 
     // 決戦 進行中は、決戦の何人目かを順番の右に添える（設計書「採点画面」）。
     if (currentStatus() === 'round2_final' && p.finalist === true) {
@@ -1596,7 +1596,7 @@ var App = (function() {
       '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
       '<td class="name">' + esc(p.name || '') + '</td>' +
       // 級位・段位は空なら空セル（ゼッケンと違い「—」は出さない）
-      '<td>' + esc(String(p.rank || '').trim()) + '</td>' +
+      '<td>' + esc(Courts.rankLabel(p.rank)) + '</td>' +
       '<td>' + esc(p.tech1 || '') + '</td>' +
       '<td>' + esc(p.tech2 || '') + '</td>' +
       '<td>' + esc(p.tech3 || '') + '</td>' +

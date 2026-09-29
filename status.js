@@ -48,6 +48,14 @@
     archived: ['final']
   };
 
+  // 級位・段位の表記の正規化。段は「初段・弐段・参段」の表記にそろえる（ユーザー要望 2026-09-29）。
+  // 保存済みの「二段」「三段」（および半角・全角の 2段/3段）は表示のたびに読み替え、
+  // サーバーは保存時にもこれを通す（新しいデータは正規化された形で入る）。他の文字列はそのまま。
+  function normalizeRank(v) {
+    var s = (typeof v === 'string') ? v.trim() : '';
+    return s.replace(/^[二2２]段$/, '弐段').replace(/^[三3３]段$/, '参段');
+  }
+
   // ---- courts.js と同じ規則の私物コピー ----
   // derive はサーバーでも動く必要があり、サーバーは courts.js（IIFE のブラウザ用）を読めない。
   // そこで order の解析と採点済み判定をここに複製する。両者が一致することは
@@ -257,6 +265,7 @@
     prev: prev,
     nextStep: nextStep,
     nextLabel: nextLabel,
+    normalizeRank: normalizeRank,
     finalists: finalists,
     hasFinalists: hasFinalists,
     finaleCourt: finaleCourt,

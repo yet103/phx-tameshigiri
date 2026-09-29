@@ -279,6 +279,11 @@ var Courts = (function() {
     return EventStatus.finalists(players).slice().sort(compareOrder);
   }
 
+  // 級位・段位の表示用（「二段」「三段」を「弐段」「参段」に読み替える。EventStatus.normalizeRank）
+  function rankLabel(rank) {
+    return EventStatus.normalizeRank(rank);
+  }
+
   // 決戦の候補がいるコートの名前（無ければ ''）。判定は status.js に一本化してあるので、
   // ここは呼び直すだけ（courts.js を主に使う画面から使えるようにするための入口）。
   function finaleCourt(players) {
@@ -803,6 +808,7 @@ var Courts = (function() {
     courtProgress: courtProgress,
     livePlayerName: livePlayerName,
     finalists: finalists,
+    rankLabel: rankLabel,
     finaleCourt: finaleCourt,
     techCopyTargets: techCopyTargets,
     nextRoundConflictMessage: nextRoundConflictMessage,

@@ -994,7 +994,7 @@
     input.type = 'text';
     input.className = 'desk-cell-input';
     input.setAttribute('list', RANK_LIST_ID);
-    input.value = (typeof p.rank === 'string') ? p.rank : '';
+    input.value = Courts.rankLabel(p.rank);
     input.setAttribute('aria-label', '級位・段位');
     input.disabled = locked || isRound2;
     if (isRound2) input.title = '一巡目の行で変更します';
@@ -1398,7 +1398,7 @@
     // 追加項目。書いていない列は出さない（短い行の下見が横に伸びないように）。
     var extras = [];
     if (typeof row.bib === 'number') extras.push('No.' + row.bib);
-    if (row.rank) extras.push(row.rank);
+    if (row.rank) extras.push(Courts.rankLabel(row.rank));
     if (row.rental) extras.push('レンタル');
     if (extras.length > 0) {
       var ex = document.createElement('span');

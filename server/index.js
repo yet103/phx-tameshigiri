@@ -579,7 +579,7 @@ function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
     // （採点画面の decodeResult が読めない文字列を保存しない）。
     result: (typeof p.result === 'string' && p.result.length <= 100 && /^[012 ]*$/.test(p.result))
       ? p.result : '',
-    rank: typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : '',
+    rank: EventStatus.normalizeRank(typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : ''),
     rental: p.rental === true
   };
   if (Array.isArray(p.adjust) && p.adjust.length === 3 && p.adjust.every(n => Number.isInteger(n))) {
@@ -951,7 +951,7 @@ function buildSystestTechPicker(techniques) {
 // （検証は 20 文字までの文字列なので、どれも通る）。動作確認で級位段位の表示と
 // 必須チェックを試せるように、空にしない。
 const SYSTEST_RANKS = ['無級', '十級', '九級', '八級', '七級', '六級', '五級', '四級', '三級', '二級', '一級',
-  '初段', '二段', '三段', '四段', '五段', '六段', '七段', '八段', '九段', '十段'];
+  '初段', '弐段', '参段', '四段', '五段', '六段', '七段', '八段', '九段', '十段'];
 
 function buildSystestPlayers(techniques) {
   const pickTechs = buildSystestTechPicker(techniques);
@@ -1286,7 +1286,7 @@ function parseBibForCreate(v) {
 function parseRankForCreate(v) {
   if (v === undefined) return { ok: true, value: '' };
   if (!isValidRankValue(v)) return { ok: false, value: '' };
-  return { ok: true, value: v.trim() };
+  return { ok: true, value: EventStatus.normalizeRank(v) };
 }
 // 真剣レンタルの検証（新規作成用）。省略時は既定の false。
 function parseRentalForCreate(v) {
@@ -1671,7 +1671,7 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       if (!isValidRankValue(body.rank)) {
         return res.status(400).json({ error: RANK_INVALID });
       }
-      player.rank = body.rank.trim();
+      player.rank = EventStatus.normalizeRank(body.rank);
     }
     if (body.rental !== undefined) {
       if (typeof body.rental !== 'boolean') {
@@ -1882,7 +1882,7 @@ app.post('/api/events/:id/import', (req, res) => {
           isNewFace: truthy(row[6]),
           isFemale,
           result: '',
-          rank: hasExtra ? String(row[8] || '').trim().slice(0, 20) : '',
+          rank: EventStatus.normalizeRank(hasExtra ? String(row[8] || '').trim().slice(0, 20) : ''),
           rental: hasExtra ? truthy(row[9]) : false
         };
         importedPlayers.push(player);

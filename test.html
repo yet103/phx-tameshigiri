@@ -279,6 +279,16 @@
     assert('PATCH: 不正な bib は 400', pfPatchBad.status, 400);
     var pfPatchRankBad = await Api.updatePlayerInfo(pfEvent.id, pfOk.id, { rank: new Array(22).join('あ') });
     assert('PATCH: rank 21文字は 400', pfPatchRankBad.status, 400);
+    // 段位の表記の正規化（初段・弐段・参段。ユーザー要望 2026-09-29）
+    assert('normalizeRank: 二段・三段（漢数字/半角/全角）は 弐段・参段、他はそのまま',
+      ['二段', '三段', '2段', '３段', '初段', '四段', '三級', ' 二段 ', ''].map(EventStatus.normalizeRank),
+      ['弐段', '参段', '弐段', '参段', '初段', '四段', '三級', '弐段', '']);
+    assert('Courts.rankLabel は EventStatus.normalizeRank と同じ', Courts.rankLabel('三段'), '参段');
+    var pfRankNorm = await postPlayerRaw(pfEvent.id, { name: '段位正規化', court: 'A', rank: '三段' });
+    assert('createPlayer: rank「三段」は「参段」で保存される', pfRankNorm.json.player.rank, '参段');
+    await Api.updatePlayer(pfEvent.id, pfRankNorm.json.player.id, { rank: '二段' });
+    var pfRankPatched = (await Api.loadEvent(pfEvent.id)).players.filter(function(p) { return p.id === pfRankNorm.json.player.id; })[0];
+    assert('PATCH: rank「二段」は「弐段」で保存される', pfRankPatched.rank, '弐段');
     var pfPatchRentalBad = await Api.updatePlayerInfo(pfEvent.id, pfOk.id, { rental: 'yes' });
     assert('PATCH: rental が真偽値でなければ 400', pfPatchRentalBad.status, 400);
     await Api.deleteEvent(pfEvent.id);
