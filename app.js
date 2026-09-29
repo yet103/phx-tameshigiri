@@ -259,7 +259,7 @@ var App = (function() {
 
   // 絞り込みを適用して画面を作り直す
   function applyCourtFilter() {
-    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt));
+    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt)).sort(Courts.compareOrder);   // 男子の部→女子の部、No. 順（登録順ではなく試技順）
     currentIndex = -1;
     if (visiblePlayers.length > 0) {
       selectPlayer(0);
@@ -659,7 +659,7 @@ var App = (function() {
     var keepRow = selectedRow;
     adoptEvent(loaded);
     refreshCourtList();
-    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt));
+    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt)).sort(Courts.compareOrder);   // 男子の部→女子の部、No. 順（登録順ではなく試技順）
     var idx = -1;
     for (var i = 0; i < visiblePlayers.length; i++) {
       if (visiblePlayers[i].id === currentId) { idx = i; break; }
