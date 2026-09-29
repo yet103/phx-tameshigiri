@@ -1640,8 +1640,13 @@ var App = (function() {
     playerListBody.innerHTML = '';
     // 男子の部・女子の部の帯で分ける（並びは visiblePlayers のまま。性別が切り替わる所に帯を入れる）
     var lastSex = null;
+    var rounds = {};
+    visiblePlayers.forEach(function(p) { rounds[Courts.roundOf(p)] = true; });
+    var manyRounds = Object.keys(rounds).length > 1;   // 複数の巡目が並ぶ状態（準備中・形登録・最終結果など）
     for (var i = 0; i < visiblePlayers.length; i++) {
-      var sex = visiblePlayers[i].isFemale === true ? '女子の部' : '男子の部';
+      var r = Courts.roundOf(visiblePlayers[i]);
+      var sex = (visiblePlayers[i].isFemale === true ? '女子の部' : '男子の部') +
+        (manyRounds ? ('　' + (r === 1 ? '一巡目' : r === 2 ? '二巡目' : r + '巡目')) : '');
       if (sex !== lastSex) {
         var band = document.createElement('tr');
         band.className = 'player-list-band';

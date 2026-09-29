@@ -134,7 +134,7 @@ main { padding: 8px 12px 16px; }
 .players-search input[type="search"] {
   font-family: inherit; font-size: 16px;   /* 16px 未満だと iOS がフォーカス時にページを拡大する */
   width: 100%; min-height: 44px; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; color: #111;
 }
 /* 固定列を wrap の左端にぴったり付けるため、wrap 自体には左右の余白を付けない */
 .players-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -259,7 +259,7 @@ main { padding: 8px 12px 16px; }
 .tp-search { padding: 8px 14px; border-bottom: 1px solid var(--border); }
 .tp-search input[type="search"] {
   font-family: inherit; font-size: 16px; width: 100%; min-height: 44px; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; color: #111;
 }
 /* 技名と太刀の配点を列でそろえる（ヘッダー行と各技の行で同じ列幅）。
    技名列は上限を付け、広い画面でも配点が技名のすぐ右に並ぶようにする（1fr だと右端まで離れる）。
@@ -335,7 +335,6 @@ main { padding: 8px 12px 16px; }
   text-decoration: none; font-size: 14px; background: var(--bg);
 }
 /* 閲覧専用 URL のボタン。リンク（.round-open）と同じ見た目で、button のリセットを打ち消す */
-button.round-share[disabled] { opacity: 0.45; }
 .round-menu { position: relative; }
 .round-menu > summary {
   list-style: none; cursor: pointer; width: 44px; height: 44px; line-height: 44px;

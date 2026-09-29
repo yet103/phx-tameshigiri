@@ -231,11 +231,14 @@ var Storage = (function() {
   // 列は CSV エクスポート（server/index.js の export）と同じ18列に揃える
   // （選手の追加項目 ゼッケン・級位段位・レンタルを末尾に足す）。
   function buildPlayersHtml(players) {
-    var rows = players.map(function(p) {
+    // 試技順（コート→性別→No.）に並べる。courts.js を読まないページでは配列順のまま
+    var sorted = (typeof Courts !== 'undefined' && Courts.compareOrder) ? players.slice().sort(Courts.compareOrder) : players;
+    var rows = sorted.map(function(p) {
       var adj = Array.isArray(p.adjust) ? p.adjust : [0, 0, 0];
       return '<tr><td>' + [
         esc(p.name), esc(p.order), esc(p.tech1), esc(p.tech2), esc(p.tech3),
-        esc(String(p.score !== undefined ? p.score : '')), p.isNewFace ? '○' : '', p.isFemale ? '○' : '',
+        // 得点は確定済みだけ（順位と同じ基準）。未確定は空欄
+        esc(p.confirmed === true && p.score !== undefined ? String(p.score) : ''), p.isNewFace ? '○' : '', p.isFemale ? '○' : '',
         esc(p.result),
         esc(String(Number(adj[0]) || 0)), esc(String(Number(adj[1]) || 0)), esc(String(Number(adj[2]) || 0)),
         esc(String(Number(p.totalAdjust) || 0)), esc(p.note), p.confirmed === true ? '○' : '',

@@ -416,9 +416,10 @@ var Courts = (function() {
         '\n一巡目を終了しますか？';
     }
     if (from === 'round1_done' && to === 'round2') {
-      var r2 = round(2);
-      return '二巡目 ' + r2.length + '名。' +
-        countPhrase('技が未入力の選手', r2.filter(isTechIncomplete).length) + '\n二巡目を開始しますか？';
+      // 試合開始と同じ形（技が全員入っていれば短く、未入力がいるときだけ注意）
+      var missing2 = round(2).filter(isTechIncomplete).length;
+      if (missing2 === 0) return '二巡目を開始しますか？';
+      return '⚠ 二巡目の技が未入力の選手が ' + missing2 + '名います。\nこのまま二巡目を開始しますか？';
     }
     if (from === 'round1_done' && to === 'final') {
       return '二巡目を行わずに最終結果にします。\nよろしいですか？';

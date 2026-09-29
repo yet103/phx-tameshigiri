@@ -148,7 +148,7 @@ a { color: var(--accent); }
 .desk-players-table .col-no { width: 44px; }
 .desk-players-table .col-name { width: 150px; }
 /* 選手の追加項目（ゼッケン・級位段位・真剣レンタル）。名前のすぐ右にまとめる。 */
-.desk-players-table .col-bib { width: 60px; }
+.desk-players-table .col-bib { width: 76px; }   /* 3〜4 桁のゼッケンが欠けないように（明朝化で広がった） */
 .desk-players-table .col-rank { width: 84px; }
 .desk-players-table .col-rental { width: 46px; text-align: center; }
 .desk-players-table .col-court { width: 80px; }

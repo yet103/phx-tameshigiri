@@ -3202,7 +3202,7 @@
       '一巡目の未確定が 1名います。\n一巡目を終了しますか？');
     assert('statusConfirmMessage: round1_done → round2',
       Courts.statusConfirmMessage('round1_done', 'round2', tcP),
-      '二巡目 1名。技が未入力の選手が 1名います。\n二巡目を開始しますか？');
+      '⚠ 二巡目の技が未入力の選手が 1名います。\nこのまま二巡目を開始しますか？');
     assert('statusConfirmMessage: round1_done → final（二巡目なしで終了）',
       Courts.statusConfirmMessage('round1_done', 'final', tcP),
       '二巡目を行わずに最終結果にします。\nよろしいですか？');

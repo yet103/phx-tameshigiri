@@ -31,6 +31,8 @@
     .event-bar select { padding:4px 8px; }
     /* 指で押す前提のタップ目標（style.css のバー類と同じ 44px） */
     .event-bar select, .event-bar button { min-height:44px; }
+    /* 大会名が長くても画面幅を超えない（375px で表がはみ出していた。QA 指摘） */
+    .event-bar select#eventSelect { flex: 1 1 0; min-width: 0; max-width: 100%; }
     /* ページリンクの並びのテーマ切替。リンクと同じ 13px・高さ 44px で、帯の上のボタンの色（style.css の大会トーン）に合わせる */
     .page-links .theme-btn {
       font-size: 13px; min-height: 44px; padding: 0 10px; margin-left: 0;

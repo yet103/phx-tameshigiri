@@ -309,7 +309,7 @@
     techCell(p.tech2);
     techCell(p.tech3);
     cell(p.isNewFace ? '●' : '');
-    cell(String(p.score || 0), 'col-score');
+    cell(p.confirmed === true ? String(p.score || 0) : '', 'col-score');   // 得点は確定済みだけ（他の一覧と同じ）
 
     // 確定済みでは編集シートを開かせない（PC 運営の desk-players.js が
     // セルの入力を disabled にするのと同じ理由。行の削除もこのシートからしか

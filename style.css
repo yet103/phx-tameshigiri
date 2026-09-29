@@ -407,7 +407,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .rank-table th { background: var(--bg-header); }
 
 /* ===== 技術リストテーブル（techniques.html） =====
-   列幅は td:nth-child ではなく techedit.js が振る col-* class で指定する
+   列幅は techedit.js が振る col-* class で指定する（下の配色の節だけは列番号 nth-child で組を分けているので、列を増減したらそこも直す）
    （列の増減・並び替えに強くする。指摘: 375px で技名列が nth-child の
    width:100% に押し潰されていたのを直す）。
    表自体は min-width: 100%; width: max-content にして、入りきらない分は
@@ -426,7 +426,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
   white-space: nowrap;
   width: 1%;
 }
-.tech-table th { background: var(--bg-header); }
+.tech-table th { background: var(--bg-header); white-space: nowrap; }
 .tech-table td.col-name { font-weight: bold; }   /* 技名も他の列と同じく中央そろえ（ユーザー要望） */
 .tech-table td.col-total { font-weight: bold; }   /* 配点の合計（自動計算・編集不可） */
 /* 色で区分けする（ユーザー要望）。表は紙面（--bg）より明るい --card-bg に載せ、見出しは採点表と同じ黒地に金。
