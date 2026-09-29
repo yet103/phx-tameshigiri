@@ -21,23 +21,6 @@ var AdminRound = (function() {
   var listEl = null;
   var outsideClickBound = false;  // '⋯' メニューの外側タップ検知は document に1回だけ付ける
 
-  // 閲覧専用 URL（共有リンク）をクリップボードへ。admin-results.js の onCopy と同じ作法。
-  async function copyShareUrl(btn, ctx) {
-    btn.disabled = true;
-    try {
-      var link = await Api.createShareLink(ctx.eventId);
-      if (ctx.isStale()) return;   // 通信中に大会やタブを切り替えられた
-      if (!link || !link.token) {
-        alert('共有リンクを作成できませんでした。通信を確認してください。');
-        return;
-      }
-      await Admin.copyText(new URL('share.html#' + link.token, location.href).href,
-        '閲覧専用 URL（共有リンク）をコピーしました');
-    } finally {
-      if (!ctx.isStale()) btn.disabled = false;
-    }
-  }
-
   function roundOne(players) {
     return (players || []).filter(function(p) { return Courts.roundOf(p) === 1; });
   }
@@ -186,17 +169,7 @@ var AdminRound = (function() {
     openBtn.textContent = '採点画面へ';
     openBtn.href = Admin.scoringHref(ctx.eventId, currentCourt);
     head.appendChild(openBtn);
-    // 閲覧専用 URL（共有リンク share.html#<token>）。採点画面へのリンクと並べて取れるようにする
-    // （ユーザー要望）。処理は結果確認タブの「共有リンクをコピー」と同じ（トークンは冪等）。
-    var shareBtn = document.createElement('button');
-    shareBtn.type = 'button';
-    shareBtn.className = 'round-open round-share';
-    shareBtn.id = 'btnRoundShare';
-    shareBtn.textContent = '閲覧専用 URL';
-    shareBtn.addEventListener('click', function() {
-      copyShareUrl(shareBtn, ctx);
-    });
-    head.appendChild(shareBtn);
+    // 閲覧専用 URL（共有リンク）は結果確認タブの「共有リンクをコピー」に任せる（2026-09-30 に見出しから外した）
     head.appendChild(buildMenu(st, players));
     container.appendChild(head);
 

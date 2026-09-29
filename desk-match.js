@@ -287,16 +287,16 @@
     });
     actions.appendChild(btnOpen);
 
-    // 閲覧専用 URL（共有リンク share.html#<token>）。採点画面の URL と並べて取れるようにする（ユーザー要望）。
-    // 大会で 1 つなのでどのコートのカードから押しても同じ URL。トークンは冪等（Api.createShareLink）。
-    var btnShare = document.createElement('button');
-    btnShare.type = 'button';
-    btnShare.className = 'desk-btn';
-    btnShare.textContent = '閲覧専用 URL をコピー';
-    btnShare.addEventListener('click', function() {
-      copyShareUrl(btnShare, ctx);
+    // 配信用ボード（board.html#<token>/<コート>）の URL。コートごとに違うのでカードに置く（ユーザー要望 2026-09-30。
+    // 閲覧専用 URL（共有リンク）は大会で 1 つなので結果確認に任せ、ここには置かない）。トークンは冪等（Api.createShareLink）。
+    var btnBoard = document.createElement('button');
+    btnBoard.type = 'button';
+    btnBoard.className = 'desk-btn';
+    btnBoard.textContent = '📺 配信用ボードの URL をコピー';
+    btnBoard.addEventListener('click', function() {
+      copyBoardUrl(btnBoard, ctx, row.court);
     });
-    actions.appendChild(btnShare);
+    actions.appendChild(btnBoard);
 
     card.appendChild(actions);
     return card;
@@ -366,8 +366,8 @@
     return p;
   }
 
-  // 閲覧専用 URL（共有リンク）をクリップボードへ。desk-results.js の onCopyShare と同じ作法。
-  async function copyShareUrl(btn, ctx) {
+  // 配信用ボードの URL をクリップボードへ。desk-results.js の onCopyBoard と同じ作法。
+  async function copyBoardUrl(btn, ctx, court) {
     btn.disabled = true;
     try {
       var link = await Api.createShareLink(ctx.eventId);
@@ -376,8 +376,8 @@
         alert('共有リンクを作成できませんでした。通信を確認してください。');
         return;
       }
-      await Desk.copyText(new URL('share.html#' + link.token, location.href).href,
-        '閲覧専用 URL（共有リンク）をコピーしました');
+      var url = new URL('board.html#' + link.token + '/' + encodeURIComponent(court), location.href).href;
+      await Desk.copyText(url, court + ' コートの配信用ボードの URL をコピーしました');
     } finally {
       if (!ctx.isStale()) btn.disabled = false;
     }
