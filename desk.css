@@ -548,6 +548,10 @@ a { color: var(--accent); }
   text-align: left; padding: 3px 10px; border-left: none;
 }
 .desk-players-table tbody tr.desk-sex-row:hover td { background: var(--band-bg-2); }
+/* 各部の末尾の「＋ 行を追加」の行 */
+.desk-players-table tr.desk-add-row td, .desk-players-table tbody tr.desk-add-row:hover td {
+  background: var(--card-bg); text-align: left; padding: 3px 10px; border-left: none;
+}
 /* 男子の部と女子の部の間の空き行 */
 .desk-players-table tbody tr.desk-sex-gap { height: 18px; }
 .desk-players-table tr.desk-sex-gap td, .desk-players-table tbody tr.desk-sex-gap:hover td {

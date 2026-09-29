@@ -132,13 +132,8 @@
     head.appendChild(h2);
     head.appendChild(spacer);
     head.appendChild(count);
+    // 「＋ 行を追加」は男子の部・女子の部それぞれの最下部に置く（fillRows の addRow。ユーザー要望 2026-09-30）
     if (!locked) {
-      var btnAdd = document.createElement('button');
-      btnAdd.type = 'button';
-      btnAdd.className = 'desk-btn';
-      btnAdd.textContent = '＋ 行を追加';
-      btnAdd.addEventListener('click', function() { startDraft(ctx); });
-      head.appendChild(btnAdd);
       var btnPaste = document.createElement('button');
       btnPaste.type = 'button';
       btnPaste.className = 'desk-btn';
@@ -146,7 +141,19 @@
       btnPaste.addEventListener('click', function() { openPasteDialog(ctx); });
       head.appendChild(btnPaste);
     }
-    head.appendChild(buildHeadMenu(ctx, locked));
+    // CSV の取り込みは「⋯」メニューに隠さず直接のボタンにする（メニューの項目がこれ 1 つだけだったため。
+    // ユーザー要望 2026-09-30）。確定済みの大会では押せない。
+    var btnCsv = document.createElement('button');
+    btnCsv.type = 'button';
+    btnCsv.className = 'desk-btn';
+    btnCsv.id = 'btnDeskPlayersCsv';
+    btnCsv.textContent = '📄 CSV を取り込む';
+    btnCsv.disabled = locked;
+    if (locked) btnCsv.title = 'この大会は最終結果を確定済みです';
+    btnCsv.addEventListener('click', function() {
+      Storage.pickCsvFile(function(text) { return importCsvText(ctx, text); });
+    });
+    head.appendChild(btnCsv);
     container.appendChild(head);
 
     // 二巡目準備の段階は、やることが「形を直す」なので試合進行へ誘導する。
@@ -533,6 +540,22 @@
     return tr;
   }
 
+  // 各部の末尾の「＋ 行を追加」の行。押すとその部（性別）の下書き行を出す
+  function addRow(ctx, female) {
+    var tr = document.createElement('tr');
+    tr.className = 'desk-add-row';
+    var td = document.createElement('td');
+    td.colSpan = COLUMNS.length;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'desk-btn-sub';
+    b.textContent = '＋ 行を追加（' + (female ? '女子' : '男子') + '）';
+    b.addEventListener('click', function() { startDraft(ctx, female); });
+    td.appendChild(b);
+    tr.appendChild(td);
+    return tr;
+  }
+
   function noMatchRow() {
     var tr = document.createElement('tr');
     var td = document.createElement('td');
@@ -607,17 +630,21 @@
     // 両方に同じように効き、それぞれの先頭に帯の行（部の名前と人数）を置く。0 名の部は出さない。
     var male = rows.filter(function(p) { return p.isFemale !== true; });
     var female = rows.filter(function(p) { return p.isFemale === true; });
+    if (rows.length === 0 && !draft && players.length > 0) tbody.appendChild(noMatchRow());
+    // 各部の末尾に「＋ 行を追加」を置き、下書き行はその部の中に出す（性別は部で決まる）。
+    // 編集できる大会では 0 名の部も帯と追加ボタンを出す（最初の 1 人を足せるように）。確定済みでは 0 名の部を出さない。
     var shown = 0;
-    [['男子の部', male], ['女子の部', female]].forEach(function(g) {
-      if (g[1].length === 0) return;
+    [['男子の部', male, false], ['女子の部', female, true]].forEach(function(g) {
+      var hasDraft = !!draft && !locked && draft.isFemale === g[2];
+      if (g[1].length === 0 && locked) return;
       // 2 つ目の部の前に少し間を空ける（ユーザー要望 2026-09-30）
       if (shown++ > 0) tbody.appendChild(gapRow());
       tbody.appendChild(sexRow(g[0] + '　' + g[1].length + ' 名'));
       g[1].forEach(function(p) { tbody.appendChild(buildRow(ctx, p, locked)); });
+      // 下書き行は絞り込みに関わらず必ず出す（打ち込んでいる途中で消えない）
+      if (hasDraft) tbody.appendChild(buildDraftRow(ctx));
+      if (!locked) tbody.appendChild(addRow(ctx, g[2]));
     });
-    if (rows.length === 0 && !draft) tbody.appendChild(noMatchRow());
-    // 下書き行は絞り込みに関わらず必ず末尾に出す（打ち込んでいる途中で消えない）
-    if (draft && !locked) tbody.appendChild(buildDraftRow(ctx));
     lastShown = rows.length;   // afterRowEdit が件数だけ描き直すときに使う
     renderCount(rows.length, players.length);
   }
@@ -626,9 +653,10 @@
     wrap.innerHTML = '';
     view.tbody = null;
     var players = ctx.players || [];
-    if (players.length === 0 && !draft) {
+    // 選手 0 名でも表（男子の部・女子の部の帯と「＋ 行を追加」）を出す。確定済みで 0 名のときだけ案内文
+    if (players.length === 0 && !draft && locked) {
       if (view.bar) view.bar.innerHTML = '';
-      wrap.appendChild(emptyMessage('まだ選手がいません。「＋ 行を追加」か「📋 貼り付けて追加」で登録してください。'));
+      wrap.appendChild(emptyMessage('選手がいません。'));
       return;
     }
     var table = document.createElement('table');
@@ -946,24 +974,12 @@
     return td;
   }
 
+  // 性別は読み取り専用（表が男子の部・女子の部で分かれているため。ユーザー要望 2026-09-30）。
+  // 間違えたときは行を削除して正しい部に追加し直す。
   function sexCell(ctx, p, locked) {
     var td = document.createElement('td');
     td.className = 'col-sex';
-    var sel = document.createElement('select');
-    sel.className = 'desk-cell-select';
-    sel.setAttribute('aria-label', '性別');
-    sel.disabled = locked;
-    addOption(sel, '男子', '男子');
-    addOption(sel, '女子', '女子');
-    var cur = Courts.sexOf(p);
-    sel.value = cur;
-    // 性別が変わると order が振り直される（男女で採番が別）ので、表ごと読み直す
-    bindChoice(ctx, p, sel, cur,
-      function() { return sel.value; },
-      function(v) { return { isFemale: v === '女子' }; },
-      function(v) { sel.value = v; },
-      function() { Desk.reloadEvent(); });
-    td.appendChild(sel);
+    td.textContent = Courts.sexOf(p);
     return td;
   }
 
@@ -1117,8 +1133,10 @@
 
   // 直前の行（いま表に出ている最後の行）からコート・性別・新人を引き継ぐ。
   // 表が空なら最初のコート（無ければ A）・男子・新人なし。
-  function draftSeed(ctx) {
-    var rows = Courts.sortBy(Courts.applyFilter(ctx.players || [], filter), sort);
+  function draftSeed(ctx, female) {
+    // 引き継ぐのは同じ部（性別）の最後の行から
+    var rows = Courts.sortBy(Courts.applyFilter(ctx.players || [], filter), sort)
+      .filter(function(p) { return (p.isFemale === true) === female; });
     var last = rows.length ? rows[rows.length - 1] : null;
     var courts = Courts.listFrom(ctx.players, extraCourts(ctx))
       .filter(function(c) { return c !== Courts.UNASSIGNED; });
@@ -1126,7 +1144,7 @@
     if (!court || court === Courts.UNASSIGNED) court = courts[0] || 'A';
     return {
       court: court,
-      isFemale: last ? !!last.isFemale : false,
+      isFemale: female,
       isNewFace: last ? !!last.isNewFace : false,
       // レンタルも直前の行から引き継ぐ（受付でレンタルの列が続くことが多い）。
       // ゼッケンと級位段位は人ごとに違うので引き継がない。
@@ -1134,11 +1152,11 @@
     };
   }
 
-  function startDraft(ctx) {
-    // 既に下書き行があるなら作り直さず、その行の名前欄にフォーカスを戻すだけ
-    // （連打で下書きの入力途中の値やコート・性別・新人の選択を捨てないため）。
-    if (!draft) {
-      draft = draftSeed(ctx);
+  function startDraft(ctx, female) {
+    // 既に同じ部の下書き行があるなら作り直さず、その行の名前欄にフォーカスを戻すだけ
+    // （連打で下書きの入力途中の値やコート・新人の選択を捨てないため）。別の部のボタンを押したら作り直す。
+    if (!draft || draft.isFemale !== (female === true)) {
+      draft = draftSeed(ctx, female === true);
       redrawTable();
     }
     var input = view && view.wrap.querySelector('.desk-draft-row input[type="text"]');
@@ -1260,6 +1278,9 @@
     addOption(selSex, '男子', '男子');
     addOption(selSex, '女子', '女子');
     selSex.value = d.isFemale ? '女子' : '男子';
+    // 性別は押した「＋ 行を追加」の部で決まる（表が男女で分かれているため変えられない）
+    selSex.disabled = true;
+    selSex.title = '性別は表の部（男子の部・女子の部）で決まります';
     selSex.addEventListener('change', function() {
       d.isFemale = (selSex.value === '女子');
       // 候補が変わるので技セレクトを作り直す（選んだ技名は接尾辞を外した形なので、
@@ -1636,14 +1657,6 @@
     body.className = 'desk-menu-body';
     menu.appendChild(body);
     return { el: menu, body: body };
-  }
-
-  function buildHeadMenu(ctx, locked) {
-    var menu = buildMenu('選手のメニュー');
-    menu.body.appendChild(menuItem(menu.el, '📄 CSV を取り込む', function() {
-      Storage.pickCsvFile(function(text) { return importCsvText(ctx, text); });
-    }, locked ? 'この大会は最終結果を確定済みです' : ''));
-    return menu.el;
   }
 
   function buildRowMenu(ctx, p) {
