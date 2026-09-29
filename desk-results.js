@@ -31,9 +31,12 @@
       onCopyShare(this, ctx);
     }));
     // 成績表（HTML）の保存。採点画面の「HTML保存」をここへ移した（コート端末には置かない。2026-09-29）。
-    // CSV エクスポートは試合進行の ⋯ にある。
     bar.appendChild(makeBtn('btnDeskResultsHtml', '📄 成績表（HTML）を保存', 'desk-btn', function() {
       onDownloadHtml(this, ctx);
+    }));
+    // CSV エクスポート（全選手の内訳）。試合進行の ⋯ からここへ移した（1 画面 1 目的。ユーザー要望 2026-09-30）。
+    bar.appendChild(makeBtn('btnDeskResultsCsv', '📄 CSV エクスポート', 'desk-btn', function() {
+      onExportCsv(this, ctx);
     }));
     container.appendChild(bar);
 
@@ -197,6 +200,23 @@
       var all = latest.players || [];
       if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
       Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
+    } finally {
+      if (!ctx.isStale()) btn.disabled = false;
+    }
+  }
+
+  // 全選手の内訳の CSV（players.csv）。サーバーが最新の大会から作る。
+  async function onExportCsv(btn, ctx) {
+    btn.disabled = true;
+    try {
+      var csv = await Api.exportCsv(ctx.eventId);
+      if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
+      if (!csv) {
+        alert('エクスポートに失敗しました。通信を確認してください。');
+        return;
+      }
+      Storage.downloadCsv('players.csv', csv);
+      Desk.toast('CSV を保存しました');
     } finally {
       if (!ctx.isStale()) btn.disabled = false;
     }

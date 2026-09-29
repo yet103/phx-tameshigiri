@@ -23,8 +23,10 @@ var AdminResults = (function() {
     bar.appendChild(makeBtn('btnResultsReload', '最新に更新', onReload));
     bar.appendChild(makeBtn('btnResultsPresent', '発表モードで開く', onPresent));
     bar.appendChild(makeBtn('btnResultsCopy', '共有リンクをコピー', onCopy));
-    // 成績表（HTML）の保存。採点画面の「HTML保存」をここへ移した（2026-09-29）。CSV は試合進行の ⋯ にある
+    // 成績表（HTML）の保存。採点画面の「HTML保存」をここへ移した（2026-09-29）
     bar.appendChild(makeBtn('btnResultsHtml', '成績表（HTML）を保存', onDownloadHtml));
+    // CSV エクスポート（全選手の内訳）。試合進行の ⋯ からここへ移した（1 画面 1 目的。ユーザー要望 2026-09-30）
+    bar.appendChild(makeBtn('btnResultsCsv', 'CSVエクスポート', onExportCsv));
     container.appendChild(bar);
 
     var body = document.createElement('div');
@@ -147,6 +149,25 @@ var AdminResults = (function() {
       var all = latest.players || [];
       if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
       Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // 全選手の内訳の CSV（players.csv）。サーバーが最新の大会から作る
+  async function onExportCsv() {
+    var eventId = Admin.currentEventId();
+    if (!eventId) {
+      alert('大会を選んでください。');
+      return;
+    }
+    var btn = this;
+    btn.disabled = true;
+    try {
+      var csv = await Api.exportCsv(eventId);
+      if (Admin.currentEventId() !== eventId) return;   // 通信中に大会を切り替えられた
+      if (!csv) { alert('エクスポートに失敗しました。'); return; }
+      Storage.downloadCsv('players.csv', csv);
     } finally {
       btn.disabled = false;
     }

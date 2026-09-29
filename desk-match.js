@@ -1,11 +1,10 @@
-// 試合の区画（#match/<id>）。コート別の進み具合と採点画面を開く入口。
+// 試合の区画（#match/<id>）。工程表（段階の遷移ボタン）・コート別の進み具合・採点画面を開く入口。
 // 二巡目の形登録（技の入力）は別の区画（desk-round2.js）に分けた（ユーザー要望 2026-09-30）。
 //
 // ポーリングはしない。「確定 n / N」といま採点中の選手は、大会を読んだ時点の値で、
 // 「↻ 最新に更新」（Desk.reloadEvent）を押したときだけ変わる。自動で更新するのは
 // 配信ボード（board.html）だけ、という既存の方針を変えないため。
 (function() {
-  var outsideClickBound = false;   // 「⋯」の外側クリック検知は document に1回だけ付ける
 
   // 大会が持つコート一覧（基本情報の settings.courts）。desk-players.js と同じ理由で
   // ここにも置く（courts.js はこの計画では触らない）。
@@ -78,8 +77,7 @@
     btnReload.textContent = '↻ 最新に更新';
     btnReload.addEventListener('click', function() { Desk.reloadEvent(); });
     head.appendChild(btnReload);
-
-    head.appendChild(buildMenu(ctx));
+    // CSV エクスポートは結果確認へ移した（1 画面 1 目的。ユーザー要望 2026-09-30）。⋯ は空になったので置かない
     return head;
   }
 
@@ -209,56 +207,6 @@
     return b;
   }
 
-  // details/summary の外側をクリックしたら閉じる。document への登録は1回だけ
-  // （描画のたびにリスナーが積み重ならないように）。desk-events.js と同じ作法。
-  function bindOutsideClickOnce() {
-    if (outsideClickBound) return;
-    outsideClickBound = true;
-    document.addEventListener('click', function(e) {
-      var menus = document.querySelectorAll('.desk-menu[open]');
-      for (var i = 0; i < menus.length; i++) {
-        if (!menus[i].contains(e.target)) menus[i].open = false;
-      }
-    });
-  }
-
-  function menuItem(menu, label, onClick) {
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.addEventListener('click', function() {
-      menu.open = false;
-      onClick();
-    });
-    return b;
-  }
-
-  function buildMenu(ctx) {
-    bindOutsideClickOnce();
-    var menu = document.createElement('details');
-    menu.className = 'desk-menu';
-    var sum = document.createElement('summary');
-    sum.textContent = '⋯';
-    sum.setAttribute('aria-label', '試合の操作');
-    menu.appendChild(sum);
-    var body = document.createElement('div');
-    body.className = 'desk-menu-body';
-    menu.appendChild(body);
-    body.appendChild(menuItem(menu, '📄 CSVエクスポート', function() { onExportCsv(ctx); }));
-    return menu;
-  }
-
-  async function onExportCsv(ctx) {
-    var csv = await Api.exportCsv(ctx.eventId);
-    if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
-    if (!csv) {
-      alert('エクスポートに失敗しました。通信を確認してください。');
-      return;
-    }
-    Storage.downloadCsv('players.csv', csv);
-    Desk.toast('CSV を保存しました');
-  }
-
   // --- コート別のカード ---
 
   function buildCourts(st, ctx) {
@@ -308,7 +256,9 @@
 
     // 決戦 進行中は決戦のカードを先に、他コートは畳む（設計書「画面」）。
     if (st === 'round2_final' && finale.length > 0) {
-      wrap.appendChild(buildCourtGrid(finale, ctx, round, caption));
+      var finaleGrid = buildCourtGrid(finale, ctx, round, caption);
+      finaleGrid.id = 'matchFinaleGrid';   // 暫定順位（renderFinaleTable）をこの直後に差し込む
+      wrap.appendChild(finaleGrid);
       var others = document.createElement('details');
       others.className = 'desk-match-others';
       var sum = document.createElement('summary');
@@ -543,14 +493,18 @@
     }
   }
 
-  // 決戦 進行中のときだけ、コートのカードの下に暫定順位を出す。
+  // 決戦 進行中のときだけ、決戦のカードの直後に暫定順位を出す。
   // 順位はサーバーが計算する（computeRanking の finale）。ポーリングはしない
   // （「↻ 最新に更新」で読み直す、というこの区画の方針を変えない）。
   async function renderFinaleTable(container, ctx) {
     var box = document.createElement('div');
     box.className = 'desk-match-finale-rank';
+    box.id = 'matchFinaleRank';
     box.textContent = '読み込み中…';
-    container.appendChild(box);
+    // 決戦のカードの直後に置く（「他のコート」「一巡目の結果」の畳みより上）。カードが無ければ末尾
+    var anchor = container.querySelector('#matchFinaleGrid');
+    if (anchor) anchor.insertAdjacentElement('afterend', box);
+    else container.appendChild(box);
     var data = await Api.loadRanking(ctx.eventId);
     if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
     if (!data || !data.finale) { box.textContent = '暫定順位を取得できませんでした。'; return; }

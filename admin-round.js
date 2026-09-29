@@ -170,7 +170,9 @@ var AdminRound = (function() {
     openBtn.href = Admin.scoringHref(ctx.eventId, currentCourt);
     head.appendChild(openBtn);
     // 閲覧専用 URL（共有リンク）は結果確認タブの「共有リンクをコピー」に任せる（2026-09-30 に見出しから外した）
-    head.appendChild(buildMenu(st, players));
+    // ⋯（戻す・二巡目なしで終了）は項目が無い段階（準備中）では出さない
+    var menu = buildMenu(st, players);
+    if (menu) head.appendChild(menu);
     container.appendChild(head);
 
     // コート絞り込み。チップは大会全体のコートから作る。
@@ -507,19 +509,8 @@ var AdminRound = (function() {
       menu.appendChild(btnSkip);
     }
 
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'btnRoundExport';
-    btn.textContent = 'CSVエクスポート';
-    btn.addEventListener('click', async function() {
-      menu.open = false;
-      var ctx = CTX;
-      var csv = await Api.exportCsv(ctx.eventId);
-      if (ctx.isStale()) return;  // 通信中に大会やタブを切り替えられた
-      if (!csv) { alert('エクスポートに失敗しました。'); return; }
-      Storage.downloadCsv('players.csv', csv);
-    });
-    menu.appendChild(btn);
+    // CSV エクスポートは結果確認タブへ移した（1 画面 1 目的。ユーザー要望 2026-09-30）
+    if (!back && st !== 'round1_done') return null;   // 項目が無ければ ⋯ ごと出さない
     return menu;
   }
 
