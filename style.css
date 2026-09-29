@@ -477,7 +477,8 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 /* ===== 選手一覧（ページ下部・開閉） =====
    上下の余白を詰め、備考以外の列は文字が収まる幅（width:1% + nowrap）。
    備考の列が残り幅を吸収する（ユーザー要望）。 */
-.player-list-section { border-top: 2px solid var(--border); }
+/* 採点の区画（ツールバーまで）と選手一覧の間を空けて、別のブロックに見せる（ユーザー要望） */
+.player-list-section { border-top: 2px solid var(--border); margin-top: 20px; }
 .player-list-toggle {
   display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
   padding: 0 12px; text-align: left; font-weight: bold; font-size: 14px;
