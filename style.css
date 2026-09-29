@@ -402,14 +402,26 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
    表自体は min-width: 100%; width: max-content にして、入りきらない分は
    親の .tech-scroll（techniques.html 側で overflow-x: auto）内で
    横スクロールさせる。ページ本体は横スクロールさせない。 */
-.tech-table { border-collapse: collapse; min-width: 100%; width: max-content; }
+/* 技得点表。備考以外の列は内容の幅に詰め（width:1% + nowrap）、右端の備考が残り幅を吸収する
+   （ユーザー要望。採点画面の選手一覧と同じ作法） */
+.tech-table { border-collapse: collapse; width: 100%; }
 .tech-table th, .tech-table td {
   border: 1px solid var(--border);
-  padding: 6px 10px;
+  padding: 4px 8px;
   text-align: center;
+  white-space: nowrap;
+  width: 1%;
 }
-.tech-table th { background: var(--bg-header); white-space: nowrap; }
+.tech-table th { background: var(--bg-header); }
 .tech-table td.col-name { text-align: left; }
+.tech-table th.col-note, .tech-table td.col-note {
+  width: auto;
+  min-width: 8em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.tech-table td.col-note input[type="text"] { width: 100%; min-width: 8em; text-align: left; }
 .tech-table input[type="number"],
 .tech-table input[type="text"] {
   width: 60px;

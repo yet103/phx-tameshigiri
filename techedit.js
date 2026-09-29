@@ -95,6 +95,8 @@ var TechEdit = (function() {
       '<span class="col-label-full">回数制限なし</span><span class="col-label-short">制限なし</span></th>' +
       '<th class="col-reduced" title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点">' +
       '<span class="col-label-full">減点初太刀</span><span class="col-label-short">減点初</span></th>' +
+      // 備考は右端。他の列は内容の幅に詰め、備考が残り幅を吸収する（style.css / desk.css の .col-note）
+      '<th class="col-note" title="技ごとのメモ（100文字まで）。得点には影響しません">備考</th>' +
       '</tr></thead><tbody></tbody>';
     var tbody = table.querySelector('tbody');
     scroll.appendChild(table);
@@ -114,7 +116,8 @@ var TechEdit = (function() {
         [0,1,2,3].map(function(s) { return '<td class="col-strike">' + num(t.strikes[s]) + '</td>'; }).join('') +
         '<td class="col-drawn">' + (t.drawn === true ? '○' : '') + '</td>' +
         '<td class="col-repeatable">' + (t.repeatable === true ? '○' : '') + '</td>' +
-        '<td class="col-reduced">' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '</td>';
+        '<td class="col-reduced">' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '</td>' +
+        '<td class="col-note">' + Storage.esc(typeof t.note === 'string' ? t.note : '') + '</td>';
     }
 
     function renderTable(techs) {
@@ -147,7 +150,9 @@ var TechEdit = (function() {
           (t.repeatable === true ? ' checked' : '') + '></td>' +
           '<td class="col-reduced"><input type="number" min="0" max="99" data-field="reducedFirst" data-idx="' + i + '"' +
           ' title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点"' +
-          ' value="' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '"></td>';
+          ' value="' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '"></td>' +
+          '<td class="col-note"><input type="text" maxlength="100" data-field="note" data-idx="' + i + '"' +
+          ' value="' + Storage.esc(typeof t.note === 'string' ? t.note : '') + '"></td>';
     }
 
     // 見出しのボタンの出し分け。閲覧では「✎ 編集する」だけ（確定済みの大会は出さない）、
@@ -187,6 +192,7 @@ var TechEdit = (function() {
         var drawnEl = tr.querySelector('[data-field="drawn"]');
         var repeatableEl = tr.querySelector('[data-field="repeatable"]');
         var reducedEl = tr.querySelector('[data-field="reducedFirst"]');
+        var noteEl = tr.querySelector('[data-field="note"]');
         var reducedVal = reducedEl ? reducedEl.value : '';
         var reducedFirst = null;
         if (reducedVal !== '') {
@@ -197,7 +203,8 @@ var TechEdit = (function() {
           name: name, strikes: strikes,
           drawn: !!(drawnEl && drawnEl.checked),
           repeatable: !!(repeatableEl && repeatableEl.checked),
-          reducedFirst: reducedFirst
+          reducedFirst: reducedFirst,
+          note: noteEl ? noteEl.value.trim().slice(0, 100) : ''
         });
       });
       return techs;

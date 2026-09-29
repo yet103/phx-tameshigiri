@@ -106,7 +106,9 @@ function cloneTechniques(list) {
       }),
       drawn: !!(t && t.drawn === true),
       repeatable: !!(t && t.repeatable === true),
-      reducedFirst: (Number.isInteger(rf) && rf >= 0 && rf <= 99) ? rf : null
+      reducedFirst: (Number.isInteger(rf) && rf >= 0 && rf <= 99) ? rf : null,
+      // note（備考。技得点表の右端の列）は省略可。得点には関わらない。省略時は ''
+      note: (t && typeof t.note === 'string') ? t.note.trim().slice(0, 100) : ''
     };
   });
 }
@@ -2056,6 +2058,11 @@ function validateTechniques(list) {
       if (!Number.isInteger(rf) || rf < 0 || rf > 99) {
         return n + ' 行目の「減点初太刀」の配点が不正です（0〜99の整数か空）';
       }
+    }
+    // note（備考）は省略可。文字列で 100 文字まで（技得点表の右端の列。得点には関わらない）。
+    if (t.note !== undefined && t.note !== null) {
+      if (typeof t.note !== 'string') return n + ' 行目の備考の形式が不正です';
+      if (t.note.trim().length > 100) return n + ' 行目の備考が長すぎます（100文字まで）';
     }
   }
   return null;
