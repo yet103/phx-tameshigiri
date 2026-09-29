@@ -33,8 +33,8 @@ input[type="text"], input[type="date"], textarea {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg);
-  color: var(--text);
+  background: #fff;
+  color: #111;
   resize: vertical;
 }
 

@@ -136,7 +136,7 @@ button { font-family: inherit; cursor: pointer; border: none; border-radius: 4px
 .home-form input[type="text"], .home-form input[type="date"], .home-form select {
   width: 100%; min-height: 40px; padding: 0 8px;
   font-family: inherit; font-size: 15px;
-  background: var(--card-bg); color: var(--text);
+  background: #fff; color: #111;
   border: 1px solid var(--border); border-radius: 4px;
 }
 .home-form-check { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text); }

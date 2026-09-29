@@ -90,3 +90,6 @@
   --btn-confirm:     #3d7fc4;
   --btn-confirm-on:  #7fb7ff;
 }
+
+/* テキスト入力欄は白地に黒字（ユーザー要望 2026-09-30。ライト・ダーク共通。個別の指定が無い入力欄の取りこぼし防止） */
+input[type="text"], input[type="number"], input[type="date"], input[type="search"], textarea { background: #fff; color: #111; }

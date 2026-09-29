@@ -18,7 +18,7 @@ button { font-family: inherit; font-size: 14px; cursor: pointer; border: none; b
 input[type="text"], input[type="date"], input[type="number"], select, textarea {
   font-family: inherit; font-size: 14px; min-height: 34px; padding: 4px 8px;
   border: 1px solid var(--border); border-radius: 4px;
-  background: var(--bg); color: var(--text);
+  background: #fff; color: #111;
 }
 a { color: var(--accent); }
 
@@ -168,6 +168,9 @@ a { color: var(--accent); }
 }
 /* セレクトは閉じているときの表示行にも中央を掛ける（text-align だけでは効かない） */
 .desk-cell-select { text-align-last: center; }
+/* 表の中のテキスト入力欄はどの区画でも白地に黒字（ユーザー要望 2026-09-30） */
+.desk-cell-input { background: #fff; color: #111; border-color: var(--border); }
+.desk-cell-input:focus { background: #fff; }
 .desk-cell-input:hover:not(:disabled), .desk-cell-select:hover:not(:disabled) { border-color: var(--border); }
 .desk-cell-input:focus, .desk-cell-select:focus { border-color: var(--accent); background: var(--bg); outline: none; }
 .desk-cell-input:disabled, .desk-cell-select:disabled { opacity: .55; cursor: not-allowed; }
