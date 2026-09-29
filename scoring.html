@@ -13,6 +13,20 @@
     /* PC・タブレットでも横幅はスマホ程度（660px）までにして左に寄せる（ユーザー要望。
        横に広げると太刀のセルや一覧が間延びして押しにくい）。狭い画面では従来どおり全幅。 */
     body { max-width: 660px; margin: 0; }
+    /* 左右の余白は全ブロック共通（--gutter）。帯（黒地）は body の幅いっぱいに敷き、中身の左右端を
+       20px でそろえる。表・補正段・操作区画・選手一覧も同じ 20px の内側に置く（端がそろい、詰まりすぎない）。 */
+    :root { --gutter: 20px; }
+    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .toolbar, .player-list-toggle {
+      padding-left: var(--gutter); padding-right: var(--gutter);
+    }
+    .score-table-wrap { padding-left: var(--gutter); padding-right: var(--gutter); }
+    .adjust-bar { padding-left: var(--gutter); padding-right: var(--gutter); }
+    .action-block { margin-left: var(--gutter); margin-right: var(--gutter); }
+    .player-list-body { margin: 0 var(--gutter) 12px; }
+    /* 選手一覧は 9 列を 620px に収める（余白を詰め、備考の最小幅を少し狭く）。収まらなければ枠の中で横スクロール */
+    .player-list-table { font-size: 12px; }
+    .player-list-table th, .player-list-table td { padding: 2px 4px; }
+    .player-list-table th.note, .player-list-table td.note { min-width: 5em; }
     .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--gold); flex-wrap:wrap; }
     .event-bar select { padding:4px 8px; }
     /* 指で押す前提のタップ目標（style.css のバー類と同じ 44px） */
