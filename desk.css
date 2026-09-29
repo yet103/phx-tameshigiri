@@ -28,7 +28,8 @@ a { color: var(--accent); }
   background: var(--band-bg); color: var(--band-text);
 }
 .desk-title {
-  flex: 1; font-family: var(--mincho); font-size: 18px; font-weight: 700;
+  flex: 0 0 auto; margin-right: 16px;   /* 右のアイコン類を左に寄せる（ユーザー要望 2026-09-30） */
+  font-family: var(--mincho); font-size: 18px; font-weight: 700;
   color: var(--gold-light); text-decoration: none;
 }
 .desk-title:hover { filter: brightness(1.15); }
@@ -55,7 +56,7 @@ a { color: var(--accent); }
   border: 1px solid var(--warn); color: var(--warn);
 }
 .desk-stage-count { font-size: 13px; color: var(--text-muted); }
-.desk-stage-actions { margin-left: auto; display: flex; gap: 8px; }
+.desk-stage-actions { margin-left: 12px; display: flex; gap: 8px; }   /* 状態の並びのすぐ右に置く（左寄せ） */
 
 /* ===== ボタン ===== */
 .desk-btn {
@@ -93,7 +94,8 @@ a { color: var(--accent); }
 /* ===== 見出し・注記 ===== */
 .desk-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .desk-section-head h2 { font-size: 16px; }
-.desk-section-head .spacer { flex: 1; }
+/* 見出しの右のボタン類は左に寄せる（ユーザー要望 2026-09-30。spacer は伸ばさず、少しの間だけ空ける） */
+.desk-section-head .spacer { flex: 0 0 12px; }
 .desk-empty { color: var(--text-muted); padding: 20px 0; }
 .desk-note, .desk-warn { padding: 8px 10px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; background: var(--card-bg); }
 .desk-note { border: 1px solid var(--border); color: var(--text-muted); }
@@ -540,6 +542,12 @@ a { color: var(--accent); }
 .desk-players-table th.col-score, .desk-players-table td.col-score { border-left: 2px solid var(--gold); }
 /* 追加中の下書き行と、ホバーした名前列（sticky）は従来の色を保つ（上の組の地色より後ろに置いて勝たせる） */
 .desk-players-table .desk-draft-row td { background: var(--bg-header); }
+/* 男子の部・女子の部の帯の行（見出しと同じ黒地に金）。表を分けて見せる（ユーザー要望 2026-09-30） */
+.desk-players-table tr.desk-sex-row td {
+  background: var(--band-bg-2); color: var(--gold-light); font-family: var(--mincho); font-weight: bold;
+  text-align: left; padding: 3px 10px; border-left: none;
+}
+.desk-players-table tbody tr.desk-sex-row:hover td { background: var(--band-bg-2); }
 .desk-players-table tbody tr:hover td.col-name { background: var(--row-selected); }
 
 /* 区画の見出し */

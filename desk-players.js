@@ -512,6 +512,17 @@
 
   // 条件に合う行が無いときの 1 行。表の外に出すと見出しごと消えて
   // 絞り込みを戻せなくなるので、行として出す。
+  // 男子の部・女子の部の帯の行（表を分けて見せる）
+  function sexRow(label) {
+    var tr = document.createElement('tr');
+    tr.className = 'desk-sex-row';
+    var td = document.createElement('td');
+    td.colSpan = COLUMNS.length;
+    td.textContent = label;
+    tr.appendChild(td);
+    return tr;
+  }
+
   function noMatchRow() {
     var tr = document.createElement('tr');
     var td = document.createElement('td');
@@ -582,7 +593,15 @@
     tbody.innerHTML = '';
     var players = ctx.players || [];
     var rows = Courts.sortBy(Courts.applyFilter(players, filter), sort);
-    rows.forEach(function(p) { tbody.appendChild(buildRow(ctx, p, locked)); });
+    // 男子の部・女子の部で表を分けて見せる（ユーザー要望 2026-09-30）。並べ替え・絞り込みは
+    // 両方に同じように効き、それぞれの先頭に帯の行（部の名前と人数）を置く。0 名の部は出さない。
+    var male = rows.filter(function(p) { return p.isFemale !== true; });
+    var female = rows.filter(function(p) { return p.isFemale === true; });
+    [['男子の部', male], ['女子の部', female]].forEach(function(g) {
+      if (g[1].length === 0) return;
+      tbody.appendChild(sexRow(g[0] + '　' + g[1].length + ' 名'));
+      g[1].forEach(function(p) { tbody.appendChild(buildRow(ctx, p, locked)); });
+    });
     if (rows.length === 0 && !draft) tbody.appendChild(noMatchRow());
     // 下書き行は絞り込みに関わらず必ず末尾に出す（打ち込んでいる途中で消えない）
     if (draft && !locked) tbody.appendChild(buildDraftRow(ctx));
