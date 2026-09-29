@@ -404,7 +404,10 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
    横スクロールさせる。ページ本体は横スクロールさせない。 */
 /* 技得点表。備考以外の列は内容の幅に詰め（width:1% + nowrap）、右端の備考が残り幅を吸収する
    （ユーザー要望。採点画面の選手一覧と同じ作法） */
-.tech-table { border-collapse: collapse; width: 100%; }
+/* 表の本文は端末の明朝（通常の太さ）。web フォントの Shippori は太字しか無いので、技名と見出しだけに当てて目立たせる */
+.tech-table { border-collapse: collapse; width: 100%; font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; }
+.tech-table th, .tech-table td.col-name { font-family: var(--mincho); }
+.tech-table input { font-family: inherit; }
 .tech-table th, .tech-table td {
   border: 1px solid var(--border);
   padding: 4px 8px;
@@ -413,7 +416,9 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
   width: 1%;
 }
 .tech-table th { background: var(--bg-header); }
-.tech-table td.col-name { text-align: left; }
+.tech-table td.col-name { text-align: left; font-weight: bold; }
+.tech-table td.col-category { text-align: left; }
+.tech-table td.col-category input[type="text"] { width: 6em; text-align: left; }
 .tech-table th.col-note, .tech-table td.col-note {
   width: auto;
   min-width: 8em;
@@ -426,8 +431,8 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .tech-table input[type="text"] {
   width: 60px;
   padding: 2px 4px;
-  background: var(--bg);
-  color: var(--text);
+  background: #fff;      /* 入力欄は白（ユーザー要望。ダークでも白のまま） */
+  color: #111;
   border: 1px solid var(--border);
   border-radius: 3px;
   text-align: center;

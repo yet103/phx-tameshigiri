@@ -309,11 +309,15 @@ a { color: var(--accent); }
 .tech-note { border: 1px solid var(--border); color: var(--text-muted); }
 .tech-warn { border: 1px solid var(--warn); color: var(--warn); }
 .tech-scroll { overflow-x: auto; }
-.tech-table { border-collapse: collapse; width: 100%; background: var(--card-bg); }
+.tech-table { border-collapse: collapse; width: 100%; background: var(--card-bg); font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; }
+.tech-table th, .tech-table td.col-name { font-family: var(--mincho); }   /* 技名と見出しだけ web フォント（太字） */
+.tech-table input { font-family: inherit; background: #fff; color: #111; }   /* 入力欄は白（techniques.html と同じ） */
 /* 備考以外の列は内容の幅に詰め、右端の備考が残り幅を吸収する（techniques.html と同じ作法） */
 .tech-table th, .tech-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; white-space: nowrap; width: 1%; }
 .tech-table th { background: var(--bg-header); font-size: 13px; }
-.tech-table td.col-name { text-align: left; }
+.tech-table td.col-name { text-align: left; font-weight: bold; }
+.tech-table td.col-category { text-align: left; }
+.tech-table td.col-category input[type="text"] { width: 6em; text-align: left; }
 .tech-table th.col-note, .tech-table td.col-note { width: auto; min-width: 8em; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .tech-table td.col-note input[type="text"] { width: 100%; min-width: 8em; text-align: left; }
 .tech-table input[type="text"], .tech-table input[type="number"] { width: 70px; min-height: 28px; text-align: center; }

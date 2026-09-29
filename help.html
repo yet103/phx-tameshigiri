@@ -355,7 +355,7 @@
     <div class="note"><span class="term">同じ形は1人の3枠に1回まで（同じ巡の中で）。</span>技リストで <span class="ui">回数制限なし</span> にチェックが付いている形（既定では抜刀してからの6形）だけは、同じ巡で何度でも選べます。それ以外の形を2枠以上に選ぶと、その選手の枠が赤くなり<span class="term">試合開始</span>で止まります（一巡目と二巡目では別に数えるので、一巡目と二巡目で同じ形を選ぶのは問題ありません）。</div>
     <p>ここに出る技と配点は<span class="term">その大会のもの</span>です。直すときは、運営画面の右上 <span class="ui">⋯</span> → <span class="ui">🗒 技得点表</span>（選択中の大会のものが開きます）、または採点画面の上のリンク <span class="ui">技得点表</span> から開きます。PC 用は左の <span class="ui">技と配点</span> です。</p>
     <div class="note"><span class="term">男女で配点が違う技があります。</span><span class="ui">胸尽くし</span>・<span class="ui">水月</span>・<span class="ui">破図味</span> は技リストでは <span class="ui">(男)</span> <span class="ui">(女)</span> の2つの行に分かれていますが、この画面には選手の性別に合う方だけが接尾辞なしで出ます（もう一方は選択肢に出ません）。</div>
-    <div class="note"><span class="term">真剣レンタルの選手は、抜刀してからの形だけを選べます。</span><span class="ui">真剣レンタル</span> にチェックが入っている選手の技の候補は、技リストで <span class="ui">抜刀後</span> にチェックが付いている形だけになります（どの形が「抜刀後」かは §3 の「技の配点を変える」で運営が決めます）。すでに選んである技は候補に残りますが、抜刀後でない形が残っていると <span class="ui">試合開始 ▶</span> で止まります。</div>
+    <div class="note"><span class="term">真剣レンタルの選手は、抜刀してからの形だけを選べます。</span><span class="ui">真剣レンタル</span> にチェックが入っている選手の技の候補は、技リストで <span class="ui">抜刀状態</span> にチェックが付いている形だけになります（どの形が「抜刀後」かは §3 の「技の配点を変える」で運営が決めます）。すでに選んである技は候補に残りますが、抜刀後でない形が残っていると <span class="ui">試合開始 ▶</span> で止まります。</div>
 
     <figure class="shot-mobile">
       <img src="help/img/admin_tech_sheet.png" loading="lazy" alt="技を選ぶシート。上に絞り込みの入力欄、見出し行、技名と各太刀の配点の一覧。">
@@ -460,7 +460,7 @@
       <ul>
         <li><span class="ui">基本情報</span> で <span class="ui">ゼッケン番号を必須にする</span> にしていて、一巡目にゼッケンが空の選手がいる。</li>
         <li><span class="ui">級位・段位を必須にする</span> にしていて、一巡目に級位・段位が空の選手がいる。</li>
-        <li><span class="ui">真剣レンタル</span> の選手に、<span class="ui">抜刀後</span> でない形が入っている。</li>
+        <li><span class="ui">真剣レンタル</span> の選手に、<span class="ui">抜刀状態</span> でない形が入っている。</li>
         <li>一巡目に、<span class="ui">回数制限なし</span> でない同じ形を2枠以上選んでいる選手がいる。</li>
       </ul>
       PC 用の <span class="ui">選手登録</span> の表では、同じ件数が表の上に赤く出ます（§1 の（d））。
@@ -610,8 +610,8 @@
       <li><span class="ui">雛形（新規大会の初期値）</span> を変えても、すでにある大会の配点は変わりません。雛形はこれから作る大会に入る初期値です。</li>
       <li><span class="ui">雛形に戻す</span> を押すと、その大会の配点を雛形の内容で置き換えます。</li>
       <li><span class="ui">別の大会からコピー</span> で、ほかの大会の配点を表に読み込めます。<span class="ui">保存</span> を押すまでは反映されません。</li>
-      <li>右端の <span class="ui">備考</span> は技ごとのメモです（100 文字まで）。得点には影響しません。</li>
-      <li><span class="ui">抜刀後</span> は「抜刀してからの形」の印です。<span class="term">真剣レンタルの選手は、ここにチェックが付いている形だけを選べます。</span>どの形を抜刀後とするかは大会ごとに運営が決めます（既定では <span class="ui">立位袈裟</span> <span class="ui">立位逆袈裟</span> <span class="ui">立位横一</span> <span class="ui">座位袈裟</span> <span class="ui">座位逆袈裟</span> <span class="ui">座位横一</span> の6形に付いています）。</li>
+      <li>左端の <span class="ui">技分類</span> は技の分類名（任意、20 文字まで）、右端の <span class="ui">備考</span> は技ごとのメモです（100 文字まで）。どちらも得点には影響しません。</li>
+      <li><span class="ui">抜刀状態</span> は「抜刀してからの形」の印です。<span class="term">真剣レンタルの選手は、ここにチェックが付いている形だけを選べます。</span>どの形を抜刀後とするかは大会ごとに運営が決めます（既定では <span class="ui">立位袈裟</span> <span class="ui">立位逆袈裟</span> <span class="ui">立位横一</span> <span class="ui">座位袈裟</span> <span class="ui">座位逆袈裟</span> <span class="ui">座位横一</span> の6形に付いています）。</li>
       <li><span class="ui">回数制限なし</span> にチェックが付いている形は、同じ巡の中で1人が何度選んでも構いません（既定では上の抜刀後の6形だけ）。チェックが無い形は、1人の3枠のうち同じ巡で1回までです（§1 の「技の選び方」）。</li>
       <li><span class="ui">減点初太刀</span> は、初太刀が減点扱いで成功したときの点です（胸尽くしなど、切先が鞘から抜けていた状態での成功）。空欄なら減点の状態そのものが出ません。数値を入れると、採点画面のその技の初太刀だけ <span class="ui">未</span> → <span class="ui">成功</span> → <span class="ui">減点</span> → <span class="ui">失敗</span> → <span class="ui">未</span> と一段増えます（既定では <span class="ui">胸尽くし(男)</span> <span class="ui">胸尽くし(女)</span> に4点）。</li>
     </ul>

@@ -79,7 +79,7 @@ var TechEdit = (function() {
     scroll.className = 'tech-scroll';
     var table = document.createElement('table');
     table.className = 'tech-table';
-    // 「抜刀後」＝ 抜刀してからの形。真剣レンタルの選手はこの形しか選べない
+    // 「抜刀状態」＝ 抜刀してからの形（data の drawn）。真剣レンタルの選手はこの形しか選べない
     // （設計書「選手の追加項目」の決定事項）。見出しだけでは意味が伝わらないので
     // title を添える。列幅は td:nth-child ではなく col-* の class で指定する
     // （style.css / techniques.html。列の増減や並び替えに強くする）。
@@ -87,10 +87,12 @@ var TechEdit = (function() {
     // （col-label-full / col-label-short を CSS 側の @media で出し分ける）。
     table.innerHTML =
       '<thead><tr>' +
+      // 技分類は左端（任意の分類名。得点には関わらない）
+      '<th class="col-category" title="技の分類（任意、20文字まで）">技分類</th>' +
       '<th class="col-name">技名</th>' +
       '<th class="col-strike">初太刀</th><th class="col-strike">二ノ太刀</th>' +
       '<th class="col-strike">三ノ太刀</th><th class="col-strike">四ノ太刀</th>' +
-      '<th class="col-drawn" title="レンタルの選手が選べる形">抜刀後</th>' +
+      '<th class="col-drawn" title="抜刀してからの形。レンタルの選手が選べる形">抜刀状態</th>' +
       '<th class="col-repeatable" title="同じ巡（一巡目・二巡目）で何度でも選べる">' +
       '<span class="col-label-full">回数制限なし</span><span class="col-label-short">制限なし</span></th>' +
       '<th class="col-reduced" title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点">' +
@@ -112,7 +114,8 @@ var TechEdit = (function() {
       function num(v) {
         return (v !== null && v !== undefined) ? Storage.esc(String(v)) : '<span class="view-empty">—</span>';
       }
-      return '<td class="col-name">' + Storage.esc(t.name) + '</td>' +
+      return '<td class="col-category">' + Storage.esc(typeof t.category === 'string' ? t.category : '') + '</td>' +
+        '<td class="col-name">' + Storage.esc(t.name) + '</td>' +
         [0,1,2,3].map(function(s) { return '<td class="col-strike">' + num(t.strikes[s]) + '</td>'; }).join('') +
         '<td class="col-drawn">' + (t.drawn === true ? '○' : '') + '</td>' +
         '<td class="col-repeatable">' + (t.repeatable === true ? '○' : '') + '</td>' +
@@ -137,7 +140,9 @@ var TechEdit = (function() {
 
     // 編集モードの行（入力欄）
     function editRowHtml(t, i) {
-      return '<td class="col-name"><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
+      return '<td class="col-category"><input type="text" maxlength="20" data-field="category" data-idx="' + i + '"' +
+          ' value="' + Storage.esc(typeof t.category === 'string' ? t.category : '') + '"></td>' +
+        '<td class="col-name"><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
           [0,1,2,3].map(function(s) {
             var v = (t.strikes[s] !== null && t.strikes[s] !== undefined) ? Storage.esc(String(t.strikes[s])) : '';
             return '<td class="col-strike"><input type="number" min="0" max="99" value="' + v +
@@ -193,6 +198,7 @@ var TechEdit = (function() {
         var repeatableEl = tr.querySelector('[data-field="repeatable"]');
         var reducedEl = tr.querySelector('[data-field="reducedFirst"]');
         var noteEl = tr.querySelector('[data-field="note"]');
+        var categoryEl = tr.querySelector('[data-field="category"]');
         var reducedVal = reducedEl ? reducedEl.value : '';
         var reducedFirst = null;
         if (reducedVal !== '') {
@@ -204,7 +210,8 @@ var TechEdit = (function() {
           drawn: !!(drawnEl && drawnEl.checked),
           repeatable: !!(repeatableEl && repeatableEl.checked),
           reducedFirst: reducedFirst,
-          note: noteEl ? noteEl.value.trim().slice(0, 100) : ''
+          note: noteEl ? noteEl.value.trim().slice(0, 100) : '',
+          category: categoryEl ? categoryEl.value.trim().slice(0, 20) : ''
         });
       });
       return techs;

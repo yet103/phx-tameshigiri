@@ -108,7 +108,9 @@ function cloneTechniques(list) {
       repeatable: !!(t && t.repeatable === true),
       reducedFirst: (Number.isInteger(rf) && rf >= 0 && rf <= 99) ? rf : null,
       // note（備考。技得点表の右端の列）は省略可。得点には関わらない。省略時は ''
-      note: (t && typeof t.note === 'string') ? t.note.trim().slice(0, 100) : ''
+      note: (t && typeof t.note === 'string') ? t.note.trim().slice(0, 100) : '',
+      // category（技分類。技得点表の左端の列）も省略可。得点には関わらない。省略時は ''
+      category: (t && typeof t.category === 'string') ? t.category.trim().slice(0, 20) : ''
     };
   });
 }
@@ -2045,7 +2047,7 @@ function validateTechniques(list) {
     }
     // drawn（抜刀後の形）は省略可。省略時は cloneTechniques が false にする。
     if (t.drawn !== undefined && typeof t.drawn !== 'boolean') {
-      return n + ' 行目の「抜刀後」の指定が不正です';
+      return n + ' 行目の「抜刀状態」の指定が不正です';
     }
     // repeatable（同じ巡で何度でも可）は省略可。省略時は cloneTechniques が false にする
     // （設計書 2026-09-20-rules-alignment-design.md）。
@@ -2063,6 +2065,11 @@ function validateTechniques(list) {
     if (t.note !== undefined && t.note !== null) {
       if (typeof t.note !== 'string') return n + ' 行目の備考の形式が不正です';
       if (t.note.trim().length > 100) return n + ' 行目の備考が長すぎます（100文字まで）';
+    }
+    // category（技分類）も省略可。文字列で 20 文字まで（技得点表の左端の列。得点には関わらない）。
+    if (t.category !== undefined && t.category !== null) {
+      if (typeof t.category !== 'string') return n + ' 行目の技分類の形式が不正です';
+      if (t.category.trim().length > 20) return n + ' 行目の技分類が長すぎます（20文字まで）';
     }
   }
   return null;
