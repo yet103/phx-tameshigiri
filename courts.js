@@ -366,18 +366,21 @@ var Courts = (function() {
   //   draft                    → これから採点する一巡目の人数と技未入力の件数
   //   round1_done              → これから採点する二巡目の人数と技未入力の件数
   //   round2_done 以降         → 出さない（数えるものが無い）
+  // 「採点済み」は確定済みの行を数える（採点途中は数えない。ユーザー要望 2026-09-30）
+  function isConfirmed(p) { return !!(p && p.confirmed === true); }
+
   function stageCountText(status, players) {
     var list = players || [];
     // 決戦 進行中は決戦の行だけを数える（他のコートはもう斬り終わっている）。
     // scoringRound('round2_final') は 2 を返すので、必ずこの分岐を先に置くこと。
     if (status === 'round2_final') {
       var fin = EventStatus.finalists(list);
-      return '決戦 採点済み ' + fin.filter(isScored).length + ' / ' + fin.length;
+      return '決戦 採点済み ' + fin.filter(isConfirmed).length + ' / ' + fin.length;
     }
     var r = EventStatus.scoringRound(status);
     if (r) {
       var rows = list.filter(function(p) { return roundOf(p) === r; });
-      return '採点済み ' + rows.filter(isScored).length + ' / ' + rows.length;
+      return '採点済み ' + rows.filter(isConfirmed).length + ' / ' + rows.length;
     }
     if (status === 'draft') {
       var r1 = list.filter(function(p) { return roundOf(p) === 1; });

@@ -28,12 +28,20 @@
       if (typeof female === 'boolean' && (p.isFemale === true) !== female) return false;
       return true;
     });
+    // 「採点済み」は確定済みの行を数える（採点途中は数えない。ユーザー要望 2026-09-30）。
+    // 選手のいないコート（settings.courts だけにある「稽古」など）のカードは出さない。
     var byCourt = Object.create(null);
-    Courts.courtProgress(plainPlayers, round).forEach(function(r) { byCourt[r.court] = r; });
-    return Courts.listFrom(plainPlayers, extraCourts(ctx)).map(function(c) {
-      var row = Object.prototype.hasOwnProperty.call(byCourt, c)
-        ? byCourt[c]
-        : { court: c, total: 0, scored: 0 };
+    plainPlayers.forEach(function(p) {
+      if (Courts.roundOf(p) !== round) return;
+      var c = Courts.courtOf(p);
+      if (!byCourt[c]) byCourt[c] = { court: c, total: 0, scored: 0 };
+      byCourt[c].total++;
+      if (p.confirmed === true) byCourt[c].scored++;
+    });
+    return Courts.listFrom(plainPlayers, extraCourts(ctx)).filter(function(c) {
+      return Object.prototype.hasOwnProperty.call(byCourt, c);
+    }).map(function(c) {
+      var row = byCourt[c];
       if (typeof female === 'boolean') row.female = female;
       return row;
     });
@@ -169,7 +177,7 @@
       finale = [{
         court: Courts.finaleCourt(ctx.players),
         total: fin.length,
-        scored: fin.filter(Courts.isScored).length,
+        scored: fin.filter(function(p) { return p.confirmed === true; }).length,
         finale: true
       }];
     }
@@ -262,10 +270,14 @@
     }
 
     var live = document.createElement('div');
-    var who = liveNameFor(ctx, row);
-    if (who) {
+    var liveP = livePlayerFor(ctx, row, round);
+    var finished = row.total > 0 && row.scored === row.total;
+    if (liveP) {
       live.className = 'desk-match-live';
-      live.textContent = 'いま採点中: ' + who;
+      live.textContent = 'いま採点中: ' + (liveP.name || '(名称未設定)');
+    } else if (finished) {
+      live.className = 'desk-match-live done';
+      live.textContent = '終了';
     } else {
       live.className = 'desk-match-live idle';
       live.textContent = '待機中';
@@ -274,7 +286,7 @@
 
     // そのカードの選手の表（順番・ゼッケン・選手名・級位段位・得点・備考。ユーザー要望 2026-09-30）。
     // 数えている行（同じコート・巡目・性別・決戦の印）を試技順に並べる。
-    card.appendChild(buildCardTable(ctx, row, round));
+    card.appendChild(buildCardTable(ctx, row, round, liveP ? liveP.id : null));
 
     var actions = document.createElement('div');
     actions.className = 'desk-match-actions';
@@ -304,7 +316,7 @@
   }
 
   // カードの中の選手の表
-  function buildCardTable(ctx, row, round) {
+  function buildCardTable(ctx, row, round, liveId) {
     var list = (ctx.players || []).filter(function(p) {
       return Courts.courtOf(p) === row.court && Courts.roundOf(p) === round &&
         (p.finalist === true) === (row.finale === true) &&
@@ -325,8 +337,11 @@
     var tbody = document.createElement('tbody');
     list.forEach(function(p) {
       var tr = document.createElement('tr');
+      // 確定済みの行はグレー、いま採点中の行は反転（採点画面の選手一覧と同じ配色）
+      if (p.confirmed === true) tr.className = 'done';
+      if (liveId && p.id === liveId) tr.className = 'current';
       var m = (p.order || '').match(/-(\d+)$/);
-      var scored = Courts.isScored(p);
+      var scored = p.confirmed === true;   // 得点は確定済みだけ出す（ユーザー要望 2026-09-30）
       [
         [m ? m[1] : (p.order || ''), 'num'],
         [Number.isInteger(p.bib) ? String(p.bib) : '', 'num'],
@@ -349,12 +364,19 @@
   // そのカードで「いま採点中」に出す名前。決戦のカードと先頭コートの通常のカードは同じコート
   // （live はコートごとに 1 人）を分け合うので、採点中の選手の印がカードと合うときだけ出す
   // （二巡目 進行中に A の通常の選手を採点しているとき、決戦のカードに名前を出さないように）。
-  function liveNameFor(ctx, row) {
+  // そのカードで「いま採点中」の選手（行）。live はコートごとに 1 人なので、その選手が
+  // このカードの組（部・巡目・決戦の印）に属するときだけ返す（ユーザー要望 2026-09-30:
+  // 男女＋コート＋巡目で判定）。属さなければ null。
+  function livePlayerFor(ctx, row, round) {
     var who = Courts.livePlayerName(ctx.event && ctx.event.live, row.court, ctx.players);
-    if (!who) return '';
+    if (!who) return null;
     var entry = ctx.event.live[row.court];   // livePlayerName が名前を返した＝hasOwnProperty 済み
     var p = (ctx.players || []).filter(function(x) { return x && x.id === entry.playerId; })[0];
-    return (p && (p.finalist === true) === (row.finale === true)) ? who : '';
+    if (!p) return null;
+    if ((p.finalist === true) !== (row.finale === true)) return null;
+    if (Courts.roundOf(p) !== round) return null;
+    if (typeof row.female === 'boolean' && (p.isFemale === true) !== row.female) return null;
+    return p;
   }
 
   // 閲覧専用 URL（共有リンク）をクリップボードへ。desk-results.js の onCopyShare と同じ作法。

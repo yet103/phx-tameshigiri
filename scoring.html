@@ -16,7 +16,7 @@
     /* 左右の余白は全ブロック共通（--gutter）。帯（黒地）は body の幅いっぱいに敷き、中身の左右端を
        20px でそろえる。表・補正段・操作区画・選手一覧も同じ 20px の内側に置く（端がそろい、詰まりすぎない）。 */
     :root { --gutter: var(--page-gutter); }
-    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .player-list-toggle {
+    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .timer-bar, .player-list-toggle {
       padding-left: var(--gutter); padding-right: var(--gutter);
     }
     .score-table-wrap { padding-left: var(--gutter); padding-right: var(--gutter); }
@@ -85,6 +85,14 @@
     </div>
   </div>
 
+  <!-- タイマー。選手名の帯の真下に置く（ユーザー要望 2026-09-30） -->
+  <div class="timer-bar">
+    <button id="btnTimerStart" title="タイマーを始める（5分から数えます）">▶ 開始</button>
+    <button id="btnTimerStop" title="タイマーを止める">■ 停止</button>
+    <button id="btnTimerReset" title="タイマーを 05:00 に戻す">↺ リセット</button>
+    <div class="timer-display" id="timerDisplay" title="残り時間">05:00</div>
+  </div>
+
   <!-- 採点テーブル -->
   <div class="score-table-wrap">
     <table class="score-table" id="scoreTable">
@@ -102,34 +110,32 @@
       <tbody id="scoreTableBody">
         <!-- app.jsが動的生成 -->
       </tbody>
+      <!-- 全体補正点は補正点の列の真下（最終行）に置き、縦にそろえる（ユーザー要望 2026-09-30） -->
+      <tfoot>
+        <tr id="totalAdjustRow" class="total-adjust-row">
+          <td colspan="5" class="total-adjust-label">全体補正点</td>
+          <td class="adjust-col"><input type="number" step="1" inputmode="numeric" class="adjust-input" id="totalAdjustInput"></td>
+          <td class="score-col"></td>
+        </tr>
+      </tfoot>
     </table>
   </div>
 
   <!-- 全体補正点・備考 -->
   <div class="adjust-bar">
-    <label>全体補正点 <input type="number" step="1" inputmode="numeric" class="adjust-input" id="totalAdjustInput"></label>
     <label class="note-label">備考 <input type="text" maxlength="200" id="noteInput" placeholder="（任意）"></label>
     <button type="button" id="btnNotePreset" class="btn-note-preset">文例</button>
   </div>
 
-  <!-- 前後の選手・タイマー・採点操作をひとつの区画にまとめる -->
+  <!-- 採点操作の区画: 前の選手・形成功・失敗・確定・次の選手 を一列に（右端に合計）。ユーザー要望 2026-09-30 -->
   <div class="action-block">
-    <!-- 1段目: 形成功・失敗・確定（右端に合計）。補正点・備考のすぐ下に採点の操作が来るように（ユーザー要望） -->
     <div class="action-bar">
+      <button class="nav-btn" id="btnPrev" title="前の選手を開く（未確定なら確定するか聞きます）">◀ 前の選手</button>
       <button class="btn-success" id="btnAllSuccess" title="選択中の技の太刀をすべて成功にして、次の技へ">形成功</button>
       <button class="btn-fail"    id="btnAllFail" title="選択中の技の最初の「未」を失敗にして、次の技へ">失敗</button>
       <button class="btn-confirm" id="btnConfirm" title="この選手の得点を確定する（もう一度押すと取り消し）">確定</button>
-      <div class="total-score" id="totalScoreDisplay"><span class="total-label">合計</span><span class="total-value" id="totalScoreBox"><span id="totalScoreValue">0</span><span class="total-unit">点</span></span></div>
-    </div>
-
-    <!-- 2段目: 前の選手・開始・停止・リセット・タイマー・次の選手 を左から詰めて一列 -->
-    <div class="timer-bar">
-      <button class="nav-btn" id="btnPrev" title="前の選手を開く（未確定なら確定するか聞きます）">◀ 前の選手</button>
-      <button id="btnTimerStart" title="タイマーを始める（5分から数えます）">▶ 開始</button>
-      <button id="btnTimerStop" title="タイマーを止める">■ 停止</button>
-      <button id="btnTimerReset" title="タイマーを 05:00 に戻す">↺ リセット</button>
-      <div class="timer-display" id="timerDisplay" title="残り時間">05:00</div>
       <button class="nav-btn" id="btnNext" title="次の選手を開く（未確定なら確定するか聞きます）">次の選手 ▶</button>
+      <div class="total-score" id="totalScoreDisplay"><span class="total-label">合計</span><span class="total-value" id="totalScoreBox"><span id="totalScoreValue">0</span><span class="total-unit">点</span></span></div>
     </div>
   </div>
 

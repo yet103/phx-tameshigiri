@@ -691,7 +691,8 @@
     tr.appendChild(techCell(ctx, p, locked, 1, refs));
     tr.appendChild(techCell(ctx, p, locked, 2, refs));
     tr.appendChild(techCell(ctx, p, locked, 3, refs));
-    tr.appendChild(cell(String(p.score || 0), 'num col-score'));
+    // 得点は確定済みだけ出す（採点途中の値は表に出さない。ユーザー要望 2026-09-30）
+    tr.appendChild(cell(p.confirmed === true ? String(p.score || 0) : '', 'num col-score'));
     var tdAct = document.createElement('td');
     tdAct.className = 'act';
     if (!locked) tdAct.appendChild(buildRowMenu(ctx, p));

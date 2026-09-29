@@ -1772,6 +1772,9 @@
                   '新人太郎,A-男子-1-4,真,,,10,○,,1    \n' +
                   '花子,A-女子-1-1,真,,,30,,○,1    \n';
     await Api.importCsv(rankEvent.id, rankCsv, 'replace');
+    // 順位は確定済みの行だけを数える（2026-09-30）ので、取り込んだ全員を確定にしてから見る
+    var rankPlayers = (await Api.loadEvent(rankEvent.id)).players;
+    for (var rpi = 0; rpi < rankPlayers.length; rpi++) await Api.updatePlayer(rankEvent.id, rankPlayers[rpi].id, { confirmed: true });
     var ranking = await Api.loadRanking(rankEvent.id);
     assert('loadRanking は大会名を返す', ranking.event.name, '順位テスト');
     assert('loadRanking は開催日と会場を返す',
@@ -1810,15 +1813,15 @@
     // 1人だけ斬る → その人だけ暫定1位
     var flRows = (await Api.loadEvent(flEvent.id)).players
       .filter(function(p) { return p.finalist === true; }).sort(Courts.compareOrder);
-    await Api.updatePlayer(flEvent.id, flRows[0].id, { score: 30, result: '1    ' });
+    await Api.updatePlayer(flEvent.id, flRows[0].id, { score: 30, result: '1    ', confirmed: true });
     var flRank2 = await Api.loadRanking(flEvent.id);
     assert('斬った人だけ合計と暫定順位が埋まる',
       flRank2.finale.rows.map(function(r) { return [r.name, r.r2, r.total, r.scored, r.rank]; }),
       [['G3', 30, 50, true, 1], ['G2', null, 30, false, null], ['G1', null, 42, false, null]]);
 
     // 同点は同順位（1, 1, 3）
-    await Api.updatePlayer(flEvent.id, flRows[1].id, { score: 20, result: '1    ' });
-    await Api.updatePlayer(flEvent.id, flRows[2].id, { score: 8, result: '1    ' });
+    await Api.updatePlayer(flEvent.id, flRows[1].id, { score: 20, result: '1    ', confirmed: true });
+    await Api.updatePlayer(flEvent.id, flRows[2].id, { score: 8, result: '1    ', confirmed: true });
     var flRank3 = await Api.loadRanking(flEvent.id);
     assert('同点は同順位（50, 50, 50 なら全員1位）',
       flRank3.finale.rows.map(function(r) { return [r.name, r.total, r.rank]; }),
@@ -1844,6 +1847,8 @@
                    '丙,A-男子-1-3,真,,,10,,,1    \n' +
                    '甲,A-男子-2-1,真,,,25,,,1    \n';
     await Api.importCsv(shareEvent.id, shareCsv, 'replace');
+    var sharePlayers = (await Api.loadEvent(shareEvent.id)).players;   // 順位は確定済みの行だけ数える
+    for (var spi = 0; spi < sharePlayers.length; spi++) await Api.updatePlayer(shareEvent.id, sharePlayers[spi].id, { confirmed: true });
 
     var link1 = await Api.createShareLink(shareEvent.id);
     assert('createShareLink はトークンを返す', typeof link1.token, 'string');
@@ -1979,12 +1984,12 @@
 
     // --- 順位の細部と静的配信のガード ---
     var rank2Event = await Api.saveEvent({ name: '順位テスト', date: '2026-03-01', venue: '', players: [
-      { id: 'r1', name: '田中 ', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 7, isNewFace: false, isFemale: false, result: '1    ' },
-      { id: 'r2', name: '田中', order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '', score: 7, isNewFace: false, isFemale: false, result: '1    ' },
-      { id: 'r3', name: '__proto__', order: 'A-男子-1-2', tech1: '', tech2: '', tech3: '', score: 20, isNewFace: false, isFemale: false, result: '1    ' },
-      { id: 'r4', name: '鈴木', order: 'A-男子-1-3', tech1: '', tech2: '', tech3: '', score: 9, isNewFace: false, isFemale: false, result: '1    ' },
-      { id: 'r5', name: '高橋', order: 'A-男子-1-4', tech1: '', tech2: '', tech3: '', score: 9, isNewFace: false, isFemale: false, result: '1    ' },
-      { id: 'r6', name: '文字列', order: 'A-男子-1-5', tech1: '', tech2: '', tech3: '', score: '40', isNewFace: false, isFemale: false, result: '1    ' }
+      { id: 'r1', name: '田中 ', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 7, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r2', name: '田中', order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '', score: 7, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r3', name: '__proto__', order: 'A-男子-1-2', tech1: '', tech2: '', tech3: '', score: 20, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r4', name: '鈴木', order: 'A-男子-1-3', tech1: '', tech2: '', tech3: '', score: 9, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r5', name: '高橋', order: 'A-男子-1-4', tech1: '', tech2: '', tech3: '', score: 9, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'r6', name: '文字列', order: 'A-男子-1-5', tech1: '', tech2: '', tech3: '', score: '40', confirmed: true, isNewFace: false, isFemale: false, result: '1    ' }
     ] });
     var rank2 = await Api.loadRanking(rank2Event.id);
     assert('氏名の前後空白は同一人物として合算する',
@@ -3039,7 +3044,7 @@
 
     // ---- 段階表示の件数と遷移の確認文言（PC 運営と スマホ運営で共用） ----
     var tcP = [
-      { order: 'A-男子-1-1', tech1: '真', tech2: '', tech3: '', score: 10 },  // 一巡目・採点済み・技未入力
+      { order: 'A-男子-1-1', tech1: '真', tech2: '', tech3: '', score: 10, confirmed: true },  // 一巡目・採点済み（確定済み）・技未入力
       { order: 'A-男子-1-2', tech1: '真', tech2: '連', tech3: '左' },         // 一巡目・未採点・技あり
       { order: 'A-男子-2-1', tech1: '', tech2: '', tech3: '' }                // 二巡目・未採点・技未入力
     ];
@@ -3121,11 +3126,11 @@
 
     // ---- 決戦を挟む遷移の確認文言 ----
     var cfP = [
-      { order: 'A-男子-1-1', score: 30, result: '1    ' },
+      { order: 'A-男子-1-1', score: 30, result: '1    ', confirmed: true },
       { order: 'A-男子-2-1', score: 0, result: '' },
-      { order: 'A-男子-2-2', score: 12, result: '1    ' },
+      { order: 'A-男子-2-2', score: 12, result: '1    ', confirmed: true },
       { order: '決戦-男子-2-1', finalist: true, score: 0, result: '' },
-      { order: '決戦-男子-2-2', finalist: true, score: 20, result: '1    ' }
+      { order: '決戦-男子-2-2', finalist: true, score: 20, result: '1    ', confirmed: true }
     ];
     assert('statusConfirmMessage: round2 → round2_final は決戦以外の未採点を数える',
       Courts.statusConfirmMessage('round2', 'round2_final', cfP),

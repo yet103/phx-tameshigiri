@@ -25,7 +25,7 @@ body { max-width: var(--page-max-width); margin: 0; }
 .container { max-width: none; margin: 0; padding: 8px var(--page-gutter); }
 
 /* ===== 選手ナビゲーションバー =====
-   前後の選手ボタンは操作区画の 2 段目（.timer-bar）にあるので、ここは選手名の表示だけ。
+   前後の選手ボタンは操作区画（.action-bar）にあるので、ここは選手名の表示だけ。
    「Aコート」が目立ちすぎないよう、3列（コート／順番+名前／空）にして中央の組を画面中央に置く。 */
 .player-nav {
   display: grid;
@@ -81,7 +81,7 @@ body { max-width: var(--page-max-width); margin: 0; }
 }
 
 /* ===== 前の選手・次の選手・タイマー・採点操作をまとめる区画 =====
-   .action-bar（1段目: 形成功・失敗・確定）と .timer-bar（2段目: 前後の選手とタイマー）を .action-block で囲み、
+   .action-bar（前の選手・形成功・失敗・確定・次の選手、右端に合計）を .action-block で囲み、
    枠と背景で1つの区画に見せる。 */
 .action-block {
   border: 1px solid var(--border);
@@ -90,7 +90,7 @@ body { max-width: var(--page-max-width); margin: 0; }
   overflow: hidden;
 }
 /* コート端末は指で操作するので、押せるものはすべて 44px 以上にする。
-   前後の選手は 2 段目（タイマーの列）に置く（.timer-bar button より後ろで詳細度も高いので勝つ） */
+   前後の選手は .action-bar の両端に置く（タイマー .timer-bar は選手名の帯の真下に別で置く） */
 .action-block .nav-btn {
   background: var(--accent);
   color: var(--accent-text);
@@ -108,6 +108,7 @@ body { max-width: var(--page-max-width); margin: 0; }
   padding: 4px 8px;
   gap: 6px;
   background: var(--bg-secondary);
+  border-bottom: 2px solid var(--border);   /* 選手名の帯の真下に置くので、帯と同じ金の線で区切る（大会トーンの節で金） */
   flex-wrap: wrap;
 }
 /* 残り時間。他のボタンと同じ文字サイズ（13px）と高さ（44px）にそろえる（ユーザー要望。大きすぎた） */
@@ -254,6 +255,10 @@ body { max-width: var(--page-max-width); margin: 0; }
   padding: 8px 12px;
 }
 .adjust-bar.is-hidden { display: none; }   /* 技が無い選手・大会未選択のとき */
+/* 採点表の最終行の全体補正点。補正点の列の真下に入力欄が来る。技が無い選手では行ごと隠す */
+.score-table tfoot .total-adjust-row.is-hidden { display: none; }
+.score-table tfoot td.total-adjust-label { text-align: right; padding-right: 12px; font-weight: bold; background: var(--bg-secondary); }
+.score-table tfoot td.adjust-col, .score-table tfoot td.score-col { background: var(--bg-secondary); }
 .adjust-bar label { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .adjust-bar .note-label { flex: 1; min-width: 200px; }
 .adjust-bar #noteInput {
@@ -308,7 +313,6 @@ body { max-width: var(--page-max-width); margin: 0; }
   align-items: center;
   padding: 4px 8px;
   gap: 6px;
-  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 .action-bar button { min-height: 44px; }

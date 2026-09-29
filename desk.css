@@ -398,6 +398,11 @@ a { color: var(--accent); }
 .desk-match-table td.name { font-family: var(--mincho); font-weight: bold; }
 .desk-match-table td.score { color: var(--score-color); font-weight: bold; }
 .desk-match-table td.score.confirmed { color: var(--score-confirmed); }
+/* 確定済みの行はグレー、いま採点中の行は反転（採点画面の選手一覧と同じ） */
+.desk-match-table tbody tr.done td { background: var(--cell-disabled); color: var(--text-muted); }
+.desk-match-table tbody tr.current td { background: var(--accent); color: var(--accent-text); }
+.desk-match-table tbody tr.current td.score { color: var(--accent-text); }
+.desk-match-live.done { background: transparent; color: var(--text-muted); padding-left: 0; }
 
 /* 二巡目の帯（生成・全員にコピー・件数） */
 .desk-match-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }

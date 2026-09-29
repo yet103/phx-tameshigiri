@@ -40,6 +40,7 @@ var App = (function() {
   var btnNotePreset    = document.getElementById('btnNotePreset');
   var btnConfirm       = document.getElementById('btnConfirm');
   var adjustBar        = document.querySelector('.adjust-bar');
+  var totalAdjustRow   = document.getElementById('totalAdjustRow');   // 採点表の最終行（全体補正点）
   var scoreTable       = document.getElementById('scoreTable');
 
   // --- 初期化 ---
@@ -738,6 +739,7 @@ var App = (function() {
     noteInput.value = player.note || '';
     // 技が無い選手は補正段ごと隠す（無効の欄に値だけ見えていると「合計に入っていない」ように見えるため）
     adjustBar.classList.toggle('is-hidden', techNames.length === 0);
+    totalAdjustRow.classList.toggle('is-hidden', techNames.length === 0);
     if (techNames.length === 0) {
       // 技が未入力（進行タブでまだ入力されていない二巡目の選手など）。
       // 空のグリッドから合計0を計算して上書き保存すると既存の得点が消えるので、
@@ -1111,6 +1113,7 @@ var App = (function() {
   // 選手が表示されていないとき（大会未選択・そのコートに選手がいない）の補正段
   function clearAdjustInputs() {
     adjustBar.classList.add('is-hidden');
+    totalAdjustRow.classList.add('is-hidden');
     totalAdjustInput.value = '';
     noteInput.value = '';
     totalAdjustInput.disabled = true;
@@ -1171,6 +1174,12 @@ var App = (function() {
     if (!gridRestorable && !gridDirty) {
       if (!quiet) alert('内訳を復元できない選手は、採点し直してから確定してください。');
       return false;
+    }
+    // 未の太刀が残っていたら、すべて失敗にしてよいか聞く（ユーザー要望 2026-09-30）。
+    // OK なら各行の最初の「未」を失敗にする（以降の太刀は無効になる）。キャンセルなら確定しない。
+    if (hasEmptyStrikes()) {
+      if (!confirm('未の太刀が残っています。'+BS+'nすべて失敗にして確定しますか？')) return false;
+      failRemainingStrikes(p);
     }
     p.confirmed = true;
     gridEdited = true;
@@ -1503,6 +1512,48 @@ var App = (function() {
   }
 
   // 「失敗」: 選択中の技の行の最初の「未」（配点のある太刀）を失敗にする（残りは自動で無効になる）
+  // 行の最初の「未」（配点があり、無効になっていない、値の無いセル）。無ければ null
+  function firstEmptyStrike(tr) {
+    for (var s = 0; s < 4; s++) {
+      var cell = tr.querySelector('[data-strike="' + s + '"]');
+      if (cell && !cell.classList.contains('disabled') && !cell.classList.contains('voided') &&
+          (cell.dataset.value || '') === '') return cell;
+    }
+    return null;
+  }
+
+  // 表のどこかに「未」が残っているか
+  function hasEmptyStrikes() {
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
+    for (var i = 0; i < rows.length; i++) {
+      if (firstEmptyStrike(rows[i])) return true;
+    }
+    return false;
+  }
+
+  // 残っている「未」をすべて失敗にする（確定のときに OK されたら）。行ごとに最初の未を × にし、
+  // 以降の太刀は applyVoiding で無効になる。保存は呼び出し元（確定）の saveCurrentState が行う。
+  function failRemainingStrikes(p) {
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
+    for (var i = 0; i < rows.length; i++) {
+      var tr = rows[i];
+      var target = firstEmptyStrike(tr);
+      if (!target) continue;
+      target.dataset.value = '×';
+      setCellDisplay(target, '×');
+      applyVoiding(tr);
+      applySequence(tr);
+      updateRowScore(tr, p ? p.isFemale : false);
+      Api.addHistory(currentEvent.id, {
+        action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
+        techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×',
+        detail: '確定時に未を失敗に（以降の太刀は無効）'
+      });
+    }
+    gridEdited = true;
+    updateTotal();
+  }
+
   function setAllFail() {
     var tr = guardRowAction();
     if (!tr) return;
@@ -1612,7 +1663,8 @@ var App = (function() {
       '<td>' + esc(p.tech1 || '') + '</td>' +
       '<td>' + esc(p.tech2 || '') + '</td>' +
       '<td>' + esc(p.tech3 || '') + '</td>' +
-      '<td class="score' + (p.confirmed ? ' confirmed' : '') + '">' + (p.score || 0) + '</td>' +
+      // 得点は確定済みだけ出す（採点途中の値は一覧に出さない。ユーザー要望 2026-09-30）
+      '<td class="score' + (p.confirmed ? ' confirmed' : '') + '">' + (p.confirmed ? (p.score || 0) : '') + '</td>' +
       // 備考は残り幅を吸収する列。折り返し可
       '<td class="note">' + esc(p.note || '') + '</td>';
     tr.addEventListener('click', function() {
@@ -1662,6 +1714,8 @@ var App = (function() {
 
   function updatePlayerListScore(index, score) {
     if (!isPlayerListOpen()) return;
+    var p = visiblePlayers[index];
+    if (!p || p.confirmed !== true) return;   // 確定前の途中の値は一覧に出さない
     var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
     var cell = row ? row.querySelector('td.score') : null;
     if (cell) cell.textContent = score;
@@ -1673,7 +1727,12 @@ var App = (function() {
     if (row) {
       row.classList.toggle('done', on);
       var cell = row.querySelector('td.score');
-      if (cell) cell.classList.toggle('confirmed', on);
+      if (cell) {
+        cell.classList.toggle('confirmed', on);
+        // 確定したら得点を出し、取り消したら消す
+        var p = visiblePlayers[index];
+        cell.textContent = on ? String((p && p.score) || 0) : '';
+      }
     }
   }
 

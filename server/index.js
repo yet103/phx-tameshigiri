@@ -352,7 +352,8 @@ function computeFinale(event) {
       const srcRow = (p.sourcePlayerId && Object.prototype.hasOwnProperty.call(byId, p.sourcePlayerId))
         ? byId[p.sourcePlayerId] : null;
       const r1 = (srcRow && typeof srcRow.score === 'number') ? srcRow.score : 0;
-      const scored = EventStatus.isScored(p);
+      // 斬った＝確定済み（採点途中の値は暫定順位に出さない。ユーザー要望 2026-09-30）
+      const scored = p.confirmed === true && EventStatus.isScored(p);
       const r2 = scored ? ((typeof p.score === 'number') ? p.score : 0) : null;
       return {
         name: String(p.name || '').trim(),
@@ -400,7 +401,8 @@ function computeRanking(event) {
     // CSV エクスポートは氏名の前後に空白が付くことがある。trim して合算する（表示名もこちらを使う）。
     const name = String((p && p.name) || '').trim();
     if (!name) return;
-    const score = typeof p.score === 'number' ? p.score : 0;
+    // 得点は「確定」された行だけ数える（採点途中の値は順位に出さない。ユーザー要望 2026-09-30）
+    const score = (p.confirmed === true && typeof p.score === 'number') ? p.score : 0;
     if (p.isFemale) add(female, name, score);
     else add(male, name, score);
     if (p.isNewFace) add(newFace, name, score);
