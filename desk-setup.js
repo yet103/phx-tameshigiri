@@ -66,7 +66,7 @@
     if (locked) {
       var warn = document.createElement('p');
       warn.className = 'desk-warn';
-      warn.textContent = 'この大会は最終結果を確定済みです。上部の「戻す」を押すと編集できます。';
+      warn.textContent = 'この大会は最終結果を確定済みです。試合進行の「戻す」を押すと編集できます。';
       container.appendChild(warn);
     }
 

@@ -1,6 +1,6 @@
 // 技リスト編集（技名と太刀ごとの配点の表）の描画・保存・コピー。
 // もとは techniques.html の <script> にあった。技術リスト編集ページと
-// PC 運営の「技と配点」の区画（desk-techniques.js）から同じコードを使う。
+// PC 運営の「技得点表」の区画（desk-techniques.js）から同じコードを使う。
 //
 //   TechEdit.mount(container, eventId, opts) → { isDirty, destroy }
 //     container : 中身を入れ替えてよい要素
@@ -9,7 +9,7 @@
 //     opts.title    : 見出しに使う大会名（省略時は events から引き、無ければ ID をそのまま）
 //     opts.readOnly : true なら保存・雛形に戻す・コピーを無効にする（確定済みの大会）
 //     opts.view     : true なら閲覧モードで開く（文字だけの表。「✎ 編集する」で編集に切り替える。
-//                     技得点表ページが使う。PC 運営の「技と配点」は従来どおり編集で開く）
+//                     技得点表ページが使う。PC 運営の「技得点表」は従来どおり編集で開く）
 //     opts.onSaved  : function(techniques) 保存が成功したあとに呼ぶ（省略可）
 //   戻り値の isDirty() は「表を触ったか」。対象を切り替える前の確認に使う。
 //   destroy() は DOM から外す前に呼ぶ（開きっぱなしのコピーのシートを閉じ、
@@ -272,7 +272,7 @@ var TechEdit = (function() {
           : '雛形（新規大会の初期値）の技得点表';
         note.hidden = !(readOnly && targetId);
         note.textContent = note.hidden ? '' :
-          'この大会は最終結果を確定済みです。技と配点は編集できません（上部の「戻す」を押すと編集できます）。';
+          'この大会は最終結果を確定済みです。技得点表は編集できません（運営画面の試合進行で「戻す」を押すと編集できます）。';
         warn.hidden = true;
         syncButtons();
         return;
@@ -288,7 +288,7 @@ var TechEdit = (function() {
         btnCopy.style.display = 'none';   // 雛形には「別の大会からコピー」を出さない
         note.hidden = false;
         note.textContent =
-          'ここで保存した内容は、これから作る大会の初期値になります。既に技リストを持つ大会の配点は変わりません。';
+          'ここで保存した内容は、これから作る大会の初期値になります。既に技得点表を持つ大会の配点は変わりません。';
         warn.hidden = true;
         return;
       }
@@ -302,13 +302,13 @@ var TechEdit = (function() {
       if (readOnly) {
         note.hidden = false;
         note.textContent =
-          'この大会は最終結果を確定済みです。技と配点は編集できません（上部の「戻す」を押すと編集できます）。';
+          'この大会は最終結果を確定済みです。技得点表は編集できません（運営画面の試合進行で「戻す」を押すと編集できます）。';
         return;
       }
       if (source === 'template') {
         note.hidden = false;
         note.textContent =
-          'この大会はまだ雛形を使っています。保存するとこの大会だけの技リストになります。';
+          'この大会はまだ雛形を使っています。保存するとこの大会だけの技得点表になります。';
       } else {
         note.hidden = true;
         note.textContent = '';
@@ -361,7 +361,7 @@ var TechEdit = (function() {
       if (seq !== loadSeq) return;
       if (!data) {
         updateChrome('');
-        fallbackToLocal('この大会の技リストを取得できませんでした。\n' +
+        fallbackToLocal('この大会の技得点表を取得できませんでした。\n' +
           '端末側の既定値を表示しています。\n' +
           '保存・雛形に戻す・別の大会からコピーを無効にしました。再読み込みしてください。');
         return;
@@ -390,7 +390,7 @@ var TechEdit = (function() {
       var panel = document.createElement('div');
       panel.className = 'tech-sheet';
       var h = document.createElement('h3');
-      h.textContent = 'どの大会の技リストをコピーしますか？（保存するまでサーバーには書きません）';
+      h.textContent = 'どの大会の技得点表をコピーしますか？（保存するまでサーバーには書きません）';
       panel.appendChild(h);
 
       others.forEach(function(ev) {
@@ -405,10 +405,10 @@ var TechEdit = (function() {
           var seq = loadSeq;
           var data = await Api.loadEventTechniques(ev.id);
           if (seq !== loadSeq) return;
-          if (!data) { alert('その大会の技リストを取得できませんでした。'); return; }
+          if (!data) { alert('その大会の技得点表を取得できませんでした。'); return; }
           renderTable(data.techniques);
           dirty = true;
-          alert('「' + (ev.name || '(名称未設定)') + '」の技リストを読み込みました。\n' +
+          alert('「' + (ev.name || '(名称未設定)') + '」の技得点表を読み込みました。\n' +
                 '保存を押すまでこの大会には反映されません。');
         });
         panel.appendChild(b);
@@ -476,14 +476,14 @@ var TechEdit = (function() {
         }
         return;
       }
-      if (!confirm('この大会の技リストを雛形（新規大会の初期値）で置き換えます。\nよろしいですか？')) return;
+      if (!confirm('この大会の技得点表を雛形（新規大会の初期値）で置き換えます。\nよろしいですか？')) return;
       var okEv = await Api.resetEventTechniques(targetId);
       if (seq !== loadSeq) return;
       if (!okEv) { alert('リセットに失敗しました。'); return; }
       var data = await Api.loadEventTechniques(targetId);
       if (seq !== loadSeq) return;
       if (!data) {
-        alert('雛形に戻しました。\nただし最新の技リストを取得できませんでした。再読み込みしてください。');
+        alert('雛形に戻しました。\nただし最新の技得点表を取得できませんでした。再読み込みしてください。');
         return;
       }
       renderTable(data.techniques);

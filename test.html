@@ -3154,17 +3154,17 @@
 
     assert('stageCountText: draft は一巡目の人数と技未入力',
       Courts.stageCountText('draft', tcP), '一巡目 2名　技 未入力 1');
-    assert('stageCountText: round1 は一巡目の採点済み',
-      Courts.stageCountText('round1', tcP), '採点済み 1 / 2');
+    assert('stageCountText: round1 は一巡目の確定の件数',
+      Courts.stageCountText('round1', tcP), '確定 1 / 2');
     assert('stageCountText: round1_done は二巡目の人数と技未入力',
       Courts.stageCountText('round1_done', tcP), '二巡目 1名　技 未入力 1');
-    assert('stageCountText: round2 は二巡目の採点済み',
-      Courts.stageCountText('round2', tcP), '採点済み 0 / 1');
+    assert('stageCountText: round2 は二巡目の確定の件数',
+      Courts.stageCountText('round2', tcP), '確定 0 / 1');
     assert('stageCountText: round2_done 以降は出さない',
       [Courts.stageCountText('round2_done', tcP), Courts.stageCountText('final', tcP),
        Courts.stageCountText('archived', tcP)], ['', '', '']);
     assert('stageCountText: players が無くても落ちない',
-      Courts.stageCountText('round1', null), '採点済み 0 / 0');
+      Courts.stageCountText('round1', null), '確定 0 / 0');
 
     assert('statusConfirmMessage: draft → round1',
       Courts.statusConfirmMessage('draft', 'round1', tcP),
@@ -3255,9 +3255,9 @@
 
     // ---- 段階表示の件数 ----
     assert('stageCountText: round2_final は決戦だけを数える',
-      Courts.stageCountText('round2_final', cfP), '決戦 採点済み 1 / 2');
+      Courts.stageCountText('round2_final', cfP), '決戦 確定 1 / 2');
     assert('stageCountText: round2 は二巡目全体を数える（従来どおり）',
-      Courts.stageCountText('round2', cfP), '採点済み 2 / 4');
+      Courts.stageCountText('round2', cfP), '確定 2 / 4');
     assert('progressRound: round2_final は二巡目', Courts.progressRound('round2_final', cfP), 2);
 
     // ---- 試合開始を止める条件は決戦で変わらない ----

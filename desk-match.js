@@ -1,7 +1,7 @@
 // 試合の区画（#match/<id>）。コート別の状況・採点画面を開く・二巡目の生成と技入力。
 // スマホ運営の「進行」タブ（admin-round.js）と同じことを PC 幅でやる。
 //
-// ポーリングはしない。「採点済み n / N」といま採点中の選手は、大会を読んだ時点の値で、
+// ポーリングはしない。「確定 n / N」といま採点中の選手は、大会を読んだ時点の値で、
 // 「↻ 最新に更新」（Desk.reloadEvent）を押したときだけ変わる。自動で更新するのは
 // 配信ボード（board.html）だけ、という既存の方針を変えないため。
 (function() {
@@ -28,7 +28,7 @@
       if (typeof female === 'boolean' && (p.isFemale === true) !== female) return false;
       return true;
     });
-    // 「採点済み」は確定済みの行を数える（採点途中は数えない。ユーザー要望 2026-09-30）。
+    // 「確定 n / N」は確定済みの行を数える（採点途中は数えない。ユーザー要望 2026-09-30）。
     // 選手のいないコート（settings.courts だけにある「稽古」など）のカードは出さない。
     var byCourt = Object.create(null);
     plainPlayers.forEach(function(p) {
@@ -147,7 +147,7 @@
     note.className = 'desk-note';
     note.id = 'matchCourtsNote';
     note.textContent = (round === 1 ? '一巡目' : '二巡目') + 'の進み具合です。' +
-      '「採点済み」と「いま採点中」は自動では変わりません。' +
+      '「確定」の件数と「いま採点中」は自動では変わりません。' +
       '「↻ 最新に更新」を押すと読み直します。';
     wrap.appendChild(note);
 
@@ -263,7 +263,7 @@
     var prog = document.createElement('div');
     prog.className = 'desk-match-progress' +
       ((row.total > 0 && row.scored === row.total) ? ' done' : '');
-    prog.textContent = '採点済み ' + row.scored + ' / ' + row.total;
+    prog.textContent = '確定 ' + row.scored + ' / ' + row.total;
     card.appendChild(prog);
 
     // 真剣レンタルの人数はカードに出さない（ユーザー要望 2026-09-30。選手表のレンタル列で分かる）
@@ -513,7 +513,7 @@
     if (editable && !techniques) {
       var warn = document.createElement('p');
       warn.className = 'desk-warn';
-      warn.textContent = '技術リストを取得できませんでした。大会を開き直してください。';
+      warn.textContent = '技得点表を取得できませんでした。大会を開き直してください。';
       wrap.appendChild(warn);
       editable = false;
     }

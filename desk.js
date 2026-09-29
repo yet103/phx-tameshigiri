@@ -12,7 +12,7 @@ var Desk = (function() {
   var NAV = [
     { tab: 'events',     label: '大会一覧' },
     { tab: 'setup',      label: '基本情報' },
-    { tab: 'techniques', label: '技と配点' },
+    { tab: 'techniques', label: '技得点表' },
     { tab: 'players',    label: '選手登録' },
     { tab: 'match',      label: '試合進行' },
     { tab: 'results',    label: '結果確認' }

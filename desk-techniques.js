@@ -1,4 +1,4 @@
-// 技と配点の区画（#techniques/<id>）。techedit.js（技術リスト編集ページと共通）を埋め込む。
+// 技得点表の区画（#techniques/<id>。2026-09-30 に「技と配点」から改名）。techedit.js（技術リスト編集ページと共通）を埋め込む。
 // 「別の大会からコピー」の候補にするため、描く前に大会一覧を取りに行く。
 // 確定済み（final / archived）の大会では編集を無効にする（サーバーも 409 で拒む）。
 (function() {
@@ -23,7 +23,7 @@
       events: Array.isArray(events) ? events : [],
       title: ctx.event.name || '(名称未設定)',
       readOnly: EventStatus.isLocked(EventStatus.of(ctx.event)),
-      onSaved: function() { Desk.toast('技と配点を保存しました'); }
+      onSaved: function() { Desk.toast('技得点表を保存しました'); }
     });
   }
 

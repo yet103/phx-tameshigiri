@@ -375,12 +375,12 @@ var Courts = (function() {
     // scoringRound('round2_final') は 2 を返すので、必ずこの分岐を先に置くこと。
     if (status === 'round2_final') {
       var fin = EventStatus.finalists(list);
-      return '決戦 採点済み ' + fin.filter(isConfirmed).length + ' / ' + fin.length;
+      return '決戦 確定 ' + fin.filter(isConfirmed).length + ' / ' + fin.length;
     }
     var r = EventStatus.scoringRound(status);
     if (r) {
       var rows = list.filter(function(p) { return roundOf(p) === r; });
-      return '採点済み ' + rows.filter(isConfirmed).length + ' / ' + rows.length;
+      return '確定 ' + rows.filter(isConfirmed).length + ' / ' + rows.length;
     }
     if (status === 'draft') {
       var r1 = list.filter(function(p) { return roundOf(p) === 1; });
