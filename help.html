@@ -18,7 +18,7 @@
     <a href="index.html">トップ</a>
     <a href="scoring.html">採点</a>
     <a href="admin.html">運営</a>
-    <a href="techniques.html">技術リスト編集</a>
+    <a href="techniques.html">技得点表</a>
     <a href="ranking.html">順位表示</a>
     <strong>ヘルプ</strong>
   </nav>
@@ -162,8 +162,8 @@
     <h2>1. 大会の作成</h2>
 
     <h3>大会前の準備</h3>
-    <p>前日までに <span class="ui">技術リスト編集</span>（<code>techniques.html</code>）を開いて、技名と配点が今年のものになっているか確かめてください。</p>
-    <p><span class="term">配点は大会ごとです。</span>画面の上の <span class="ui">編集する対象</span> で、<span class="ui">雛形（新規大会の初期値）</span> かどの大会かを選びます。雛形を直しても、すでにある大会の配点は変わりません。大会を作る前に雛形を直しておくと、その後に作る大会にそのまま入ります。</p>
+    <p>前日までに <span class="ui">技得点表</span>（<code>techniques.html</code>。トップの <span class="ui">技得点表</span> からも開けます）を開いて、技名と配点が今年のものになっているか確かめてください。開いた直後は<span class="term">閲覧モード</span>（文字だけの表）です。直すときは <span class="ui">✎ 編集する</span> を押します。</p>
+    <p><span class="term">配点は大会ごとです。</span>画面の上の <span class="ui">表示する対象</span> で、<span class="ui">雛形（新規大会の初期値）</span> かどの大会かを選びます（ハッシュ無しで開くと、進行中の大会があればそれが選ばれます）。雛形を直しても、すでにある大会の配点は変わりません。大会を作る前に雛形を直しておくと、その後に作る大会にそのまま入ります。</p>
     <div class="note">大会が始まってから配点を変えると、すでに採点した選手の得点は変わらないまま、新しい配点との食い違いが残ります。配点の確認は必ず大会の前に済ませてください。</div>
 
     <h3>大会を作る</h3>
@@ -353,7 +353,7 @@
     </ul>
     <p>技は一巡目・二巡目とも3つ入れるのが基本です。事情があれば2つでも採点はできます。</p>
     <div class="note"><span class="term">同じ形は1人の3枠に1回まで（同じ巡の中で）。</span>技リストで <span class="ui">回数制限なし</span> にチェックが付いている形（既定では抜刀してからの6形）だけは、同じ巡で何度でも選べます。それ以外の形を2枠以上に選ぶと、その選手の枠が赤くなり<span class="term">試合開始</span>で止まります（一巡目と二巡目では別に数えるので、一巡目と二巡目で同じ形を選ぶのは問題ありません）。</div>
-    <p>ここに出る技と配点は<span class="term">その大会のもの</span>です。直すときは、運営画面の右上 <span class="ui">⋯</span> → <span class="ui">🗒 技術リスト編集</span>（選択中の大会のものが開きます）、または採点画面の上のリンク <span class="ui">技術リスト編集</span> から開きます。PC 用は左の <span class="ui">技と配点</span> です。</p>
+    <p>ここに出る技と配点は<span class="term">その大会のもの</span>です。直すときは、運営画面の右上 <span class="ui">⋯</span> → <span class="ui">🗒 技得点表</span>（選択中の大会のものが開きます）、または採点画面の上のリンク <span class="ui">技得点表</span> から開きます。PC 用は左の <span class="ui">技と配点</span> です。</p>
     <div class="note"><span class="term">男女で配点が違う技があります。</span><span class="ui">胸尽くし</span>・<span class="ui">水月</span>・<span class="ui">破図味</span> は技リストでは <span class="ui">(男)</span> <span class="ui">(女)</span> の2つの行に分かれていますが、この画面には選手の性別に合う方だけが接尾辞なしで出ます（もう一方は選択肢に出ません）。</div>
     <div class="note"><span class="term">真剣レンタルの選手は、抜刀してからの形だけを選べます。</span><span class="ui">真剣レンタル</span> にチェックが入っている選手の技の候補は、技リストで <span class="ui">抜刀後</span> にチェックが付いている形だけになります（どの形が「抜刀後」かは §3 の「技の配点を変える」で運営が決めます）。すでに選んである技は候補に残りますが、抜刀後でない形が残っていると <span class="ui">試合開始 ▶</span> で止まります。</div>
 
@@ -605,7 +605,7 @@
     </ul>
 
     <h3>技の配点を変える</h3>
-    <p>配点は <span class="ui">技術リスト編集</span>（<code>techniques.html</code>）で<span class="term">大会ごとに</span>変えられます。画面の上の <span class="ui">編集する対象</span> で大会を選び、技名ごとに <span class="ui">初太刀</span> から <span class="ui">四ノ太刀</span> までの点を入れ、<span class="ui">保存</span> を押します。PC 用は左の <span class="ui">技と配点</span> から同じことができます。</p>
+    <p>配点は <span class="ui">技得点表</span>（<code>techniques.html</code>）で<span class="term">大会ごとに</span>変えられます。画面の上の <span class="ui">表示する対象</span> で大会を選び、<span class="ui">✎ 編集する</span> を押してから、技名ごとに <span class="ui">初太刀</span> から <span class="ui">四ノ太刀</span> までの点を入れ、<span class="ui">保存</span> を押します。PC 用は左の <span class="ui">技と配点</span> から同じことができます。</p>
     <ul>
       <li><span class="ui">雛形（新規大会の初期値）</span> を変えても、すでにある大会の配点は変わりません。雛形はこれから作る大会に入る初期値です。</li>
       <li><span class="ui">雛形に戻す</span> を押すと、その大会の配点を雛形の内容で置き換えます。</li>
@@ -798,8 +798,8 @@
     <p>ダイアログに選手 ID と点数が並びます。該当する選手を採点画面で開き、採点を確認して入力し直してください。</p>
 
     <h3>技が見つからない</h3>
-    <p>技を選ぶシートの絞り込みに出てこない、あるいは採点表の行がまるごと灰色になるときは、その技名が <span class="ui">技術リスト編集</span> にあるか確かめてください。配点は大会ごとなので、<span class="term">その大会を選んで</span>から確かめます（画面の上の <span class="ui">編集する対象</span>）。PC 用は左の <span class="ui">技と配点</span> です。</p>
-    <div class="note">技術リスト編集では<span class="term">行を足せません</span>。できるのは、すでにある行の技名と配点を書き換えて <span class="ui">保存</span> するか、雛形なら <span class="ui">デフォルト設定に戻す</span>、大会なら <span class="ui">雛形に戻す</span> のどちらかです。</div>
+    <p>技を選ぶシートの絞り込みに出てこない、あるいは採点表の行がまるごと灰色になるときは、その技名が <span class="ui">技得点表</span> にあるか確かめてください。配点は大会ごとなので、<span class="term">その大会を選んで</span>から確かめます（画面の上の <span class="ui">表示する対象</span>）。PC 用は左の <span class="ui">技と配点</span> です。</p>
+    <div class="note">技得点表では<span class="term">行を足せません</span>。できるのは、すでにある行の技名と配点を書き換えて <span class="ui">保存</span> するか、雛形なら <span class="ui">デフォルト設定に戻す</span>、大会なら <span class="ui">雛形に戻す</span> のどちらかです。</div>
     <p>対処は2つあります。</p>
     <ol>
       <li>使っていない行の技名と配点を書き換えて <span class="ui">保存</span> する。</li>
@@ -820,13 +820,13 @@
 
     <h3>このマニュアルの開き方</h3>
     <ul>
-      <li>採点画面・技術リスト編集・順位表示 — いちばん上のリンクの右端 <span class="ui">ヘルプ</span>。</li>
+      <li>採点画面・技得点表・順位表示 — いちばん上のリンクの右端 <span class="ui">ヘルプ</span>。</li>
       <li>運営画面（PC 用 <code>desk.html</code>） — ヘッダーの <span class="ui">❓</span>（🌙 の左）。</li>
       <li>運営画面（スマホ用 <code>admin.html</code>） — 右上の <span class="ui">⋯</span> → <span class="ui">❓ ヘルプ</span>。</li>
     </ul>
 
     <figure class="shot-mobile">
-      <img src="help/img/admin_menu.png" loading="lazy" alt="運営画面の右上「⋯」メニュー。🏠 トップ・📝 基本情報・📋 採点画面・🗒 技術リスト編集・💾 大会をファイルに保存・🏆 順位表示・❓ ヘルプの項目。">
+      <img src="help/img/admin_menu.png" loading="lazy" alt="運営画面の右上「⋯」メニュー。🏠 トップ・📝 基本情報・📋 採点画面・🗒 技得点表・💾 大会をファイルに保存・🏆 順位表示・❓ ヘルプの項目。">
       <figcaption>運営画面の <span class="ui">⋯</span> メニュー。<span class="ui">🏠 トップ</span> でトップページへ、<span class="ui">💾 大会をファイルに保存</span> で選択中の大会をファイルに書き出せます。<span class="ui">📝 基本情報</span> は大会を選んでいるときだけ出ます。<span class="ui">❓ ヘルプ</span> は <span class="ui">🏆 順位表示</span> の下にあります。</figcaption>
     </figure>
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>

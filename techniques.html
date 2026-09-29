@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PHX試し斬り 技リスト</title>
+  <title>PHX試し斬り 技得点表</title>
   <meta name="application-name" content="PHX試し斬り">
   <meta name="apple-mobile-web-app-title" content="PHX試し斬り">
   <link rel="stylesheet" href="theme.css">
@@ -55,14 +55,14 @@
     <a href="index.html">トップ</a>
     <a href="scoring.html">採点</a>
     <a href="admin.html">運営</a>
-    <strong>技術リスト編集</strong>
+    <strong>技得点表</strong>
     <a href="ranking.html">順位表示</a>
     <a href="help.html">ヘルプ</a>
   </div>
 
   <div class="container" style="padding-top:16px;">
     <div class="tech-target">
-      <label for="targetSelect">編集する対象</label>
+      <label for="targetSelect">表示する対象</label>
       <select id="targetSelect">
         <option value="">雛形（新規大会の初期値）</option>
       </select>
@@ -84,7 +84,9 @@
     // 配点は大会ごと（大会 JSON の techniques）。この画面は
     //   対象 = ''        → 雛形（POST/DELETE /api/techniques）
     //   対象 = 大会ID    → その大会（PUT/DELETE /api/events/:id/techniques）
-    // を切り替えて編集する。ハッシュ #<大会ID> で開くとその大会が選ばれる。
+    // を切り替えて表示・編集する。ハッシュ #<大会ID> で開くとその大会が選ばれる。
+    // 閲覧モードで開き、「✎ 編集する」で編集に切り替える（ユーザー要望）。ハッシュが無ければ
+    // 採点できる状態（進行中）の大会のうち更新の新しいものを出し、無ければ雛形。
     // 表の描画・保存・コピーは techedit.js（PC 運営の「技と配点」と共通）。
     // この画面が持つのは「対象の選択」「ハッシュ」「テーマ」だけ。
     var targetSelect = document.getElementById('targetSelect');
@@ -138,7 +140,8 @@
         title: ev ? (ev.name || '(名称未設定)') : id,
         // 確定済み（final/archived）の大会は読み取り専用にする。雛形（id === ''）は
         // 大会の状態を持たないので常に編集できる。
-        readOnly: !!ev && EventStatus.isLocked(EventStatus.of(ev))
+        readOnly: !!ev && EventStatus.isLocked(EventStatus.of(ev)),
+        view: true
       });
     }
 
@@ -161,6 +164,11 @@
       // eventsCache が空になるだけで「その大会が無い」わけではないので、ハッシュの ID を
       // そのまま使う（GET /api/events/:id/techniques は一覧に依存しない）。
       if (!listFailed && hashId && !eventById(hashId)) hashId = '';
+      if (!hashId) {
+        // トップの「技得点表」から来た（ハッシュ無し）ときは、いま採点できる大会を出す
+        var open = eventsCache.filter(function(e) { return EventStatus.isScoringOpen(EventStatus.of(e)); });
+        if (open.length > 0) hashId = open[0].id;
+      }
       targetId = hashId;
       fillTargetSelect();
       if (listFailed) alert('大会一覧を取得できませんでした。');

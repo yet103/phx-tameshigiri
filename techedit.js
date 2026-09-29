@@ -8,6 +8,8 @@
 //     opts.events   : [{ id, name, date }]「別の大会からコピー」の候補（既定は []）
 //     opts.title    : 見出しに使う大会名（省略時は events から引き、無ければ ID をそのまま）
 //     opts.readOnly : true なら保存・雛形に戻す・コピーを無効にする（確定済みの大会）
+//     opts.view     : true なら閲覧モードで開く（文字だけの表。「✎ 編集する」で編集に切り替える。
+//                     技得点表ページが使う。PC 運営の「技と配点」は従来どおり編集で開く）
 //     opts.onSaved  : function(techniques) 保存が成功したあとに呼ぶ（省略可）
 //   戻り値の isDirty() は「表を触ったか」。対象を切り替える前の確認に使う。
 //   destroy() は DOM から外す前に呼ぶ（開きっぱなしのコピーのシートを閉じ、
@@ -36,6 +38,13 @@ var TechEdit = (function() {
     // 読み込みの再入ガード。destroy でも進めて、外したあとに戻ってきた応答で
     // DOM に触らないようにする（app.js の loadSeq と同じ考え方）。
     var loadSeq = 0;
+    // 閲覧モード（opts.view）。閲覧⇄編集の切り替えで表を描き直すため、最後に描いた技リストと
+    // 注記の材料（source・選手）を持っておく。
+    var viewable = opts.view === true;
+    var editing = !viewable;
+    var currentTechs = [];
+    var lastSource = '';
+    var lastPlayers = [];
 
     container.innerHTML = '';
 
@@ -43,10 +52,14 @@ var TechEdit = (function() {
     head.className = 'tech-head';
     var title = document.createElement('h2');
     title.className = 'tech-title';
+    var btnEdit = makeButton('✎ 編集する', 'btn-neutral');
+    var btnView = makeButton('閲覧に戻る', 'btn-neutral');
     var btnCopy = makeButton('別の大会からコピー', 'btn-neutral');
     var btnSave = makeButton('保存', 'btn-neutral');
     var btnReset = makeButton('デフォルト設定に戻す', 'btn-fail');
     head.appendChild(title);
+    head.appendChild(btnEdit);
+    head.appendChild(btnView);
     head.appendChild(btnCopy);
     head.appendChild(btnSave);
     head.appendChild(btnReset);
@@ -92,12 +105,36 @@ var TechEdit = (function() {
     // （dirty が立たないと、対象を切り替えるときの「破棄しますか？」が出なくなる）。
     tbody.addEventListener('change', function() { dirty = true; });
 
+    // 閲覧モードの行（文字だけ。打たない太刀は「—」）
+    function viewRowHtml(t) {
+      function num(v) {
+        return (v !== null && v !== undefined) ? Storage.esc(String(v)) : '<span class="view-empty">—</span>';
+      }
+      return '<td class="col-name">' + Storage.esc(t.name) + '</td>' +
+        [0,1,2,3].map(function(s) { return '<td class="col-strike">' + num(t.strikes[s]) + '</td>'; }).join('') +
+        '<td class="col-drawn">' + (t.drawn === true ? '○' : '') + '</td>' +
+        '<td class="col-repeatable">' + (t.repeatable === true ? '○' : '') + '</td>' +
+        '<td class="col-reduced">' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '</td>';
+    }
+
     function renderTable(techs) {
+      currentTechs = techs || [];
       tbody.innerHTML = '';
-      (techs || []).forEach(function(t, i) {
+      currentTechs.forEach(function(t, i) {
         var tr = document.createElement('tr');
-        tr.innerHTML =
-          '<td class="col-name"><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
+        tr.innerHTML = editing ? editRowHtml(t, i) : viewRowHtml(t);
+        tbody.appendChild(tr);
+      });
+      dirty = false;
+      if (editing && readOnly) {
+        var inputs = tbody.querySelectorAll('input');
+        for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+      }
+    }
+
+    // 編集モードの行（入力欄）
+    function editRowHtml(t, i) {
+      return '<td class="col-name"><input type="text" value="' + Storage.esc(t.name) + '" data-field="name" data-idx="' + i + '"></td>' +
           [0,1,2,3].map(function(s) {
             var v = (t.strikes[s] !== null && t.strikes[s] !== undefined) ? Storage.esc(String(t.strikes[s])) : '';
             return '<td class="col-strike"><input type="number" min="0" max="99" value="' + v +
@@ -111,14 +148,30 @@ var TechEdit = (function() {
           '<td class="col-reduced"><input type="number" min="0" max="99" data-field="reducedFirst" data-idx="' + i + '"' +
           ' title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点"' +
           ' value="' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '"></td>';
-        tbody.appendChild(tr);
-      });
-      dirty = false;
-      if (readOnly) {
-        var inputs = tbody.querySelectorAll('input');
-        for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
-      }
     }
+
+    // 見出しのボタンの出し分け。閲覧では「✎ 編集する」だけ（確定済みの大会は出さない）、
+    // 編集では 保存・戻す・コピー（雛形にはコピー無し）と、閲覧で開いた画面なら「閲覧に戻る」。
+    function syncButtons() {
+      btnEdit.style.display = (!editing && !readOnly) ? '' : 'none';
+      btnView.style.display = (editing && viewable) ? '' : 'none';
+      btnSave.style.display = editing ? '' : 'none';
+      btnReset.style.display = editing ? '' : 'none';
+      btnCopy.style.display = (editing && targetId) ? '' : 'none';
+    }
+
+    function setEditing(on) {
+      editing = on;
+      renderTable(currentTechs);
+      updateChrome(lastSource);
+      updateScoredWarning(lastPlayers);
+    }
+
+    btnEdit.addEventListener('click', function() { setEditing(true); });
+    btnView.addEventListener('click', function() {
+      if (dirty && !confirm('編集中の内容は保存されていません。\n破棄して閲覧に戻りますか？')) return;
+      setEditing(false);
+    });
 
     function collectTechs() {
       var techs = [];
@@ -170,6 +223,25 @@ var TechEdit = (function() {
 
     // 見出し・注記・ボタンの文言を対象に合わせる
     function updateChrome(source) {
+      lastSource = source;
+      if (!editing) {
+        // 閲覧: 見出しと（確定済みなら）その注記だけ。編集向けの注記は出さない
+        var ev0 = eventById(targetId);
+        title.textContent = targetId
+          ? (opts.title || (ev0 ? (ev0.name || '(名称未設定)') : targetId)) + ' の技得点表'
+          : '雛形（新規大会の初期値）の技得点表';
+        note.hidden = !(readOnly && targetId);
+        note.textContent = note.hidden ? '' :
+          'この大会は最終結果を確定済みです。技と配点は編集できません（上部の「戻す」を押すと編集できます）。';
+        warn.hidden = true;
+        syncButtons();
+        return;
+      }
+      updateChromeEditing(source);
+      syncButtons();
+    }
+
+    function updateChromeEditing(source) {
       if (!targetId) {
         title.textContent = '雛形（新規大会の初期値）';
         btnReset.textContent = 'デフォルト設定に戻す';
@@ -184,7 +256,7 @@ var TechEdit = (function() {
       // 大会一覧が取れていないときは名前が分からない。空欄より ID を出すほうが
       // 「今どの対象を触っているか」を誤認しない。
       var label = opts.title || (ev ? (ev.name || '(名称未設定)') : targetId);
-      title.textContent = label + ' の技リスト';
+      title.textContent = label + ' の技得点表';
       btnReset.textContent = '雛形に戻す';
       btnCopy.style.display = '';
       if (readOnly) {
@@ -204,9 +276,10 @@ var TechEdit = (function() {
     }
 
     function updateScoredWarning(players) {
-      // readOnly（確定済み）では配点自体を編集できないので、
+      lastPlayers = players || [];
+      // readOnly（確定済み）と閲覧モードでは配点を編集しないので、
       // 「配点を変えても…」という編集向けの注意書きは出さない。
-      if (readOnly) { warn.hidden = true; warn.textContent = ''; return; }
+      if (readOnly || !editing) { warn.hidden = true; warn.textContent = ''; return; }
       var n = (players || []).filter(function(p) { return Courts.isScored(p); }).length;
       if (n === 0) { warn.hidden = true; warn.textContent = ''; return; }
       warn.hidden = false;

@@ -410,7 +410,7 @@ var Admin = (function() {
     var btnTechniques = document.createElement('button');
     btnTechniques.type = 'button';
     btnTechniques.className = 'menu-item';
-    btnTechniques.textContent = '🗒 技術リスト編集';
+    btnTechniques.textContent = '🗒 技得点表';
     body.appendChild(btnTechniques);
 
     // 大会を選んでいるときだけ出す（どの大会を保存するのか決まらないため）

@@ -422,6 +422,8 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 }
 /* 技名の入力欄。立位逆袈裟（5文字）程度は詰めずに全部見えるだけの幅を確保する */
 .tech-table td.col-name input[type="text"] { width: 9em; min-width: 6em; }
+/* 閲覧モードで打たない太刀の「—」 */
+.tech-table .view-empty { color: var(--text-muted); }
 /* 「回数制限なし」「減点初太刀」の短縮表記（スマホ幅で入れ替える） */
 .tech-table .col-label-short { display: none; }
 /* スマホ幅: 表自体は縮めず、.tech-scroll 内の横スクロールに任せる。
