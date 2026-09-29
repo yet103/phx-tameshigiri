@@ -4,6 +4,8 @@
 // 絞り込み・並べ替えはスマホ運営の選手登録タブと同じ純粋関数（Courts.applyFilter / Courts.sortBy）。
 // 絞り込みは見出しの ▼（Excel 風）。スマホの admin-players.js はチップの帯のまま。
 // セルの編集・行の追加・貼り付け・削除はこのあとのタスクで足す。
+// 表は 男子の部・女子の部 × コート × 巡目 の帯に分け、帯の中は行の左端の掴み手（⋮⋮）の
+// ドラッグで試技順を入れ替えられる（POST …/players/reorder。ユーザー要望 2026-09-30）。
 (function() {
   // 絞り込みと並べ替えの状態。形は Courts.defaultFilter() / Courts.defaultSort()。
   // 大会が変われば既定に戻す。保存後の描き直し（Desk.reloadEvent）では保つ。
@@ -360,7 +362,7 @@
     if (col.filter === 'court') return courtPop(ctx);
     if (col.filter === 'round') {
       return triPop(Courts.roundsOf(ctx.players).map(function(r) {
-        return { value: r, label: r === 1 ? '一巡目' : r === 2 ? '二巡目' : r + '巡目' };
+        return { value: r, label: roundLabel(r) };
       }), filter.round, 0, function(v) { filter.round = v; });
     }
     if (col.filter === 'sex') {
@@ -519,7 +521,7 @@
 
   // 条件に合う行が無いときの 1 行。表の外に出すと見出しごと消えて
   // 絞り込みを戻せなくなるので、行として出す。
-  // 男子の部・女子の部の帯の行（表を分けて見せる）
+  // 帯の行（男子の部・女子の部 × コート × 巡目 で表を分けて見せる）
   function sexRow(label) {
     var tr = document.createElement('tr');
     tr.className = 'desk-sex-row';
@@ -530,7 +532,7 @@
     return tr;
   }
 
-  // 部と部の間の空き行（枠線なし・紙面の地色）
+  // 帯と帯の間の空き行（枠線なし・紙面の地色）
   function gapRow() {
     var tr = document.createElement('tr');
     tr.className = 'desk-sex-gap';
@@ -619,34 +621,241 @@
     return b;
   }
 
+  // 巡目・コートの帯の文言
+  function roundLabel(r) {
+    return r === 1 ? '一巡目' : r === 2 ? '二巡目' : r + '巡目';
+  }
+
+  function courtLabel(c) {
+    return c === Courts.UNASSIGNED ? c : c + ' コート';
+  }
+
+  // 1 つの部（性別）の行を「コート×巡目」の帯に分ける。
+  // 帯の並びはコート名の昇順（Courts.listFrom の順。未分類は末尾）→ 巡目の昇順。
+  // 帯の中の行は渡された順（＝見出しで選んだ並べ替え）のまま。
+  // 戻り値: [{ court, round, rows }]（0 名の帯は無い）
+  function divisionBands(rows) {
+    var courts = Courts.listFrom(rows);
+    var map = Object.create(null);   // コート名が 'constructor' などでも壊れないように
+    var bands = [];
+    rows.forEach(function(p) {
+      var court = Courts.courtOf(p);
+      var round = Courts.roundOf(p);
+      var key = court + '\n' + round;
+      if (!map[key]) {
+        map[key] = { court: court, round: round, rows: [] };
+        bands.push(map[key]);
+      }
+      map[key].rows.push(p);
+    });
+    return bands.sort(function(a, b) {
+      var c = courts.indexOf(a.court) - courts.indexOf(b.court);
+      return c !== 0 ? c : a.round - b.round;
+    });
+  }
+
   // 行と件数だけ作り直す（見出しはそのまま）。
   function fillRows(ctx, locked) {
     var tbody = view && view.tbody;
     if (!tbody) return;
     tbody.innerHTML = '';
+    clearDrag();   // 描き直すとドラッグ中の行は DOM から外れる
     var players = ctx.players || [];
     var rows = Courts.sortBy(Courts.applyFilter(players, filter), sort);
-    // 男子の部・女子の部で表を分けて見せる（ユーザー要望 2026-09-30）。並べ替え・絞り込みは
-    // 両方に同じように効き、それぞれの先頭に帯の行（部の名前と人数）を置く。0 名の部は出さない。
-    var male = rows.filter(function(p) { return p.isFemale !== true; });
-    var female = rows.filter(function(p) { return p.isFemale === true; });
+    // 男子の部・女子の部を、さらに コート×巡目 の帯に分けて見せる（ユーザー要望 2026-09-30）。
+    // No.（試技順）は コート×性別×巡目 ごとに 1 から振るので、帯の中では No. が 1 からの連番になる。
+    // 並べ替え・絞り込みは帯の中に効き、それぞれの先頭に帯の行（部・コート・巡目と人数）を置く。
     if (rows.length === 0 && !draft && players.length > 0) tbody.appendChild(noMatchRow());
     // 各部の末尾に「＋ 行を追加」を置き、下書き行はその部の中に出す（性別は部で決まる）。
-    // 編集できる大会では 0 名の部も帯と追加ボタンを出す（最初の 1 人を足せるように）。確定済みでは 0 名の部を出さない。
+    // 編集できる大会では 0 名の部も帯（「男子の部　0 名」）と追加ボタンを出す（最初の 1 人を足せるように）。
+    // 確定済みでは 0 名の部を出さない。0 名のコート×巡目の帯は出さない。
     var shown = 0;
-    [['男子の部', male, false], ['女子の部', female, true]].forEach(function(g) {
-      var hasDraft = !!draft && !locked && draft.isFemale === g[2];
-      if (g[1].length === 0 && locked) return;
-      // 2 つ目の部の前に少し間を空ける（ユーザー要望 2026-09-30）
-      if (shown++ > 0) tbody.appendChild(gapRow());
-      tbody.appendChild(sexRow(g[0] + '　' + g[1].length + ' 名'));
-      g[1].forEach(function(p) { tbody.appendChild(buildRow(ctx, p, locked)); });
+    [['男子の部', false], ['女子の部', true]].forEach(function(g) {
+      var female = g[1];
+      var inDivision = rows.filter(function(p) { return (p.isFemale === true) === female; });
+      var hasDraft = !!draft && !locked && draft.isFemale === female;
+      if (inDivision.length === 0 && locked) return;
+      var bands = divisionBands(inDivision);
+      if (bands.length === 0) {
+        if (shown++ > 0) tbody.appendChild(gapRow());
+        tbody.appendChild(sexRow(g[0] + '　0 名'));
+      }
+      bands.forEach(function(b) {
+        // 帯と帯の間に少し間を空ける（ユーザー要望 2026-09-30）
+        if (shown++ > 0) tbody.appendChild(gapRow());
+        tbody.appendChild(sexRow(g[0] + '　' + courtLabel(b.court) + '　' + roundLabel(b.round) +
+          '　' + b.rows.length + ' 名'));
+        var band = { court: b.court, isFemale: female, round: b.round, rows: b.rows };
+        band.blocked = dragBlockReason(ctx, band);
+        b.rows.forEach(function(p) { tbody.appendChild(buildRow(ctx, p, locked, band)); });
+      });
       // 下書き行は絞り込みに関わらず必ず出す（打ち込んでいる途中で消えない）
       if (hasDraft) tbody.appendChild(buildDraftRow(ctx));
-      if (!locked) tbody.appendChild(addRow(ctx, g[2]));
+      if (!locked) tbody.appendChild(addRow(ctx, female));
     });
     lastShown = rows.length;   // afterRowEdit が件数だけ描き直すときに使う
     renderCount(rows.length, players.length);
+  }
+
+  // --- 行のドラッグで試技順を入れ替える（ユーザー要望 2026-09-30） ---
+  // 同じ帯（＝同じ コート×性別×巡目）の中だけで入れ替え、落としたらその帯の No. を
+  // 上から 1, 2, 3 … に振り直して保存する（POST …/players/reorder）。帯をまたぐドロップは
+  // 受け付けない（コートの変更はコートのセル、性別は行の削除と追加で行う）。
+  // 掴めるのは行の左端の掴み手（⋮⋮）だけ。行全体を draggable にすると、行の中の入力欄で
+  // 文字を選ぶ操作がドラッグに化けるため。
+
+  var drag = null;          // null | { tr, band }  いまドラッグしている行
+  var dropMark = null;      // null | tr  線を出している行
+  var reorderBusy = false;  // 保存の通信中（二重送信を防ぐ。通信中はどの帯も掴めない）
+
+  // その帯をドラッグで並べ替えられないときの理由（ツールチップの文言）。できるなら ''。
+  //   ・見出しで No. 以外の並べ替え（名前順など）を選んでいる
+  //   ・絞り込みで帯の行が欠けている（全行を送らないとサーバーが 400 にする）
+  //   ・order が「コート-性別-巡目-番号」の形でない行がある（CSV 由来の空の order など）
+  function dragBlockReason(ctx, band) {
+    if (!sort || sort.key !== 'order' || sort.dir !== 'asc') return 'No. 順のときに並べ替えできます';
+    var all = (ctx.players || []).filter(function(p) {
+      return (p.isFemale === true) === band.isFemale &&
+        Courts.courtOf(p) === band.court && Courts.roundOf(p) === band.round;
+    });
+    if (all.length !== band.rows.length) return '絞り込みを解除すると並べ替えできます';
+    var sex = band.isFemale ? 1 : 0;
+    var broken = band.court === Courts.UNASSIGNED || band.rows.some(function(p) {
+      return Courts.orderKey(p).sex !== sex;
+    });
+    if (broken) return 'この帯には番号の形式が崩れた行があるため並べ替えできません';
+    return '';
+  }
+
+  // 行の左端の掴み手。並べ替えできない帯では薄くして、理由をツールチップに出す。
+  function dragHandle(ctx, tr, band) {
+    var h = document.createElement('span');
+    h.className = 'drag-handle';
+    h.textContent = '⋮⋮';
+    if (band.blocked) {
+      h.classList.add('disabled');
+      h.title = band.blocked;
+      return h;
+    }
+    h.draggable = true;
+    h.title = 'ドラッグで試技順を入れ替えます';
+    h.addEventListener('dragstart', function(e) {
+      if (reorderBusy) { e.preventDefault(); return; }
+      closePopover();
+      drag = { tr: tr, band: band };
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox は何か setData しないとドラッグが始まらない
+        try { e.dataTransfer.setData('text/plain', tr.dataset.playerId || ''); } catch (err) { /* 無視 */ }
+        // 掴み手だけでなく行ごと動いて見えるように
+        try { e.dataTransfer.setDragImage(tr, 12, Math.round(tr.offsetHeight / 2)); } catch (err) { /* 無視 */ }
+      }
+      tr.classList.add('dragging');
+    });
+    h.addEventListener('dragend', function() { clearDrag(); });
+    return h;
+  }
+
+  function setDropMark(tr, after) {
+    if (dropMark && dropMark !== tr) dropMark.classList.remove('drop-before', 'drop-after');
+    dropMark = tr;
+    tr.classList.toggle('drop-before', !after);
+    tr.classList.toggle('drop-after', after);
+  }
+
+  function clearDropMark() {
+    if (dropMark) dropMark.classList.remove('drop-before', 'drop-after');
+    dropMark = null;
+  }
+
+  function clearDrag() {
+    if (drag && drag.tr) drag.tr.classList.remove('dragging');
+    drag = null;
+    clearDropMark();
+  }
+
+  // 行の上半分なら「その前」、下半分なら「その後」に落とす
+  function isAfter(tr, e) {
+    var r = tr.getBoundingClientRect();
+    return e.clientY > r.top + r.height / 2;
+  }
+
+  // 同じ帯の行だけを落とし先にする（dragover で preventDefault しない行には落とせない）。
+  // 帯の比較は band オブジェクトの同一性（fillRows の 1 回の描画で帯ごとに 1 つ）。
+  function bindDropTarget(ctx, tr, band) {
+    tr.addEventListener('dragover', function(e) {
+      if (!drag || drag.band !== band) { clearDropMark(); return; }
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      setDropMark(tr, isAfter(tr, e));
+    });
+    tr.addEventListener('drop', function(e) {
+      if (!drag || drag.band !== band) return;
+      e.preventDefault();
+      var moving = drag.tr;
+      var after = isAfter(tr, e);
+      clearDrag();
+      dropRow(ctx, band, moving, tr, after);
+    });
+  }
+
+  // 落としたあと。先に表の上で行を動かして No. を振り直して見せ、保存する。
+  // 成功したら大会を読み直して表を描き直し、失敗したら元の並び（ctx.players は変えていない）に戻す。
+  async function dropRow(ctx, band, moving, target, after) {
+    if (reorderBusy || moving === target) return;
+    var before = band.rows.map(function(p) { return p.id; });
+    var ids = before.slice();
+    var movingId = moving.dataset.playerId;
+    var from = ids.indexOf(movingId);
+    if (from === -1 || ids.indexOf(target.dataset.playerId) === -1) return;
+    ids.splice(from, 1);
+    var to = ids.indexOf(target.dataset.playerId);
+    ids.splice(after ? to + 1 : to, 0, movingId);
+    if (ids.join('\n') === before.join('\n')) return;   // 並びが変わらない（自分のすぐ上下に落とした）
+
+    target.parentNode.insertBefore(moving, after ? target.nextSibling : target);
+    renumberShown(ids);
+
+    var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
+    reorderBusy = true;
+    if (view && view.tbody) view.tbody.classList.add('reorder-saving');
+    try {
+      var res = await Api.reorderPlayers(eventId, {
+        court: band.court, isFemale: band.isFemale, round: band.round, ids: ids
+      });
+      if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた。DOM にも alert にも触らない
+      if (!res || !res.ok) {
+        if (res && res.reason === 'locked') {
+          alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else if (res && res.reason === 'reorder_mismatch') {
+          // 別の端末で行が足された・消されたなど。最新を読み直す
+          alert(res.error);
+          await Desk.reloadEvent();
+          return;
+        } else {
+          alert('並べ替えを保存できませんでした。\n通信を確認してください。');
+        }
+        redrawTable();   // 元の並びに戻す
+        return;
+      }
+      Desk.toast('試技順を保存しました');
+      await Desk.reloadEvent();
+    } finally {
+      reorderBusy = false;
+      // reloadEvent が描き直せなかったとき（通信断）にも通信中の見た目を残さない
+      if (view && view.tbody && Desk.currentEventId() === eventId) view.tbody.classList.remove('reorder-saving');
+    }
+  }
+
+  // 動かした帯の No. のセルを、保存を待たずに新しい並びで書き換える（見た目だけ）
+  function renumberShown(ids) {
+    if (!view || !view.tbody) return;
+    Array.prototype.forEach.call(view.tbody.children, function(tr) {
+      var i = ids.indexOf(tr.dataset && tr.dataset.playerId);
+      if (i === -1) return;
+      var no = tr.querySelector('td.col-no');
+      if (no) no.textContent = String(i + 1);
+    });
   }
 
   function renderTable(wrap, ctx, locked) {
@@ -671,7 +880,8 @@
 
   // 1 人 1 行。名前・コート・性別・新人・技は編集できる。
   // 巡・No.（order から導出）と得点は読み取り（得点は採点画面が書く）。
-  function buildRow(ctx, p, locked) {
+  // band は行が属する帯（fillRows。ドラッグで試技順を入れ替える範囲）。
+  function buildRow(ctx, p, locked, band) {
     var key = Courts.orderKey(p);
     // この行の入力を控えておく（レンタルの切り替えで技を作り直す・赤枠を塗り直す）
     var refs = { techSelects: [], bibInput: null, rankInput: null };
@@ -679,7 +889,15 @@
     // 一巡目の bib/rank/rental 保存が二巡目の行に伝播したとき、表全体を描き直さずこの行
     // だけを探して差し替えるための目印（saveCell 参照）。
     tr.dataset.playerId = p.id || '';
-    tr.appendChild(cell(String(Courts.roundOf(p)), 'num col-round'));
+    tr.deskBand = band || null;   // 差し替えるときに同じ帯のまま作り直すため
+    var tdRound = cell('', 'num col-round');
+    // 左端の掴み手（確定済みの大会では出さない）
+    if (band && !locked) {
+      tdRound.appendChild(dragHandle(ctx, tr, band));
+      bindDropTarget(ctx, tr, band);
+    }
+    tdRound.appendChild(document.createTextNode(String(Courts.roundOf(p))));
+    tr.appendChild(tdRound);
     tr.appendChild(cell(String(key.no || ''), 'num col-no'));
     tr.appendChild(nameCell(ctx, p, locked));
     tr.appendChild(bibCell(ctx, p, locked, refs));
@@ -770,7 +988,7 @@
             var oldTr = Array.prototype.find.call(view.tbody.children, function(tr) {
               return tr.dataset && tr.dataset.playerId === other.id;
             });
-            if (oldTr) oldTr.replaceWith(buildRow(ctx, other, view.locked));
+            if (oldTr) oldTr.replaceWith(buildRow(ctx, other, view.locked, oldTr.deskBand));
           }
         }
       });
@@ -1135,10 +1353,11 @@
   // 直前の行（いま表に出ている最後の行）からコート・性別・新人を引き継ぐ。
   // 表が空なら最初のコート（無ければ A）・男子・新人なし。
   function draftSeed(ctx, female) {
-    // 引き継ぐのは同じ部（性別）の最後の行から
-    var rows = Courts.sortBy(Courts.applyFilter(ctx.players || [], filter), sort)
-      .filter(function(p) { return (p.isFemale === true) === female; });
-    var last = rows.length ? rows[rows.length - 1] : null;
+    // 引き継ぐのは同じ部（性別）の、表で最後に見えている行から（帯の並びは fillRows と同じ）
+    var bands = divisionBands(Courts.sortBy(Courts.applyFilter(ctx.players || [], filter), sort)
+      .filter(function(p) { return (p.isFemale === true) === female; }));
+    var lastRows = bands.length ? bands[bands.length - 1].rows : [];
+    var last = lastRows.length ? lastRows[lastRows.length - 1] : null;
     var courts = Courts.listFrom(ctx.players, extraCourts(ctx))
       .filter(function(c) { return c !== Courts.UNASSIGNED; });
     var court = last ? Courts.courtOf(last) : '';

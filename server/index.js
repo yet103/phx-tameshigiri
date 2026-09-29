@@ -1591,6 +1591,76 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
   }
 });
 
+// POST /api/events/:id/players/reorder : 1 つの組（コート×性別×巡目）の試技順の並べ替え
+// （PC 運営の選手登録の表で行をドラッグしたとき。ユーザー要望 2026-09-30）。
+// Body: { court, isFemale, round, ids: [選手ID, ...] }
+// ids の順に order の番号を 1, 2, 3 … と振り直す（欠番も詰まる）。他の項目は変えない。
+// ids はその組の行の id の集合と完全に一致していなければならない（不足・余分があれば
+// 400 reorder_mismatch。画面が古いまま一部の行だけ送ってくると、送られなかった行と番号が
+// 重なってしまうため）。組は order の コート・性別・巡目 で決める（finalist の印は区別しない）。
+// 採点済みの行を含んでも並べ替えは許す（得点は行に付いているので、番号が変わっても壊れない）。
+// 二巡目の行は sourcePlayerId で一巡目に紐づくが、order は伝播しない（PATCH の bib 等の伝播とは別）。
+app.post('/api/events/:id/players/reorder', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const body = req.body || {};
+    const court = body.court;
+    if (!isValidCourt(court)) {
+      return res.status(400).json({ error: '不正なコート名です' });
+    }
+    if (typeof body.isFemale !== 'boolean') {
+      return res.status(400).json({ error: '性別の指定が不正です' });
+    }
+    const round = body.round;
+    if (!Number.isInteger(round) || round < 1 || round > 9) {
+      return res.status(400).json({ error: '不正な巡目です' });
+    }
+    const ids = body.ids;
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 1000 ||
+        !ids.every(id => typeof id === 'string' && id !== '')) {
+      return res.status(400).json({ error: '選手IDの配列が必要です' });
+    }
+    const seen = Object.create(null);   // id が '__proto__' などでも壊れないように
+    for (const id of ids) {
+      if (seen[id]) return res.status(400).json({ error: '選手IDが重複しています' });
+      seen[id] = true;
+    }
+
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) {
+      return res.status(404).json({ error: '大会が見つかりません' });
+    }
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
+    if (!Array.isArray(event.players)) event.players = [];
+
+    // この組の行（order の コート・性別・巡目 が一致するもの）を id で引けるようにする
+    const gender = body.isFemale ? '女子' : '男子';
+    const byId = Object.create(null);
+    event.players.forEach(p => {
+      const parsed = parseOrder((p && p.order) || '');
+      if (!parsed) return;
+      if (parsed.court !== court || parsed.gender !== gender || parsed.round !== round) return;
+      byId[p.id] = p;
+    });
+    if (Object.keys(byId).length !== ids.length || !ids.every(id => byId[id])) {
+      return res.status(400).json({
+        error: '並べ替える選手が現在の登録と一致しません。画面を読み直してからやり直してください',
+        reason: 'reorder_mismatch'
+      });
+    }
+
+    ids.forEach((id, i) => {
+      byId[id].order = buildOrder(court, body.isFemale, round, i + 1);
+    });
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true, players: event.players });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/events/:id/players/:playerId : 選手の部分更新（採点と運営編集の共用）
 // 受理するフィールドは allowlist に限る。単純マージだと id / order / 未知のキーまで
 // クライアントが書き込めてしまう。

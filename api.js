@@ -315,6 +315,37 @@ var Api = (function() {
     }
   }
 
+  async function reorderPlayers(eventId, body) {
+    // POST /api/events/:eventId/players/reorder（PC 運営の選手登録の表で行をドラッグしたとき）
+    // Body: { court, isFemale, round, ids: [選手ID, ...] }
+    //   ids はその組（コート×性別×巡目）の行すべて。この順に番号を 1 から振り直す。
+    // 戻り値: { ok: true, players }（大会の選手全体）
+    //       | { ok: false, status: <HTTPステータス>, reason, error }
+    //         （reason は 'locked'（409。確定済み）/ 'reorder_mismatch'（400。組の行と ids が
+    //          一致しない）/ ''。通信自体に失敗した場合は status: 0）
+    try {
+      var res = await fetch('/api/events/' + eventId + '/players/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        var errJson = null;
+        try { errJson = await res.json(); } catch (e) { /* JSON でない応答 */ }
+        return {
+          ok: false,
+          status: res.status,
+          reason: (errJson && errJson.reason) || '',
+          error: (errJson && errJson.error) || ('サーバーがエラーを返しました（' + res.status + '）')
+        };
+      }
+      var json = await res.json();
+      return { ok: true, players: json.players || [] };
+    } catch (e) {
+      return { ok: false, status: 0, reason: '', error: '' };
+    }
+  }
+
   async function deletePlayer(eventId, playerId, force) {
     // DELETE /api/events/:eventId/players/:playerId?force=1
     // 戻り値: true（削除成功）
@@ -730,6 +761,7 @@ var Api = (function() {
     createPlayer: createPlayer,
     createPlayersBulk: createPlayersBulk,
     updatePlayerInfo: updatePlayerInfo,
+    reorderPlayers: reorderPlayers,
     deletePlayer: deletePlayer,
     importCsv: importCsv,
     exportCsv: exportCsv,

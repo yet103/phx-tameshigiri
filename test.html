@@ -293,6 +293,90 @@
     assert('PATCH: rental が真偽値でなければ 400', pfPatchRentalBad.status, 400);
     await Api.deleteEvent(pfEvent.id);
 
+    // ==== 試技順の並べ替え POST /api/events/:id/players/reorder（Api.reorderPlayers）====
+    // PC 運営の選手登録の表で行をドラッグしたとき（ユーザー要望 2026-09-30）。
+    // 1 つの組（コート×性別×巡目）の行すべての id を新しい順で送ると、番号を 1 から振り直す。
+    var roEvent = await Api.saveEvent({ name: '並べ替えテスト', date: '2026-09-30', venue: '', players: [] });
+    var roA1 = await Api.createPlayer(roEvent.id, { name: '甲', court: 'A' });
+    var roA2 = await Api.createPlayer(roEvent.id, { name: '乙', court: 'A' });
+    var roA3 = await Api.createPlayer(roEvent.id, { name: '丙', court: 'A' });
+    var roA4 = await Api.createPlayer(roEvent.id, { name: '丁', court: 'A' });
+    var roB1 = await Api.createPlayer(roEvent.id, { name: '戊', court: 'B' });
+    var roB2 = await Api.createPlayer(roEvent.id, { name: '己', court: 'B' });
+    var roF1 = await Api.createPlayer(roEvent.id, { name: '庚', court: 'A', isFemale: true });
+    var roF2 = await Api.createPlayer(roEvent.id, { name: '辛', court: 'A', isFemale: true });
+    // 欠番（A 男子の 3 番を消す）があっても 1 から詰めて振り直す
+    await Api.deletePlayer(roEvent.id, roA3.id, false);
+    // 採点済みの行（甲）を含んでも並べ替えは通る
+    await Api.updatePlayer(roEvent.id, roA1.id, { score: 30, result: '1', confirmed: true });
+    function roOrders(players) {
+      var m = {};
+      players.forEach(function(p) { m[p.name] = p.order; });
+      return m;
+    }
+    var roOk = await Api.reorderPlayers(roEvent.id, {
+      court: 'A', isFemale: false, round: 1, ids: [roA4.id, roA1.id, roA2.id]
+    });
+    assert('reorder: 成功すると ok と大会の選手全体を返す', [roOk.ok, roOk.players.length], [true, 7]);
+    var roAfter = roOrders((await Api.loadEvent(roEvent.id)).players);
+    assert('reorder: ids の順に番号を 1 から振り直す（欠番も詰まる）',
+      [roAfter['丁'], roAfter['甲'], roAfter['乙']], ['A-男子-1-1', 'A-男子-1-2', 'A-男子-1-3']);
+    assert('reorder: 他の組（B 男子・A 女子）の行は変わらない',
+      [roAfter['戊'], roAfter['己'], roAfter['庚'], roAfter['辛']],
+      ['B-男子-1-1', 'B-男子-1-2', 'A-女子-1-1', 'A-女子-1-2']);
+    var roScored = (await Api.loadEvent(roEvent.id)).players.filter(function(p) { return p.id === roA1.id; })[0];
+    assert('reorder: 採点済みの行の得点・結果・確定はそのまま',
+      [roScored.score, roScored.result, roScored.confirmed, roScored.name], [30, '1', true, '甲']);
+
+    var roFem = await Api.reorderPlayers(roEvent.id, {
+      court: 'A', isFemale: true, round: 1, ids: [roF2.id, roF1.id]
+    });
+    var roAfterF = roOrders(roFem.players);
+    assert('reorder: 女子の組も並べ替えられる', [roAfterF['辛'], roAfterF['庚']], ['A-女子-1-1', 'A-女子-1-2']);
+
+    var roShort = await Api.reorderPlayers(roEvent.id, {
+      court: 'A', isFemale: false, round: 1, ids: [roA1.id, roA2.id]
+    });
+    assert('reorder: 組の行が足りなければ 400 reorder_mismatch',
+      [roShort.ok, roShort.status, roShort.reason], [false, 400, 'reorder_mismatch']);
+    var roExtra = await Api.reorderPlayers(roEvent.id, {
+      court: 'A', isFemale: false, round: 1, ids: [roA4.id, roA1.id, roA2.id, roB1.id]
+    });
+    assert('reorder: 他の組の行が混じれば 400 reorder_mismatch',
+      [roExtra.ok, roExtra.status, roExtra.reason], [false, 400, 'reorder_mismatch']);
+    var roGone = await Api.reorderPlayers(roEvent.id, {
+      court: 'A', isFemale: false, round: 1, ids: [roA4.id, roA1.id, roA3.id]
+    });
+    assert('reorder: 消えた行の id が混じれば 400 reorder_mismatch',
+      [roGone.ok, roGone.status, roGone.reason], [false, 400, 'reorder_mismatch']);
+    var roDup = await Api.reorderPlayers(roEvent.id, {
+      court: 'A', isFemale: false, round: 1, ids: [roA4.id, roA1.id, roA1.id]
+    });
+    assert('reorder: id が重複していれば 400', [roDup.ok, roDup.status, roDup.error],
+      [false, 400, '選手IDが重複しています']);
+    var roBadCourt = await Api.reorderPlayers(roEvent.id, {
+      court: 'A-1', isFemale: false, round: 1, ids: [roA4.id]
+    });
+    assert('reorder: 不正なコート名は 400', [roBadCourt.ok, roBadCourt.status], [false, 400]);
+    var roBadSex = await Api.reorderPlayers(roEvent.id, {
+      court: 'A', isFemale: 'false', round: 1, ids: [roA4.id, roA1.id, roA2.id]
+    });
+    assert('reorder: isFemale が真偽値でなければ 400', [roBadSex.ok, roBadSex.status], [false, 400]);
+    var roBadRound = await Api.reorderPlayers(roEvent.id, {
+      court: 'A', isFemale: false, round: '1', ids: [roA4.id, roA1.id, roA2.id]
+    });
+    assert('reorder: round が整数でなければ 400', [roBadRound.ok, roBadRound.status], [false, 400]);
+    var roNoIds = await Api.reorderPlayers(roEvent.id, { court: 'A', isFemale: false, round: 1, ids: [] });
+    assert('reorder: ids が空なら 400', [roNoIds.ok, roNoIds.status], [false, 400]);
+    var roAfterBad = roOrders((await Api.loadEvent(roEvent.id)).players);
+    assert('reorder: 断ったときは番号を変えない',
+      [roAfterBad['丁'], roAfterBad['甲'], roAfterBad['乙']], ['A-男子-1-1', 'A-男子-1-2', 'A-男子-1-3']);
+    var roNoEvent = await Api.reorderPlayers('no-such-event-reorder', {
+      court: 'A', isFemale: false, round: 1, ids: [roA4.id]
+    });
+    assert('reorder: 大会が無ければ 404', [roNoEvent.ok, roNoEvent.status], [false, 404]);
+    await Api.deleteEvent(roEvent.id);
+
     // ---- 2. bulk rows の bib/rank/rental・レンタルの drawn 縛り・同じ形の回数制限 ----
     var pf2Event = await Api.saveEvent({ name: '一括登録追加項目テスト', date: '2026-09-19', venue: '', players: [] });
     await Api.saveEventTechniques(pf2Event.id, [
@@ -982,6 +1066,13 @@
       { status: 409, reason: 'locked' });
     assert('確定後の putLive は 409 locked',
       await writeResult(lockBase + '/live/A', 'PUT', { playerId: lockP.id }),
+      { status: 409, reason: 'locked' });
+    var lockRound1Ids = (await Api.loadEvent(lockEvent.id)).players
+      .filter(function(p) { return /^A-男子-1-/.test(p.order); })
+      .map(function(p) { return p.id; });
+    assert('確定後の試技順の並べ替えは 409 locked',
+      await writeResult(lockBase + '/players/reorder', 'POST',
+        { court: 'A', isFemale: false, round: 1, ids: lockRound1Ids.slice().reverse() }),
       { status: 409, reason: 'locked' });
 
     // Api の各関数も（changeStatus と同じ作法で）409 の reason と error をそのまま返す。

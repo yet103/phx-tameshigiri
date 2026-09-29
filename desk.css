@@ -573,6 +573,26 @@ a { color: var(--accent); }
 .desk-players-table tr.desk-sex-gap td, .desk-players-table tbody tr.desk-sex-gap:hover td {
   background: var(--bg); border-left: none; border-right: none; padding: 0;
 }
+/* 行のドラッグで試技順を入れ替える（desk-players.js。ユーザー要望 2026-09-30）。
+   掴み手（⋮⋮）は巡のセルの左端。並べ替えできない帯（No. 順以外・絞り込み中）では薄くする。 */
+.desk-players-table td.col-round { position: relative; padding-left: 14px; padding-right: 2px; }
+.desk-players-table .drag-handle {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 15px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gold-deep); font-weight: bold; letter-spacing: -1px;
+  cursor: grab; user-select: none; -webkit-user-select: none;
+}
+[data-theme="dark"] .desk-players-table .drag-handle { color: var(--gold); }
+.desk-players-table .drag-handle:hover { color: var(--gold-light); }
+.desk-players-table .drag-handle:active { cursor: grabbing; }
+.desk-players-table .drag-handle.disabled { cursor: not-allowed; opacity: .3; }
+.desk-players-table .drag-handle.disabled:hover { color: var(--gold-deep); }
+/* ドラッグ中の元の行は薄く、落とす位置に金の線 */
+.desk-players-table tr.dragging td { opacity: .5; }
+.desk-players-table tr.drop-before td { box-shadow: inset 0 2px 0 var(--gold); }
+.desk-players-table tr.drop-after td { box-shadow: inset 0 -2px 0 var(--gold); }
+/* 保存の通信中はもう一度掴めない（JS 側でも弾く） */
+.desk-players-table tbody.reorder-saving .drag-handle { cursor: progress; opacity: .3; }
 /* 表の中のテキスト入力欄（名前・ゼッケン・級位段位）は白地に黒字（技得点表の入力欄と同じ。ユーザー要望 2026-09-30） */
 .desk-players-table .desk-cell-input { background: #fff; color: #111; border-color: var(--border); }
 .desk-players-table .desk-cell-input:focus { background: #fff; }
