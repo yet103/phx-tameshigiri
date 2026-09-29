@@ -31,6 +31,11 @@
     .event-bar select { padding:4px 8px; }
     /* 指で押す前提のタップ目標（style.css のバー類と同じ 44px） */
     .event-bar select, .event-bar button { min-height:44px; }
+    /* ページリンクの並びのテーマ切替。リンクと同じ 13px・高さ 44px で、帯の上のボタンの色（style.css の大会トーン）に合わせる */
+    .page-links .theme-btn {
+      font-size: 13px; min-height: 44px; padding: 0 10px; margin-left: 0;
+      background: var(--band-bg-2); color: var(--band-text); border: 1px solid var(--gold-deep); border-radius: 4px;
+    }
   </style>
 </head>
 <body data-theme="light">
@@ -43,6 +48,8 @@
     <a href="techniques.html" id="linkTechniques">技得点表</a>
     <a href="ranking.html">順位表示</a>
     <a href="help.html">ヘルプ</a>
+    <!-- テーマ切替はページリンクの並び（ヘルプの隣）に置き、リンクと同じ文字サイズにする（ユーザー要望） -->
+    <button type="button" class="theme-btn" id="btnTheme">🌙 ダーク</button>
   </div>
 
   <!-- 大会選択バー -->
@@ -129,7 +136,6 @@
   <div class="toolbar">
     <button id="btnExport">CSVエクスポート</button>
     <button id="btnDownloadHtml">HTML保存</button>
-    <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
   </div>
 
   <!-- 選手一覧（ページ下部に常設。見出しで開閉） -->
