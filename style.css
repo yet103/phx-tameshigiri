@@ -418,6 +418,18 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .tech-table th { background: var(--bg-header); }
 .tech-table td.col-name { font-weight: bold; }   /* 技名も他の列と同じく中央そろえ（ユーザー要望） */
 .tech-table td.col-total { font-weight: bold; }   /* 配点の合計（自動計算・編集不可） */
+/* 色で区分けする（ユーザー要望）。表は紙面（--bg）より明るい --card-bg に載せ、見出しは採点表と同じ黒地に金。
+   列は 4 つの組に分け、組の境目を金の太線で切る（1: 技名・合計点＝金の薄い地、2: 太刀 4 列＝白、
+   3: 抜刀状態・回数制限なし・減点初太刀＝灰みの地、4: 備考＝白）。列番号は techedit.js の並びに固定。 */
+.tech-table td { background: var(--card-bg); }
+.tech-table th { background: var(--band-bg); color: var(--gold-light); border-color: var(--gold); }
+.tech-table td:nth-child(-n+2) { background: color-mix(in srgb, var(--gold) 14%, var(--card-bg)); }
+.tech-table td:nth-child(n+7):nth-child(-n+9) { background: color-mix(in srgb, var(--border) 22%, var(--card-bg)); }
+.tech-table td.col-total { color: var(--score-color); }
+.tech-table th:nth-child(3), .tech-table td:nth-child(3),
+.tech-table th:nth-child(7), .tech-table td:nth-child(7),
+.tech-table th:nth-child(10), .tech-table td:nth-child(10) { border-left: 2px solid var(--gold); }
+.tech-table { border: 2px solid var(--gold); }
 /* 初太刀〜四ノ太刀（3〜6 列目）の間の縦線だけ薄くして細く見せる。border-collapse では隣り合う
    2 つのセルの線が競い、同じ幅・同じ種類なら左のセルの色が勝つので、右側の border-left と
    左側の border-right の両方に同じ薄い色を当てる（ユーザー要望） */
