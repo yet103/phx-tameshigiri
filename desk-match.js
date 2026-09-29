@@ -194,6 +194,7 @@
       others.appendChild(sum);
       groups.forEach(function(g) { others.appendChild(buildCourtGrid(g.rows, ctx, round, g.caption)); });
       wrap.appendChild(others);
+      appendRound1Results(wrap, ctx, round);
       return wrap;
     }
 
@@ -203,11 +204,32 @@
       wrap.appendChild(buildCourtGrid(finale, ctx, round,
         st === 'round2' ? caption + '　開始前' : caption));
     }
+    appendRound1Results(wrap, ctx, round);
     return wrap;
   }
 
+  // 二巡目を数えている間も一巡目の結果を残す（ユーザー要望 2026-09-30）。一巡目のカード一式を
+  // 「一巡目の結果」として畳んで下に置く（読み取り専用: 採点中の表示とボタンは出さない）。
+  function appendRound1Results(wrap, ctx, round) {
+    if (round !== 2) return;
+    var groups = [];
+    [[false, '男子の部'], [true, '女子の部']].forEach(function(g) {
+      var cards = courtCards(ctx, 1, g[0]);
+      if (cards.length > 0) groups.push({ caption: g[1] + ' 一巡目', rows: cards });
+    });
+    if (groups.length === 0) return;
+    var box = document.createElement('details');
+    box.className = 'desk-match-others';
+    box.id = 'matchRound1Results';
+    var sum = document.createElement('summary');
+    sum.textContent = '一巡目の結果';
+    box.appendChild(sum);
+    groups.forEach(function(g) { box.appendChild(buildCourtGrid(g.rows, ctx, 1, g.caption, true)); });
+    wrap.appendChild(box);
+  }
+
   // コート別カードのグリッドを1つ作る。caption が空でなければ見出しを先頭に置く。
-  function buildCourtGrid(rows, ctx, round, caption) {
+  function buildCourtGrid(rows, ctx, round, caption, readOnly) {
     var wrap = document.createElement('div');
     if (caption) {
       var h3 = document.createElement('h3');
@@ -224,12 +246,12 @@
     }
     var grid = document.createElement('div');
     grid.className = 'desk-match-courts';
-    rows.forEach(function(r) { grid.appendChild(buildCourtCard(r, ctx, round)); });
+    rows.forEach(function(r) { grid.appendChild(buildCourtCard(r, ctx, round, readOnly)); });
     wrap.appendChild(grid);
     return wrap;
   }
 
-  function buildCourtCard(row, ctx, round) {
+  function buildCourtCard(row, ctx, round, readOnly) {
     var card = document.createElement('section');
     card.className = 'desk-match-card';
 
@@ -253,6 +275,11 @@
       hint.className = 'desk-note';
       hint.textContent = 'コートが決まっていない選手です。「選手」の区画でコートを設定してください。';
       card.appendChild(hint);
+      return card;
+    }
+
+    if (readOnly) {
+      card.appendChild(buildCardTable(ctx, row, round, null));
       return card;
     }
 
@@ -313,10 +340,16 @@
     table.className = 'desk-table desk-match-table';
     var thead = document.createElement('thead');
     var htr = document.createElement('tr');
-    ['順番', 'ゼッケン', '選手名', '級位・段位', '得点', '備考'].forEach(function(label, i) {
+    var byId = Object.create(null);
+    (ctx.players || []).forEach(function(p) { if (p && typeof p.id === 'string') byId[p.id] = p; });
+    var withR1 = (round === 2);   // 二巡目の表には一巡目の得点も並べる（ユーザー要望 2026-09-30）
+    var labels = withR1
+      ? ['順番', 'ゼッケン', '選手名', '級位・段位', '一巡目', '得点', '備考']
+      : ['順番', 'ゼッケン', '選手名', '級位・段位', '得点', '備考'];
+    labels.forEach(function(label, i) {
       var th = document.createElement('th');
       th.textContent = label;
-      if (i === 5) th.className = 'note';
+      if (i === labels.length - 1) th.className = 'note';
       htr.appendChild(th);
     });
     thead.appendChild(htr);
@@ -329,14 +362,19 @@
       if (liveId && p.id === liveId) tr.className = 'current';
       var m = (p.order || '').match(/-(\d+)$/);
       var scored = p.confirmed === true;   // 得点は確定済みだけ出す（ユーザー要望 2026-09-30）
-      [
+      var cells = [
         [m ? m[1] : (p.order || ''), 'num'],
         [Number.isInteger(p.bib) ? String(p.bib) : '', 'num'],
         [p.name || '', 'name'],
-        [Courts.rankLabel(p.rank), ''],
-        [scored ? String(p.score || 0) : '', 'num score' + (p.confirmed === true ? ' confirmed' : '')],
-        [p.note || '', 'note']
-      ].forEach(function(c) {
+        [Courts.rankLabel(p.rank), '']
+      ];
+      if (withR1) {
+        var src = (p.sourcePlayerId && byId[p.sourcePlayerId]) ? byId[p.sourcePlayerId] : null;
+        cells.push([(src && src.confirmed === true) ? String(src.score || 0) : '', 'num score confirmed']);
+      }
+      cells.push([scored ? String(p.score || 0) : '', 'num score' + (p.confirmed === true ? ' confirmed' : '')]);
+      cells.push([p.note || '', 'note']);
+      cells.forEach(function(c) {
         var td = document.createElement('td');
         td.textContent = c[0];
         if (c[1]) td.className = c[1];
