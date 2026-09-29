@@ -2050,7 +2050,7 @@ function validateTechniques(list) {
     // repeatable（同じ巡で何度でも可）は省略可。省略時は cloneTechniques が false にする
     // （設計書 2026-09-20-rules-alignment-design.md）。
     if (t.repeatable !== undefined && typeof t.repeatable !== 'boolean') {
-      return n + ' 行目の「回数制限なし」の指定が不正です';
+      return n + ' 行目の「回数制限」の指定が不正です';
     }
     // reducedFirst（減点成功△の初太刀の配点）は省略・null か 0〜99 の整数。省略時は cloneTechniques が null にする。
     if (t.reducedFirst !== undefined && t.reducedFirst !== null) {

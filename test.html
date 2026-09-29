@@ -354,7 +354,7 @@
     var dtBad = await Api.saveEventTechniques(dtEvent.id, [{ name: '不正', strikes: [1, null, null, null], drawn: 'x' }]);
     assert('validateTechniques: drawn が真偽値でなければ 400', dtBad.error, '1 行目の「抜刀状態」の指定が不正です');
     var dtRepBad = await Api.saveEventTechniques(dtEvent.id, [{ name: '不正', strikes: [1, null, null, null], repeatable: 'x' }]);
-    assert('validateTechniques: repeatable が真偽値でなければ 400', dtRepBad.error, '1 行目の「回数制限なし」の指定が不正です');
+    assert('validateTechniques: repeatable が真偽値でなければ 400', dtRepBad.error, '1 行目の「回数制限」の指定が不正です');
     var dtRfBad100 = await Api.saveEventTechniques(dtEvent.id, [{ name: '不正', strikes: [1, null, null, null], reducedFirst: 100 }]);
     assert('validateTechniques: reducedFirst が100（範囲外）なら 400',
       dtRfBad100.error, '1 行目の「減点初太刀」の配点が不正です（0〜99の整数か空）');

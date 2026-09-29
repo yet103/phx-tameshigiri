@@ -83,7 +83,7 @@ var TechEdit = (function() {
     // （設計書「選手の追加項目」の決定事項）。見出しだけでは意味が伝わらないので
     // title を添える。列幅は td:nth-child ではなく col-* の class で指定する
     // （style.css / techniques.html。列の増減や並び替えに強くする）。
-    // スマホ幅では「回数制限なし」「減点初太刀」を「制限なし」「減点初」に詰める
+    // スマホ幅では「回数制限」「減点初太刀」を「制限」「減点初」に詰める
     // （col-label-full / col-label-short を CSS 側の @media で出し分ける）。
     table.innerHTML =
       '<thead><tr>' +
@@ -93,8 +93,9 @@ var TechEdit = (function() {
       '<th class="col-strike">初太刀</th><th class="col-strike">二ノ太刀</th>' +
       '<th class="col-strike">三ノ太刀</th><th class="col-strike">四ノ太刀</th>' +
       '<th class="col-drawn" title="抜刀してからの形。レンタルの選手が選べる形">抜刀状態</th>' +
-      '<th class="col-repeatable" title="同じ巡（一巡目・二巡目）で何度でも選べる">' +
-      '<span class="col-label-full">回数制限なし</span><span class="col-label-short">制限なし</span></th>' +
+      // 回数制限は「なし」（同じ巡で何度でも選べる＝repeatable）か「あり」（1 人の 3 枠に 1 回まで）で出す（ユーザー要望）
+      '<th class="col-repeatable" title="「なし」なら同じ巡（一巡目・二巡目）で何度でも選べる。「あり」は 1 人の 3 枠に 1 回まで">' +
+      '<span class="col-label-full">回数制限</span><span class="col-label-short">制限</span></th>' +
       '<th class="col-reduced" title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点">' +
       '<span class="col-label-full">減点初太刀</span><span class="col-label-short">減点初</span></th>' +
       // 備考は右端。他の列は内容の幅に詰め、備考が残り幅を吸収する（style.css / desk.css の .col-note）
@@ -145,7 +146,7 @@ var TechEdit = (function() {
         '<td class="col-total">' + strikesTotal(t.strikes) + '</td>' +
         [0,1,2,3].map(function(s) { return '<td class="col-strike">' + num(t.strikes[s]) + '</td>'; }).join('') +
         '<td class="col-drawn">' + (t.drawn === true ? '○' : '') + '</td>' +
-        '<td class="col-repeatable">' + (t.repeatable === true ? '○' : '') + '</td>' +
+        '<td class="col-repeatable">' + (t.repeatable === true ? 'なし' : 'あり') + '</td>' +
         '<td class="col-reduced">' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '</td>' +
         '<td class="col-note">' + Storage.esc(typeof t.note === 'string' ? t.note : '') + '</td>';
     }
@@ -177,8 +178,9 @@ var TechEdit = (function() {
           // drawn / repeatable を持たない古い技リスト（data.js の既定値も持たない）は未チェックで出す
           '<td class="col-drawn"><input type="checkbox" data-field="drawn" data-idx="' + i + '"' +
           (t.drawn === true ? ' checked' : '') + '></td>' +
-          '<td class="col-repeatable"><input type="checkbox" data-field="repeatable" data-idx="' + i + '"' +
-          (t.repeatable === true ? ' checked' : '') + '></td>' +
+          // チェック＝回数制限「なし」（何度でも選べる）。見出しが「回数制限」なので、意味が逆に読めないよう文字を添える
+          '<td class="col-repeatable"><label class="check-label"><input type="checkbox" data-field="repeatable" data-idx="' + i + '"' +
+          (t.repeatable === true ? ' checked' : '') + '> なし</label></td>' +
           '<td class="col-reduced"><input type="number" min="0" max="99" data-field="reducedFirst" data-idx="' + i + '"' +
           ' title="胸尽くしなど。切先が鞘から抜けていたときの初太刀の点"' +
           ' value="' + (typeof t.reducedFirst === 'number' ? Storage.esc(String(t.reducedFirst)) : '') + '"></td>' +

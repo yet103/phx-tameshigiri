@@ -102,14 +102,19 @@ input[type="file"] { display: none; }
   background: var(--bg-secondary);
   flex-wrap: wrap;
 }
+/* 残り時間。他のボタンと同じ文字サイズ（13px）と高さ（44px）にそろえる（ユーザー要望。大きすぎた） */
 .timer-display {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--timer-bg);
   color: var(--timer-text);
-  font-size: 28px;
+  font-size: 13px;
   font-weight: bold;
-  padding: 2px 12px;
-  border-radius: 6px;
-  min-width: 90px;
+  padding: 0 12px;
+  min-height: 44px;
+  border-radius: 4px;
+  min-width: 64px;
   text-align: center;
 }
 .timer-bar button { background: var(--bg-header); color: var(--text); min-height: 44px; }
