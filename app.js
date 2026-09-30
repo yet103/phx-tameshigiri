@@ -20,6 +20,17 @@ var App = (function() {
   // 雛形（サーバー全体の技リスト）の控え。大会未選択のときと、
   // 大会の応答に techniques が無かったとき（旧サーバー）に使う。
   var templateTechniques = null;
+  // いま Scoring に入れている技得点表（技得点表に無い技の判定 Courts.unknownTechs に渡す）。
+  var activeTechniques = null;
+  // 編集中（gridEdited）に読み直した大会の配点。表を描き直すときまで入れ替えを待つ
+  // （行ごとに新旧の配点が混ざらないように。網羅検証 S17）。
+  var deferredTechEvent = null;
+  // 表示中の選手の技に、技得点表に無い技があるか（網羅検証 M3）。真の間は保存・確定を止める。
+  var gridBlocked = false;
+  // 保存済みの得点と、今の技得点表で計算し直した得点が違うときの知らせの行（網羅検証 M4）
+  var recalcRow = null;
+  // 補正点（行・全体）の上限（網羅検証 S4。サーバーは範囲外を 400 で拒む）
+  var ADJUST_LIMIT = 999;
 
   // --- DOM参照 ---
   var courtLabel       = document.getElementById('courtLabel');
@@ -50,11 +61,15 @@ var App = (function() {
     // 送信キューは何よりも先に起動する。
     // ここから下の API 呼び出しがどう転んでも、前回未送信の採点が
     // 復旧され、online イベントの購読も済んでいる状態にするため。
-    var recovered = Outbox.init(onSaveStatus, onSaveDiscarded);
+    var recovered = Outbox.init(onSaveStatus, onSaveDiscarded, {
+      onConflict: onSaveConflict,
+      onSaved: onEntrySaved
+    });
     // 技術データをAPIから取得してScoringに注入
     var techData = await Api.loadTechniques();
     if (techData && techData.techniques) {
       templateTechniques = techData.techniques;
+      activeTechniques = techData.techniques;
       Scoring.setTechniques(techData.techniques);
     } else {
       // 端末側の既定値で採点は続けられるが、サーバーのカスタム技術とは
@@ -111,6 +126,10 @@ var App = (function() {
     } else if (authLost) {
       saveStatusEl.textContent = '⚠ 認証が切れました・ページを再読み込みしてください';
       saveStatusEl.classList.add('retrying');
+    } else if (st.state === 'conflict') {
+      // 送れるものは送り終え、別の端末の更新と衝突した採点だけが端末に残っている
+      saveStatusEl.textContent = '⚠ 衝突 ' + st.conflicts + ' 件・未保存';
+      saveStatusEl.classList.add('retrying');
     } else {
       saveStatusEl.textContent = '⚠ 未保存 ' + st.pending + ' 件・再送中';
       saveStatusEl.classList.add('retrying');
@@ -118,14 +137,19 @@ var App = (function() {
 
     // 最初の失敗から30秒経っても未保存が残っていればバナーに昇格する。
     // 認証切れは待っても直らないので即座に昇格する。
+    // 衝突を端末に残している間も出す（「今すぐ再試行」で送り直すと、まだ衝突なら確認がもう一度出る）。
     var stale = st.failingSince && (Date.now() - st.failingSince >= BANNER_AFTER_MS);
     if (authLost) {
       saveBannerTextEl.textContent =
         '⚠ 認証が切れています。ページを再読み込みしてください（未保存 ' + st.pending + ' 件は保持されます）';
       saveBannerEl.style.display = 'flex';
-    } else if (st.pending > 0 && stale) {
+    } else if (st.pending > (st.conflicts || 0) && stale) {
       saveBannerTextEl.textContent =
         '⚠ サーバーに保存できていません（' + st.pending + '件未保存）';
+      saveBannerEl.style.display = 'flex';
+    } else if (st.conflicts > 0 && !conflictOverlay) {
+      saveBannerTextEl.textContent =
+        '⚠ 別の端末の更新と衝突した採点が ' + st.conflicts + ' 件あります（この端末に残しています）';
       saveBannerEl.style.display = 'flex';
     } else {
       saveBannerEl.style.display = 'none';
@@ -147,7 +171,10 @@ var App = (function() {
     } catch (e) {}
     var detail = entries.map(function(e) {
       // 備考だけのエントリ（score を持たない）が捨てられることもある
-      return '  選手ID ' + e.playerId + ' / ' + ('score' in e ? e.score + '点' : '備考');
+      // サーバーが断った理由（Outbox が dropError / dropReason に載せる）も添える
+      var why = e.dropError || e.dropReason || '';
+      return '  選手ID ' + e.playerId + ' / ' + ('score' in e ? e.score + '点' : '備考') +
+        (why ? '（' + why + '）' : '');
     }).join('\n');
     alert('保存できなかった採点が ' + entries.length + ' 件あります。\n' +
           'サーバーが受け付けませんでした。\n' +
@@ -155,6 +182,163 @@ var App = (function() {
           detail + '\n\n' +
           '運営画面で状態を確認してください。\n' +
           '該当する選手の採点を確認し、必要なら入力し直してください。');
+  }
+
+  // --- 送信の成功と衝突（網羅検証 M2。設計書 2026-10-01 1.3） ---
+
+  // 送信が成功した。画面の控えの版（p.rev）を、サーバーの保存後の版に進める。
+  // 控えがいま送ったエントリの baseRev のままのときだけ進める（読み直しなどで別の版を控えていれば触らない）。
+  function onEntrySaved(entry, saved) {
+    if (!saved || typeof saved.rev !== 'number') return;
+    if (typeof entry.baseRev !== 'number') return;
+    if (!currentEvent || currentEvent.id !== entry.eventId) return;
+    var p = findPlayer(entry.playerId);
+    if (p && EventStatus.revOf(p) === entry.baseRev) p.rev = saved.rev;
+  }
+
+  function findPlayer(id) {
+    for (var i = 0; i < players.length; i++) {
+      if (players[i] && players[i].id === id) return players[i];
+    }
+    return null;
+  }
+
+  // 衝突の確認は 1 件ずつ出す（複数の選手が同時に衝突することがある）。
+  var conflictWaiting = [];
+  var conflictOverlay = null;
+
+  function onSaveConflict(entry) {
+    conflictWaiting.push(entry);
+    showNextConflict();
+  }
+
+  // 衝突の確認（画面の上に重ねるダイアログ）。confirm() の 2 択では
+  // 「読み込む／上書き／あとで」の 3 つを出せないので、その場で作る。
+  function showNextConflict() {
+    if (conflictOverlay) return;
+    var entry = null;
+    while (conflictWaiting.length > 0) {
+      var e = conflictWaiting.shift();
+      // 「今すぐ再試行」などで送り直しが始まっていれば（印が外れていれば）出さない
+      if (e && e.conflict) { entry = e; break; }
+    }
+    if (!entry) { onSaveStatus(Outbox.status()); return; }
+    var c = entry.conflict;
+    var server = c.player || null;
+    var local = (currentEvent && currentEvent.id === entry.eventId) ? findPlayer(entry.playerId) : null;
+    var name = (server && server.name) || (local && local.name) || ('選手ID ' + entry.playerId);
+    var order = (server && server.order) || (local && local.order) || '';
+
+    var overlay = document.createElement('div');
+    overlay.className = 'conflict-overlay';
+    var box = document.createElement('div');
+    box.className = 'conflict-dialog';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+
+    var title = document.createElement('h3');
+    var msg = document.createElement('p');
+    msg.className = 'conflict-message';
+    if (c.reason === 'stale') {
+      title.textContent = '別の端末で更新されています';
+      msg.textContent = name + (order ? '（' + order + '）' : '') + ' の採点を、別の端末が先に更新しました。\n' +
+        'サーバーの内容を読み込みますか／この端末の内容で上書きしますか';
+    } else {
+      var st = c.eventStatus || (currentEvent && currentEvent.id === entry.eventId ? currentStatus() : '');
+      title.textContent = 'この巡目は今は採点できません';
+      msg.textContent = name + (order ? '（' + order + '）' : '') + ' の採点を保存できませんでした。\n' +
+        'この巡目は今は採点できません（状態: ' + (EventStatus.LABELS[st] || st || '不明') + '）。\n' +
+        'サーバーの内容を読み込むか、この端末に残してください。';
+    }
+    box.appendChild(title);
+    box.appendChild(msg);
+
+    // サーバーとこの端末の値を並べる（どちらを残すか選ぶ材料）
+    var cmp = document.createElement('table');
+    cmp.className = 'conflict-compare';
+    function scoreText(score, confirmed) {
+      return (typeof score === 'number' ? score + '点' : '—') + (confirmed ? '（確定済み）' : '（未確定）');
+    }
+    [['サーバー', server ? scoreText(server.score, server.confirmed === true) : '（読み込めませんでした）'],
+     ['この端末', scoreText('score' in entry ? entry.score : (local ? local.score : undefined),
+                           'confirmed' in entry ? entry.confirmed === true : !!(local && local.confirmed))]]
+      .forEach(function(row) {
+        var tr = document.createElement('tr');
+        var th = document.createElement('th');
+        th.textContent = row[0];
+        var td = document.createElement('td');
+        td.textContent = row[1];
+        tr.appendChild(th);
+        tr.appendChild(td);
+        cmp.appendChild(tr);
+      });
+    box.appendChild(cmp);
+
+    var actions = document.createElement('div');
+    actions.className = 'conflict-actions';
+    function addButton(label, cls, action) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      b.textContent = label;
+      b.addEventListener('click', function() { resolveConflictChoice(entry, action); });
+      actions.appendChild(b);
+      return b;
+    }
+    addButton('サーバーの内容を読み込む', 'conflict-load', 'discard');
+    if (c.reason === 'stale') {
+      addButton('この端末の内容で上書き', 'conflict-overwrite', 'overwrite');
+      addButton('あとで決める（端末に残す）', 'conflict-keep', 'keep');
+    } else {
+      addButton('この端末に残す', 'conflict-keep', 'keep');
+    }
+    box.appendChild(actions);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    conflictOverlay = overlay;
+    onSaveStatus(Outbox.status());   // 衝突のバナーはダイアログを閉じてから出す
+  }
+
+  function closeConflictDialog() {
+    if (conflictOverlay && conflictOverlay.parentNode) conflictOverlay.parentNode.removeChild(conflictOverlay);
+    conflictOverlay = null;
+  }
+
+  function resolveConflictChoice(entry, action) {
+    var c = entry.conflict || {};
+    var server = c.player || null;
+    closeConflictDialog();
+    Outbox.resolveConflict(entry.eventId, entry.playerId, action);
+    if (action === 'discard') {
+      // サーバーの内容を読み込む。409 に付いてきた選手（サーバーの今の行）で画面を描き直す。
+      applyServerPlayer(entry.eventId, server);
+    } else if (action === 'overwrite') {
+      // この端末の内容で上書き。控えの版もサーバーの今の版にそろえる（次の保存で衝突にしない）。
+      var p = (currentEvent && currentEvent.id === entry.eventId) ? findPlayer(entry.playerId) : null;
+      if (p && server && typeof server.rev === 'number') p.rev = server.rev;
+    }
+    onSaveStatus(Outbox.status());
+    showNextConflict();
+  }
+
+  // サーバーの選手の行（409 の player）を画面の選手に当て、表示中ならその選手を描き直す。
+  // 大会の状態が変わったこと（not_scorable）もあるので、最後に大会を読み直す。
+  function applyServerPlayer(eventId, server) {
+    if (!currentEvent || currentEvent.id !== eventId) return;
+    var p = server ? findPlayer(server.id) : null;
+    if (p) {
+      Object.assign(p, server);
+      if (!('rev' in server)) delete p.rev;
+      if (p === visiblePlayers[currentIndex]) {
+        updatePlayerLabels(p);
+        renderScoreGrid(p);   // gridEdited も外れる（サーバーの内容を採ったので）
+        renderStatusBanner();
+        applyScoringLock();
+      }
+      refreshPlayerList();
+      updatePlayerList();
+    }
+    refreshFromServer();
   }
 
   // --- テーマ ---
@@ -264,6 +448,10 @@ var App = (function() {
     if (visiblePlayers.length > 0) {
       selectPlayer(0);
     } else {
+      applyDeferredTechniques();
+      gridEdited = false;
+      gridBlocked = false;
+      recalcRow = null;
       scoreTableBody.innerHTML = '';
       setTotalDisplay(0);
       playerNameLabel.textContent = players.length > 0
@@ -363,10 +551,13 @@ var App = (function() {
     var empty = currentStatus() === 'round2_final' && !visiblePlayers[currentIndex];
     var locked = !!currentEvent && (!scoringOpenHere() || empty);
     // 確定済みは「採点できる状態」のまま入力だけ止める。確定ボタンは押せる（取り消しのトグル）。
-    var frozen = locked || currentConfirmed();
+    // 技得点表に無い技がある選手（gridBlocked）は、保存・確定（取り消しも）を止める（網羅検証 M3）。
+    var frozen = locked || currentConfirmed() || gridBlocked;
     document.body.classList.toggle('scoring-locked', locked);
     document.body.classList.toggle('score-frozen', frozen);
-    btnConfirm.disabled = locked;
+    btnConfirm.disabled = locked || gridBlocked;
+    var btnRecalc = document.getElementById('btnRecalc');
+    if (btnRecalc) btnRecalc.disabled = locked;
     document.getElementById('btnAllSuccess').disabled = frozen;
     document.getElementById('btnAllFail').disabled = frozen;
     if (frozen) {
@@ -479,10 +670,18 @@ var App = (function() {
   // 当たったときは雛形のままにする（黙って 0 点にしない）。
   function applyEventTechniques(event) {
     if (event && Array.isArray(event.techniques) && event.techniques.length > 0) {
+      activeTechniques = event.techniques;
       Scoring.setTechniques(event.techniques);
     } else if (templateTechniques) {
+      activeTechniques = templateTechniques;
       Scoring.setTechniques(templateTechniques);
     }
+  }
+
+  // いま採点に使っている技得点表（Courts.unknownTechs に渡す）。雛形も取れなかったときは端末の既定値。
+  function currentTechList() {
+    if (activeTechniques) return activeTechniques;
+    return (typeof TECHNIQUES !== 'undefined' && Array.isArray(TECHNIQUES)) ? TECHNIQUES : [];
   }
 
   // サーバーから読み直した大会データを画面の状態に取り込む。
@@ -491,12 +690,33 @@ var App = (function() {
   // 再エンコードされて未送信分を破棄する。
   // 読み直す経路が複数あるため、ここに一本化して付け忘れを防ぐ。
   function adoptEvent(event) {
+    // 同じ大会を読み直していて、表示中の選手をこの端末で編集している最中か（表は描き直さない）
+    var editingSame = gridEdited && !!currentEvent && currentEvent.id === event.id;
+    // 版（rev）を単調に保つ（レビュー指摘 8）。読み直しの GET が自分の保存（PATCH）より先に
+    // サーバーで読まれ、保存の成功より後に届くことがある（選手を切り替えた直後など）。その古い行で
+    // 差し替えると、画面が保存前の値へ巻き戻り、次の保存が古い baseRev で自分の採点と衝突する。
+    // 同じ大会の読み直しで、画面の控えのほうが新しい版の行は、控えの行をそのまま使う。
+    if (currentEvent && currentEvent.id === event.id && Array.isArray(event.players)) {
+      var held = {};
+      (players || []).forEach(function(p) { if (p && p.id) held[p.id] = p; });
+      event.players = event.players.map(function(p) {
+        var mine = (p && p.id) ? held[p.id] : null;
+        return (mine && EventStatus.revOf(mine) > EventStatus.revOf(p)) ? mine : p;
+      });
+    }
     currentEvent = event;
     players = event.players || [];
     Outbox.applyPending(event.id, players);
     // 大会を読み直す経路（onEventSelect / refreshFromServer）はここに集まる。
     // 配点の入れ替えもここでやると付け忘れない。
-    applyEventTechniques(event);
+    // ただし編集中は入れ替えない。描いてある行は古い配点、これから押す太刀は新しい配点、と
+    // 1 人の中で新旧が混ざるため（網羅検証 S17）。次に表を描くとき（renderScoreGrid）に入れ替える。
+    if (editingSame) {
+      deferredTechEvent = event;
+    } else {
+      deferredTechEvent = null;
+      applyEventTechniques(event);
+    }
   }
 
   // 運営画面リンクに選択中の大会を引き継がせる。採点画面と運営画面は
@@ -537,6 +757,9 @@ var App = (function() {
       visiblePlayers = [];
       currentCourt = '';
       currentIndex = -1;
+      gridEdited = false;
+      gridBlocked = false;
+      recalcRow = null;
       refreshCourtList();
       scoreTableBody.innerHTML = '';
       setTotalDisplay(0);
@@ -553,7 +776,11 @@ var App = (function() {
       renderStatusBanner();
       applyScoringLock();
       // 大会を離れたら配点も雛形に戻す（次に選ぶ大会まで前の大会の配点を持ち越さない）。
-      if (templateTechniques) Scoring.setTechniques(templateTechniques);
+      deferredTechEvent = null;
+      if (templateTechniques) {
+        activeTechniques = templateTechniques;
+        Scoring.setTechniques(templateTechniques);
+      }
       // 救済で足した選択肢も、大会を離れたら残さない。
       removeStaleRescuedOptions('');
       return;
@@ -604,6 +831,7 @@ var App = (function() {
   function confirmLeave() {
     var p = visiblePlayers[currentIndex];
     if (!p || !scoringOpenHere() || p.confirmed) return true;
+    if (gridBlocked) return true;   // 技得点表に無い技がある選手は確定できない（聞いても進めない）
     if (!gridEdited && !Courts.isScored(p)) return true;
     if (!canConfirmCurrent()) {
       return confirm('この選手の採点がまだ確定されていません。確定せずに移動しますか？');
@@ -657,6 +885,9 @@ var App = (function() {
     var current = visiblePlayers[currentIndex];
     var currentId = current ? current.id : null;
     var keepRow = selectedRow;
+    // 編集中の選手は、画面の内容が元にしている版（控えの rev）を保つ。サーバーの新しい rev に
+    // 置き換えると、他の端末の更新を知らないまま上書きしてしまう（衝突に気付けない。網羅検証 M2）。
+    var keepRev = (gridEdited && current) ? EventStatus.revOf(current) : null;
     adoptEvent(loaded);
     refreshCourtList();
     visiblePlayers = filterForStatus(Courts.filter(players, currentCourt).sort(Courts.compareOrder));   // 試技順（男子の部→女子の部、No. 順）に並べてから状態で絞る（候補を末尾に寄せる処理を保つ）
@@ -671,6 +902,7 @@ var App = (function() {
     }
     currentIndex = idx;
     if (gridEdited) {
+      if (keepRev !== null) visiblePlayers[idx].rev = keepRev;
       // 編集中はサーバー値で画面を作り直さない。編集した値は保存のたびにキューへ積んであり、
       // adoptEvent がその値を新しい選手オブジェクトへ反映済みなので、一覧だけ描き直す。
       refreshPlayerList();
@@ -729,11 +961,33 @@ var App = (function() {
   }
 
   // --- スコアグリッド描画 ---
+  // 編集中に読み直して入れ替えを待たせていた配点を、表を描き直す前に入れる（S17）
+  function applyDeferredTechniques() {
+    if (!deferredTechEvent) return;
+    var ev = deferredTechEvent;
+    deferredTechEvent = null;
+    applyEventTechniques(ev);
+  }
+
+  // 選手の技のうち、技得点表に無いもの（網羅検証 M3）。Courts.unknownTechs に加えて、
+  // 採点で引けない技名（Scoring.findTechnique が null）も数える（その行は 0 点・押せない表示になり、
+  // 保存すると ○× が消えるため）。
+  function unknownTechNames(player) {
+    var out = Courts.unknownTechs(player, currentTechList()).slice();
+    [player.tech1, player.tech2, player.tech3].filter(Boolean).forEach(function(name) {
+      if (!Scoring.findTechnique(name, player.isFemale === true) && out.indexOf(name) === -1) out.push(name);
+    });
+    return out;
+  }
+
   function renderScoreGrid(player) {
+    applyDeferredTechniques();
     scoreTableBody.innerHTML = '';
     gridDirty = false;
     gridEdited = false;
+    gridBlocked = false;
     noticeRow = null;
+    recalcRow = null;
     selectedRow = -1;
     var techNames = [player.tech1, player.tech2, player.tech3].filter(Boolean);
     totalAdjustInput.value = adjustText(player.totalAdjust);
@@ -769,6 +1023,22 @@ var App = (function() {
     gridRestorable = Scoring.canDecode(player.result, techNames.length) || !Courts.isScored(player);
     var decoded = gridRestorable ? Scoring.decodeResult(player.result, techNames.length, player.adjust) : null;
 
+    // 技得点表に無い技がある選手は、行を赤く示して保存・確定を止める（網羅検証 M3）。
+    // その行は配点が引けず 0 点・押せない表示になるので、保存すると ○× が消える。記録には触らない。
+    var unknown = unknownTechNames(player);
+    gridBlocked = unknown.length > 0;
+    if (gridBlocked) {
+      var trBad = document.createElement('tr');
+      var tdBad = document.createElement('td');
+      tdBad.colSpan = 7;
+      tdBad.className = 'score-notice tech-unknown-notice';
+      tdBad.textContent = '技得点表に無い技があります（' + unknown.join('、') + '）。' +
+        'この選手は保存・確定できません（記録は残してあります）。' +
+        '運営画面で技を選び直すか、技得点表に技を戻してください。';
+      trBad.appendChild(tdBad);
+      scoreTableBody.appendChild(trBad);
+    }
+
     if (!decoded) {
       // result を技内訳へ分解できない（技の再割当てなどで長さが噛み合わなくなった
       // 既採点者など）。空欄のグリッドから合計0を計算して上書き保存してしまうと、
@@ -789,23 +1059,86 @@ var App = (function() {
     // （tech1..3 を filter(Boolean) しているため）。保存時も同じ順で書く。
     for (var i = 0; i < techNames.length; i++) {
       var rowData = decoded ? decoded[i] : { values: ['','','',''], adjust: 0 };
-      var tr = buildScoreRow(techNames[i], player.isFemale, rowData, i);
+      var tr = buildScoreRow(techNames[i], player.isFemale, rowData, i, unknown.indexOf(techNames[i]) !== -1 ||
+        unknown.indexOf(String(techNames[i]).trim()) !== -1);
       scoreTableBody.appendChild(tr);
     }
     selectRow(0);
-    if (decoded) {
-      updateTotal();
+    // 開いただけでは p.score・一覧を書き換えない（網羅検証 M4）。合計は保存済みの得点を出し、
+    // 今の技得点表で計算し直した値と違えば知らせて「計算し直して保存」を出す。
+    var saved = player.score || 0;
+    if (decoded && !gridBlocked) {
+      var recomputed = gridTotal();
+      if (Courts.isScored(player) && recomputed !== saved) {
+        showRecalcNotice(saved, recomputed);
+        setTotalDisplay(saved);
+      } else {
+        setTotalDisplay(recomputed);
+      }
     } else {
-      setTotalDisplay(player.score || 0);
+      setTotalDisplay(saved);
     }
     applyConfirmedStyle(!!player.confirmed);
     applyScoringLock();
   }
 
-  function buildScoreRow(techName, isFemale, rowData, rowIndex) {
+  // 保存済みの得点と再計算の値が違うことの知らせ（表の先頭の行）と「計算し直して保存」ボタン
+  function showRecalcNotice(saved, recomputed) {
+    var tr = document.createElement('tr');
+    var td = document.createElement('td');
+    td.colSpan = 7;
+    td.className = 'score-notice score-recalc';
+    var text = document.createElement('span');
+    text.textContent = '技得点表の変更で点が変わります（保存 ' + saved + ' → 再計算 ' + recomputed + '）';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-recalc';
+    btn.id = 'btnRecalc';
+    btn.textContent = '計算し直して保存';
+    btn.addEventListener('click', onRecalc);
+    td.appendChild(text);
+    td.appendChild(btn);
+    tr.appendChild(td);
+    scoreTableBody.insertBefore(tr, scoreTableBody.firstChild);
+    recalcRow = tr;
+  }
+
+  function removeRecalcNotice() {
+    if (recalcRow && recalcRow.parentNode) recalcRow.parentNode.removeChild(recalcRow);
+    recalcRow = null;
+  }
+
+  // 「計算し直して保存」。今の技得点表の配点で合計を出し直して保存する。
+  // 確定済みの選手は確定のまま保存し直す（確定し直し）ので、先に確認する。
+  function onRecalc() {
+    var p = visiblePlayers[currentIndex];
+    if (!p || !currentEvent || gridBlocked) return;
+    if (!scoringOpenHere()) {
+      alert('今は採点できない状態のため、計算し直せません。');
+      return;
+    }
+    var before = p.score || 0;
+    var after = gridTotal();
+    if (p.confirmed) {
+      if (!confirm('確定済みの選手です。\n技得点表の今の配点で計算し直した ' + after + '点（保存 ' + before +
+                   '点）で確定し直しますか？')) return;
+    }
+    gridEdited = true;
+    updateTotal();          // p.score を再計算の値にし、知らせの行を外す
+    saveCurrentState();
+    Api.addHistory(currentEvent.id, {
+      action: 'score_update',
+      playerName: p.name || '',
+      detail: '技得点表の変更で計算し直し（' + before + '点 → ' + after + '点' + (p.confirmed ? '。確定し直し' : '') + '）'
+    });
+  }
+
+  // unknown が真なら技得点表に無い技の行（赤く示す。記録の ○× は押せない表示で見せるだけ）
+  function buildScoreRow(techName, isFemale, rowData, rowIndex, unknown) {
     var tr = document.createElement('tr');
     tr.dataset.tech = techName;
     tr.dataset.row = rowIndex;
+    if (unknown) tr.classList.add('tech-unknown');
 
     var tdName = document.createElement('td');
     tdName.className = 'tech-name';
@@ -824,6 +1157,11 @@ var App = (function() {
       var disabled = !tech || tech.strikes[s] === null;
       if (disabled) {
         td.classList.add('disabled');
+        // 技得点表に無い技の行は、記録されている ○× を文字だけで見せる（消えていないことが分かるように）
+        if (!tech) {
+          var rec = rowData.values[s] || '';
+          td.textContent = rec === '○' ? '成功' : rec === '△' ? '減点' : rec === '×' ? '失敗' : '';
+        }
       } else {
         td.dataset.value = rowData.values[s] || '';
         setCellDisplay(td, rowData.values[s] || '');
@@ -839,6 +1177,8 @@ var App = (function() {
     inp.type = 'number';
     inp.step = '1';
     inp.inputMode = 'numeric';
+    inp.min = String(-ADJUST_LIMIT);
+    inp.max = String(ADJUST_LIMIT);
     inp.className = 'adjust-input';
     inp.value = adjustText(rowData.adjust);
     // 置き換えを断られたときに戻す値（この描画時点の補正点。復元不能なら空欄）
@@ -856,6 +1196,8 @@ var App = (function() {
     applyVoiding(tr);
     applySequence(tr);
     updateRowScore(tr, isFemale);
+    // 配点が引けない行の得点は出さない（0 点に見せない）
+    if (unknown) tdScore.textContent = '—';
     return tr;
   }
 
@@ -994,17 +1336,28 @@ var App = (function() {
     selectRow(selectedRow + 1);
   }
 
+  // 補正点の入力値を整数にし、±ADJUST_LIMIT に収める（網羅検証 S4）。空欄・数値でないものは 0。
+  function clampAdjust(raw) {
+    var n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(-ADJUST_LIMIT, Math.min(ADJUST_LIMIT, n));
+  }
+
+  // 入力値が範囲の外か（収める前の値で判定。知らせるため）
+  function adjustOutOfRange(raw) {
+    var n = parseInt(raw, 10);
+    return Number.isFinite(n) && (n > ADJUST_LIMIT || n < -ADJUST_LIMIT);
+  }
+
   // 行の補正点入力欄の値（空欄は 0）
   function rowAdjust(tr) {
     var inp = tr.querySelector('.adjust-input');
     if (!inp) return 0;
-    var n = parseInt(inp.value, 10);
-    return Number.isFinite(n) ? n : 0;
+    return clampAdjust(inp.value);
   }
 
   function totalAdjustValue() {
-    var n = parseInt(totalAdjustInput.value, 10);
-    return Number.isFinite(n) ? n : 0;
+    return clampAdjust(totalAdjustInput.value);
   }
 
   // --- 配信用ボードへのライブ状態の送信 ---
@@ -1139,12 +1492,19 @@ var App = (function() {
     // 確定済みで押したら確定を取り消す（トグル。ユーザー要望）。技の有無を先に見ると、
     // 技が無い確定済みの選手をただ開いただけで無関係な警告が出るので、ここで分岐する。
     if (p.confirmed) {
+      if (gridBlocked) return;   // 技得点表に無い技がある選手は触らない（ボタンも無効）
       if (!confirm('確定を取り消しますか？（取り消すと点数を直せます）')) return;
       p.confirmed = false;
-      gridEdited = true;
       applyConfirmedStyle(false);
       applyScoringLock();
-      saveCurrentState();
+      // 取り消しは確定の印だけを送る（網羅検証 S5）。画面の全項目を送ると、内訳を復元できない
+      // 選手では送れず（saveCurrentState が止める）、復元できても他の値まで書き戻してしまう。
+      Outbox.enqueue({
+        eventId: currentEvent.id,
+        playerId: p.id,
+        confirmed: false,
+        baseRev: EventStatus.revOf(p)
+      });
       Api.addHistory(currentEvent.id, {
         action: 'unconfirm',
         playerName: p.name || '',
@@ -1159,6 +1519,7 @@ var App = (function() {
   // confirmLeave はこれで「確定して移動」か「確定せずに移動」かの文言を選ぶ。
   function canConfirmCurrent() {
     if (!hasScoreRows()) return false;
+    if (gridBlocked) return false;
     if (!gridRestorable && !gridDirty) return false;
     return true;
   }
@@ -1172,9 +1533,19 @@ var App = (function() {
       if (!quiet) alert('技が未入力のため確定できません。');
       return false;
     }
+    if (gridBlocked) {
+      if (!quiet) alert('技得点表に無い技があるため確定できません。\n運営画面で技を選び直すか、技得点表に技を戻してください。');
+      return false;
+    }
     if (!gridRestorable && !gridDirty) {
       if (!quiet) alert('内訳を復元できない選手は、採点し直してから確定してください。');
       return false;
+    }
+    // 保存済みの得点と今の配点での再計算が違う（技得点表が変わった）なら、再計算の値で確定してよいか聞く（M4）
+    if (recalcRow) {
+      var recomputed = gridTotal();
+      if (!confirm('技得点表の変更で点が変わります（保存 ' + (p.score || 0) + ' → 再計算 ' + recomputed + '）。\n' +
+                   '再計算した ' + recomputed + '点 で確定しますか？')) return false;
     }
     // 未の太刀が残っていたら、すべて失敗にしてよいか聞く（ユーザー要望 2026-09-30）。
     // OK なら各行の最初の「未」を失敗にする（以降の太刀は無効になる）。キャンセルなら確定しない。
@@ -1182,6 +1553,8 @@ var App = (function() {
       if (!confirm('未の太刀が残っています。\nすべて失敗にして確定しますか？')) return false;
       failRemainingStrikes(p);
     }
+    // 表の内容で合計を出し直して保存する（開いただけでは p.score を書き換えていないため。M4）
+    updateTotal();
     p.confirmed = true;
     gridEdited = true;
     applyConfirmedStyle(true);
@@ -1201,13 +1574,16 @@ var App = (function() {
   }
 
   function onTotalAdjustChange() {
-    if (!currentEvent || !hasScoreRows()) return;
+    if (!currentEvent || !hasScoreRows() || gridBlocked) return;
     var p = visiblePlayers[currentIndex];
     // 置き換えを断られたら、入力を保存値へ戻す。空欄にすると表示と
     // player.totalAdjust が食い違い、次の置き換えで 0 として消える。
     if (!confirmReplaceIfNeeded()) {
       totalAdjustInput.value = p ? adjustText(p.totalAdjust) : '';
       return;
+    }
+    if (adjustOutOfRange(totalAdjustInput.value)) {
+      alert('全体補正点は -' + ADJUST_LIMIT + '〜' + ADJUST_LIMIT + ' の範囲です。範囲に収めました。');
     }
     var n = totalAdjustValue();
     totalAdjustInput.value = adjustText(n);
@@ -1306,8 +1682,12 @@ var App = (function() {
     var inp = e.currentTarget;
     var tr = inp.closest('tr');
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
+    if (gridBlocked) return;   // 技得点表に無い技がある選手は保存しない（入力欄も無効）
     // 断られたら描画時の値へ戻す（空欄にしない。理由は onTotalAdjustChange と同じ）
     if (!confirmReplaceIfNeeded()) { inp.value = inp.dataset.initial || ''; return; }
+    if (adjustOutOfRange(inp.value)) {
+      alert('補正点は -' + ADJUST_LIMIT + '〜' + ADJUST_LIMIT + ' の範囲です。範囲に収めました。');
+    }
     var n = rowAdjust(tr);
     inp.value = adjustText(n);
     var p = visiblePlayers[currentIndex];
@@ -1350,6 +1730,7 @@ var App = (function() {
   function onStrikeClick(e) {
     if (!scoringOpenHere()) return;   // 採点できない状態（理由はバナーに出ている）
     if (currentConfirmed()) return;   // 確定済みは触れない（確定済みボタンで取り消してから）
+    if (gridBlocked) return;         // 技得点表に無い技がある選手は保存しない（M3）
     var td = e.currentTarget;
     if (td.classList.contains('disabled') || td.classList.contains('voided') ||
         td.classList.contains('pending')) return;
@@ -1433,17 +1814,26 @@ var App = (function() {
     scoreCell.dataset.score = String(rowScore);
   }
 
-  function updateTotal() {
+  // 表の内容（今の配点）での合計。書き込みはしない。
+  function gridTotal() {
     var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
-    // 技が無い選手は採点できない
-    if (rows.length === 0) return;
     var total = 0;
     for (var i = 0; i < rows.length; i++) {
       var sc = rows[i].querySelector('.score-col');
       if (sc) total += parseInt(sc.dataset.score, 10) || 0;
     }
-    total += totalAdjustValue();
+    return total + totalAdjustValue();
+  }
+
+  // 編集したときに呼ぶ。表の合計を選手の得点にし、表示・一覧も合わせる。
+  // 表を描いただけ（選手を開いただけ）では呼ばない（網羅検証 M4。保存済みの得点を勝手に変えない）。
+  function updateTotal() {
+    var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
+    // 技が無い選手は採点できない
+    if (rows.length === 0) return;
+    var total = gridTotal();
     setTotalDisplay(total);
+    removeRecalcNotice();   // 編集で再計算の値になったので、配点の変更の知らせはもう要らない
     if (visiblePlayers[currentIndex] !== undefined) {
       visiblePlayers[currentIndex].score = total;
       updatePlayerListScore(currentIndex, total);
@@ -1460,6 +1850,8 @@ var App = (function() {
     // 内訳を復元できない選手は、採点し直すまで保存しない
     // （空のグリッドを送ると内訳が消え、次回 0 点で上書きされる）
     if (!gridRestorable && !gridDirty) return;
+    // 技得点表に無い技がある選手は保存しない（その行が空で書かれ ○× が消えるため。M3）
+    if (gridBlocked) return;
     var rows = scoreTableBody.querySelectorAll('tr[data-tech]');
     var rowDataArr = [];
     var adjust = [0, 0, 0];
@@ -1482,7 +1874,9 @@ var App = (function() {
       adjust: p.adjust,
       totalAdjust: p.totalAdjust,
       note: p.note,
-      confirmed: p.confirmed
+      confirmed: p.confirmed,
+      // この画面がその選手を読み込んだ時点の版。別の端末が先に更新していればサーバーが 409 stale を返す（M2）
+      baseRev: EventStatus.revOf(p)
     });
   }
 
@@ -1590,6 +1984,7 @@ var App = (function() {
   // 形成功・失敗の共通ガード。対象の行（tr）を返す。操作できなければ null。
   function guardRowAction() {
     if (!currentEvent) { alert('大会が選択されていません。'); return null; }
+    if (gridBlocked) { alert('技得点表に無い技があるため採点できません。'); return null; }
     if (!hasScoreRows()) {
       alert('技が未入力のため採点できません。運営画面の試合進行で技を入力してください。');
       return null;

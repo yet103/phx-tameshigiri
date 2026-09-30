@@ -103,7 +103,9 @@ var Storage = (function() {
   // onDone は選択〜取り込みが終わった時点（成功・失敗・キャンセルのどれでも）で一度だけ
   // 呼ぶ。呼び出し元はこれでボタンの disabled を戻す。省略してもよい。
   // ページに <input type="file"> を置かずに済ませるため、その場で作って捨てる。
-  function pickTextFile(accept, onText, onDone) {
+  // decode を渡すと、ファイルを ArrayBuffer で読んで decode(buffer) の戻り値（文字列）を onText に渡す
+  // （CSV の Shift_JIS 読み直し。decodeCsvBytes）。省略すると従来どおり UTF-8 の文字列で読む。
+  function pickTextFile(accept, onText, onDone, decode) {
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = accept;
@@ -147,7 +149,7 @@ var Storage = (function() {
         reader.onload = function(ev) {
           var r = null;
           try {
-            r = onText(ev.target.result);
+            r = onText(decode ? decode(ev.target.result) : ev.target.result);
           } catch (err) {
             console.error(err);
           }
@@ -156,7 +158,8 @@ var Storage = (function() {
           else finish();
         };
         reader.onerror = function() { alert('ファイルを読めませんでした。'); finish(); };
-        reader.readAsText(file, 'UTF-8');
+        if (decode) reader.readAsArrayBuffer(file);
+        else reader.readAsText(file, 'UTF-8');
       } else {
         finish();
       }
@@ -170,9 +173,32 @@ var Storage = (function() {
     pickTextFile('.json,application/json', onText, onDone);
   }
 
+  // CSV のバイト列を文字列にする（網羅検証 M5）。UTF-8 で読み、読めなかった文字（U+FFFD）があれば
+  // Shift_JIS（Excel の既定の保存形式）で読み直す。Shift_JIS のほうが化けが少ないときだけそちらを使う
+  // （どちらでも化けるならサーバーが 400 encoding で断る）。先頭の BOM は TextDecoder が落とす。
+  // TextDecoder が無い・shift_jis を知らない環境では UTF-8 の結果のまま。
+  function decodeCsvBytes(buffer) {
+    var bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer || new ArrayBuffer(0));
+    if (typeof TextDecoder !== 'function') {
+      // 古いブラウザ。1 バイトずつ文字にするしかないが、そこまでの環境はこのアプリの対象外
+      return String.fromCharCode.apply(null, Array.prototype.slice.call(bytes));
+    }
+    var utf8 = new TextDecoder('utf-8').decode(bytes);
+    if (utf8.indexOf('\uFFFD') === -1) return utf8;
+    var sjis;
+    try {
+      sjis = new TextDecoder('shift_jis').decode(bytes);
+    } catch (e) {
+      return utf8;
+    }
+    function bad(s) { return s.split('\uFFFD').length - 1; }
+    return bad(sjis) < bad(utf8) ? sjis : utf8;
+  }
+
   // 選手の CSV を選ぶ。desk-players.js / admin-players.js の「CSV 取り込み」が使う。
+  // onText には文字列が渡る（UTF-8 / Shift_JIS のどちらで保存されたファイルでも。decodeCsvBytes）。
   function pickCsvFile(onText, onDone) {
-    pickTextFile('.csv,text/csv', onText, onDone);
+    pickTextFile('.csv,text/csv', onText, onDone, decodeCsvBytes);
   }
 
   // 取り込むファイルがこのアプリのエクスポートかどうか。
@@ -280,6 +306,7 @@ var Storage = (function() {
     pickJsonFile: pickJsonFile,
     pickTextFile: pickTextFile,
     pickCsvFile: pickCsvFile,
+    decodeCsvBytes: decodeCsvBytes,
     checkBundle: checkBundle,
     downloadText: downloadText,
     downloadCsv: downloadCsv,

@@ -62,6 +62,23 @@ var Board = (function() {
     });
   }
 
+  // 行の得点（今の配点で計算した値）の和＋全体補正が、保存済みの合計（score）と一致するか。
+  // 採点のあとで技得点表の配点が変わると、行は新しい配点・合計は保存時の配点になって食い違う
+  // （網羅検証 M4）。一致しないときは行の得点を出さず、合計（保存値）だけを見せる。
+  function rowScoresMatch(player) {
+    var p = player || {};
+    var isFemale = p.isFemale === true;
+    var sum = 0;
+    rowsFor(p).forEach(function(row) {
+      sum += Scoring.calcRowScore(row.techName, row.values, row.adjust, isFemale);
+    });
+    var ta = Math.trunc(Number(p.totalAdjust));
+    if (!Number.isFinite(ta)) ta = 0;
+    var saved = Number(p.score);
+    if (!Number.isFinite(saved)) saved = 0;
+    return sum + ta === saved;
+  }
+
   // 決戦の表に出す行。決戦 進行中（finale.status === 'round2_final'）に、決戦の候補がいる
   // コート（finale.court。先頭コート＝通常 A。設計書 2026-09-28）を映しているときだけ返す。
   // 候補は A コートの通常の選手と同じコートに並ぶので、状態を見ないと二巡目 進行中（決戦前）や
@@ -179,6 +196,8 @@ var Board = (function() {
       return;
     }
     var rows = rowsFor(player);
+    // 行の得点の和が合計（保存値）と合わないときは、行の得点を空欄にする（合計と食い違って見せない）
+    var showRowScores = rowScoresMatch(p);
     rows.forEach(function(row, i) {
       var tr = document.createElement('tr');
 
@@ -202,7 +221,9 @@ var Board = (function() {
 
       var score = document.createElement('td');
       score.className = 'num score';
-      score.textContent = Scoring.calcRowScore(row.techName, row.values, row.adjust, player.isFemale === true);
+      score.textContent = showRowScores
+        ? Scoring.calcRowScore(row.techName, row.values, row.adjust, player.isFemale === true)
+        : '';
       tr.appendChild(score);
 
       el.body.appendChild(tr);
@@ -424,6 +445,7 @@ var Board = (function() {
     rowsFor: rowsFor,
     parseHash: parseHash,
     hasNoDetail: hasNoDetail,
+    rowScoresMatch: rowScoresMatch,
     finaleFor: finaleFor
   };
 })();

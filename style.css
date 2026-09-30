@@ -301,6 +301,55 @@ body { max-width: var(--page-max-width); margin: 0; }
 }
 .note-preset-item:hover { background: var(--bg-header); }
 
+/* ===== 技得点表に無い技の行（網羅検証 M3）=====
+   配点が引けない行は赤枠・赤地で示す。記録の ○× は文字だけで見せる（押せない）。 */
+.score-table tr.tech-unknown td,
+.score-table tr.tech-unknown.selected td { background: var(--cell-fail); color: var(--cell-fail-text); }
+.score-table tr.tech-unknown td.tech-name,
+.score-table tr.tech-unknown.selected td.tech-name {
+  background: var(--btn-fail); color: var(--banner-text);
+}
+.score-table tr.tech-unknown td.tech-name::before { color: inherit; }
+.score-table tr.tech-unknown td.tech-name::after { content: '（表に無い技）'; font-size: 12px; font-weight: normal; margin-left: 4px; }
+.score-table tr.tech-unknown td.strike-cell.disabled,
+.score-table tr.tech-unknown.selected td.strike-cell.disabled { background: var(--cell-fail); font-size: 14px; }
+.score-table td.score-notice.tech-unknown-notice {
+  background: var(--btn-fail); color: var(--banner-text); text-align: left; padding: 10px 12px;
+}
+
+/* ===== 技得点表の変更で点が変わる知らせ（網羅検証 M4）===== */
+.score-table td.score-notice.score-recalc {
+  text-align: left; padding: 8px 12px;
+}
+.score-table td.score-recalc span { margin-right: 12px; }
+.btn-recalc {
+  min-height: 40px; padding: 0 14px; margin-top: 4px;
+  background: var(--warn); color: var(--bg); border: none; border-radius: 4px; font-weight: bold;
+}
+.btn-recalc:disabled { opacity: 0.5; cursor: default; }
+
+/* ===== 採点の衝突の確認（網羅検証 M2）=====
+   別の端末が先に更新した・今は採点できない巡目、のときに重ねて出す。 */
+.conflict-overlay {
+  position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.conflict-dialog {
+  width: 100%; max-width: 520px; max-height: 90%; overflow-y: auto;
+  background: var(--bg); color: var(--text); border-radius: 10px; border-top: 4px solid var(--btn-fail);
+  padding: 14px 16px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+.conflict-dialog h3 { margin: 0 0 8px; font-size: 18px; }
+.conflict-message { white-space: pre-line; margin: 0 0 10px; line-height: 1.5; }
+.conflict-compare { border-collapse: collapse; margin: 0 0 12px; }
+.conflict-compare th, .conflict-compare td { border: 1px solid var(--border); padding: 4px 10px; text-align: left; }
+.conflict-compare th { background: var(--bg-secondary); white-space: nowrap; }
+.conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.conflict-actions button { min-height: 44px; padding: 0 14px; border-radius: 6px; font-weight: bold; }
+.conflict-actions .conflict-load { background: var(--btn-confirm-on); color: #fff; }
+.conflict-actions .conflict-overwrite { background: var(--btn-fail); color: var(--banner-text); }
+.conflict-actions .conflict-keep { background: var(--bg-header); color: var(--text); border: 1px solid var(--border); }
+
 /* ===== 確定 ===== */
 .btn-confirm { background: var(--btn-confirm); color: #fff; }        /* 未確定＝水色 */
 .btn-confirm.on { background: var(--btn-confirm-on); color: #fff; }  /* 確定済み＝青 */
