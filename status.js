@@ -138,7 +138,7 @@
     return STATES[i - 1];
   }
 
-  // 暫定ベスト8（決戦に出る選手）の行。二巡目の行に付いた finalist の印で判定する。
+  // 暫定ベスト4（決戦に出る選手）の行。二巡目の行に付いた finalist の印で判定する。
   // コートを手で変えても印は残るので、コート名では判定しない（設計書「データ」）。
   // 並びはここでは整えない（試技順に並べるのは Courts.finalists）。
   function finalists(players) {
@@ -217,14 +217,18 @@
     return (typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= 0) ? v : 0;
   }
 
-  // 暫定ベスト8 の選考で使う得点。確定済みの行だけ数える（未確定は 0。順位と同じ基準）。
+  // 暫定ベスト4 の選考で使う得点。確定済みの行だけ数える（未確定は 0。順位と同じ基準）。
   function confirmedScoreOf(p) {
     return (p && p.confirmed === true && typeof p.score === 'number') ? p.score : 0;
   }
 
-  // 暫定ベスト8。一般男子（isFemale が true でない＝新人も含む。順位の集計と同じ規則）の
-  // 一巡目の確定済みの得点の上位 8 名。0 点は含めない。8 位が同点なら全員（同点同順位）。
-  // 8 名未満なら全員。rows は一巡目の行（呼び出し側が絞る）。
+  // 決戦に進む人数（暫定ベスト N の N。設計書 2026-10-01-finale-best4.md）。選考・画面の文言はすべてこれを使う。
+  var FINALIST_COUNT = 4;
+  var FINALIST_LABEL = '暫定ベスト' + FINALIST_COUNT;
+
+  // 暫定ベスト4。一般男子（isFemale が true でない＝新人も含む。順位の集計と同じ規則）の
+  // 一巡目の確定済みの得点の上位 FINALIST_COUNT 名。0 点は含めない。最後の位が同点なら全員（同点同順位）。
+  // FINALIST_COUNT 名未満なら全員。rows は一巡目の行（呼び出し側が絞る）。
   // 戻り値: { <playerId>: true }（選手 id が '__proto__' でも壊れない辞書）。
   // サーバの二巡目生成と finalistDiff（S18）が同じ判定を使う（以前は server/index.js にあった）。
   function pickFinalists(rows) {
@@ -233,7 +237,7 @@
       return p && p.isFemale !== true && confirmedScoreOf(p) > 0;
     }).sort(function(a, b) { return confirmedScoreOf(b) - confirmedScoreOf(a); });
     if (males.length === 0) return out;
-    var cut = confirmedScoreOf(males.length >= 8 ? males[7] : males[males.length - 1]);
+    var cut = confirmedScoreOf(males.length >= FINALIST_COUNT ? males[FINALIST_COUNT - 1] : males[males.length - 1]);
     males.forEach(function(p) { if (confirmedScoreOf(p) >= cut) out[p.id] = true; });
     return out;
   }
@@ -284,7 +288,7 @@
   }
 
   // 「次へ進む」の行き先。二巡目 進行中からは、決戦の行があれば決戦へ、
-  // 無ければ二巡目終了へ（暫定ベスト8 が 0 名の大会）。
+  // 無ければ二巡目終了へ（暫定ベスト4 が 0 名の大会）。
   function nextStep(status, players) {
     if (status === 'round2') return hasFinalists(players) ? 'round2_final' : 'round2_done';
     return next(status);
@@ -362,6 +366,8 @@
     isRowScorable: isRowScorable,
     revOf: revOf,
     confirmedScoreOf: confirmedScoreOf,
+    FINALIST_COUNT: FINALIST_COUNT,
+    FINALIST_LABEL: FINALIST_LABEL,
     pickFinalists: pickFinalists,
     round1Sources: round1Sources,
     finalistDiff: finalistDiff,

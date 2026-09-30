@@ -173,19 +173,19 @@
     // 決戦以外（元のコートで先に斬る）
     wrap.appendChild(buildRound2Table(plainRows, ctx, editable, techniques));
 
-    // 決戦の区画（暫定ベスト8）。0 名なら節ごと出さない。
+    // 決戦の区画（暫定ベスト4）。0 名なら節ごと出さない。
     if (finalRows.length > 0) {
       var finHead = document.createElement('div');
       finHead.className = 'desk-section-head';
       var finH2 = document.createElement('h2');
-      finH2.textContent = '決戦（暫定ベスト8）';
+      finH2.textContent = '決戦（' + EventStatus.FINALIST_LABEL + '）';
       finHead.appendChild(finH2);
       wrap.appendChild(finHead);
 
       var finNote = document.createElement('p');
       finNote.className = 'desk-note';
       finNote.id = 'round2FinaleNote';
-      finNote.textContent = '暫定ベスト8（一般男子・一巡目の得点上位）。' +
+      finNote.textContent = EventStatus.FINALIST_LABEL + '（一般男子・一巡目の得点上位）。' +
         Courts.finaleCourt(ctx.players) + ' コートの二巡目の最後に斬ります。';
       wrap.appendChild(finNote);
 

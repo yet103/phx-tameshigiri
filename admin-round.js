@@ -157,7 +157,7 @@ var AdminRound = (function() {
       alert('⚠ コートが決まっていない（未分類の）選手が ' + res.round2.unassignedCount +
         ' 名います。二巡目には入っていません。\n選手登録でコートを設定し、一巡目に戻して終了し直してください。');
     }
-    // 網羅検証 S18: 暫定ベスト8 が今の一巡目の確定得点で選び直した結果と違うときは警告する
+    // 網羅検証 S18: 暫定ベスト4 が今の一巡目の確定得点で選び直した結果と違うときは警告する
     if (res.round2 && res.round2.finalistDiff) {
       var diffMsg = Courts.finalistDiffMessage(res.round2.finalistDiff);
       if (diffMsg) alert(diffMsg);
@@ -220,7 +220,7 @@ var AdminRound = (function() {
     // 段階表示(現在の状態と「次へ進む」)を先頭に置く
     var st = EventStatus.of(ctx.event);
     container.appendChild(buildStage(st, players));
-    // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、決戦（暫定ベスト8）の
+    // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、決戦（暫定ベスト4）の
     // 印は選び直されない。今の一巡目の確定得点で選び直した結果と違うときに警告を出す
     // （判定は EventStatus.finalistDiff、文言は Courts.finalistDiffMessage。PC 運営と共通）。
     if (['round1_done', 'round2', 'round2_final', 'round2_done'].indexOf(st) !== -1) {
@@ -316,7 +316,7 @@ var AdminRound = (function() {
         cap.className = 'round-finale-caption';
         // 候補は先頭コート（通常 A）の二巡目の末尾で斬る（設計書 2026-09-28）。
         // コートで絞っていても候補のコートを出すため、大会の全選手から引く。
-        cap.textContent = '決戦（暫定ベスト8）　' +
+        cap.textContent = '決戦（' + EventStatus.FINALIST_LABEL + '）　' +
           Courts.finaleCourt((CTX && CTX.players) || fin) + ' コートの最後に斬ります';
         listEl.appendChild(cap);
         var box = document.createElement('div');

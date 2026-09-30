@@ -701,7 +701,7 @@ var Admin = (function() {
       if (courtErr) { alert(courtErr); return; }
       btnSave.disabled = true;
       sheet.lock(true);
-      // 決戦コートの名前（finalCourt）は廃止（暫定ベスト8 は先頭コートの最後に斬る。
+      // 決戦コートの名前（finalCourt）は廃止（暫定ベスト4 は先頭コートの最後に斬る。
       // 設計書 2026-09-28）。PC 運営 desk-setup.js と同じく、変わった settings のキーだけ送る。
       var settingsPatch = {};
       if (chkBib.checked !== origBib) settingsPatch.requireBib = chkBib.checked;

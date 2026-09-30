@@ -116,7 +116,7 @@ var Share = (function() {
   // 「決戦（暫定）」を残さない（網羅検証 S11。2026-10-01）。
   var FINALE_STATES = ['round2', 'round2_final', 'round2_done'];
 
-  // 決戦（暫定ベスト8）の表。finale が無ければ何も足さない。
+  // 決戦（暫定ベスト4）の表。finale が無ければ何も足さない。
   // 順位の上に出す（いま会場で進んでいるのは決戦なので、参加者が最初に見たいもの）。
   function renderFinale(finale) {
     if (!finale || !Array.isArray(finale.rows) || finale.rows.length === 0) return null;

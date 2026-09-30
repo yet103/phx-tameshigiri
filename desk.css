@@ -437,7 +437,7 @@ a { color: var(--accent); }
 .desk-match-table td.copy { text-align: center; }
 .desk-match-table td.copy .desk-btn { min-height: 30px; padding: 0 10px; font-size: 12px; }
 
-/* 決戦（暫定ベスト8）の区画と暫定順位の表。金の細い枠で他のコートと区別する
+/* 決戦（暫定ベスト4）の区画と暫定順位の表。金の細い枠で他のコートと区別する
    （--gold 系は「大会トーン」の節と同じ、テーマに依らない黒金の配色）。 */
 .desk-match-finale,
 .desk-match-finale-rank {

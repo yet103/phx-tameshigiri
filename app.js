@@ -486,7 +486,7 @@ var App = (function() {
 
   // いま開いている選手を採点してよいか。状態が採点できることに加えて、
   // 決戦の制限（EventStatus.isPlayerScorable。行の印 finalist で判定。設計書 2026-09-28）も見る。
-  //   二巡目 進行中 … 決戦（暫定ベスト8）の行は「決戦を開始」の後
+  //   二巡目 進行中 … 決戦（暫定ベスト4）の行は「決戦を開始」の後
   //   決戦 進行中   … 決戦の行だけ（他の選手は斬り終わっている）
   function scoringOpenHere() {
     if (!scoringOpen()) return false;
@@ -505,8 +505,8 @@ var App = (function() {
         // 状態は採点できるが、この選手は今は採点できない（決戦の制限。行の印で判定）
         el.className = 'status-banner closed';
         el.textContent = (st === 'round2')
-          ? 'この選手は決戦（暫定ベスト8）です。他の選手が終わり、運営画面で「決戦を開始」を押すと採点できます'
-          : '決戦 進行中。採点できるのは決戦（暫定ベスト8）の選手だけです';
+          ? 'この選手は決戦（' + EventStatus.FINALIST_LABEL + '）です。他の選手が終わり、運営画面で「決戦を開始」を押すと採点できます'
+          : '決戦 進行中。採点できるのは決戦（' + EventStatus.FINALIST_LABEL + '）の選手だけです';
         return;
       }
       // 決戦 進行中に、決戦の選手がいないコートを開いている（一覧が空）。
@@ -514,7 +514,7 @@ var App = (function() {
       if (st === 'round2_final' && !visiblePlayers[currentIndex]) {
         var finCourt = Courts.finaleCourt(players);
         el.className = 'status-banner closed';
-        el.textContent = '決戦 進行中。採点できるのは決戦（暫定ベスト8）の選手だけです' +
+        el.textContent = '決戦 進行中。採点できるのは決戦（' + EventStatus.FINALIST_LABEL + '）の選手だけです' +
           (finCourt ? '（' + finCourt + ' コート）' : '');
         return;
       }
@@ -572,7 +572,7 @@ var App = (function() {
 
   // 表示する選手。進行中ならその巡目だけに絞る（コートの絞り込みと併用）。
   // 進行中でなければ全巡目を出す（見直し・確認のため）。
-  // 決戦（暫定ベスト8）は先頭コートの二巡目の末尾で斬る（設計書 2026-09-28）ので、
+  // 決戦（暫定ベスト4）は先頭コートの二巡目の末尾で斬る（設計書 2026-09-28）ので、
   //   二巡目 進行中 … 全員を出し、決戦の行を末尾に寄せる（採点はできない。一覧で薄く出す）。
   //                   生成した順ですでに末尾のはずだが、差分追加などで崩れても末尾に来るよう
   //                   印の有無で安定に並べ直す。
@@ -933,7 +933,7 @@ var App = (function() {
       var roundName = m[3] === '1' ? '一巡目' : (m[3] === '2' ? '二巡目' : m[3] + '巡目');
       var stage = m[2] + 'の部　' + roundName + '　' + m[1] + ' コート';
       if (currentStatus() === 'round2_final' && p.finalist === true) {
-        stage = '決戦（暫定ベスト8）　' + m[1] + ' コート';
+        stage = '決戦（' + EventStatus.FINALIST_LABEL + '）　' + m[1] + ' コート';
       }
       playerStageLabel.textContent = stage;
       courtLabel.textContent = '';
@@ -2062,7 +2062,7 @@ var App = (function() {
     tr.dataset.index = index;
     if (index === currentIndex) tr.classList.add('current-player');
     if (p.confirmed) tr.classList.add('done');   // 確定済みの行はグレー（ユーザー要望）
-    // 決戦（暫定ベスト8）の行は番号の右に「決戦」の印。二巡目 進行中はまだ採点できないので
+    // 決戦（暫定ベスト4）の行は番号の右に「決戦」の印。二巡目 進行中はまだ採点できないので
     // 薄く出す（tr.finale。設計書 2026-09-28）。
     var isFinale = p.finalist === true && Courts.roundOf(p) === 2;
     if (isFinale && currentStatus() === 'round2') tr.classList.add('finale');

@@ -55,7 +55,7 @@
       await Api.changeStatus(eventId, 'round1');
       return await Api.changeStatus(eventId, 'round1_done');
     }
-    // 取り込みで得点が入った行を確定にする。順位・暫定ベスト8 の選考・二巡目生成の判定は
+    // 取り込みで得点が入った行を確定にする。順位・暫定ベスト4 の選考・二巡目生成の判定は
     // 確定した行だけを見る（2026-09-30）ので、9 列 CSV で入れた得点はこれで確定にしてから使う。
     async function confirmScored(eventId) {
       var ps = (await Api.loadEvent(eventId)).players;
@@ -1042,7 +1042,7 @@
     await Api.changeStatus(lockEvent.id, 'round1');
     await Api.changeStatus(lockEvent.id, 'round1_done');   // 遷移が二巡目を生成する
     await Api.changeStatus(lockEvent.id, 'round2');
-    // L1・L2 は男子2名とも得点があり8名未満なので両方が決戦（暫定ベスト8）に入る。
+    // L1・L2 は男子2名とも得点があり4名未満なので両方が決戦（暫定ベスト4）に入る。
     // 決戦の行がある大会は round2 → round2_done の前に round2_final を挟む必要がある。
     await Api.changeStatus(lockEvent.id, 'round2_final');
     await Api.changeStatus(lockEvent.id, 'round2_done');
@@ -1428,9 +1428,9 @@
     await Api.deleteEvent(edEvent.id);
 
     // --- 二巡目の生成 ---
-    // ---- 暫定ベスト8（決戦）の抽出。設計書 2026-09-22「データ」 ----
-    // 一般男子（女子でない＝新人も含む）の一巡目の得点上位 8 名。0 点は含めない。
-    // 8 位が同点なら全員。先頭のコート（通常 A）の男子の二巡目に、通常の行の続き番号で
+    // ---- 暫定ベスト4（決戦）の抽出。設計書 2026-09-22「データ」 ----
+    // 一般男子（女子でない＝新人も含む）の一巡目の得点上位 4 名（EventStatus.FINALIST_COUNT）。0 点は含めない。
+    // 4 位が同点なら全員（設計書 2026-10-01-finale-best4.md）。先頭のコート（通常 A）の男子の二巡目に、通常の行の続き番号で
     // 一巡目の得点が低い順に置く（設計書 2026-09-28。決戦コートは廃止）。
     async function makeGenEvent(name, csv) {
       var ev = await Api.saveEvent({ name: name, date: '2026-09-22', venue: '', players: [] });
@@ -1442,24 +1442,24 @@
       return players.filter(function(p) { return Courts.roundOf(p) === 2; });
     }
 
-    // 男子 10 名（60,55,50,45,40,35,30,25,20,15）＋女子 2 名。上位 8 名が決戦。
+    // 男子 10 名（60,55,50,45,40,35,30,25,20,15）＋女子 2 名。上位 4 名が決戦。
     var b8Csv = '';
     [60, 55, 50, 45, 40, 35, 30, 25, 20, 15].forEach(function(s, i) {
       b8Csv += 'M' + (i + 1) + ',A-男子-1-' + (i + 1) + ',真,水月,四方,' + s + ',,,1    \n';
     });
     b8Csv += 'F1,A-女子-1-1,真,水月,四方,99,,○,1    \n';
     b8Csv += 'F2,A-女子-1-2,真,水月,四方,90,,○,1    \n';
-    var b8 = await makeGenEvent('決戦8名', b8Csv);
+    var b8 = await makeGenEvent('決戦4名', b8Csv);
     await toRound1Done(b8.id);
     await Api.generateNextRound(b8.id, true);
     var b8Rows = round2Of((await Api.loadEvent(b8.id)).players);
     var b8Fin = b8Rows.filter(function(p) { return p.finalist === true; });
-    assert('決戦は一般男子の上位8名', b8Fin.map(function(p) { return p.name; }).sort(),
-      ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8']);
+    assert('決戦の人数の定数は 4', EventStatus.FINALIST_COUNT, 4);
+    assert('決戦は一般男子の上位4名', b8Fin.map(function(p) { return p.name; }).sort(),
+      ['M1', 'M2', 'M3', 'M4']);
     assert('決戦の order は先頭コート・男子・二巡目で、通常の行の続き番号・得点の低い順',
       b8Fin.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
-      ['A-男子-2-3:M8', 'A-男子-2-4:M7', 'A-男子-2-5:M6', 'A-男子-2-6:M5',
-       'A-男子-2-7:M4', 'A-男子-2-8:M3', 'A-男子-2-9:M2', 'A-男子-2-10:M1']);
+      ['A-男子-2-7:M4', 'A-男子-2-8:M3', 'A-男子-2-9:M2', 'A-男子-2-10:M1']);
     assert('二巡目の行の並び（データ順）でも候補は通常の行の後ろ',
       b8Rows.map(function(p) { return p.name; }),
       ['F2', 'F1', 'M10', 'M9', 'M8', 'M7', 'M6', 'M5', 'M4', 'M3', 'M2', 'M1']);
@@ -1477,9 +1477,9 @@
       (await Api.generateNextRound(b8.id, false)).existingCount, 12);
     await Api.deleteEvent(b8.id);
 
-    // 8 位が同点なら 9 名になる
+    // 4 位が同点なら 5 名になる
     var tieCsv = '';
-    [60, 55, 50, 45, 40, 35, 30, 25, 25, 20].forEach(function(s, i) {
+    [60, 55, 50, 45, 45, 40, 35, 30, 25, 20].forEach(function(s, i) {
       tieCsv += 'T' + (i + 1) + ',A-男子-1-' + (i + 1) + ',真,水月,四方,' + s + ',,,1    \n';
     });
     var tie = await makeGenEvent('決戦同点', tieCsv);
@@ -1487,25 +1487,41 @@
     await Api.generateNextRound(tie.id, true);
     var tieFin = round2Of((await Api.loadEvent(tie.id)).players)
       .filter(function(p) { return p.finalist === true; });
-    assert('8位が同点なら9名が決戦に入る', tieFin.length, 9);
-    // T8・T9 が同点（25点）で8位タイ。9名（T1〜T9）が決戦に入り、T10（20点）は入らない。
-    // 決戦の並びは一巡目の得点が低い順・同点は order 順（T8 が 'A-男子-1-8' で T9 より先）。
+    assert('4位が同点なら5名が決戦に入る', tieFin.length, 5);
+    // T4・T5 が同点（45点）で4位タイ。5名（T1〜T5）が決戦に入り、T6（40点）は入らない。
+    // 決戦の並びは一巡目の得点が低い順・同点は order 順（T4 が 'A-男子-1-4' で T5 より先）。
     assert('同点は一巡目の order 順で番号が付く',
       tieFin.slice().sort(Courts.compareOrder).map(function(p) { return p.name; }),
-      ['T8', 'T9', 'T7', 'T6', 'T5', 'T4', 'T3', 'T2', 'T1']);
+      ['T4', 'T5', 'T3', 'T2', 'T1']);
+    assert('4位が同点でも5位より下は入らない',
+      round2Of((await Api.loadEvent(tie.id)).players)
+        .filter(function(p) { return p.finalist !== true && !p.isFemale; })
+        .map(function(p) { return p.name; }).sort(), ['T10', 'T6', 'T7', 'T8', 'T9']);
     await Api.deleteEvent(tie.id);
 
-    // 男子 5 名なら 5 名全員
-    var few = await makeGenEvent('決戦5名',
+    // 男子 3 名（4 名未満）なら 3 名全員
+    var few = await makeGenEvent('決戦3名',
+      'P1,A-男子-1-1,真,,,50,,,1    \nP2,A-男子-1-2,真,,,40,,,1    \n' +
+      'P3,A-男子-1-3,真,,,30,,,1    \n');
+    await toRound1Done(few.id);
+    await Api.generateNextRound(few.id, true);
+    assert('男子が4名未満なら全員が決戦',
+      round2Of((await Api.loadEvent(few.id)).players)
+        .filter(function(p) { return p.finalist === true; }).length, 3);
+    await Api.deleteEvent(few.id);
+
+    // 男子 5 名（同点なし）なら上位 4 名だけ
+    var five = await makeGenEvent('決戦5名',
       'P1,A-男子-1-1,真,,,50,,,1    \nP2,A-男子-1-2,真,,,40,,,1    \n' +
       'P3,A-男子-1-3,真,,,30,,,1    \nP4,A-男子-1-4,真,,,20,,,1    \n' +
       'P5,A-男子-1-5,真,,,10,,,1    \n');
-    await toRound1Done(few.id);
-    await Api.generateNextRound(few.id, true);
-    assert('男子が8名未満なら全員が決戦',
-      round2Of((await Api.loadEvent(few.id)).players)
-        .filter(function(p) { return p.finalist === true; }).length, 5);
-    await Api.deleteEvent(few.id);
+    await toRound1Done(five.id);
+    await Api.generateNextRound(five.id, true);
+    assert('男子が5名（同点なし）なら上位4名だけが決戦',
+      round2Of((await Api.loadEvent(five.id)).players)
+        .filter(function(p) { return p.finalist === true; }).map(function(p) { return p.name; }).sort(),
+      ['P1', 'P2', 'P3', 'P4']);
+    await Api.deleteEvent(five.id);
 
     // 0 点は決戦に含めない
     var zero = await makeGenEvent('決戦0点',
@@ -1579,7 +1595,7 @@
     assert('二巡目は決戦以外が先・女子が先頭・得点の低い順',
       round2.filter(function(p) { return p.finalist !== true; }).map(function(p) { return p.name; }),
       ['F2', 'F1']);
-    // 男子 4 名（A の M1〜M3・B の M4）は 8 名未満なので全員が候補。候補は B の M4 も含めて
+    // 男子 4 名（A の M1〜M3・B の M4）は上位 4 名に収まるので全員が候補。候補は B の M4 も含めて
     // 先頭コート A に置く（A の男子に通常の行は無いので 1 から、一巡目の得点が低い順）。
     assert('二巡目の順番はコート×性別ごとに1から（候補は先頭コート A の男子の続き番号）',
       round2.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
@@ -1658,7 +1674,7 @@
     assert('差分追加の skipped は生成済みの一巡目人数', diffGen.skipped, 2);
     assert('差分追加の existingCount は既存の二巡目人数', diffGen.existingCount, 2);
     var diffRows = (await Api.loadEvent(diffEvent.id)).players.filter(function(p) { return Courts.roundOf(p) === 2; });
-    // D1・D2・D3 は男子8名未満で全員得点0より大きいため、3名とも決戦（暫定ベスト8）に入る。
+    // D1・D2・D3 は男子4名未満で全員得点0より大きいため、3名とも決戦（暫定ベスト4）に入る。
     // 候補は先頭コート A に置かれ、差分追加でも番号は続き番号のまま採番される。
     assert('差分追加は既存の二巡目の続き番号', diffRows.map(function(p) { return p.order; }),
       ['A-男子-2-1', 'A-男子-2-2', 'A-男子-2-3']);
@@ -1677,7 +1693,7 @@
     var unaDone = await toRound1Done(unaEvent.id);   // 遷移が二巡目を生成する
     assert('order 無し・未分類コートの選手は二巡目を作らない', unaDone.round2.created, 1);
     assert('order 無し・未分類コートの選手数を合わせて返す', unaDone.round2.unassignedCount, 2);
-    // U2（唯一の候補）は男子1名だけなので決戦（暫定ベスト8）に入り、先頭コート A で採番される
+    // U2（唯一の候補）は男子1名だけなので決戦（暫定ベスト4）に入り、先頭コート A で採番される
     // （未分類は先頭コートの候補にもならない）。
     assert('未分類のコートを製造しない',
       (await Api.loadEvent(unaEvent.id)).players.map(function(p) { return p.order; }),
@@ -1721,7 +1737,7 @@
 
     // 一巡目に戻して選手を足し、もう一度終了すると差分だけ追加される
     // （まだ誰も採点していないので、レビュー指摘Jの「作り直す」経路も通る。件数は
-    // 従来の差分追加と同じだが、暫定ベスト8の番号は新しい得点順に付け直される）。
+    // 従来の差分追加と同じだが、暫定ベスト4の番号は新しい得点順に付け直される）。
     await Api.changeStatus(trEvent.id, 'round1');
     var trAdd = await Api.createPlayer(trEvent.id, { name: 'R4', court: 'A', isFemale: false });
     await Api.updatePlayer(trEvent.id, trAdd.id, { score: 5, result: '1    ', confirmed: true });   // 選考は確定済みだけを見る
@@ -1761,7 +1777,7 @@
       trkRows.length, 8);
     await Api.deleteEvent(trkEvent.id);
 
-    // ---- レビュー指摘J: 一巡目の得点を戻して直すと、暫定ベスト8の番号が入れ替わる
+    // ---- レビュー指摘J: 一巡目の得点を戻して直すと、暫定ベスト4の番号が入れ替わる
     //      （直した技は残る） ----
     var reoEvent = await makeGenEvent('得点訂正で付け直し',
       'H1,A-男子-1-1,真,,,50,,,1    \nH2,A-男子-1-2,真,,,30,,,1    \nH3,A-男子-1-3,真,,,10,,,1    \n');
@@ -1815,11 +1831,11 @@
       return round2Of(players).filter(function(p) { return Courts.courtOf(p) === court && !p.isFemale; })
         .sort(Courts.compareOrder).map(function(p) { return p.name + (p.finalist ? '*' : ''); });
     }
-    // 上位 8 名: RA1 60, RB1 58, RA2 55, RA3 50, RA4 45, RA5 40, RA6 35, RB2 30。
-    // A の男子は全員候補なので A の通常の行は無い。B の通常の行は RB3〜RB5。
-    assert('最初の生成: A の男子は候補 8 名（得点の低い順）',
+    // 上位 4 名: RA1 60, RB1 58, RA2 55, RA3 50。
+    // A の通常の行は RA4・RA5・RA6（得点の低い RA6 が 1 番）、候補が 4 番から得点の低い順。
+    assert('最初の生成: A の男子は通常の行が先、候補 4 名が続き番号で後ろ',
       rfCourtRows((await Api.loadEvent(rfEvent.id)).players, 'A'),
-      ['RB2*', 'RA6*', 'RA5*', 'RA4*', 'RA3*', 'RA2*', 'RB1*', 'RA1*']);
+      ['RA6', 'RA5', 'RA4', 'RA3*', 'RA2*', 'RB1*', 'RA1*']);
     // 一巡目に戻して得点を直す: RA5・RA6 を 1・2 点に下げ、RB3・RB4 を 90・80 に上げる。
     await Api.changeStatus(rfEvent.id, 'round1');
     var rfP1 = (await Api.loadEvent(rfEvent.id)).players;
@@ -1833,20 +1849,19 @@
     var rfAgain = await Api.changeStatus(rfEvent.id, 'round1_done');
     assert('付け直しになる（reordered: true）', rfAgain.round2.reordered, true);
     var rfAfter = (await Api.loadEvent(rfEvent.id)).players;
-    // 新しい上位 8 名: RB3 90, RB4 80, RA1 60, RB1 58, RA2 55, RA3 50, RA4 45, RB2 30。
-    // A の通常の行は RA5（1 点）・RA6（2 点）で 1・2 番。候補は 3 番から得点の低い順。
+    // 新しい上位 4 名: RB3 90, RB4 80, RA1 60, RB1 58。
+    // A の通常の行は RA5（1 点）・RA6（2 点）・RA4・RA3・RA2 で 1〜5 番。候補は 6 番から得点の低い順。
     assert('付け直し後: A の男子は通常の行が先、候補が続き番号で後ろ',
       rfCourtRows(rfAfter, 'A'),
-      ['RA5', 'RA6', 'RB2*', 'RA4*', 'RA3*', 'RA2*', 'RB1*', 'RA1*', 'RB4*', 'RB3*']);
-    assert('付け直し後: 候補の番号は A-男子-2-3〜10',
+      ['RA5', 'RA6', 'RA4', 'RA3', 'RA2', 'RB1*', 'RA1*', 'RB4*', 'RB3*']);
+    assert('付け直し後: 候補の番号は A-男子-2-6〜9',
       Courts.finalists(rfAfter).map(function(p) { return p.order; }),
-      ['A-男子-2-3', 'A-男子-2-4', 'A-男子-2-5', 'A-男子-2-6',
-       'A-男子-2-7', 'A-男子-2-8', 'A-男子-2-9', 'A-男子-2-10']);
+      ['A-男子-2-6', 'A-男子-2-7', 'A-男子-2-8', 'A-男子-2-9']);
     assert('付け直し後: 候補の行はデータの並びでも A の通常の行の後ろ',
       round2Of(rfAfter).filter(function(p) { return Courts.courtOf(p) === 'A'; })
         .map(function(p) { return !!p.finalist; }),
-      [false, false, true, true, true, true, true, true, true, true]);
-    assert('付け直し後: B の男子は候補以外（RB5 だけ）', rfCourtRows(rfAfter, 'B'), ['RB5']);
+      [false, false, false, false, false, true, true, true, true]);
+    assert('付け直し後: B の男子は候補以外（RB5・RB2）', rfCourtRows(rfAfter, 'B'), ['RB5', 'RB2']);
     assert('付け直し後: 候補のコートは A', EventStatus.finaleCourt(rfAfter), 'A');
     await Api.deleteEvent(rfEvent.id);
 
@@ -2609,7 +2624,7 @@
     var rtJiro2 = rt2nd.find(function(p) { return p.sourcePlayerId === rtJiro.id; });
     assert('往復: 二巡目の一郎行が sourcePlayerId で取り込み後の一郎を指す', !!rtIchiro2, true);
     assert('往復: 二巡目の二郎行が sourcePlayerId で取り込み後の二郎を指す', !!rtJiro2, true);
-    // 男子 2 名とも得点があるので 2 名とも決戦（暫定ベスト8）。印が落ちると決戦が消える。
+    // 男子 2 名とも得点があるので 2 名とも決戦（暫定ベスト4）。印が落ちると決戦が消える。
     assert('往復: 書き出しに finalist の印が入る',
       rtBundle.event.players.filter(function(p) { return p.finalist === true; }).length, 1);   // 二郎は未確定なので候補は一郎だけ（選考は確定済みを見る）
     assert('往復: 取り込み後も finalist の印が残る（決戦が消えない）',
@@ -3000,7 +3015,7 @@
       [m6Tr.ok, auById(m6Ps, 'm6a').confirmed, auById(m6Ps, 'm6b').confirmed], [true, true, undefined]);
     assert('M6: 移行した得点は順位に残る',
       (await Api.loadRanking(m6Id)).rankings.male.map(function(r) { return [r.name, r.score]; }), [['旧 一郎', 25], ['旧 二郎', 0]]);
-    assert('M6: 移行した得点で暫定ベスト8 が選ばれる', auR2Of(m6Ps, 'm6a').finalist, true);
+    assert('M6: 移行した得点で暫定ベスト4 が選ばれる', auR2Of(m6Ps, 'm6a').finalist, true);
     await Api.deleteEvent(m6Id);
 
     // ---- S1: 二巡目は一巡目の確定得点の低い順、同点は試技順の番号を数値で ----
@@ -4127,7 +4142,7 @@
     assert('statusConfirmMessage: archived から final への復元は確定の文言にならない',
       Courts.statusConfirmMessage('archived', 'final', tcP), '最終結果に戻します。よろしいですか？');
 
-    // ---- 決戦（暫定ベスト8）の並び ----
+    // ---- 決戦（暫定ベスト4）の並び ----
     var finP = [
       { id: 'a', order: 'A-男子-1-1', score: 30 },
       { id: 'b', order: '決戦-男子-2-2', finalist: true, name: '二郎' },
@@ -4725,15 +4740,33 @@
       [EventStatus.revOf({}), EventStatus.revOf(null), EventStatus.revOf({ rev: -1 }), EventStatus.revOf({ rev: 1.5 }),
        EventStatus.revOf({ rev: '3' }), EventStatus.revOf({ rev: 4 })], [0, 0, 0, 0, 0, 4]);
 
-    // pickFinalists: 一般男子・確定済み・得点 > 0 の上位 8、8 位同点は全員
+    // pickFinalists: 一般男子・確定済み・得点 > 0 の上位 4、4 位同点は全員
     var PF = [];
     for (var pfi = 1; pfi <= 10; pfi++) PF.push({ id: 'm' + pfi, order: 'A-男子-1-' + pfi, score: 100 - pfi * 5, confirmed: true });
-    PF[8].score = PF[7].score;   // 9 人目が 8 位と同点
+    PF[4].score = PF[3].score;   // 5 人目が 4 位と同点
     PF.push({ id: 'f1', order: 'A-女子-1-1', isFemale: true, score: 99, confirmed: true });
     PF.push({ id: 'u1', order: 'A-男子-1-11', score: 99 });   // 未確定
     PF.push({ id: 'z1', order: 'A-男子-1-12', score: 0, confirmed: true });
-    assert('pickFinalists: 確定済みの一般男子の上位 8（8 位同点は全員、女子・未確定・0 点は除く）',
-      Object.keys(EventStatus.pickFinalists(PF)).sort(), ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9']);
+    assert('pickFinalists: 確定済みの一般男子の上位 4（4 位同点は全員、女子・未確定・0 点は除く）',
+      Object.keys(EventStatus.pickFinalists(PF)).sort(), ['m1', 'm2', 'm3', 'm4', 'm5']);
+    // 4 位が同点でなければちょうど 4 名、4 名未満なら全員、0 点だけなら空
+    var PF2 = PF.slice();
+    PF2[4] = { id: 'm5', order: 'A-男子-1-5', score: 10, confirmed: true };
+    assert('pickFinalists: 4 位が同点でなければちょうど 4 名',
+      Object.keys(EventStatus.pickFinalists(PF2)).sort(), ['m1', 'm2', 'm3', 'm4']);
+    assert('pickFinalists: 男子が 4 名未満なら全員（0 点・未確定・女子は除く）',
+      Object.keys(EventStatus.pickFinalists([
+        { id: 'a', score: 30, confirmed: true }, { id: 'b', score: 20, confirmed: true },
+        { id: 'c', score: 0, confirmed: true }, { id: 'd', score: 50 },
+        { id: 'e', score: 40, confirmed: true, isFemale: true }
+      ])).sort(), ['a', 'b']);
+    assert('pickFinalists: 4 位が 0 点なら 0 点は入れない（3 名）',
+      Object.keys(EventStatus.pickFinalists([
+        { id: 'a', score: 30, confirmed: true }, { id: 'b', score: 20, confirmed: true },
+        { id: 'c', score: 10, confirmed: true }, { id: 'd', score: 0, confirmed: true },
+        { id: 'e', score: 0, confirmed: true }
+      ])).sort(), ['a', 'b', 'c']);
+    assert('EventStatus.FINALIST_LABEL は定数から組み立てる', EventStatus.FINALIST_LABEL, '暫定ベスト4');
     assert('pickFinalists: 空でも落ちない', Object.keys(EventStatus.pickFinalists([])), []);
 
     // finalistDiff: 選ぶべき候補と決戦の印の差（S18）
@@ -4756,7 +4789,7 @@
     assert('finalistDiff: 二巡目に採点済みがあれば round2Scored: true', EventStatus.finalistDiff(fdScored).round2Scored, true);
     assert('finalistDiffMessage: 差があれば入るべき・外れるべきと、戻して選び直す案内',
       Courts.finalistDiffMessage(fdRes),
-      '⚠ 暫定ベスト8 が、今の一巡目の確定得点で選び直した結果と違います。\n' +
+      '⚠ 暫定ベスト4 が、今の一巡目の確定得点で選び直した結果と違います。\n' +
       '入るべき選手: 乙（10点）\n外れるべき選手: 丙（0点）\n' +
       '「戻す」で一巡目に戻して一巡目を終了し直すと選び直せます。');
     assert('finalistDiffMessage: 二巡目に採点済みがあれば自動では選び直さない旨',

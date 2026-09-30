@@ -471,7 +471,7 @@ var Desk = (function() {
       alert('⚠ コートが決まっていない（未分類の）選手が ' + res.round2.unassignedCount +
         ' 名います。二巡目には入っていません。\n選手登録でコートを設定し、一巡目に戻して終了し直してください。');
     }
-    // 網羅検証 S18: 暫定ベスト8 が今の一巡目の確定得点で選び直した結果と違うときは警告する
+    // 網羅検証 S18: 暫定ベスト4 が今の一巡目の確定得点で選び直した結果と違うときは警告する
     if (res.round2 && res.round2.finalistDiff) {
       var diffMsg = Courts.finalistDiffMessage(res.round2.finalistDiff);
       if (diffMsg) alert(diffMsg);

@@ -273,7 +273,7 @@ var Courts = (function() {
       .sort(function(a, b) { return compareOrder(a.player, b.player); });
   }
 
-  // 決戦（暫定ベスト8）の行を試技順（番号順）に並べて返す。
+  // 決戦（暫定ベスト4）の行を試技順（番号順）に並べて返す。
   // 誰が決戦かの判定は status.js（サーバーと共有）にあり、ここは並べるだけ。
   function finalists(players) {
     return EventStatus.finalists(players).slice().sort(compareOrder);
@@ -442,7 +442,7 @@ var Courts = (function() {
       return unconfirmedWarning(list, [1]) + '二巡目を行わずに最終結果にします。\nよろしいですか？';
     }
     if (from === 'round2' && to === 'round2_final') {
-      // 決戦に出ない選手（暫定ベスト8 以外）が全員斬り終わっているかを数える
+      // 決戦に出ない選手（暫定ベスト4 以外）が全員斬り終わっているかを数える
       var others = round(2).filter(function(p) { return p.finalist !== true; });
       return countPhrase('決戦以外の未確定', others.filter(function(p) { return !isConfirmed(p); }).length) +
         '\n決戦を開始しますか？';
@@ -548,7 +548,7 @@ var Courts = (function() {
       if (all.length > BLOCKER_NAME_LIMIT) s += '…ほか ' + (all.length - BLOCKER_NAME_LIMIT) + ' 名';
       return s;
     }
-    var lines = ['⚠ 暫定ベスト8 が、今の一巡目の確定得点で選び直した結果と違います。'];
+    var lines = ['⚠ ' + (typeof EventStatus !== 'undefined' ? EventStatus.FINALIST_LABEL : '暫定ベスト4') + ' が、今の一巡目の確定得点で選び直した結果と違います。'];
     if (diff.missing && diff.missing.length > 0) lines.push('入るべき選手: ' + names(diff.missing));
     if (diff.extra && diff.extra.length > 0) lines.push('外れるべき選手: ' + names(diff.extra));
     lines.push(diff.round2Scored

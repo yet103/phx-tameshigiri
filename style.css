@@ -593,7 +593,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .player-list-table tr:hover td { opacity: 0.75; }
 /* 確定済みの行はグレー。選択中の行（下の .current-player）のほうが後にあるので勝つ */
 .player-list-table tr.done td { background: var(--cell-disabled); color: var(--text-muted); }
-/* 決戦（暫定ベスト8）の行。二巡目 進行中はまだ採点できないので薄く（app.js の tr.finale）。
+/* 決戦（暫定ベスト4）の行。二巡目 進行中はまだ採点できないので薄く（app.js の tr.finale）。
    選択中の行（下の .current-player）のほうが後にあるので、開いたときは反転した色が勝つ。 */
 .player-list-table tr.finale td { color: var(--text-muted); }
 .player-list-table .finale-mark {

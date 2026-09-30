@@ -204,7 +204,7 @@ var Api = (function() {
     //   { created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount,
     //     reordered, finalistDiff }。サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
     //   finalistDiff は EventStatus.finalistDiff の戻り値（選考の差。網羅検証 S18）。
-    //   reordered: true は、誰も採点していなかったため暫定ベスト8と番号を現在の
+    //   reordered: true は、誰も採点していなかったため暫定ベスト4と番号を現在の
     //   一巡目の得点から付け直したことを表す（レビュー指摘J）。
     // opts.force: true を渡すと、追跡できない二巡目の行があっても確認済みとして進める。
     try {
@@ -564,7 +564,7 @@ var Api = (function() {
     // 戻り値:
     //   { success: true, created, skipped, existingCount, untrackedCount, unassignedCount,
     //     finalistCount, reordered }
-    //     reordered: true は、誰も採点していなかったため暫定ベスト8と番号を現在の
+    //     reordered: true は、誰も採点していなかったため暫定ベスト4と番号を現在の
     //       一巡目の得点から付け直したことを表す（レビュー指摘J）
     //     created: 新規に作った二巡目行数
     //     skipped: source（order が解析できる一巡目）のうち既に二巡目行を生成済みだった人数
@@ -573,7 +573,7 @@ var Api = (function() {
     //     untrackedCount: 既存の二巡目行のうち sourcePlayerId を持たない件数
     //                     （CSVインポート由来。force すると重複生成される）
     //     unassignedCount: order が解析できず二巡目を作れなかった一巡目選手の人数
-    //     finalistCount: 決戦（暫定ベスト8）に入った人数（設計書 2026-09-22）
+    //     finalistCount: 決戦（暫定ベスト4）に入った人数（設計書 2026-09-22）
     //     finalistDiff: 選考の差（EventStatus.finalistDiff の戻り値。差分追加では決戦の印を
     //                   選び直さないので、画面が Courts.finalistDiffMessage で警告する。網羅検証 S18）
     //   | { blocked: true, reason: 'unscored' | 'exists' | 'status' | 'locked', error,

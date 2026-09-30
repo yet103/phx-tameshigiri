@@ -370,7 +370,7 @@ function playerWithRev(p) {
   return Object.assign({}, p, { rev: EventStatus.revOf(p) });
 }
 
-// 決戦（暫定ベスト8）の表。決戦の行が無ければ null（設計書 2026-09-22）。
+// 決戦（暫定ベスト4）の表。決戦の行が無ければ null（設計書 2026-09-22）。
 // rows は試技順（候補の行の番号順。候補は先頭コートの男子の二巡目の末尾に並ぶ。設計書 2026-09-28）。r1 は一巡目の得点（sourcePlayerId で引く）、
 // r2 は斬った人だけ（未採点は null）、rank も斬った人だけの中での暫定順位
 // （合計降順・同点同順位。1, 1, 3）。
@@ -520,7 +520,7 @@ function computeRanking(event) {
       female: rank(female),
       newFace: rank(newFace)
     },
-    // 決戦（暫定ベスト8）の表。決戦の行が無ければ null。
+    // 決戦（暫定ベスト4）の表。決戦の行が無ければ null。
     // 順位の集計（rankings）は変えない（氏名で合算、一般男子／新人／一般女子）。
     finale: computeFinale(event)
   };
@@ -711,7 +711,7 @@ function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
     if (note) out.note = note;
   }
   if (p.confirmed === true) out.confirmed = true;
-  // 決戦（暫定ベスト8）の印。決戦の判定は行の印だけで行う（設計書 2026-09-28）ので、
+  // 決戦（暫定ベスト4）の印。決戦の判定は行の印だけで行う（設計書 2026-09-28）ので、
   // バンドルの取り込みや大会の保存し直しで落とすと決戦が消える。二巡目の行にだけ残す。
   if (p.finalist === true && EventStatus.roundOf(p) === 2) out.finalist = true;
   if (bib !== null && bib !== undefined) out.bib = bib;
@@ -911,7 +911,7 @@ app.patch('/api/events/:id', (req, res) => {
       const requireBib = s.requireBib !== undefined ? s.requireBib === true : cur.requireBib === true;
       const requireRank = s.requireRank !== undefined ? s.requireRank === true : cur.requireRank === true;
       // finalCourt（2026-09-22 の決戦コートの名前）は廃止。届いても無視して保存しない
-      // （暫定ベスト8 は先頭コートの末尾に置く。設計書 2026-09-28）。既存の大会に残っている
+      // （暫定ベスト4 は先頭コートの末尾に置く。設計書 2026-09-28）。既存の大会に残っている
       // finalCourt キーも、settings を送る PATCH で落ちる（どこからも読まないので害は無い）。
       event.settings = { requireBib: requireBib, requireRank: requireRank, courts: courts };
     }
@@ -1255,7 +1255,7 @@ app.post('/api/events/:id/status', (req, res) => {
         });
       }
       // 未採点の確認はクライアントが済ませているので force 扱いで呼ぶ（既に二巡目があれば
-      // 差分だけ追加される。誰も採点していなければ暫定ベスト8と番号を現在の一巡目の
+      // 差分だけ追加される。誰も採点していなければ暫定ベスト4と番号を現在の一巡目の
       // 得点から付け直す。レビュー指摘J）。
       const gen = generateRound2(event, true, true);
       if (!gen.ok) {
@@ -1281,7 +1281,7 @@ app.post('/api/events/:id/status', (req, res) => {
         players.filter(p => EventStatus.roundOf(p) === 2).length === 0) {
       return res.status(409).json({ error: '二巡目が生成されていません', reason: 'no_round2' });
     }
-    // 決戦の行が無ければ決戦は始められない（暫定ベスト8 が 0 名の大会）
+    // 決戦の行が無ければ決戦は始められない（暫定ベスト4 が 0 名の大会）
     if (from === 'round2' && to === 'round2_final' && !EventStatus.hasFinalists(event.players)) {
       return res.status(409).json({ error: '決戦の選手がいません', reason: 'no_finale' });
     }
@@ -2799,7 +2799,7 @@ function pickBundlePlayer(p) {
   if (Number.isInteger(src.totalAdjust)) out.totalAdjust = src.totalAdjust;
   if (typeof src.note === 'string' && src.note !== '') out.note = src.note;
   if (src.confirmed === true) out.confirmed = true;
-  // 決戦（暫定ベスト8）の印（取り込み側は sanitizePlayerForSave が同じ条件で残す）
+  // 決戦（暫定ベスト4）の印（取り込み側は sanitizePlayerForSave が同じ条件で残す）
   if (src.finalist === true && EventStatus.roundOf(src) === 2) out.finalist = true;
   if (isValidId(src.sourcePlayerId)) out.sourcePlayerId = src.sourcePlayerId;
   if (Number.isInteger(src.bib)) out.bib = src.bib;
@@ -3039,12 +3039,12 @@ app.post('/api/events/import', (req, res) => {
 // この関数は同期のまま維持すること（server/index.js 冒頭の【不変条件】）。
 
 // 二巡目の並びに使う一巡目の得点。確定済みの得点だけ（未確定は 0 扱い＝先頭側。網羅検証 S1）。
-// 順位・暫定ベスト8 の選考と同じ基準にそろえる（採点途中の値で並びを決めない）。
+// 順位・暫定ベスト4 の選考と同じ基準にそろえる（採点途中の値で並びを決めない）。
 function scoreOf(p) {
   return EventStatus.confirmedScoreOf(p);
 }
 
-// 暫定ベスト8 の選考は status.js の EventStatus.pickFinalists（finalistDiff と同じ判定。網羅検証 S18）。
+// 暫定ベスト4 の選考は status.js の EventStatus.pickFinalists（finalistDiff と同じ判定。網羅検証 S18）。
 function pickFinalists(src) {
   return EventStatus.pickFinalists(src);
 }
@@ -3160,9 +3160,9 @@ function generateRound2(event, force, allowReorder) {
   }
 
   // 二巡目の行が1つも採点されておらず、すべて sourcePlayerId で一巡目の行を
-  // 追跡できるなら、一巡目の得点を戻して直したあとの「二巡目を終了」で暫定ベスト8が
+  // 追跡できるなら、一巡目の得点を戻して直したあとの「二巡目を終了」で暫定ベスト4が
   // 入れ替わらない不具合を防ぐため、行の入れ物（id・技・ゼッケン・級位段位・レンタル）を
-  // 保ったまま、暫定ベスト8の印とコート内の番号だけを現在の一巡目の得点から付け直す
+  // 保ったまま、暫定ベスト4の印とコート内の番号だけを現在の一巡目の得点から付け直す
   // （レビュー指摘J）。採点済みの行が1つでもあれば、この分岐には入らず従来どおり
   // 差分追加だけを行う（採点結果を勝手に組み替えない）。
   const base = players.filter(p => !(p && EventStatus.roundOf(p) === 2));
@@ -3176,7 +3176,7 @@ function generateRound2(event, force, allowReorder) {
   existing.forEach(p => { if (p && p.sourcePlayerId) generated[p.sourcePlayerId] = true; });
   const targets = src.filter(p => p && !generated[p.id]);
 
-  // 暫定ベスト8 は src 全体（一巡目の全員）から選ぶ。差分追加でも母集団を変えない。
+  // 暫定ベスト4 は src 全体（一巡目の全員）から選ぶ。差分追加でも母集団を変えない。
   const finalistIds = pickFinalists(src);
   const plain = targets.filter(p => !finalistIds[p.id]).sort(compareForRound2);
   const finals = targets.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
@@ -3210,7 +3210,7 @@ function generateRound2(event, force, allowReorder) {
 }
 
 // generateRound2 の「誰も採点していない二巡目を作り直す」分岐（レビュー指摘J）。
-// src（現在の一巡目の得点）から暫定ベスト8とコート内の番号を付け直し、既存の二巡目行
+// src（現在の一巡目の得点）から暫定ベスト4とコート内の番号を付け直し、既存の二巡目行
 // （sourcePlayerId で対応が取れるもの）は id・技・ゼッケン・級位段位・レンタルを保ったまま
 // 並べ直す。対応する既存行が無い src（前回の生成より後に増えた一巡目の選手）は新規に作る。
 // 対応する src が無くなった既存行（一巡目から削除された選手）は落とす。
