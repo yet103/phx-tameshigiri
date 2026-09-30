@@ -26,6 +26,25 @@
     return EventStatus.isLocked(EventStatus.of(ctx.event));
   }
 
+  // 一巡目に元がある二巡目の行か（sourcePlayerId が今ある行を指している）。
+  // その行の氏名・性別・新人は一巡目の行で直す（サーバーも 409 linked で断る。網羅検証 M1）。
+  // 元の行が消えている二巡目の行は直せる（サーバーの判定と同じ。desk-players.js の isLinked と同じ規則）。
+  var LINKED_NOTE = '一巡目の行で直してください';
+  function isLinked(ctx, p) {
+    if (!p || !p.sourcePlayerId) return false;
+    return (ctx.players || []).some(function(q) { return q && q !== p && q.id === p.sourcePlayerId; });
+  }
+
+  // 網羅検証 S14: 一巡目の終了のあとに一巡目の選手を足しても、その選手を採点する経路が無い。
+  // 追加が済んだあとに戻し方を案内する。準備中・一巡目 進行中は空文字。
+  function round1AddNote(ctx) {
+    var st = EventStatus.of(ctx.event);
+    if (st === 'draft' || st === 'round1') return '';
+    return '一巡目の選手を追加しました。いまは「' + (EventStatus.LABELS[st] || st) + '」なので、' +
+      'この選手は採点できません（二巡目にも入りません）。\n' +
+      '採点するには、試合進行で一巡目に戻して終了し直す必要があります。';
+  }
+
   function adoptTechniques(ctx) {
     techOwner = ctx.eventId;
     techCache = (Array.isArray(ctx.techniques) && ctx.techniques.length > 0) ? ctx.techniques : null;
@@ -328,7 +347,8 @@
   // onSexChange は性別を切り替えるたびに呼ぶ（省略可）。buildPlayerForm が技の重複注記
   // （同じ形は男女で配点が分かれる技があり、性別で解決先が変わる）を塗り直すのに使う。
   // 戻り値: { el, court(), isFemale(), isNewFace() }
-  function buildCommonFields(ctx, player, onSexChange) {
+  // lockSexNew が true のとき、性別と新人は変えられない（二巡目の行。一巡目の行で直す）。
+  function buildCommonFields(ctx, player, onSexChange, lockSexNew) {
     var el = document.createElement('div');
 
     // 既存のコート一覧（未分類はサーバーが受け付けないので候補に出さない）。
@@ -409,6 +429,7 @@
         b.type = 'button';
         b.className = (isFemale === pair[1]) ? 'on' : '';
         b.textContent = pair[0];
+        if (lockSexNew) { b.disabled = true; b.title = LINKED_NOTE; }
         b.addEventListener('click', function() {
           isFemale = pair[1];
           renderSexSeg();
@@ -427,6 +448,7 @@
     var chkNew = document.createElement('input');
     chkNew.type = 'checkbox';
     chkNew.checked = player ? !!player.isNewFace : false;
+    if (lockSexNew) { chkNew.disabled = true; chkNew.title = LINKED_NOTE; }
     var txtNew = document.createElement('span');
     txtNew.textContent = '新人';
     toggle.appendChild(chkNew);
@@ -460,6 +482,8 @@
     // 変更させない（レビュー修正。PC の desk-players.js の bibCell 等と同じ理由）。
     var isRound2 = player ? Courts.roundOf(player) !== 1 : false;
     var ROUND2_NOTE = '一巡目の行で変更します';
+    // 氏名・性別・新人は、一巡目に元がある二巡目の行では読み取り専用（網羅検証 M1）
+    var linked = player ? isLinked(ctx, player) : false;
 
     // 名前
     var fName = document.createElement('div');
@@ -469,6 +493,7 @@
     var inName = document.createElement('input');
     inName.type = 'text';
     inName.value = player ? (player.name || '') : '';
+    if (linked) { inName.disabled = true; inName.title = LINKED_NOTE; }
     fName.appendChild(lName);
     fName.appendChild(inName);
     el.appendChild(fName);
@@ -516,7 +541,7 @@
     fRank.appendChild(rankList);
     el.appendChild(fRank);
 
-    var common = buildCommonFields(ctx, player, function() { updateTechNote(); });
+    var common = buildCommonFields(ctx, player, function() { updateTechNote(); }, linked);
     el.appendChild(common.el);
 
     // 真剣レンタル。新人と同じトグル（.toggle）で、コート・性別・新人のすぐ下に置く。
@@ -623,6 +648,25 @@
       };
     }
 
+    // 値をそのまま集める（検証も alert もしない）。開いた時点の値の控え（initial）に使う。
+    function collect() {
+      var bibText = inBib.value.trim();
+      var t = TechPicker.toArray(techState);
+      return {
+        name: inName.value.trim(),
+        court: common.court(),
+        isFemale: common.isFemale(),
+        isNewFace: common.isNewFace(),
+        bib: (/^[0-9]+$/.test(bibText)) ? parseInt(bibText, 10) : null,
+        rank: inRank.value.trim(),
+        rental: chkRental.checked,
+        tech1: t[0],
+        tech2: t[1],
+        tech3: t[2]
+      };
+    }
+    var initial = collect();
+
     function reset() {
       inName.value = '';
       // ゼッケンは大会の中で重複できないので必ず消す。級位段位も人ごとに違う。
@@ -634,7 +678,7 @@
       inName.focus();
     }
 
-    return { el: el, read: read, reset: reset };
+    return { el: el, read: read, reset: reset, initial: initial };
   }
 
   // 追加フォーム
@@ -670,8 +714,8 @@
       btnSaveNext.disabled = false;
       sheet.lock(false);
       if (created && created.player === null) {
-        // 409（確定済みガード（reason:'locked'）と、ゼッケン番号の重複（reason:'bib'）の
-        // どちらも通る）。シートは閉じない（入力を残す）
+        // 409（確定済みガード（reason:'locked'）と、ゼッケン番号の重複（reason:'bib'））と
+        // 400（入力の不正。技得点表に無い技名など）が通る。シートは閉じない（入力を残す）
         if (created.reason === 'locked') {
           alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
         } else {
@@ -686,6 +730,8 @@
       }
       added++;
       Admin.toast(created.order + ' ' + created.name + ' を追加しました');
+      var addNote = round1AddNote(ctx);
+      if (addNote) alert(addNote);
       return true;
     }
 
@@ -775,6 +821,8 @@
       }
       added += res.created;
       Admin.toast(res.created + ' 人を登録しました');
+      var bulkNote = round1AddNote(ctx);
+      if (bulkNote) alert(bulkNote);
       // 履歴記録（CSV インポートと同様。一括登録も辿れるようにする）
       Api.addHistory(eventId, {
         action: 'bulk_add',
@@ -806,32 +854,62 @@
     var sheet = Admin.openSheet('選手を編集', form.el, [btnDelete, btnSave]);
 
     btnSave.addEventListener('click', async function() {
-      var data = form.read();
-      if (!data) return;
+      var all = form.read();
+      if (!all) return;
+
+      // 開いた時点から変わった項目だけ送る（網羅検証 S6。全項目を送ると、他の端末が
+      // その間に直した値を、この画面の古い値で上書きしてしまう）。
+      // コートだけは開いた時点の控えではなく、選手の実際のコートと比べる
+      // （未分類の選手は、シートの初期表示が先頭のコートなので、保存で割り当てられる）。
+      var baseline = Object.assign({}, form.initial, { court: Courts.courtOf(player) });
+      var data = {};
+      Object.keys(all).forEach(function(k) {
+        if (all[k] !== baseline[k]) data[k] = all[k];
+      });
+      if (Object.keys(data).length === 0) {
+        sheet.close();
+        Admin.toast('変更はありません');
+        return;
+      }
 
       // 採点済みの選手の性別や技を変えても、サーバーは得点を再計算しない。
       // 男女で配点が違う技があるほか、技の差し替えは採点画面が検知できないため、
-      // 採点画面で開き直してもらう必要がある（Courts.scoreMayChange 参照）。
-      if (Courts.scoreMayChange(player, data) && !confirm(Courts.scoreChangeConfirmMessage(player))) {
-        return;
+      // 採点画面で「計算し直して保存」してもらう必要がある（Courts.scoreMayChange 参照）。
+      // 確認を承諾したら force: true を付けて送る（サーバーは force なしだと 409 scored。網羅検証 S7）。
+      var forced = false;
+      if (Courts.scoreMayChange(player, data)) {
+        if (!confirm(Courts.scoreChangeConfirmMessage(player))) return;
+        forced = true;
       }
 
       btnSave.disabled = true;
       btnDelete.disabled = true;
       sheet.lock(true);
       // round は送らない。サーバーは今の order から巡目を据え置く。
-      var res = await Api.updatePlayerInfo(ctx.eventId, player.id, data);
+      var res = await Api.updatePlayerInfo(ctx.eventId, player.id, forced ? Object.assign({ force: true }, data) : data);
+      var declined = false;
+      if (res && !res.ok && res.reason === 'scored' && !forced) {
+        // 画面の控えが古く、その間に採点されていた。同じ確認を出し、承諾されたら force で送り直す
+        if (confirm(Courts.scoreChangeConfirmMessage(res.player || player))) {
+          res = await Api.updatePlayerInfo(ctx.eventId, player.id, Object.assign({ force: true }, data));
+        } else {
+          declined = true;
+        }
+      }
       sheet.lock(false);
       btnSave.disabled = false;
       btnDelete.disabled = false;
       if (!res || !res.ok) {
         // 失敗してもシートは閉じない（入力を残す）
+        if (declined) return;   // 確認でやめた。保存していないので何も出さない
         if (res && res.reason === 'locked') {
           alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
         } else if (res && res.reason === 'bib') {
           // 「ゼッケン番号 12 は「山田 太郎」が使っています」。
           // 誰と重なったかを知っているのはサーバーだけなので文言をそのまま出す。
           alert(res.error);
+        } else if (res && res.reason === 'linked') {
+          alert(res.error || ('二巡目の行の氏名・性別・新人は' + LINKED_NOTE));
         } else {
           alert('選手の更新に失敗しました。\n入力内容と通信を確認してください。');
         }
@@ -947,51 +1025,136 @@
     });
   }
 
+  // 選択肢つきの確認。OK / キャンセルの 2 択だと「どちらが破壊的か」が読み取れないので、
+  // 破壊的な操作は文言を明示したボタンにし、既定（主ボタン）にしない（網羅検証 M5）。
+  // options: [{ label, value, cls }]（左から並ぶ。cls は 'primary' / 'danger'）。
+  // ✕・外側タップ・画面遷移で閉じたら null（やめる）。
+  function choose(title, lines, options) {
+    return new Promise(function(resolve) {
+      var body = document.createElement('div');
+      lines.forEach(function(t) {
+        var p = document.createElement('p');
+        p.className = 'field-note';
+        p.textContent = t;
+        body.appendChild(p);
+      });
+      var picked = null;
+      var sheet = null;
+      var buttons = options.map(function(o) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn' + (o.cls ? ' ' + o.cls : '');
+        b.textContent = o.label;
+        b.addEventListener('click', function() { picked = o.value; sheet.close(); });
+        return b;
+      });
+      sheet = Admin.openSheet(title, body, buttons, function() { resolve(picked); });
+    });
+  }
+
+  // 取り込みが断られた理由を画面の文言にする（サーバーの reason で書き分ける。網羅検証 M5。
+  // desk-players.js の importFailureMessage と同じ文言）
+  function importFailureMessage(result) {
+    if (result && result.reason === 'encoding') {
+      return 'CSV の文字が化けていて読み取れませんでした。\n' +
+        'UTF-8（Excel なら「CSV UTF-8（コンマ区切り）」）か Shift_JIS で保存し直してください。';
+    }
+    if (result && result.reason === 'format') {
+      return 'CSV の 1 行目（見出し）が、読み込める形式と合っていません。\n' +
+        '結果確認の「CSV エクスポート」で書き出した形、または簡易形式' +
+        '（名前,コート,性別,技①,技②,技③,新人 …）の見出しで作ってください。';
+    }
+    if (result && result.reason === 'round2_format') {
+      return '二巡目がある大会には、結果確認の CSV エクスポート（20 列）で書き出した形のファイルだけ取り込めます（置き換え・追記とも）。\n' +
+        '（決戦の印と一巡目とのつながりを保ち、つながりの無い二巡目の行を増やさないため）';
+    }
+    return 'インポートに失敗しました。' + (result && result.error ? '\n' + result.error : '');
+  }
+
+  // 取り込み直前に大会を読み直し、いまの選手数を確かめて expectedCount で送る
+  // （0 名表示の古い画面から、他の端末が登録した選手を確認なしで消さない。網羅検証 M5）。
   async function importCsvText(ctx, text) {
     var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
-    var eventName = ctx.event && ctx.event.name;
-    var mode = 'replace';
-    if (ctx.players.length > 0) {
-      mode = confirm(
-        '大会「' + eventName + '」に読み込みます。' +
-        '既存データをクリアして読み込みますか？（キャンセルで追記）'
-      ) ? 'replace' : 'append';
-      if (mode === 'append') {
-        var okAppend = confirm(
-          '既存の ' + ctx.players.length + ' 名に追記します。' +
-          '同じ順番の選手がいると重複します。追記しますか？'
-        );
-        if (!okAppend) return;
-      }
+    var fresh = await Api.loadEventResult(eventId);
+    if (Admin.currentEventId() !== eventId) return;
+    if (!fresh.ok) {
+      alert(fresh.status === 404 ? 'この大会は削除されています' : '大会データを取得できませんでした。通信を確認してください。');
+      return;
     }
-    // 大会が切り替わっていたら、確認ダイアログの後・Api.importCsv の前で必ず止める
+    var eventName = fresh.event.name || '';
+    var nowPlayers = fresh.event.players || [];
+    var count = nowPlayers.length;
+    var mode = 'replace';
+    if (count > 0) {
+      var lines = ['大会「' + eventName + '」には、いま ' + count + ' 名の選手がいます。読み込み方を選んでください。'];
+      var shown = (ctx.players || []).length;
+      if (shown !== count) {
+        lines.push('※ 画面の表示は ' + shown + ' 名でしたが、いまは ' + count + ' 名です（他の端末で変わりました）。');
+      }
+      lines.push('追記する: 既存の ' + count + ' 名は残し、CSV の選手を足します（同じ順番の選手がいると重複します）。');
+      lines.push('置き換える: 既存の ' + count + ' 名を全部消して、CSV の内容だけにします（採点結果も消えます）。');
+      if (nowPlayers.some(function(p) { return Courts.roundOf(p) === 2; })) {
+        lines.push('二巡目の行があるため、置き換え・追記とも結果確認の CSV エクスポート（20 列）の形のファイルだけ受け付けます。');
+      }
+      var pick = await choose('CSV の取り込み', lines, [
+        { label: '置き換える（既存 ' + count + ' 名を消す）', value: 'replace', cls: 'danger' },
+        { label: '追記する', value: 'append', cls: 'primary' }
+      ]);
+      if (!pick) return;
+      mode = pick;
+    }
+    // 大会が切り替わっていたら、選択の後・Api.importCsv の前で必ず止める
     // （古い ctx の大会に書き込んでしまわないため）。
     if (Admin.currentEventId() !== eventId) {
       alert('大会が切り替わったため、CSV の読み込みを中止しました。');
       return;
     }
-    var result = await Api.importCsv(eventId, text, mode);
+    var expected = (mode === 'replace') ? count : undefined;
+    var result = await Api.importCsv(eventId, text, mode, false, expected);
+    if (Admin.currentEventId() !== eventId) return;
     if (result && result.blocked && result.reason === 'locked') {
       alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
       return;
     }
+    if (result && result.blocked && result.reason === 'stale') {
+      alert('取り込む間に選手の人数が変わりました（いまは ' + (result.playerCount || 0) + ' 名）。\n' +
+        '画面を読み直します。内容を確かめてから、もう一度取り込んでください。');
+      await Admin.reloadEvent();
+      return;
+    }
+    if (result && result.blocked && result.reason === 'round2_format') {
+      alert(importFailureMessage(result));
+      return;
+    }
     if (result && result.blocked) {
-      var ok = confirm(
-        '大会「' + eventName + '」\n' +
-        'この大会には採点済みの選手が少なくとも ' + result.scoredCount + ' 名います。\n' +
-        '他のコート端末による採点も含まれます。\n' +
-        '読み込みを続けると、これらの採点結果はすべて失われます。\n' +
-        '本当に続行しますか？'
-      );
-      if (!ok) return;
+      var go = await choose('採点結果が消えます', [
+        '大会「' + eventName + '」には採点済みの選手が少なくとも ' + result.scoredCount + ' 名います。',
+        '他のコート端末による採点も含まれます。',
+        '置き換えると、これらの採点結果はすべて失われて戻せません。'
+      ], [
+        { label: '採点結果を消して置き換える', value: 'go', cls: 'danger' },
+        { label: 'やめる', value: 'stop', cls: 'primary' }
+      ]);
+      if (go !== 'go') return;
       if (Admin.currentEventId() !== eventId) {
         alert('大会が切り替わったため、CSV の読み込みを中止しました。');
         return;
       }
-      result = await Api.importCsv(eventId, text, mode, true);
+      result = await Api.importCsv(eventId, text, mode, true, expected);
+      if (Admin.currentEventId() !== eventId) return;
+      if (result && result.blocked && result.reason === 'stale') {
+        alert('取り込む間に選手の人数が変わりました（いまは ' + (result.playerCount || 0) + ' 名）。\n' +
+          '画面を読み直します。内容を確かめてから、もう一度取り込んでください。');
+        await Admin.reloadEvent();
+        return;
+      }
     }
     if (!result || !result.success) {
-      alert('インポートに失敗しました。' + (result && result.error ? '\n' + result.error : ''));
+      if (!result) {
+        alert('インポートに失敗しました。通信を確認してください。');
+      } else {
+        alert(importFailureMessage(result));
+      }
       return;
     }
     // ゼッケンの重複・範囲外は行を弾かず「未設定」に落として取り込む（サーバー側）ので、

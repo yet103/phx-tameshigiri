@@ -348,7 +348,7 @@ var Courts = (function() {
   // scoreMayChange が true のときに出す確認文言。
   function scoreChangeConfirmMessage(player) {
     return 'この選手は採点済みです（' + ((player && player.score) || 0) + '点）。\n' +
-      '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
+      '得点が変わる可能性があります。保存後に採点画面でこの選手を開き、「計算し直して保存」を押してください。\n\n' +
       'このまま保存しますか？';
   }
 

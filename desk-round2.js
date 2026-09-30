@@ -83,6 +83,17 @@
     guide.appendChild(goMatchButton(ctx));
     container.appendChild(guide);
 
+    // 一巡目の行が終了後に確定・得点変更されたときの選考の差（網羅検証 S18。試合進行と同じ警告）
+    var diffMsg = Courts.finalistDiffMessage(EventStatus.finalistDiff(ctx.players || []));
+    if (diffMsg) {
+      var diffBox = document.createElement('p');
+      diffBox.className = 'desk-warn';
+      diffBox.id = 'round2FinalistDiff';
+      diffBox.style.whiteSpace = 'pre-line';
+      diffBox.textContent = diffMsg;
+      container.appendChild(diffBox);
+    }
+
     container.appendChild(buildRound2(ctx));
   }
 
@@ -201,7 +212,10 @@
     tr.appendChild(cell('2', 'num'));
     tr.appendChild(cell(String(Courts.orderKey(p).no || ''), 'num'));
     tr.appendChild(cell(p.name || '', 'desk-cell-main'));
-    tr.appendChild(cell(src ? String(src.score || 0) : '—', 'num'));
+    // 一巡目の得点は確定済みだけ出す（採点途中の値は順位にも入らない。網羅検証 S10）
+    var r1Cell = cell((src && src.confirmed === true) ? String(src.score || 0) : '—', 'num');
+    if (src && src.confirmed !== true) r1Cell.title = '一巡目が未確定です';
+    tr.appendChild(r1Cell);
 
     if (!editable) {
       tr.appendChild(cell(p.tech1 || ''));
@@ -347,13 +361,29 @@
   // 写していたが、計画4 でこの2関数が courts.js に入ったのでそちらに寄せた。
   async function saveTech(p, arr, selects, ctx, tr) {
     var patch = { tech1: arr[0], tech2: arr[1], tech3: arr[2] };
-    if (Courts.scoreMayChange(p, patch) && !confirm(Courts.scoreChangeConfirmMessage(p))) {
+    function restore() {
       setValues(selects, [p.tech1 || '', p.tech2 || '', p.tech3 || ''], ctx.techniques, !!p.isFemale);
-      return false;
+    }
+    // 確認を承諾したら force: true を付けて送る（サーバーは採点済みの行の技の変更を force なしで
+    // 409 scored にする。網羅検証 S7）。
+    var forced = false;
+    if (Courts.scoreMayChange(p, patch)) {
+      if (!confirm(Courts.scoreChangeConfirmMessage(p))) { restore(); return false; }
+      forced = true;
     }
     setRowDisabled(selects, tr, true);
-    var res = await Api.updatePlayerInfo(ctx.eventId, p.id, patch);
+    var res = await Api.updatePlayerInfo(ctx.eventId, p.id, forced ? Object.assign({ force: true }, patch) : patch);
     if (ctx.isStale()) return !!(res && res.ok);   // 画面を離れていたら DOM に触れない（alert もしない）
+    if (res && !res.ok && res.reason === 'scored' && !forced) {
+      // 画面の控えが古く、その間に採点されていた。同じ確認を出し、承諾されたら force で送り直す
+      if (!confirm(Courts.scoreChangeConfirmMessage(res.player || p))) {
+        setRowDisabled(selects, tr, false);
+        restore();
+        return false;
+      }
+      res = await Api.updatePlayerInfo(ctx.eventId, p.id, Object.assign({ force: true }, patch));
+      if (ctx.isStale()) return !!(res && res.ok);
+    }
     setRowDisabled(selects, tr, false);
     if (!res || !res.ok) {
       if (res && res.reason === 'locked') {
@@ -361,7 +391,7 @@
       } else {
         alert('技を保存できませんでした。通信を確認してもう一度お試しください。');
       }
-      setValues(selects, [p.tech1 || '', p.tech2 || '', p.tech3 || ''], ctx.techniques, !!p.isFemale);
+      restore();
       return false;
     }
     p.tech1 = arr[0];

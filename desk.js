@@ -368,21 +368,57 @@ var Desk = (function() {
   // 状態を変える。確認文言は courts.js（スマホ運営と共通）。
   // 失敗の理由はサーバーの文言をそのまま出し、読み直す
   // （transition の 409 は他の端末が先に進めていた場合）。
-  async function applyStatus(from, to) {
+  // opts.resolveTo(players): 読み直した選手から「行き先」を決め直す関数（次へ進む・戻すは
+  //   選手のデータで行き先が変わる。読み直した結果が画面の行き先と違ったら進めずに描き直す）。
+  async function applyStatus(from, to, opts) {
     var eventId = selectedEventId;
-    var players = (currentEvent && currentEvent.players) || [];
     if (!eventId) return;
+    var seq = renderSeq;
+    // 網羅検証 S3: 確認文の件数は「画面を開いた時点」の値だと、他の端末で採点が進んだあとに
+    // 古い件数で聞いてしまう。確認を出す直前に大会を読み直して数える。
+    setStageButtonsDisabled(true);
+    var fresh = await Api.loadEventResult(eventId);
+    if (seq !== renderSeq || selectedEventId !== eventId) return;   // 通信中に画面を離れた
+    setStageButtonsDisabled(false);
+    if (!fresh.ok) {
+      if (fresh.status === 404) {
+        alert('この大会は削除されています');
+        clearLast();
+        redirect('events');
+      } else {
+        alert('大会データを取得できませんでした。通信を確認してください。');
+      }
+      return;
+    }
+    var ev = fresh.event;
+    var players = ev.players || [];
+    var nowStatus = EventStatus.of(ev);
+    if (nowStatus !== from) {
+      // 画面が古い（他の端末が先に進めた・戻した）。想定外の状態へ行かないよう進めずに描き直す
+      alert('他の端末で状態が変わっていました（いまは「' + (EventStatus.LABELS[nowStatus] || nowStatus) +
+        '」）。画面を読み直します。\nもう一度確かめてから操作してください。');
+      await reloadEvent();
+      return;
+    }
+    if (opts && typeof opts.resolveTo === 'function') {
+      var resolved = opts.resolveTo(players);
+      if (resolved && resolved !== to) {
+        alert('選手の状況が変わったため、進む先が変わります。画面を読み直します。\nもう一度確かめてから操作してください。');
+        await reloadEvent();
+        return;
+      }
+    }
     // 試合開始の前だけ、必須項目の未入力とレンタルの選手の技を見る。サーバーは硬い条件
     // （選手 0 名・遷移表にない組み合わせ）しか見ないので、ここで止める。
     // 「確認して進む」にはしない（設計書の決定事項）。必須を外すか入力すれば通る。
     if (from === 'draft' && to === 'round1') {
-      var blockers = Courts.startBlockers(currentEvent, players);
+      var blockers = Courts.startBlockers(ev, players);
       if (blockers.length > 0) { alert(Courts.blockerMessage(blockers)); return; }
     }
     if (!confirm(Courts.statusConfirmMessage(from, to, players))) return;
-    var seq = renderSeq;
     setStageButtonsDisabled(true);
-    var res = await Api.changeStatus(eventId, to);
+    // 網羅検証 S19: 画面が見ていた状態（from）を送る。違えばサーバーが 409 stale で断る
+    var res = await Api.changeStatus(eventId, to, { from: from });
     // 追跡できない（CSV 由来の）二巡目の行が既にあると、一巡目終了は 409 exists で
     // いったん止まる。確認して承諾されたら force で再送する（レビュー指摘A）。
     if (res && !res.ok && res.reason === 'exists' && from === 'round1' && to === 'round1_done') {
@@ -391,7 +427,7 @@ var Desk = (function() {
         setStageButtonsDisabled(false);
         return;
       }
-      res = await Api.changeStatus(eventId, to, { force: true });
+      res = await Api.changeStatus(eventId, to, { from: from, force: true });
     }
     if (seq !== renderSeq || selectedEventId !== eventId) return;   // 通信中に画面を離れた
     // 成功しても reloadEvent が通信断で描き直せないことがあるので、分岐に置かず
@@ -402,6 +438,14 @@ var Desk = (function() {
       return;
     }
     if (!res.ok) {
+      if (res.reason === 'stale') {
+        // 画面が見ていた状態が古い。読み直して、もう一度確かめてもらう（S19）
+        alert('他の端末で状態が変わっていました' +
+          (res.currentStatus ? '（いまは「' + (EventStatus.LABELS[res.currentStatus] || res.currentStatus) + '」）' : '') +
+          '。画面を読み直します。\nもう一度確かめてから操作してください。');
+        await reloadEvent();
+        return;
+      }
       alert(res.error);
       // 他の端末が先に進めていたときだけ読み直す。
       // finale_pending / no_finale はこちらの画面が古い（決戦の行の有無を取り違えている）
@@ -422,6 +466,16 @@ var Desk = (function() {
       toastMsg += '（追跡できない二巡目の行が' + res.round2.untrackedCount + '件あります）';
     }
     toast(toastMsg);
+    // 網羅検証 S13: コートが決まっていない一巡目の選手は二巡目に入らない。黙って外れないよう知らせる
+    if (res.round2 && res.round2.unassignedCount > 0) {
+      alert('⚠ コートが決まっていない（未分類の）選手が ' + res.round2.unassignedCount +
+        ' 名います。二巡目には入っていません。\n選手登録でコートを設定し、一巡目に戻して終了し直してください。');
+    }
+    // 網羅検証 S18: 暫定ベスト8 が今の一巡目の確定得点で選び直した結果と違うときは警告する
+    if (res.round2 && res.round2.finalistDiff) {
+      var diffMsg = Courts.finalistDiffMessage(res.round2.finalistDiff);
+      if (diffMsg) alert(diffMsg);
+    }
     // 試合開始に成功したら、コート端末で使う採点画面を別ウィンドウで開く
     if (from === 'draft' && to === 'round1') openScoring(eventId, '');
     // 一巡目を終了したら、形を直す画面（二巡目の形登録）へ自動で移る（設計書の決定。

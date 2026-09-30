@@ -528,6 +528,10 @@ var Admin = (function() {
     // 画面で編集中のコート一覧（保存するのはこの配列）。選手から導かれるコートは
     // ここに入れない（外せないものを保存し直さない。desk-setup.js と同じ規約）。
     var extra = Array.isArray(settings.courts) ? settings.courts.slice() : [];
+    // 開いた時点の設定。保存では、ここから変わったキーだけを送る（網羅検証 S16。desk-setup.js と同じ）
+    var origBib = settings.requireBib === true;
+    var origRank = settings.requireRank === true;
+    var origCourts = JSON.stringify(extra);
 
     var body = document.createElement('div');
 
@@ -697,16 +701,15 @@ var Admin = (function() {
       if (courtErr) { alert(courtErr); return; }
       btnSave.disabled = true;
       sheet.lock(true);
-      var result = await Api.updateEventInfo(eventId, {
-        name: name, date: inDate.value, venue: inVenue.value.trim(),
-        // 決戦コートの名前（finalCourt）は廃止（暫定ベスト8 は先頭コートの最後に斬る。
-        // 設計書 2026-09-28）。PC 運営 desk-setup.js と同じく requireBib / requireRank / courts だけ送る。
-        settings: {
-          requireBib: chkBib.checked,
-          requireRank: chkRank.checked,
-          courts: extra.slice()
-        }
-      });
+      // 決戦コートの名前（finalCourt）は廃止（暫定ベスト8 は先頭コートの最後に斬る。
+      // 設計書 2026-09-28）。PC 運営 desk-setup.js と同じく、変わった settings のキーだけ送る。
+      var settingsPatch = {};
+      if (chkBib.checked !== origBib) settingsPatch.requireBib = chkBib.checked;
+      if (chkRank.checked !== origRank) settingsPatch.requireRank = chkRank.checked;
+      if (JSON.stringify(extra) !== origCourts) settingsPatch.courts = extra.slice();
+      var info = { name: name, date: inDate.value, venue: inVenue.value.trim() };
+      if (Object.keys(settingsPatch).length > 0) info.settings = settingsPatch;
+      var result = await Api.updateEventInfo(eventId, info);
       // 保存中に大会を切り替えられていたら、もう閉じているシートを操作しない
       // （PC 運営 desk-setup.js の ctx.isStale() と同じ扱い）。
       sheet.lock(false);

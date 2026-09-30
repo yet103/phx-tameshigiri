@@ -54,6 +54,8 @@
 
     container.appendChild(buildHead(ctx));
     container.appendChild(buildSteps(st, ctx));
+    var diffBox = buildFinalistDiff(st, ctx.players);
+    if (diffBox) container.appendChild(diffBox);
     container.appendChild(buildCourts(st, ctx));
     // 決戦 進行中のときだけ、決戦のカード（buildCourts）の直後に暫定順位を出す
     // （非同期。あとから差し込む。レビュー指摘E）。二巡目の形登録の表は desk-round2.js に移した。
@@ -128,6 +130,22 @@
     }
   }
 
+  // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、決戦（暫定ベスト8）の
+  // 印は選び直されない。今の一巡目の確定得点で選び直した結果と違うときに警告を出す
+  // （判定は EventStatus.finalistDiff、文言は Courts.finalistDiffMessage。スマホ運営と共通）。
+  // 一巡目終了より前は二巡目の行が無いので出ない。
+  function buildFinalistDiff(st, players) {
+    if (['round1_done', 'round2', 'round2_final', 'round2_done'].indexOf(st) === -1) return null;
+    var msg = Courts.finalistDiffMessage(EventStatus.finalistDiff(players || []));
+    if (!msg) return null;
+    var box = document.createElement('p');
+    box.className = 'desk-warn';
+    box.id = 'matchFinalistDiff';
+    box.style.whiteSpace = 'pre-line';
+    box.textContent = msg;
+    return box;
+  }
+
   function buildSteps(st, ctx) {
     var players = ctx.players || [];
     var box = document.createElement('div');
@@ -171,12 +189,14 @@
     var nx = EventStatus.nextStep(st, players);
     if (nx) {
       actions.appendChild(stepButton('btnDeskNext', 'desk-btn primary',
-        EventStatus.nextLabel(st, players) + ' ▶', st, nx));
+        EventStatus.nextLabel(st, players) + ' ▶', st, nx,
+        function(pl) { return EventStatus.nextStep(st, pl); }));
     }
     var back = EventStatus.prev(st, players);
     if (back) {
       actions.appendChild(stepButton('btnDeskBack', 'desk-btn',
-        '◀ ' + EventStatus.LABELS[back] + ' に戻す', st, back));
+        '◀ ' + EventStatus.LABELS[back] + ' に戻す', st, back,
+        function(pl) { return EventStatus.prev(st, pl); }));
     }
     // 二巡目を行わずに最終結果へ（二巡目準備のときだけ）
     if (st === 'round1_done') {
@@ -187,13 +207,15 @@
     return box;
   }
 
-  function stepButton(id, cls, label, from, to) {
+  // resolveTo: 読み直した選手から行き先を決め直す関数（省略可。行き先が選手のデータで変わる
+  // 「次へ進む」「戻す」だけが渡す。Desk.applyStatus が読み直した結果と突き合わせる）
+  function stepButton(id, cls, label, from, to, resolveTo) {
     var b = document.createElement('button');
     b.type = 'button';
     b.id = id;
     b.className = cls;
     b.textContent = label;
-    b.addEventListener('click', function() { Desk.applyStatus(from, to); });
+    b.addEventListener('click', function() { Desk.applyStatus(from, to, { resolveTo: resolveTo }); });
     return b;
   }
 

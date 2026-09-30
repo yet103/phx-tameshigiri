@@ -50,22 +50,75 @@ var AdminRound = (function() {
 
   // 状態を変える。失敗の理由はサーバーの文言をそのまま出す。
   // transition の 409 は他の端末が先に進めていた場合なので、画面を読み直す。
-  async function applyStatus(from, to) {
+  // opts.resolveTo(players): 読み直した選手から行き先を決め直す関数（次へ進む・戻すは選手の
+  //   データで行き先が変わる。読み直した結果が画面の行き先と違ったら進めずに描き直す）。
+  // 状態を変える操作の最中か。読み直し・確認・送信の間は段階のボタンを止め、連打で二重に進めない
+  // （PC 運営 desk.js の setStageButtonsDisabled と同じ。レビュー指摘 10）。
+  var statusBusy = false;
+
+  function setStageButtonsDisabled(flag) {
+    ['btnRoundNext', 'btnRoundBack', 'btnRoundSkipRound2'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.disabled = flag;
+    });
+  }
+
+  async function applyStatus(from, to, opts) {
+    if (statusBusy) return;
+    statusBusy = true;
+    setStageButtonsDisabled(true);
+    try {
+      await applyStatusBody(from, to, opts);
+    } finally {
+      statusBusy = false;
+      // 成功・読み直しで描き直した後のボタンにも当たるが、新しいボタンは元から押せるので無害
+      setStageButtonsDisabled(false);
+    }
+  }
+
+  async function applyStatusBody(from, to, opts) {
     var ctx = CTX;
+    // 網羅検証 S3: 確認文の件数は「画面を開いた時点」の値だと、他の端末で採点が進んだあとに
+    // 古い件数で聞いてしまう。確認を出す直前に大会を読み直して数える（PC 運営 desk.js と同じ）。
+    var fresh = await Api.loadEventResult(ctx.eventId);
+    if (ctx.isStale()) return;   // 通信中に大会やタブを切り替えられた
+    if (!fresh.ok) {
+      alert(fresh.status === 404 ? 'この大会は削除されています' : '大会データを取得できませんでした。通信を確認してください。');
+      return;
+    }
+    var ev = fresh.event;
+    var players = ev.players || [];
+    var nowStatus = EventStatus.of(ev);
+    if (nowStatus !== from) {
+      // 画面が古い（他の端末が先に進めた・戻した）。想定外の状態へ行かないよう進めずに描き直す
+      alert('他の端末で状態が変わっていました（いまは「' + (EventStatus.LABELS[nowStatus] || nowStatus) +
+        '」）。画面を読み直します。\nもう一度確かめてから操作してください。');
+      await Admin.reloadEvent();
+      return;
+    }
+    if (opts && typeof opts.resolveTo === 'function') {
+      var resolved = opts.resolveTo(players);
+      if (resolved && resolved !== to) {
+        alert('選手の状況が変わったため、進む先が変わります。画面を読み直します。\nもう一度確かめてから操作してください。');
+        await Admin.reloadEvent();
+        return;
+      }
+    }
     // 試合開始の前だけ、必須項目の未入力とレンタルの選手の技を見る（PC 運営の
     // desk.js の applyStatus と同じ判定・同じ文言。判定は courts.js に置いてある）。
     if (from === 'draft' && to === 'round1') {
-      var blockers = Courts.startBlockers(ctx.event, ctx.players);
+      var blockers = Courts.startBlockers(ev, players);
       if (blockers.length > 0) { alert(Courts.blockerMessage(blockers)); return; }
     }
-    if (!confirm(Courts.statusConfirmMessage(from, to, ctx.players))) return;
-    var res = await Api.changeStatus(ctx.eventId, to);
+    if (!confirm(Courts.statusConfirmMessage(from, to, players))) return;
+    // 網羅検証 S19: 画面が見ていた状態（from）を送る。違えばサーバーが 409 stale で断る
+    var res = await Api.changeStatus(ctx.eventId, to, { from: from });
     if (ctx.isStale()) return;   // 通信中に大会やタブを切り替えられた
     // 追跡できない（CSV 由来の）二巡目の行が既にあると、一巡目終了は 409 exists で
     // いったん止まる。確認して承諾されたら force で再送する（レビュー指摘A）。
     if (res && !res.ok && res.reason === 'exists' && from === 'round1' && to === 'round1_done') {
       if (!confirm(Courts.nextRoundConflictMessage(res, '選手の区画でコートを設定してください'))) return;
-      res = await Api.changeStatus(ctx.eventId, to, { force: true });
+      res = await Api.changeStatus(ctx.eventId, to, { from: from, force: true });
       if (ctx.isStale()) return;
     }
     if (!res) {
@@ -73,6 +126,14 @@ var AdminRound = (function() {
       return;
     }
     if (!res.ok) {
+      if (res.reason === 'stale') {
+        // 画面が見ていた状態が古い。読み直して、もう一度確かめてもらう（S19）
+        alert('他の端末で状態が変わっていました' +
+          (res.currentStatus ? '（いまは「' + (EventStatus.LABELS[res.currentStatus] || res.currentStatus) + '」）' : '') +
+          '。画面を読み直します。\nもう一度確かめてから操作してください。');
+        await Admin.reloadEvent();
+        return;
+      }
       alert(res.error);
       // 読み直すのは他の端末が先に進めていた場合（transition）と、こちらの画面が
       // 決戦の行の有無を取り違えている可能性がある場合（finale_pending / no_finale）。
@@ -91,6 +152,16 @@ var AdminRound = (function() {
       toastMsg += '（追跡できない二巡目の行が' + res.round2.untrackedCount + '件あります）';
     }
     Admin.toast(toastMsg);
+    // 網羅検証 S13: コートが決まっていない一巡目の選手は二巡目に入らない。黙って外れないよう知らせる
+    if (res.round2 && res.round2.unassignedCount > 0) {
+      alert('⚠ コートが決まっていない（未分類の）選手が ' + res.round2.unassignedCount +
+        ' 名います。二巡目には入っていません。\n選手登録でコートを設定し、一巡目に戻して終了し直してください。');
+    }
+    // 網羅検証 S18: 暫定ベスト8 が今の一巡目の確定得点で選び直した結果と違うときは警告する
+    if (res.round2 && res.round2.finalistDiff) {
+      var diffMsg = Courts.finalistDiffMessage(res.round2.finalistDiff);
+      if (diffMsg) alert(diffMsg);
+    }
     await Admin.reloadEvent();
   }
 
@@ -116,7 +187,9 @@ var AdminRound = (function() {
       btn.className = 'round-next';
       btn.id = 'btnRoundNext';
       btn.textContent = EventStatus.nextLabel(st, players) + ' ▶';
-      btn.addEventListener('click', function() { applyStatus(st, next); });
+      btn.addEventListener('click', function() {
+        applyStatus(st, next, { resolveTo: function(pl) { return EventStatus.nextStep(st, pl); } });
+      });
       wrap.appendChild(btn);
     }
     return wrap;
@@ -147,6 +220,20 @@ var AdminRound = (function() {
     // 段階表示(現在の状態と「次へ進む」)を先頭に置く
     var st = EventStatus.of(ctx.event);
     container.appendChild(buildStage(st, players));
+    // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、決戦（暫定ベスト8）の
+    // 印は選び直されない。今の一巡目の確定得点で選び直した結果と違うときに警告を出す
+    // （判定は EventStatus.finalistDiff、文言は Courts.finalistDiffMessage。PC 運営と共通）。
+    if (['round1_done', 'round2', 'round2_final', 'round2_done'].indexOf(st) !== -1) {
+      var diffMsg = Courts.finalistDiffMessage(EventStatus.finalistDiff(players));
+      if (diffMsg) {
+        var diffBox = document.createElement('p');
+        diffBox.className = 'admin-warn';
+        diffBox.id = 'roundFinalistDiff';
+        diffBox.style.whiteSpace = 'pre-line';
+        diffBox.textContent = diffMsg;
+        container.appendChild(diffBox);
+      }
+    }
 
     // 技を入れられるのは「一巡目終了」のときだけ（PC 運営 desk-match.js の editable と同じ）。
     // それ以外の状態では行タップ・チップ・「一巡目と同じ技をコピー」を止め、同じ注記を出す
@@ -267,7 +354,9 @@ var AdminRound = (function() {
     name.textContent = (p.order || '') + '　' + (p.name || '');
     var prev = document.createElement('span');
     prev.className = 'round-prev';
-    prev.textContent = '一巡目 ' + (src ? String(src.score || 0) : '—');
+    // 一巡目の得点は確定済みだけ出す（採点途中の値は順位にも入らない。網羅検証 S10）
+    prev.textContent = '一巡目 ' + ((src && src.confirmed === true) ? String(src.score || 0) : '—');
+    if (src && src.confirmed !== true) prev.title = '一巡目が未確定です';
     top.appendChild(name);
     top.appendChild(prev);
     row.appendChild(top);
@@ -419,21 +508,27 @@ var AdminRound = (function() {
     // 採点画面（Scoring.canDecode）はこれを検知できず、黙って新しい技の配点で
     // 再解釈してしまう（admin-players.js の性別変更ガードと同じ理由）。
     // openPicker の onClose と onCopyFromRound1 のどちらから来ても必ずここを通す。
-    if (Courts.isScored(p) &&
-        (arr[0] !== (p.tech1 || '') || arr[1] !== (p.tech2 || '') || arr[2] !== (p.tech3 || ''))) {
-      var ok = confirm(
-        'この選手は採点済みです（' + (p.score || 0) + '点）。\n' +
-        '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
-        'このまま保存しますか？'
-      );
-      if (!ok) {
+    // 確認を承諾したら force: true を付けて送る（サーバーは force なしだと 409 scored。網羅検証 S7）。
+    var patch = { tech1: arr[0], tech2: arr[1], tech3: arr[2] };
+    var forced = false;
+    if (Courts.scoreMayChange(p, patch)) {
+      if (!confirm(Courts.scoreChangeConfirmMessage(p))) {
         drawChips(p, row);
         return false;
       }
+      forced = true;
     }
-    var res = await Api.updatePlayerInfo(eventId, p.id,
-      { tech1: arr[0], tech2: arr[1], tech3: arr[2] });
+    var res = await Api.updatePlayerInfo(eventId, p.id, forced ? Object.assign({ force: true }, patch) : patch);
     if (ctx.isStale()) return !!(res && res.ok);   // 画面を離れていたら DOM に触れない（alert もしない）
+    if (res && !res.ok && res.reason === 'scored' && !forced) {
+      // 画面の控えが古く、その間に採点されていた。同じ確認を出し、承諾されたら force で送り直す
+      if (!confirm(Courts.scoreChangeConfirmMessage(res.player || p))) {
+        drawChips(p, row);
+        return false;
+      }
+      res = await Api.updatePlayerInfo(eventId, p.id, Object.assign({ force: true }, patch));
+      if (ctx.isStale()) return !!(res && res.ok);
+    }
     if (!res || !res.ok) {
       if (res && res.reason === 'locked') {
         alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
@@ -491,7 +586,7 @@ var AdminRound = (function() {
       btnBack.textContent = '◀ ' + EventStatus.LABELS[back] + ' に戻す';
       btnBack.addEventListener('click', function() {
         menu.open = false;
-        applyStatus(st, back);
+        applyStatus(st, back, { resolveTo: function(pl) { return EventStatus.prev(st, pl); } });
       });
       menu.appendChild(btnBack);
     }

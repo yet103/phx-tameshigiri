@@ -373,14 +373,17 @@
   async function onArchive(ev, ctx) {
     // 確認文言はスマホ運営と共通（courts.js）
     if (!confirm(Courts.statusConfirmMessage('final', 'archived', null))) return;
-    var res = await Api.changeStatus(ev.id, 'archived');
+    // 画面が見ていた状態（final）を送る。他の端末が動かしていたらサーバーが 409 stale で断る（網羅検証 S19）
+    var res = await Api.changeStatus(ev.id, 'archived', { from: 'final' });
     if (ctx.isStale()) return;
     if (!res) {
       alert('アーカイブできませんでした。通信を確認してください。');
       return;
     }
     if (!res.ok) {
-      alert(res.error);
+      alert(res.reason === 'stale'
+        ? '他の端末で状態が変わっていました。一覧を読み直します。'
+        : res.error);
     } else {
       Desk.toast('アーカイブしました');
     }

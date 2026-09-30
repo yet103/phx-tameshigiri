@@ -45,6 +45,12 @@ var TechEdit = (function() {
     var currentTechs = [];
     var lastSource = '';
     var lastPlayers = [];
+    // 網羅検証 M3: 使用中の技の改名を「選手の技名の付け替え」として送るため、サーバーが今持っている
+    // 技得点表の行（行の並び＝名前の列）を控える。表は行を足せない（名前と配点を書き換えるだけ）ので、
+    // 同じ行番号で名前が変わっていれば「改名」と読める。別の大会からコピーした表は行の対応が
+    // 取れないので（fromCopy）、改名とは読まない。
+    var baseNames = [];
+    var fromCopy = false;
 
     container.innerHTML = '';
 
@@ -164,6 +170,12 @@ var TechEdit = (function() {
         var inputs = tbody.querySelectorAll('input');
         for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
       }
+    }
+
+    // サーバーが持っている技得点表を控える（改名の対応づけに使う）
+    function markBase(techs) {
+      baseNames = (techs || []).map(function(t) { return t && t.name; });
+      fromCopy = false;
     }
 
     // 編集モードの行（入力欄）
@@ -324,7 +336,7 @@ var TechEdit = (function() {
       if (n === 0) { warn.hidden = true; warn.textContent = ''; return; }
       warn.hidden = false;
       warn.textContent = '採点済みの選手が ' + n + ' 名います。' +
-        '配点を変えても保存済みの得点は変わりません（採点し直すと新しい配点で計算されます）。';
+        '配点を変えても保存済みの得点は変わりません（その選手を採点画面で開いて「計算し直して保存」すると新しい配点になります）。';
     }
 
     // 通信に失敗したときは端末側の既定値（data.js の TECHNIQUES）を出し、
@@ -368,6 +380,7 @@ var TechEdit = (function() {
       }
       updateChrome(data.source);
       renderTable(data.techniques);
+      markBase(data.techniques);
       var ev = await Api.loadEvent(targetId);
       if (seq !== loadSeq) return;
       updateScoredWarning(ev ? ev.players : []);
@@ -408,6 +421,7 @@ var TechEdit = (function() {
           if (!data) { alert('その大会の技得点表を取得できませんでした。'); return; }
           renderTable(data.techniques);
           dirty = true;
+          fromCopy = true;   // 行の対応が取れなくなる（使用中の技の付け替えは出さない）
           alert('「' + (ev.name || '(名称未設定)') + '」の技得点表を読み込みました。\n' +
                 '保存を押すまでこの大会には反映されません。');
         });
@@ -445,13 +459,67 @@ var TechEdit = (function() {
       var r = await Api.saveEventTechniques(targetId, techs);
       if (seq !== loadSeq) return;
       if (!r) { alert('保存に失敗しました。通信を確認してください。'); return; }
+      if (!r.success && r.reason === 'tech_in_use') {
+        // 選手が使っている技が、新しい技得点表から無くなる（網羅検証 M3）。
+        // 改名なら「選手の技名も付け替える」かどうかを選ばせ、付けて再送する。削除は拒否のみ。
+        var renames = askRenames(r, techs);
+        if (!renames) return;
+        r = await Api.saveEventTechniques(targetId, techs, renames);
+        if (seq !== loadSeq) return;
+        if (!r) { alert('保存に失敗しました。通信を確認してください。'); return; }
+        if (!r.success && r.reason === 'tech_in_use') {
+          alert('選手が使っている技が無くなるため保存できませんでした。' + inUseText(r) +
+            '\n画面を読み直して、もう一度やり直してください。');
+          return;
+        }
+      }
       if (!r.success) { alert(r.error || '保存に失敗しました。'); return; }
       dirty = false;
       renderTable(r.techniques);
+      markBase(r.techniques);
       updateChrome('event');
-      alert('保存しました。');
+      alert('保存しました。' + (r.renamed > 0 ? '\n選手 ' + r.renamed + ' 名の技名を新しい名前に付け替えました。' : ''));
       if (opts.onSaved) opts.onSaved(r.techniques);
     });
+
+    // 使用中の技の一覧（409 tech_in_use の usages / names から。「技名」n名 の形）
+    function inUseText(r) {
+      var usages = Array.isArray(r.usages) ? r.usages : [];
+      var parts = usages.map(function(u) { return '「' + u.name + '」' + u.count + '名'; });
+      if (parts.length === 0) parts = (r.names || []).map(function(n) { return '「' + n + '」'; });
+      return '\n選手が使っている技: ' + parts.join('、') +
+        (typeof r.count === 'number' ? '（計 ' + r.count + ' 名）' : '');
+    }
+
+    // 409 tech_in_use への答え。戻り値: 付け替えの対応 [{ from, to }]（付けて再送する）| null（保存しない）
+    //   ・消える技が全部「同じ行の名前を変えた」もの（改名）なら、選手の技名も付け替えるか確認する
+    //   ・1 つでも改名でないもの（削除・空にした・別の大会からコピーした表）があれば、保存できない
+    //     と案内するだけ（削除は付け替え先が無い。技名を残すか、先に選手の技を変えてもらう）
+    function askRenames(r, techs) {
+      var names = Array.isArray(r.names) ? r.names : [];
+      var renames = [];
+      var rest = [];
+      names.forEach(function(from) {
+        var i = baseNames.indexOf(from);
+        var to = (!fromCopy && i !== -1 && techs.length === baseNames.length && techs[i]) ? techs[i].name : '';
+        var stillThere = techs.some(function(t) { return t.name === from; });
+        if (to && to !== from && !stillThere) renames.push({ from: from, to: to });
+        else rest.push(from);
+      });
+      if (renames.length === 0 || rest.length > 0) {
+        alert('選手が使っている技が、新しい技得点表に無くなるため保存できません。' + inUseText(r) +
+          '\n技の名前を残すか、先に選手の技を別の技に変えてください。' +
+          '（使っている技の削除や、別の技への置き換えは付け替えできません）' +
+          (fromCopy ? '\n別の大会からコピーした表では、使っている技の名前が無いと保存できません。' : ''));
+        return null;
+      }
+      var lines = renames.map(function(m) { return '　「' + m.from + '」→「' + m.to + '」'; });
+      var ok = confirm('選手が使っている技の名前を変えようとしています。' + inUseText(r) +
+        '\n' + lines.join('\n') +
+        '\n\n選手の技名も新しい名前に付け替えて保存しますか？' +
+        '\nOK ＝ 付け替えて保存／キャンセル ＝ 保存しない');
+      return ok ? renames : null;
+    }
 
     btnReset.addEventListener('click', async function() {
       var seq = loadSeq;   // 対象や画面が切り替えられていないかを await のたびに確かめる
@@ -479,7 +547,14 @@ var TechEdit = (function() {
       if (!confirm('この大会の技得点表を雛形（新規大会の初期値）で置き換えます。\nよろしいですか？')) return;
       var okEv = await Api.resetEventTechniques(targetId);
       if (seq !== loadSeq) return;
-      if (!okEv) { alert('リセットに失敗しました。'); return; }
+      if (okEv && okEv.reason === 'tech_in_use') {
+        // 雛形に、選手が使っている技が無い（網羅検証 M3。付け替えはできない）
+        alert('選手が使っている技が雛形に無いため、雛形に戻せません。' + inUseText(okEv) +
+          '\n先に選手の技を別の技に変えるか、この表の技名を残したまま配点だけ直してください。');
+        return;
+      }
+      // 409 locked（確定済みの大会）などの断りもオブジェクト（真）で返るので、true だけを成功とみなす
+      if (okEv !== true) { alert((okEv && okEv.error) || 'リセットに失敗しました。'); return; }
       var data = await Api.loadEventTechniques(targetId);
       if (seq !== loadSeq) return;
       if (!data) {
@@ -487,6 +562,7 @@ var TechEdit = (function() {
         return;
       }
       renderTable(data.techniques);
+      markBase(data.techniques);
       updateChrome(data.source);
       alert('雛形に戻しました。');
       if (opts.onSaved) opts.onSaved(data.techniques);

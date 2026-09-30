@@ -87,6 +87,11 @@
     // 選手から導かれるコートはここに入れない（外せないものを保存し直さない）。
     // settings.courts は壊れたデータ（配列でない値）が来ても落ちないように読む
     var extra = Array.isArray(settings.courts) ? settings.courts.slice() : [];
+    // 開いた時点の設定。保存では、ここから変わったキーだけを送る（網羅検証 S16。全部送ると、
+    // 画面を開いている間に他の端末が足したコートなどを、この画面の古い値で消してしまう）。
+    var origBib = settings.requireBib === true;
+    var origRank = settings.requireRank === true;
+    var origCourts = JSON.stringify(extra);
     var chkBib = addCheck(form, 'ゼッケン番号を必須にする', settings.requireBib === true);
     var chkRank = addCheck(form, '級位・段位を必須にする', settings.requireRank === true);
 
@@ -126,17 +131,16 @@
       var courtErr = Courts.validateCourtList(extra);
       if (courtErr) { alert(courtErr); return; }
       btn.disabled = true;
-      var result = await Api.updateEventInfo(ctx.eventId, {
-        name: name, date: inDate.value, venue: inVenue.value.trim(),
-        // settings はサーバーが requireBib / requireRank / courts だけを拾う
-        // （他のキーは無視される）。毎回すべて送るので、外したときも保存される。
-        // 決戦コートの名前（finalCourt）は廃止（暫定ベスト8 は先頭コートの最後に斬る。設計書 2026-09-28）。
-        settings: {
-          requireBib: chkBib.checked,
-          requireRank: chkRank.checked,
-          courts: extra.slice()
-        }
-      });
+      // settings はサーバーが requireBib / requireRank / courts だけを拾う（キーごとの部分更新）。
+      // 変わったキーだけ送る。courts は送ると置き換えになる（和集合にはしない）。
+      // 決戦コートの名前（finalCourt）は廃止（暫定ベスト8 は先頭コートの最後に斬る。設計書 2026-09-28）。
+      var settingsPatch = {};
+      if (chkBib.checked !== origBib) settingsPatch.requireBib = chkBib.checked;
+      if (chkRank.checked !== origRank) settingsPatch.requireRank = chkRank.checked;
+      if (JSON.stringify(extra) !== origCourts) settingsPatch.courts = extra.slice();
+      var info = { name: name, date: inDate.value, venue: inVenue.value.trim() };
+      if (Object.keys(settingsPatch).length > 0) info.settings = settingsPatch;
+      var result = await Api.updateEventInfo(ctx.eventId, info);
       if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
       btn.disabled = false;
       if (!result || !result.ok) {

@@ -463,3 +463,7 @@ input[type="search"]:focus {
 /* 画面幅は theme.css のマスタ設定。上下の固定バーも同じ幅で左に寄せる（採点画面と同じ） */
 body { max-width: var(--page-max-width); margin: 0; }
 .topbar, .tabbar { max-width: var(--page-max-width); }
+
+/* 編集シートで直せない項目（二巡目の行の氏名・性別・新人、ゼッケン等。一巡目の行で直す）は薄く出す */
+.sheet-body input:disabled, .sheet-body .seg button:disabled { opacity: .5; cursor: not-allowed; }
+.sheet-body .toggle:has(input:disabled) { opacity: .5; }
