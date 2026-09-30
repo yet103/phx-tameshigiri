@@ -664,6 +664,24 @@ function isValidAdjust(v) {
 function isValidTotalAdjust(v) {
   return Number.isInteger(v) && v >= -999 && v <= 999;
 }
+// 更新前の採点画面（baseRev を送らない）の補正点を ±999 に丸める（PATCH の互換。レビュー指摘 9）。
+// 整数でない値・長さの違う配列は触らない（形の検査で従来どおり 400）。得点は丸めた分を差し引く
+// （得点 ＝ Σ 行の得点 ＋ 全体補正で、補正点は線形に足されるため）。body をその場で書き換える。
+function clampLegacyAdjust(body) {
+  const clamp = n => Math.max(-999, Math.min(999, n));
+  let delta = 0;
+  if (Array.isArray(body.adjust) && body.adjust.length === 3 && body.adjust.every(n => Number.isInteger(n))) {
+    const next = body.adjust.map(clamp);
+    for (let i = 0; i < 3; i++) delta += body.adjust[i] - next[i];
+    body.adjust = next;
+  }
+  if (Number.isInteger(body.totalAdjust)) {
+    const t = clamp(body.totalAdjust);
+    delta += body.totalAdjust - t;
+    body.totalAdjust = t;
+  }
+  if (delta !== 0 && Number.isInteger(body.score)) body.score -= delta;
+}
 
 function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
   const out = {
@@ -1304,6 +1322,7 @@ app.post('/api/events/:id/status', (req, res) => {
 // スマホ・PC の1件ずつの編集フォームから来るため、技の候補自体をクライアントが
 // techniqueOptions で絞り込んでおり、また「試合開始」の可否は courts.js の startBlockers
 // が別途まとめて見る（画面の赤枠はクライアント側の判定に任せる）。ここで二重に検証しない。
+// ただし技得点表に無い技名は bulk rows と同じく 400 で断る（reason: 'unknown_tech'。空は可）。
 app.post('/api/events/:id/players', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -1354,6 +1373,16 @@ app.post('/api/events/:id/players', (req, res) => {
     if (rejectIfLocked(res, event)) return;
     if (!Array.isArray(event.players)) event.players = [];
 
+    // 技はその大会の技得点表にある名前だけ（一括登録 bulk rows と同じ規則。空は可）。
+    // 表に無い技名で登録すると、採点画面で配点が引けず 0 点になる（通し試験の所見 B）。
+    const createIsFemale = body.isFemale === true;
+    const createTechList = effectiveTechniques(event);
+    for (const t of techs) {
+      if (t && !resolveTechnique(createTechList, t, createIsFemale)) {
+        return res.status(400).json({ error: `技「${t}」は技リストにありません`, reason: 'unknown_tech' });
+      }
+    }
+
     if (bibParsed.value !== null) {
       const conflict = findBibConflict(event.players, bibParsed.value, null);
       if (conflict) {
@@ -1364,7 +1393,7 @@ app.post('/api/events/:id/players', (req, res) => {
       }
     }
 
-    const isFemale = body.isFemale === true;
+    const isFemale = createIsFemale;
     const gender = isFemale ? '女子' : '男子';
     const n = nextOrderNumber(event.players, court, gender, round);
 
@@ -1848,7 +1877,8 @@ app.post('/api/events/:id/players/reorder', (req, res) => {
 //        stale（409）… baseRev が今の rev と違い、採点の値が今と違う（M2 a）
 //        not_scorable（409）… その行の巡目が今の状態で採点できない（M2 b。force で越えられる）
 //      baseRev の無い採点の PATCH は当面受理する（更新前の画面の送信キューは 4xx を捨てるので、
-//      拒むとその端末の採点が黙って失われる。設計書 1.2）。
+//      拒むとその端末の採点が黙って失われる。設計書 1.2）。同じ理由で、baseRev の無い採点の PATCH の
+//      範囲外の補正点は 1 の検査の前に ±999 に丸める（clampLegacyAdjust。baseRev ありは 400）。
 //   3. linked（409）… 一巡目に元がある二巡目の行の氏名・性別・新人を変えようとした（M1。一巡目で直す）
 //   4. scored（409）… 採点済みの行の技・性別を変えようとした（S7。force で越えられる）
 //   5. bib（409）… ゼッケンの重複
@@ -1877,6 +1907,15 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     const player = event.players[playerIndex];
     const before = Object.assign({}, player);
     const force = body.force === true;
+
+    // ── 0. 更新前の画面の補正点（レビュー指摘 9） ──
+    // 更新前の採点画面は補正点の入力に上限が無く、baseRev も送らない。その送信キューは 4xx を
+    // 「送っても通らない」として捨てるので、範囲外を 400 で断るとその選手の採点ごと黙って消える。
+    // baseRev の無い採点の PATCH に限り、整数の補正点を ±999 に丸めて受理する（得点も丸めた分だけ
+    // 差し引いて、補正点と合う値にする）。新しい画面（baseRev あり）は従来どおり 400。
+    if (body.baseRev === undefined && SCORE_FIELDS.some(k => body[k] !== undefined)) {
+      clampLegacyAdjust(body);
+    }
 
     // ── 1. 形の検査（400）。ここではまだ何も書き換えない ──
     // 得点・補正点は範囲外なら要求全体を断る（以前は黙って無視し、他の項目だけ保存していた。網羅検証 S4）。
@@ -2223,7 +2262,7 @@ function csvInt(v) {
 // Body: { csvText, mode: 'replace' | 'append', force?, expectedCount? }
 // 検査の順（設計書 2026-10-01 5.2。最初に当たったもので返し、何も書かない）:
 //   locked（409）→ expectedCount の食い違い（409 stale。replace のときだけ）→ 文字化け（400 encoding）
-//   → 見出し（400 format）→ 二巡目がある大会の往復できない置換（409 round2_format）
+//   → 見出し（400 format）→ 二巡目がある大会への往復できない形式の置換・追記（409 round2_format）
 //   → 採点済みの置換（409。force で越えられる）→ 行ごとの検査（簡易形式のコート名は 400）
 // 値は sanitizePlayerForSave と同じ規則で洗う（氏名 100 字・技 trim 50 字・得点 -9999〜9999 の整数・
 // 補正点 ±999・級位段位の正規化など）。
@@ -2278,11 +2317,12 @@ app.post('/api/events/:id/import', (req, res) => {
     }
 
     // 二巡目の行がある大会を、決戦の印と一巡目とのつながりを持たない形式で置き換えると、
-    // 決戦が消えて二巡目の行が追跡できなくなる。往復できる 20 列の形式だけ許す（force でも越えない）。
-    if (mode === 'replace' && current.some(p => EventStatus.roundOf(p) === 2) &&
-        !(fmt.kind === 'std' && fmt.roundtrip)) {
+    // 決戦が消えて二巡目の行が追跡できなくなる。追記でも、9 列などの形式では二巡目の行が
+    // 一巡目とのつながり無しに増えうる（通し試験の所見 C）。置換・追記とも、往復できる 20 列の
+    // 形式だけ許す（force でも越えない）。
+    if (current.some(p => EventStatus.roundOf(p) === 2) && !(fmt.kind === 'std' && fmt.roundtrip)) {
       return res.status(409).json({
-        error: '二巡目がある大会は、CSV エクスポート（20 列）で書き出したファイルだけ置換できます',
+        error: '二巡目がある大会には、CSV エクスポート（20 列）で書き出した形のファイルだけ取り込めます（置換・追記とも）',
         reason: 'round2_format'
       });
     }
@@ -3428,7 +3468,17 @@ app.get('/api/events/:id/history', (req, res) => {
     if (!requireValidId(req, res)) return;
     const historyPath = path.join(HISTORY_DIR, `${req.params.id}.json`);
     if (fs.existsSync(historyPath)) {
-      const data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+      // 壊れた履歴ファイルでも 500 にしない（POST の appendHistory と同じく空の履歴として扱う）。
+      // 読むだけなのでファイルは消さず、調べられるようログに出す。
+      let data;
+      try {
+        data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+      } catch (e) {
+        console.error(`履歴ファイルを読めません（空の履歴として返します）: ${historyPath}: ${e.message}`);
+        data = null;
+      }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) data = { eventId: req.params.id, entries: [] };
+      if (!Array.isArray(data.entries)) data.entries = [];
       res.json(data);
     } else {
       res.json({ eventId: req.params.id, entries: [] });
@@ -3442,8 +3492,9 @@ app.get('/api/events/:id/history', (req, res) => {
 // 本文をそのまま積むと、任意のキーや巨大な値が履歴ファイルに入り、存在しない大会の履歴も作れた
 // （網羅検証 S15）。許可した項目だけを残し、長さを切る。action は必須。大会が無ければ 404。
 // 壊れた履歴ファイルでも 500 にしない（appendHistory が空から積み直す）。
+// strike（太刀の番号）は採点画面が 0 始まりの数値で送る。古いデータ・他の画面の文字列も受けるので両方を通す。
 const HISTORY_STRING_KEYS = ['action', 'detail', 'playerName', 'playerId', 'techName', 'strike', 'value', 'court'];
-const HISTORY_NUMBER_KEYS = ['techRow', 'round'];
+const HISTORY_NUMBER_KEYS = ['techRow', 'round', 'strike'];
 app.post('/api/events/:id/history', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;

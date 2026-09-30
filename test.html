@@ -22,6 +22,7 @@
 <script src="route.js"></script>
 <script src="outbox.js"></script>
 <script src="techpicker.js"></script>
+<script src="techedit.js"></script>
 <script src="admin.js"></script>
 <script src="home.js"></script>
 <script src="desk.js"></script>
@@ -1293,13 +1294,21 @@
     assert('createPlayer は body の order を無視する', pMass.order, 'A-男子-1-3');
     assert('createPlayer は body の score を無視する', pMass.score, 0);
 
-    assert('name が空なら null', await Api.createPlayer(addEvent.id, { name: '', court: 'A' }), null);
-    assert('コート名に - があれば null',
-      await Api.createPlayer(addEvent.id, { name: '四郎', court: 'A-1' }), null);
-    assert('コート名が未分類なら null',
-      await Api.createPlayer(addEvent.id, { name: '四郎', court: '未分類' }), null);
-    assert('コート名が33文字以上なら null',
-      await Api.createPlayer(addEvent.id, { name: '四郎', court: new Array(34).join('A') }), null);
+    // 400 は { player: null, status: 400, reason, error }（画面が error を出せるように。通し試験の所見 B）
+    function bad400(r) { return !!r && r.player === null && r.status === 400 && typeof r.error === 'string' && r.error.length > 0; }
+    assert('name が空なら 400（player: null と error）', bad400(await Api.createPlayer(addEvent.id, { name: '', court: 'A' })), true);
+    assert('コート名に - があれば 400',
+      bad400(await Api.createPlayer(addEvent.id, { name: '四郎', court: 'A-1' })), true);
+    assert('コート名が未分類なら 400',
+      bad400(await Api.createPlayer(addEvent.id, { name: '四郎', court: '未分類' })), true);
+    assert('コート名が33文字以上なら 400',
+      bad400(await Api.createPlayer(addEvent.id, { name: '四郎', court: new Array(34).join('A') })), true);
+    // 技はその大会の技得点表にある名前だけ（一括登録と同じ規則。空は可）
+    var addUnknown = await Api.createPlayer(addEvent.id, { name: '四郎', court: 'A', tech1: '真', tech2: '存在しない技' });
+    assert('所見B: 技得点表に無い技名は 400 unknown_tech（理由の文言つき）',
+      [bad400(addUnknown), addUnknown && addUnknown.reason, addUnknown && addUnknown.error],
+      [true, 'unknown_tech', '技「存在しない技」は技リストにありません']);
+    assert('所見B: 400 のときは選手を足さない', (await Api.loadEvent(addEvent.id)).players.length, 5);
     assert('存在しない大会は null',
       await Api.createPlayer('nosuchevent', { name: '四郎', court: 'A' }), null);
     await Api.deleteEvent(addEvent.id);
@@ -2753,9 +2762,10 @@
     var s4P = (await Api.createPlayersBulk(s4Ev, { rows: [{ name: '範囲 太郎', court: 'A' }] })).players[0].id;
     assert('S4: score 100000 は 400', (await auPatch(s4Ev, s4P, { score: 100000 })).status, 400);
     assert('S4: score 1.5 は 400', (await auPatch(s4Ev, s4P, { score: 1.5 })).status, 400);
-    assert('S4: adjust に 1000 は 400', (await auPatch(s4Ev, s4P, { adjust: [1000, 0, 0] })).status, 400);
+    // baseRev のある（新しい画面の）PATCH。baseRev の無い古い画面の補正点は ±999 に丸めて受理する（レビュー指摘 9）
+    assert('S4: adjust に 1000 は 400（baseRev あり）', (await auPatch(s4Ev, s4P, { adjust: [1000, 0, 0], baseRev: 0 })).status, 400);
     assert('S4: adjust の長さ 2 は 400', (await auPatch(s4Ev, s4P, { adjust: [1, 2] })).status, 400);
-    assert('S4: totalAdjust -1000 は 400', (await auPatch(s4Ev, s4P, { totalAdjust: -1000 })).status, 400);
+    assert('S4: totalAdjust -1000 は 400（baseRev あり）', (await auPatch(s4Ev, s4P, { totalAdjust: -1000, baseRev: 0 })).status, 400);
     var s4Mixed = await auPatch(s4Ev, s4P, { note: '書かない', score: 1.5 });
     assert('S4: 400 のときは他の項目（備考）も書かない',
       [s4Mixed.status, auById(await auPlayers(s4Ev), s4P).note], [400, undefined]);
@@ -2928,6 +2938,13 @@
     var m5Fmt15 = await au('/api/events/' + m5Ev + '/import', 'POST', { csvText: m5Hdr9 + '\n誰か,A-男子-1-1,,,,0,,,', mode: 'replace', force: true });
     assert('M5: 二巡目がある大会を往復できない形式で置換すると 409 round2_format',
       [m5Fmt15.status, m5Fmt15.json.reason], [409, 'round2_format']);
+    // 通し試験の所見 C: 追記でも 20 列以外は断る（つながりの無い二巡目の行を増やさない）
+    var m5AppendFmt = await au('/api/events/' + m5Ev + '/import', 'POST', { csvText: m5Hdr9 + '\n誰か,A-男子-2-9,,,,0,,,', mode: 'append' });
+    var m5AppendApi = await Api.importCsv(m5Ev, m5Hdr9 + '\n誰か,A-男子-1-9,,,,0,,,', 'append');
+    assert('所見C: 二巡目がある大会へ 9 列の追記も 409 round2_format（Api は blocked と reason）で、選手は増えない',
+      [m5AppendFmt.status, m5AppendFmt.json.reason, m5AppendApi && m5AppendApi.blocked, m5AppendApi && m5AppendApi.reason,
+       (await auPlayers(m5Ev)).length],
+      [409, 'round2_format', true, 'round2_format', m5Before.length]);
     var m5Round = await au('/api/events/' + m5Ev + '/import', 'POST',
       { csvText: m5Csv, mode: 'replace', force: true, expectedCount: m5Before.length });
     var m5After = await auPlayers(m5Ev);
@@ -3032,6 +3049,494 @@
     assert('S18: 二巡目の差分追加の応答にも finalistDiff が入る',
       s18Gen.json.finalistDiff && s18Gen.json.finalistDiff.changed, true);
     await Api.deleteEvent(s18Ev);
+  }
+
+  // ==== 網羅バグ検証の修正（設計書 2026-10-01 11 章「採点画面」）: api.js / outbox.js / storage.js / board.js ====
+  async function runScoringAuditTests() {
+    var h2sa = document.createElement('h2');
+    h2sa.textContent = '網羅検証の修正（採点画面）';
+    results.appendChild(h2sa);
+
+    function saById(list, id) { return list.filter(function(p) { return p.id === id; })[0]; }
+    function saWait(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+    var saTechs = [
+      { name: '真', strikes: [11, 3, null, null], drawn: false, repeatable: false, reducedFirst: null },
+      { name: '連', strikes: [8, 3, null, null], drawn: false, repeatable: false, reducedFirst: null }
+    ];
+
+    // ---- api.js: updatePlayer（baseRev と 409 の本文） ----
+    var saEv = (await Api.saveEvent({ name: '監査修正テスト（採点画面）', date: '2026-10-01', venue: '',
+      techniques: saTechs, players: [] })).id;
+    var saBulk = await Api.createPlayersBulk(saEv, { rows: [
+      { name: '採点 一郎', court: 'A', isFemale: false, tech1: '真', tech2: '連' },
+      { name: '採点 二郎', court: 'A', isFemale: false, tech1: '真' }
+    ] });
+    var saA = saBulk.players[0].id;
+    var saB = saBulk.players[1].id;
+    var saDraft = await Api.updatePlayer(saEv, saA, { score: 11, result: '1    ', baseRev: 0 });
+    assert('updatePlayer: 準備中は 409 not_scorable を reason / player / eventStatus つきで返す',
+      [saDraft.ok, saDraft.status, saDraft.reason, saDraft.eventStatus, saDraft.player && saDraft.player.rev],
+      [false, 409, 'not_scorable', 'draft', 0]);
+    await Api.changeStatus(saEv, 'round1');
+    var saOk = await Api.updatePlayer(saEv, saA, { score: 11, result: '1    1    ', baseRev: 0 });
+    assert('updatePlayer: 成功は { ok: true, player }（保存後の rev 入り）',
+      [saOk.ok, saOk.player && saOk.player.score, saOk.player && saOk.player.rev], [true, 11, 1]);
+    var saStale = await Api.updatePlayer(saEv, saA, { score: 14, result: '11   1    ', baseRev: 0 });
+    assert('updatePlayer: 古い baseRev は 409 stale（サーバーの今の行つき）',
+      [saStale.ok, saStale.status, saStale.reason, saStale.player && saStale.player.score,
+       saStale.player && saStale.player.rev, typeof saStale.error],
+      [false, 409, 'stale', 11, 1, 'string']);
+    var saBad = await Api.updatePlayer(saEv, saA, { score: 1, adjust: [1000, 0, 0], baseRev: 1 });
+    assert('updatePlayer: 範囲外の補正点は 400（本文の error を返す）',
+      [saBad.ok, saBad.status, typeof saBad.error === 'string' && saBad.error.length > 0], [false, 400, true]);
+    var saGone = await Api.updatePlayer(saEv, 'nosuchplayer', { note: 'x' });
+    assert('updatePlayer: 選手が無ければ 404（Outbox は捨てる）', [saGone.ok, saGone.status], [false, 404]);
+
+    // fetch に打ち切りの信号（AbortSignal）を渡している（S8。15 秒で時間切れ → status: 0）
+    var saOrigFetch = window.fetch;
+    var saSignal = null;
+    window.fetch = function(url, opts) {
+      saSignal = opts && opts.signal;
+      return Promise.reject(new DOMException('aborted', 'AbortError'));
+    };
+    var saAbort = await Api.updatePlayer(saEv, saA, { note: 'x' });
+    window.fetch = saOrigFetch;
+    assert('updatePlayer: fetch に AbortSignal を渡し、打ち切りは status: 0',
+      [saSignal instanceof AbortSignal, saAbort.ok, saAbort.status], [true, false, 0]);
+
+    // ---- api.js: updatePlayerInfo（force をそのまま本文へ・409 の本文） ----
+    var saScored = await Api.updatePlayerInfo(saEv, saA, { tech2: '真' });
+    assert('updatePlayerInfo: 採点済みの技の変更は 409 scored（player つき）',
+      [saScored.ok, saScored.status, saScored.reason, saScored.player && saScored.player.id],
+      [false, 409, 'scored', saA]);
+    var saForce = await Api.updatePlayerInfo(saEv, saA, { tech2: '連', force: true });
+    assert('updatePlayerInfo: force: true は本文にそのまま入る（同じ値なので 200）', saForce.ok, true);
+
+    // ---- api.js: changeStatus（from と 409 の currentStatus） ----
+    var saStaleSt = await Api.changeStatus(saEv, 'round1_done', { from: 'draft' });
+    assert('changeStatus: from が今の状態と違えば 409 stale（currentStatus に今の状態）',
+      [saStaleSt.ok, saStaleSt.status, saStaleSt.reason, saStaleSt.currentStatus], [false, 409, 'stale', 'round1']);
+    assert('changeStatus: stale のときは状態を変えない', (await Api.loadEvent(saEv)).status, 'round1');
+
+    // ---- api.js: saveEventTechniques / resetEventTechniques（409 tech_in_use と renames） ----
+    var saInUse = await Api.saveEventTechniques(saEv, [saTechs[0]]);
+    assert('saveEventTechniques: 使用中の技が消えると 409（conflict / names / count / usages）',
+      [saInUse.success, saInUse.conflict, saInUse.reason, saInUse.names, saInUse.count, saInUse.usages],
+      [false, true, 'tech_in_use', ['連'], 1, [{ name: '連', count: 1 }]]);
+    var saRenamed = await Api.saveEventTechniques(saEv,
+      [saTechs[0], { name: '連続', strikes: [8, 3, null, null], drawn: false, repeatable: false, reducedFirst: null }],
+      [{ from: '連', to: '連続' }]);
+    assert('saveEventTechniques: renames を送ると選手の技名も付け替える（renamed）',
+      [saRenamed.success, saRenamed.renamed, saById((await Api.loadEvent(saEv)).players, saA).tech2],
+      [true, 1, '連続']);
+    var saReset = await Api.resetEventTechniques(saEv);
+    assert('resetEventTechniques: 雛形に無い技を使っていれば 409 の本文（conflict: true）',
+      [saReset === true, saReset && saReset.conflict, saReset && saReset.reason, saReset && saReset.names],
+      [false, true, 'tech_in_use', ['連続']]);
+
+    // ---- api.js: importCsv（expectedCount・400 の reason） ----
+    var saCsvStale = await Api.importCsv(saEv, '選手名,順番,技1,技2,技3,得点,新人,女子,結果\n', 'replace', false, 5);
+    assert('importCsv: expectedCount が違えば 409 stale（playerCount にサーバーの人数）',
+      [saCsvStale && saCsvStale.blocked, saCsvStale && saCsvStale.reason, saCsvStale && saCsvStale.playerCount],
+      [true, 'stale', 2]);
+    var saCsvFmt = await Api.importCsv(saEv, 'あ,い,う\n1,2,3\n', 'append');
+    assert('importCsv: 見出しが読めなければ { success: false, reason: format }',
+      [saCsvFmt && saCsvFmt.success, saCsvFmt && saCsvFmt.reason], [false, 'format']);
+    var saCsvEnc = await Api.importCsv(saEv, '選手名,順番\n\uFFFD,A-男子-1-1\n', 'append');
+    assert('importCsv: 文字化け（U+FFFD）は { success: false, reason: encoding }',
+      [saCsvEnc && saCsvEnc.success, saCsvEnc && saCsvEnc.reason], [false, 'encoding']);
+
+    // ---- レビュー指摘 9: 更新前の画面（baseRev なし）の範囲外の補正点は ±999 に丸めて受理する ----
+    // 得点 -1689 ＝ 真の初太刀 11 ＋ 行の補正 1500・-1200 ＋ 全体補正 -2000。丸めると 11 ＋ 999 − 999 − 999 ＝ -988
+    var saLegacy = await Api.updatePlayer(saEv, saB,
+      { score: -1689, result: '1    ', adjust: [1500, 0, -1200], totalAdjust: -2000 });
+    assert('指摘9: baseRev の無い採点の PATCH は範囲外の補正点を ±999 に丸めて受理し、得点も丸めた分を差し引く',
+      [saLegacy.ok, saLegacy.player && saLegacy.player.adjust, saLegacy.player && saLegacy.player.totalAdjust,
+       saLegacy.player && saLegacy.player.score],
+      [true, [999, 0, -999], -999, -988]);
+    var saLegacyRev = saLegacy.player ? saLegacy.player.rev : 0;
+    var saNewBad = await Api.updatePlayer(saEv, saB,
+      { score: 11, result: '1    ', adjust: [1500, 0, 0], totalAdjust: 0, baseRev: saLegacyRev });
+    assert('指摘9: baseRev のある（新しい画面の）PATCH の範囲外の補正点は従来どおり 400',
+      [saNewBad.ok, saNewBad.status, saById((await Api.loadEvent(saEv)).players, saB).adjust],
+      [false, 400, [999, 0, -999]]);
+    var saLegacyFloat = await Api.updatePlayer(saEv, saB, { score: 11, adjust: [1.5, 0, 0] });
+    assert('指摘9: baseRev が無くても整数でない補正点は 400（丸めない）', [saLegacyFloat.ok, saLegacyFloat.status], [false, 400]);
+
+    // ---- レビュー指摘 5: 採点の履歴の strike は数値（太刀の番号）も文字列も残す ----
+    await Api.addHistory(saEv, { action: 'score_update', playerName: '採点 一郎', techName: '真', techRow: 0,
+      strike: 2, value: '○', detail: '三ノ太刀 → 成功' });
+    await Api.addHistory(saEv, { action: 'adjust', playerName: '採点 一郎', strike: 'adjust', value: '3' });
+    await Api.addHistory(saEv, { action: 'score_update', strike: Infinity });
+    var saHist = (await Api.loadHistory(saEv)).entries || [];
+    var saHistStrikes = saHist.slice(-3).map(function(h) { return 'strike' in h ? h.strike : '(なし)'; });
+    assert('指摘5: 履歴の strike は数値 2 も文字列 adjust も残し、有限でない数は落とす',
+      saHistStrikes, [2, 'adjust', '(なし)']);
+    await Api.deleteEvent(saEv);
+
+    // ---- outbox.js: baseRev・連続保存の書き換え・衝突の保持 ----
+    var saSavedQueue = localStorage.getItem('tmg_outbox');
+    var saOrigUpdate = Api.updatePlayer;
+    localStorage.removeItem('tmg_outbox');
+
+    assert('buildBody: 採点の項目があれば baseRev を送る',
+      Outbox.buildBody({ eventId: 'e', playerId: 'p', score: 1, result: 'r', baseRev: 3 }),
+      { score: 1, result: 'r', baseRev: 3 });
+    assert('buildBody: 備考だけなら baseRev を送らない',
+      Outbox.buildBody({ eventId: 'e', playerId: 'p', note: 'n', baseRev: 3 }), { note: 'n' });
+    assert('buildBody: 確定の取り消しだけ（S5）は { confirmed: false, baseRev }',
+      Outbox.buildBody({ eventId: 'e', playerId: 'p', confirmed: false, baseRev: 2 }), { confirmed: false, baseRev: 2 });
+    assert('isConflict: 409 stale / not_scorable は衝突、locked は衝突でない',
+      [Outbox.isConflict({ status: 409, reason: 'stale' }), Outbox.isConflict({ status: 409, reason: 'not_scorable' }),
+       Outbox.isConflict({ status: 409, reason: 'locked' })], [true, true, false]);
+
+    // 送信中に同じ選手が再採点されたら、成功の rev で残りのエントリの baseRev を書き換える
+    var saBodies = [];
+    var saSavedCalls = [];
+    var saCall = 0;
+    Api.updatePlayer = async function(eventId, playerId, body) {
+      saBodies.push(body);
+      saCall++;
+      if (saCall === 1) {
+        Outbox.enqueue({ eventId: 'evS', playerId: 'pS', score: 14, result: 'B', baseRev: 4 });
+        return { ok: true, player: { id: 'pS', rev: 5 } };
+      }
+      return { ok: true, player: { id: 'pS', rev: 6 } };
+    };
+    Outbox.init(function() {}, function() {}, {
+      onSaved: function(entry, player) { saSavedCalls.push([entry.baseRev, player && player.rev]); }
+    });
+    Outbox.enqueue({ eventId: 'evS', playerId: 'pS', score: 11, result: 'A', baseRev: 4 });
+    await saWait(300);
+    assert('rebase: 1 通目は baseRev 4、送信中に積んだ 2 通目は成功の rev 5 に書き換わる',
+      saBodies.map(function(b) { return [b.score, b.baseRev]; }), [[11, 4], [14, 5]]);
+    assert('onSaved: 成功のたびに送ったエントリとサーバーの行を渡す', saSavedCalls, [[4, 5], [5, 6]]);
+    assert('rebase: 送り終えたらキューは空', Outbox.pendingCount(), 0);
+
+    // 409 stale は捨てずに衝突として残し、onConflict を呼ぶ。上書きは 409 の player.rev で送り直す
+    var saConflicts = [];
+    var saSends = [];
+    var saMode = 'stale';
+    Api.updatePlayer = async function(eventId, playerId, body) {
+      saSends.push(body);
+      if (saMode === 'stale') {
+        return { ok: false, status: 409, reason: 'stale', error: '別の端末で更新されています',
+                 player: { id: playerId, score: 20, rev: 9 } };
+      }
+      return { ok: true, player: { id: playerId, rev: 10 } };
+    };
+    var saDropped = [];
+    Outbox.init(function() {}, function(list) { saDropped = saDropped.concat(list); }, {
+      onConflict: function(entry) { saConflicts.push(entry); }
+    });
+    Outbox.enqueue({ eventId: 'evC', playerId: 'pC', score: 11, result: 'A', baseRev: 3 });
+    await saWait(300);
+    assert('衝突: 409 stale のエントリは捨てずに残る', [Outbox.pendingCount(), Outbox.conflictCount(), saDropped.length], [1, 1, 0]);
+    assert('衝突: onConflict に理由とサーバーの行が渡る',
+      [saConflicts.length, saConflicts[0] && saConflicts[0].conflict.reason, saConflicts[0] && saConflicts[0].conflict.player.rev],
+      [1, 'stale', 9]);
+    assert('衝突: 状態は conflict（送れるものが無い）', [Outbox.status().state, Outbox.status().conflicts], ['conflict', 1]);
+    var saSentBefore = saSends.length;
+    Outbox.enqueue({ eventId: 'evC', playerId: 'pC', note: '衝突中の備考' });
+    await saWait(200);
+    assert('衝突: 確認が済むまで同じ選手のエントリは送らない（畳まれて残る）',
+      [saSends.length - saSentBefore, Outbox.pendingCount(), Outbox.conflictCount()], [0, 1, 1]);
+    var saPend = [{ id: 'pC', score: 20, result: '', rev: 9 }];
+    Outbox.applyPending('evC', saPend);
+    assert('applyPending: 衝突中のエントリも画面へ当て、版は baseRev に戻す',
+      [saPend[0].score, saPend[0].rev, saPend[0].note], [11, 3, '衝突中の備考']);
+    saMode = 'ok';
+    Outbox.resolveConflict('evC', 'pC', 'overwrite');
+    await saWait(300);
+    assert('上書き: baseRev をサーバーの今の rev（9）にして送り直す',
+      [saSends[saSends.length - 1].baseRev, saSends[saSends.length - 1].score, Outbox.pendingCount()], [9, 11, 0]);
+
+    // 読み込む（discard）はエントリを捨てる・残す（keep）は送らずに持つ・flushNow で送り直す
+    saMode = 'stale';
+    saConflicts = [];
+    Outbox.enqueue({ eventId: 'evC', playerId: 'pD', score: 5, result: 'A', baseRev: 1 });
+    await saWait(300);
+    Outbox.resolveConflict('evC', 'pD', 'keep');
+    assert('残す: エントリは衝突のまま残る', [Outbox.pendingCount(), Outbox.conflictCount()], [1, 1]);
+    var saKeptStored = JSON.parse(localStorage.getItem('tmg_outbox') || '[]');
+    assert('残す: 衝突の印ごと localStorage に残る（次の起動で送り直して確かめる）',
+      [saKeptStored.length, !!(saKeptStored[0] && saKeptStored[0].conflict)], [1, true]);
+    saConflicts = [];
+    Outbox.flushNow();
+    await saWait(300);
+    assert('flushNow: 衝突の印を外して送り直し、まだ衝突なら確認がもう一度出る',
+      [saConflicts.length, Outbox.conflictCount()], [1, 1]);
+    Outbox.resolveConflict('evC', 'pD', 'discard');
+    assert('読み込む: エントリを捨てる', [Outbox.pendingCount(), localStorage.getItem('tmg_outbox')], [0, null]);
+
+    // 起動時の再送も同じ仕組み（localStorage のエントリが 409 not_scorable なら衝突で残る）
+    Api.updatePlayer = async function(eventId, playerId) {
+      return { ok: false, status: 409, reason: 'not_scorable', error: '採点できません',
+               player: { id: playerId, rev: 2 }, eventStatus: 'round1_done' };
+    };
+    saConflicts = [];
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'evN', playerId: 'pN', score: 3, result: 'A', baseRev: 2, queuedAt: 't1' }
+    ]));
+    Outbox.init(function() {}, function() {}, { onConflict: function(e) { saConflicts.push(e); } });
+    await saWait(300);
+    assert('起動時の再送: 409 not_scorable も衝突として残り確認が出る',
+      [Outbox.pendingCount(), saConflicts.length, saConflicts[0] && saConflicts[0].conflict.eventStatus],
+      [1, 1, 'round1_done']);
+    Outbox.resolveConflict('evN', 'pN', 'discard');
+
+    // S9: 別タブのエントリ（tab が違う）を保存で消さない
+    Api.updatePlayer = async function() { return { ok: false, status: 0 }; };
+    var saSavedAlive = localStorage.getItem(Outbox.ALIVE_KEY);
+    function saSetAlive(map) {
+      var cur = {};
+      try { cur = JSON.parse(localStorage.getItem(Outbox.ALIVE_KEY) || '{}') || {}; } catch (e) {}
+      Object.keys(map).forEach(function(k) { if (map[k] === null) delete cur[k]; else cur[k] = map[k]; });
+      localStorage.setItem(Outbox.ALIVE_KEY, JSON.stringify(cur));
+    }
+    Outbox.init(function() {}, function() {});
+    saSetAlive({ someOtherTab: Date.now() });   // 生きている別タブ（見回りでも引き取らない）
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'evT', playerId: 'other1', score: 1, result: 'A', queuedAt: 't1', tab: 'someOtherTab' }
+    ]));
+    Outbox.enqueue({ eventId: 'evT', playerId: 'mine1', score: 2, result: 'B', baseRev: 0 });
+    var saTabs = JSON.parse(localStorage.getItem('tmg_outbox') || '[]').map(function(e) { return e.playerId; }).sort();
+    assert('S9: 保存の前に読み直し、別タブのエントリを残す', saTabs, ['mine1', 'other1']);
+    assert('S9: 別タブのエントリはこのタブのキューには入れない（送るのは持ち主）', Outbox.pendingCount(), 1);
+
+    // ---- レビュー指摘 1: 時間切れのあとに届いていた自分の送信を、別の端末の更新（衝突）と取り違えない ----
+    await saWait(100);   // 上の S9 の送信（応答待ち）が片付くのを待つ（送信中だと新しいエントリを送らない）
+    localStorage.removeItem('tmg_outbox');
+    var r1Bodies = [];
+    var r1Conf = [];
+    var r1Saved = [];
+    var r1Call = 0;
+    var r1Server = { id: 'pM', score: 0, result: '', rev: 5 };
+    Api.updatePlayer = async function(eventId, playerId, body) {
+      r1Bodies.push([body.score, body.baseRev]);
+      r1Call++;
+      if (r1Call === 1) {
+        // 応答を待つ間（時間切れまで）に同じ選手をもう一度採点する（別のエントリに畳まれる）
+        Outbox.enqueue({ eventId: 'evM', playerId: 'pM', score: 14, result: 'B', baseRev: 5 });
+        // 実はサーバーに届いて rev 6 になったが、応答は時間切れ（status 0）
+        r1Server = { id: 'pM', score: body.score, result: body.result, rev: 6 };
+        return { ok: false, status: 0 };
+      }
+      if (body.baseRev !== r1Server.rev && (body.score !== r1Server.score || body.result !== r1Server.result)) {
+        return { ok: false, status: 409, reason: 'stale', error: '別の端末で更新されています',
+                 player: Object.assign({}, r1Server) };
+      }
+      r1Server = { id: 'pM', score: body.score, result: body.result, rev: r1Server.rev + 1 };
+      return { ok: true, player: Object.assign({}, r1Server) };
+    };
+    Outbox.init(function() {}, function() {}, {
+      onConflict: function(e) { r1Conf.push(e); },
+      onSaved: function(entry, player) { r1Saved.push([entry.baseRev, player && player.rev]); }
+    });
+    Outbox.flushNow();   // 前のテストのバックオフ待ちを打ち切る
+    Outbox.enqueue({ eventId: 'evM', playerId: 'pM', score: 11, result: 'A', baseRev: 5 });
+    await saWait(200);
+    var r1Stored = JSON.parse(localStorage.getItem('tmg_outbox') || '[]');
+    assert('指摘1: 曖昧な失敗（status 0）は、送った本文と baseRev を畳んだ先のエントリの maybeApplied に控える',
+      [r1Stored.length, r1Stored[0] && r1Stored[0].score, r1Stored[0] && r1Stored[0].maybeApplied],
+      [1, 14, [{ baseRev: 5, body: { score: 11, result: 'A', baseRev: 5 } }]]);
+    Outbox.flushNow();
+    await saWait(300);
+    assert('指摘1: 409 stale の行が控えの値で rev が baseRev + 1 なら、確認を出さずに今の rev で送り直す',
+      [r1Bodies, r1Conf.length, Outbox.pendingCount(), r1Server.score, r1Server.rev],
+      [[[11, 5], [14, 5], [14, 6]], 0, 0, 14, 7]);
+    assert('指摘1: 画面の控えの版も進むよう onSaved で知らせる（5→6、6→7）', r1Saved, [[5, 6], [6, 7]]);
+
+    // 別の端末が違う値を書いていたら（5xx も曖昧な失敗として控えるが）従来どおり衝突の確認を出す
+    r1Call = 0;
+    r1Bodies = [];
+    r1Conf = [];
+    Api.updatePlayer = async function(eventId, playerId, body) {
+      r1Bodies.push([body.score, body.baseRev]);
+      r1Call++;
+      if (r1Call === 1) {
+        Outbox.enqueue({ eventId: 'evM', playerId: 'pM', score: 14, result: 'B', baseRev: 5 });
+        return { ok: false, status: 504 };
+      }
+      return { ok: false, status: 409, reason: 'stale', error: '別の端末で更新されています',
+               player: { id: 'pM', score: 20, result: 'C', rev: 6 } };
+    };
+    Outbox.enqueue({ eventId: 'evM', playerId: 'pM', score: 11, result: 'A', baseRev: 5 });
+    await saWait(200);
+    Outbox.flushNow();
+    await saWait(300);
+    assert('指摘1: サーバーの行が控えの値と違えば（別の端末の更新）従来どおり衝突の確認を出す',
+      [r1Bodies, r1Conf.length, Outbox.conflictCount()], [[[11, 5], [14, 5]], 1, 1]);
+    Outbox.resolveConflict('evM', 'pM', 'discard');
+    // 値が同じでも rev が 2 つ以上先（間に別の端末の更新がある）なら衝突
+    r1Call = 0;
+    r1Conf = [];
+    Api.updatePlayer = async function(eventId, playerId, body) {
+      r1Call++;
+      if (r1Call === 1) {
+        Outbox.enqueue({ eventId: 'evM', playerId: 'pM', score: 14, result: 'B', baseRev: 5 });
+        return { ok: false, status: 0 };
+      }
+      return { ok: false, status: 409, reason: 'stale', error: '別の端末で更新されています',
+               player: { id: 'pM', score: 11, result: 'A', rev: 8 } };
+    };
+    Outbox.enqueue({ eventId: 'evM', playerId: 'pM', score: 11, result: 'A', baseRev: 5 });
+    await saWait(200);
+    Outbox.flushNow();
+    await saWait(300);
+    assert('指摘1: 値が控えと同じでも rev が baseRev + 1 でなければ衝突の確認を出す', [r1Conf.length, Outbox.conflictCount()], [1, 1]);
+    Outbox.resolveConflict('evM', 'pM', 'discard');
+
+    // ---- レビュー指摘 2: 端末に残した衝突は、次の起動で印を外して送り直し、まだ衝突なら確認を出す ----
+    var r2Sends = [];
+    var r2Conf = [];
+    Api.updatePlayer = async function(eventId, playerId) {
+      r2Sends.push(playerId);
+      return { ok: true, player: { id: playerId, rev: 4 } };
+    };
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'evK', playerId: 'pK', score: 3, result: 'A', baseRev: 2, queuedAt: 't1', tab: 'closedTab',
+        conflict: { reason: 'stale', error: '別の端末で更新されています', player: { id: 'pK', rev: 3 } } }
+    ]));
+    Outbox.init(function() {}, function() {}, { onConflict: function(e) { r2Conf.push(e); } });
+    await saWait(300);
+    assert('指摘2: 端末に残した衝突（閉じたタブの分も）は起動時に送り直し、通れば消える',
+      [r2Sends, Outbox.pendingCount(), r2Conf.length], [['pK'], 0, 0]);
+    Api.updatePlayer = async function(eventId, playerId) {
+      return { ok: false, status: 409, reason: 'stale', error: '別の端末で更新されています',
+               player: { id: playerId, score: 9, rev: 5 } };
+    };
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'evK', playerId: 'pK', score: 3, result: 'A', baseRev: 2, queuedAt: 't1',
+        conflict: { reason: 'stale', error: '', player: { id: 'pK', rev: 3 } } }
+    ]));
+    Outbox.init(function() {}, function() {}, { onConflict: function(e) { r2Conf.push(e); } });
+    await saWait(300);
+    assert('指摘2: 起動時の送り直しでまだ衝突なら確認が出る（サーバーの今の行つき）',
+      [Outbox.conflictCount(), r2Conf.length, r2Conf[0] && r2Conf[0].conflict.player.rev], [1, 1, 5]);
+    Outbox.resolveConflict('evK', 'pK', 'discard');
+
+    // ---- レビュー指摘 3: 生きている別タブのキューは引き取らない（二重に送らない） ----
+    var r3Sends = [];
+    Api.updatePlayer = async function(eventId, playerId) { r3Sends.push(playerId); return { ok: false, status: 0 }; };
+    saSetAlive({ liveTab: Date.now(), deadTab: Date.now() - 60000 });
+    localStorage.setItem('tmg_outbox', JSON.stringify([
+      { eventId: 'evL', playerId: 'pLive', score: 1, result: 'A', queuedAt: 't1', tab: 'liveTab' },
+      { eventId: 'evL', playerId: 'pDead', score: 2, result: 'A', queuedAt: 't2', tab: 'deadTab' },
+      { eventId: 'evL', playerId: 'pOld', score: 3, result: 'A', queuedAt: 't3' }
+    ]));
+    var r3Recovered = Outbox.init(function() {}, function() {});
+    await saWait(200);
+    function r3Stored(id) {
+      return JSON.parse(localStorage.getItem('tmg_outbox') || '[]').filter(function(e) { return e.playerId === id; })[0] || null;
+    }
+    var r3Alive = JSON.parse(localStorage.getItem(Outbox.ALIVE_KEY) || '{}');
+    assert('指摘3: 起動時に引き取るのは閉じたタブと tab の無いエントリだけ（生きているタブのものは送らず残す）',
+      [r3Recovered, Outbox.pendingCount(), r3Sends.indexOf('pLive'), r3Stored('pLive') && r3Stored('pLive').tab,
+       r3Stored('pDead') && r3Stored('pDead').tab === Outbox.TAB_ID, r3Stored('pDead') && r3Stored('pDead').adoptedFrom],
+      [2, 2, -1, 'liveTab', true, 'deadTab']);
+    assert('指摘3: 起動するとこのタブの生存時刻を書く', typeof r3Alive[Outbox.TAB_ID], 'number');
+    saSetAlive({ liveTab: Date.now() - 60000 });
+    assert('指摘3: 見回りで、止まった（生存時刻が古い）タブのエントリを引き取る',
+      [Outbox.adoptOrphans(), Outbox.pendingCount(), r3Stored('pLive') && r3Stored('pLive').tab === Outbox.TAB_ID],
+      [1, 3, true]);
+    // 止まっている間に別のタブ（thiefTab）が pOld を引き取っていた → このタブでは送らずに外す
+    var r3All = JSON.parse(localStorage.getItem('tmg_outbox') || '[]').map(function(e) {
+      return e.playerId === 'pOld' ? Object.assign({}, e, { tab: 'thiefTab', adoptedFrom: Outbox.TAB_ID }) : e;
+    });
+    localStorage.setItem('tmg_outbox', JSON.stringify(r3All));
+    saSetAlive({ thiefTab: Date.now() });
+    r3Sends = [];
+    Outbox.flushNow();
+    await saWait(200);
+    assert('指摘3: 他のタブに引き取られたエントリ（adoptedFrom が自分・queuedAt が同じ）は送らずに外す',
+      [Outbox.pendingCount(), r3Sends.indexOf('pOld'), r3Stored('pOld') && r3Stored('pOld').tab], [2, -1, 'thiefTab']);
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    var r3AliveAfter = JSON.parse(localStorage.getItem(Outbox.ALIVE_KEY) || '{}');
+    assert('指摘3: 閉じる（pagehide）と生存時刻を消す（残したエントリを他のタブがすぐ引き取れる）',
+      Outbox.TAB_ID in r3AliveAfter, false);
+    saSetAlive({ liveTab: null, deadTab: null, thiefTab: null, someOtherTab: null });
+
+    // ---- レビュー指摘 6: 捨てたエントリにサーバーの理由を載せる ----
+    var r6Dropped = [];
+    Api.updatePlayer = async function() {
+      return { ok: false, status: 400, reason: '', error: '補正点は3つとも -999〜999 の整数で指定してください' };
+    };
+    localStorage.removeItem('tmg_outbox');
+    Outbox.init(function() {}, function(list) { r6Dropped = r6Dropped.concat(list); });
+    Outbox.flushNow();
+    Outbox.enqueue({ eventId: 'evD', playerId: 'pD6', score: 1, result: 'A', adjust: [1000, 0, 0], baseRev: 0 });
+    await saWait(200);
+    assert('指摘6: 捨てたエントリにサーバーの status と error を載せて呼び出し元へ渡す',
+      [r6Dropped.length, r6Dropped[0] && r6Dropped[0].dropStatus, r6Dropped[0] && r6Dropped[0].dropError],
+      [1, 400, '補正点は3つとも -999〜999 の整数で指定してください']);
+
+    // 後始末
+    Api.updatePlayer = saOrigUpdate;
+    if (saSavedQueue === null) localStorage.removeItem('tmg_outbox');
+    else localStorage.setItem('tmg_outbox', saSavedQueue);
+    Outbox.init(function() {}, function() {});
+    if (saSavedAlive !== null) {
+      // 元の表に、いま起動し直したこのタブの生存時刻を足して戻す
+      var saAliveBack = JSON.parse(saSavedAlive);
+      saAliveBack[Outbox.TAB_ID] = Date.now();
+      localStorage.setItem(Outbox.ALIVE_KEY, JSON.stringify(saAliveBack));
+    }
+
+    // ---- レビュー指摘 4: 雛形に戻すが断られたら（409 locked など）「雛形に戻しました」と出さない ----
+    var r4Orig = { load: Api.loadEventTechniques, ev: Api.loadEvent, reset: Api.resetEventTechniques };
+    var r4Alert = window.alert;
+    var r4Confirm = window.confirm;
+    var r4Alerts = [];
+    Api.loadEventTechniques = async function() { return { techniques: saTechs, source: 'event' }; };
+    Api.loadEvent = async function() { return { id: 'evR', players: [] }; };
+    Api.resetEventTechniques = async function() {
+      return { success: false, conflict: true, reason: 'locked', error: 'この大会は最終結果を確定済みです',
+               names: [], count: 0, usages: [] };
+    };
+    window.alert = function(m) { r4Alerts.push(String(m)); };
+    window.confirm = function() { return true; };
+    try {
+      var r4Box = document.createElement('div');
+      var r4Ed = TechEdit.mount(r4Box, 'evR', { title: 'テスト' });
+      await saWait(100);
+      r4Box.querySelector('button.btn-fail').click();
+      await saWait(100);
+      Api.resetEventTechniques = async function() { return false; };
+      r4Box.querySelector('button.btn-fail').click();
+      await saWait(100);
+      r4Ed.destroy();
+    } finally {
+      window.alert = r4Alert;
+      window.confirm = r4Confirm;
+      Api.loadEventTechniques = r4Orig.load;
+      Api.loadEvent = r4Orig.ev;
+      Api.resetEventTechniques = r4Orig.reset;
+    }
+    assert('指摘4: 雛形に戻すが 409 locked で断られたら、サーバーの理由を出して成功とは出さない（通信失敗は従来の文言）',
+      r4Alerts, ['この大会は最終結果を確定済みです', 'リセットに失敗しました。']);
+
+    // ---- storage.js: CSV の文字コード（UTF-8 → U+FFFD があれば Shift_JIS） ----
+    var saUtf8 = new TextEncoder().encode('選手名,順番\n試し 斬子,A-女子-1-1\n');
+    assert('decodeCsvBytes: UTF-8 はそのまま', Storage.decodeCsvBytes(saUtf8.buffer), '選手名,順番\n試し 斬子,A-女子-1-1\n');
+    // 「選手名」を Shift_JIS で（91 49 8E E8 96 BC）
+    var saSjis = new Uint8Array([0x91, 0x49, 0x8E, 0xE8, 0x96, 0xBC, 0x2C, 0x41]);
+    assert('decodeCsvBytes: Shift_JIS は読み直す', Storage.decodeCsvBytes(saSjis.buffer), '選手名,A');
+    var saBom = new Uint8Array([0xEF, 0xBB, 0xBF, 0x41, 0x2C, 0x42]);
+    assert('decodeCsvBytes: 先頭の BOM は落とす', Storage.decodeCsvBytes(saBom.buffer), 'A,B');
+    assert('decodeCsvBytes: 空でも落ちない', Storage.decodeCsvBytes(new ArrayBuffer(0)), '');
+
+    // ---- board.js: 行の得点の和と合計（保存値）が食い違わない（M4） ----
+    Scoring.setTechniques(saTechs);
+    assert('rowScoresMatch: 行の和＋全体補正＝保存値なら true',
+      Board.rowScoresMatch({ tech1: '真', result: '11   ', adjust: [0, 0, 0], totalAdjust: 1, score: 15 }), true);
+    assert('rowScoresMatch: 配点が変わって保存値と違えば false（行の得点は出さない）',
+      Board.rowScoresMatch({ tech1: '真', result: '11   ', adjust: [0, 0, 0], totalAdjust: 0, score: 16 }), false);
+    assert('rowScoresMatch: 未採点（得点なし・空の結果）は true',
+      Board.rowScoresMatch({ tech1: '真', result: '', score: 0 }), true);
+    assert('rowScoresMatch: 技得点表に無い技は 0 点になるので保存値と合わず false',
+      Board.rowScoresMatch({ tech1: '消えた技', result: '1    ', adjust: [0, 0, 0], score: 11 }), false);
+    Scoring.setTechniques(TECHNIQUES);
   }
 
   (async function() {
@@ -3900,7 +4405,7 @@
     assert('scoreChangeConfirmMessage: 得点を含む文言',
       Courts.scoreChangeConfirmMessage(smScored),
       'この選手は採点済みです（66点）。\n' +
-      '得点が変わる可能性があります。採点画面でこの選手を開き直してください。\n\n' +
+      '得点が変わる可能性があります。保存後に採点画面でこの選手を開き、「計算し直して保存」を押してください。\n\n' +
       'このまま保存しますか？');
     assert('scoreChangeConfirmMessage: 得点が無ければ 0点',
       Courts.scoreChangeConfirmMessage({}).indexOf('（0点）') !== -1, true);
@@ -5296,6 +5801,7 @@
       { ok: false, error: '対応していないファイル形式です（version: 2）\nこのアプリを更新してください。' });
 
     await runApiTests();
+    await runScoringAuditTests();
 
     // 結果サマリ
     var summary = document.createElement('p');

@@ -1,4 +1,4 @@
-// 認証と静的配信の許可リストのテスト。
+// 認証と静的配信の許可リストのテスト（ほか、データのファイルを直接書く必要がある結合テスト）。
 // server/index.js を子プロセスで起動し、環境変数の組み合わせごとに HTTP で検証する。
 // 実行: npm test（外部依存なし。Node 18 以上）
 const assert = require('assert');
@@ -349,6 +349,39 @@ test('開発・認証なし: 許可リストは効く（deploy.sh は 404、shar
     assert.strictEqual((await get(base, '/deploy.sh')).status, 404);
     assert.strictEqual((await get(base, '/share.html')).status, 200);
     assert.strictEqual((await get(base, '/test.html')).status, 200);
+  });
+});
+
+// ── 結合: 履歴ファイルが壊れていても GET は 500 にしない（通し試験の所見 A） ──
+// ブラウザのテスト（test.html）からは履歴ファイルを壊せないので、ここでファイルを直接書く。
+// 作った大会は自分の id だけ消す（DELETE が履歴ファイルも消す）。
+test('履歴: 壊れた履歴ファイルでも GET は 200 の空の履歴（ファイルは消さずに残す）', async () => {
+  const fs = require('fs');
+  await withServer(NO_AUTH_DEV, async base => {
+    const created = await fetch(base + '/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '履歴破損テスト（自動で消す）', date: '2026-10-01', venue: '', players: [] }),
+      signal: AbortSignal.timeout(5000)
+    });
+    const id = (await created.json()).id;
+    assert.ok(id, '大会を作れる');
+    const historyPath = path.join(__dirname, 'data', 'history', id + '.json');
+    try {
+      fs.writeFileSync(historyPath, '{ "eventId": "' + id + '", "entries": [ 壊れ');
+      const res = await get(base, '/api/events/' + id + '/history');
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual((await res.json()).entries, []);
+      assert.ok(fs.readFileSync(historyPath, 'utf-8').includes('壊れ'), '壊れたファイルは消さない');
+      // 形の違う（entries が配列でない）ファイルも空の履歴として返す
+      fs.writeFileSync(historyPath, JSON.stringify({ eventId: id, entries: 'x' }));
+      const res2 = await get(base, '/api/events/' + id + '/history');
+      assert.strictEqual(res2.status, 200);
+      assert.deepStrictEqual((await res2.json()).entries, []);
+    } finally {
+      await fetch(base + '/api/events/' + id, { method: 'DELETE', signal: AbortSignal.timeout(5000) });
+      if (fs.existsSync(historyPath)) fs.unlinkSync(historyPath);
+    }
   });
 });
 
