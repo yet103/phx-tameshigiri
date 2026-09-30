@@ -118,12 +118,17 @@
   }
 
   // 「戻す」の行き先。draft と未知の状態は null。
-  // final からは二巡目の行があれば round2_done、無ければ round1_done。
+  // final からは二巡目に採点済みか確定済みの行があれば round2_done、無ければ round1_done。
+  // 一巡目の終了で二巡目の行は必ず作られるので、行があるかどうかでは「二巡目を行わず
+  // 最終結果へ」の後の「戻す」が二巡目終了に行ってしまう（網羅検証 S11。2026-10-01）。
   // round2_done からは決戦の行があれば round2_final、無ければ round2
   // （決戦の無い大会を添字だけで round2_final に戻さない。既存データの移行）。
   function prev(status, players) {
     if (status === 'final') {
-      return rowsOfRound(players, 2).length > 0 ? 'round2_done' : 'round1_done';
+      var played = rowsOfRound(players, 2).some(function(p) {
+        return isScored(p) || (p && p.confirmed === true);
+      });
+      return played ? 'round2_done' : 'round1_done';
     }
     if (status === 'round2_done') {
       return hasFinalists(players) ? 'round2_final' : 'round2';
@@ -193,6 +198,89 @@
     if (status === 'round2') return player.finalist !== true;
     if (status === 'round2_final') return player.finalist === true;
     return true;
+  }
+
+  // その行を今の状態で採点してよいか（サーバの not_scorable の判定。設計書 2026-10-01 1.2）。
+  // 状態が採点できること（isScoringOpen）、行の巡目がその状態の巡目であること
+  // （一巡目終了の後に一巡目の行の得点が届いても受け付けない）、決戦の制限（isPlayerScorable）の3つ。
+  // 採点画面の「この選手を採点できるか」もこれに寄せてよい。
+  function isRowScorable(status, player) {
+    if (!isScoringOpen(status)) return false;
+    if (!player) return false;
+    if (roundOf(player) !== scoringRound(status)) return false;
+    return isPlayerScorable(status, player);
+  }
+
+  // 選手の行の版（設計書 2026-10-01 1.1）。無い・壊れた値は 0（旧データ・新規作成の行）。
+  function revOf(player) {
+    var v = player && player.rev;
+    return (typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= 0) ? v : 0;
+  }
+
+  // 暫定ベスト8 の選考で使う得点。確定済みの行だけ数える（未確定は 0。順位と同じ基準）。
+  function confirmedScoreOf(p) {
+    return (p && p.confirmed === true && typeof p.score === 'number') ? p.score : 0;
+  }
+
+  // 暫定ベスト8。一般男子（isFemale が true でない＝新人も含む。順位の集計と同じ規則）の
+  // 一巡目の確定済みの得点の上位 8 名。0 点は含めない。8 位が同点なら全員（同点同順位）。
+  // 8 名未満なら全員。rows は一巡目の行（呼び出し側が絞る）。
+  // 戻り値: { <playerId>: true }（選手 id が '__proto__' でも壊れない辞書）。
+  // サーバの二巡目生成と finalistDiff（S18）が同じ判定を使う（以前は server/index.js にあった）。
+  function pickFinalists(rows) {
+    var out = Object.create(null);
+    var males = (rows || []).filter(function(p) {
+      return p && p.isFemale !== true && confirmedScoreOf(p) > 0;
+    }).sort(function(a, b) { return confirmedScoreOf(b) - confirmedScoreOf(a); });
+    if (males.length === 0) return out;
+    var cut = confirmedScoreOf(males.length >= 8 ? males[7] : males[males.length - 1]);
+    males.forEach(function(p) { if (confirmedScoreOf(p) >= cut) out[p.id] = true; });
+    return out;
+  }
+
+  // 二巡目の元になる一巡目の行（order が解析でき、コートが使える名前の行）。
+  // サーバの generateRound2 の src と同じ条件（isValidCourt: '未分類' でない・32 文字まで。
+  // '-' を含まないことは ORDER_PATTERN が保証する）。
+  function round1Sources(players) {
+    return (players || []).filter(function(p) {
+      if (!p || roundOf(p) !== 1) return false;
+      var m = (typeof p.order === 'string' ? p.order : '').match(ORDER_PATTERN);
+      return !!m && m[1] !== UNASSIGNED && m[1].length <= 32;
+    });
+  }
+
+  // 選考の差（網羅検証 S18。設計書 2026-10-01 6 章）。今の一巡目の確定得点で選ぶべき候補と、
+  // 二巡目の決戦の行（finalist の印）の元（sourcePlayerId）を比べる。
+  // 一巡目の終了のあとで一巡目の行が確定・得点変更されると、決戦の印は選び直されない。
+  // それを試合進行（PC・スマホ）とサーバの応答で知らせるための共通の判定。
+  // 戻り値: { changed, missing: [{ id, name, score }], extra: [{ id, name, score }], round2Scored }
+  //   missing … 選ぶべきなのに決戦の行が無い一巡目の行
+  //   extra   … 決戦の行があるのに選ぶべきでない一巡目の行
+  //   round2Scored … 二巡目に採点済みか確定済みの行があるか（無ければ戻して選び直せる）
+  // 二巡目の行が 1 つも無いときは changed: false（まだ選んでいない）。
+  function finalistDiff(players) {
+    var list = players || [];
+    var r2 = rowsOfRound(list, 2);
+    var result = { changed: false, missing: [], extra: [], round2Scored: false };
+    if (r2.length === 0) return result;
+    result.round2Scored = r2.some(function(p) { return isScored(p) || (p && p.confirmed === true); });
+    var src = round1Sources(list);
+    var want = pickFinalists(src);
+    var have = Object.create(null);
+    finalists(list).forEach(function(p) {
+      if (typeof p.sourcePlayerId === 'string' && p.sourcePlayerId) have[p.sourcePlayerId] = true;
+    });
+    function brief(p) {
+      return { id: p.id, name: String(p.name || '').trim(), score: confirmedScoreOf(p) };
+    }
+    src.forEach(function(p) {
+      var w = !!want[p.id];
+      var h = !!have[p.id];
+      if (w && !h) result.missing.push(brief(p));
+      if (!w && h) result.extra.push(brief(p));
+    });
+    result.changed = result.missing.length > 0 || result.extra.length > 0;
+    return result;
   }
 
   // 「次へ進む」の行き先。二巡目 進行中からは、決戦の行があれば決戦へ、
@@ -271,6 +359,12 @@
     finaleCourt: finaleCourt,
     firstCourt: firstCourt,
     isPlayerScorable: isPlayerScorable,
+    isRowScorable: isRowScorable,
+    revOf: revOf,
+    confirmedScoreOf: confirmedScoreOf,
+    pickFinalists: pickFinalists,
+    round1Sources: round1Sources,
+    finalistDiff: finalistDiff,
     isScoringOpen: isScoringOpen,
     scoringRound: scoringRound,
     isLocked: isLocked,

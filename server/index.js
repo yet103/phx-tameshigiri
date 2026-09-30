@@ -336,6 +336,40 @@ function countsAllScores(event) {
   return !(event && typeof event.status === 'string');
 }
 
+// ── 選手の版（rev）。設計書 2026-10-01-audit-fixes-design.md 1 章 ──
+// 遅れて届いた採点が新しい採点を上書きしないよう（網羅検証 M2）、行ごとに版を持たせる。
+// 版を上げるのは「採点に関わる値」（REV_FIELDS）が実際に変わったときだけ。
+// 名前・備考・ゼッケンなどの直しで採点画面を衝突にしないため、それらは含めない。
+// 技と性別を含めるのは、古い技の並びのまま ○× を書かせないため。
+const SCORE_FIELDS = ['score', 'result', 'adjust', 'totalAdjust', 'confirmed'];
+const REV_FIELDS = SCORE_FIELDS.concat(['tech1', 'tech2', 'tech3', 'isFemale']);
+
+// 版の項目を比べるための正規化（無い adjust と [0,0,0] は区別する。旧データの 5 文字目の
+// 読み替えが変わるため）。JSON 文字列にして比べる。
+function revFieldValue(p, key) {
+  const v = p ? p[key] : undefined;
+  if (key === 'confirmed' || key === 'isFemale') return v === true;
+  if (key === 'adjust') return Array.isArray(v) ? v.slice() : null;
+  if (key === 'score') return typeof v === 'number' ? v : 0;
+  if (key === 'totalAdjust') return Number.isInteger(v) ? v : null;
+  return typeof v === 'string' ? v : '';
+}
+
+function revFieldsDiffer(before, after, keys) {
+  return (keys || REV_FIELDS).some(k =>
+    JSON.stringify(revFieldValue(before, k)) !== JSON.stringify(revFieldValue(after, k)));
+}
+
+// before（変更前の複製）と after（変更後の行）で版の項目が変わっていれば rev を +1 する。
+function bumpRevIfChanged(before, after) {
+  if (revFieldsDiffer(before, after)) after.rev = EventStatus.revOf(before) + 1;
+}
+
+// 応答で返す選手の行。rev を必ず整数で入れる（ファイルに rev が無い行も 0 として返す）。
+function playerWithRev(p) {
+  return Object.assign({}, p, { rev: EventStatus.revOf(p) });
+}
+
 // 決戦（暫定ベスト8）の表。決戦の行が無ければ null（設計書 2026-09-22）。
 // rows は試技順（候補の行の番号順。候補は先頭コートの男子の二巡目の末尾に並ぶ。設計書 2026-09-28）。r1 は一巡目の得点（sourcePlayerId で引く）、
 // r2 は斬った人だけ（未採点は null）、rank も斬った人だけの中での暫定順位
@@ -395,32 +429,74 @@ function computeFinale(event) {
 }
 
 // 順位の集計。順位ロジックの唯一の実装。
-// 行ごとに isFemale で男女に振り分け、isNewFace なら新人にも入れる。
-// 氏名で合算する（一巡目＋二巡目）。得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
-// ○×の生データ（result）や order は返さない（共有リンクから無認証で読まれるため）。
+// 一巡目の行ごとに合算する（一巡目＋二巡目。網羅検証 M1。設計書 2026-10-01 2.3）:
+//   一巡目の行 … 自分の id の組
+//   sourcePlayerId を持つ行 … その id の組（元の行が消えていてもその id でまとめる）
+//   sourcePlayerId を持たない二巡目以降の行（旧データ・CSV 由来）… 従来どおり氏名と性別で、
+//     同じ氏名・同じ性別の一巡目の組に足す（無ければ氏名の組を作る）
+// 以前は氏名だけで合算していたため、一巡目の氏名を直すと 2 行に割れ、同姓同名の別人は合算されていた。
+// 組の氏名・性別・新人は組の代表（一巡目の行。無ければ最初に入った行）から取る。
+// 得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
+// ○×の生データ（result）や order・id は返さない（共有リンクから無認証で読まれるため）。
 function computeRanking(event) {
   const lockedEvent = countsAllScores(event);   // 旧データ（status 無し）だけ全行を数える
-  // 選手名が __proto__ / constructor などでも壊れないよう、プロトタイプ無しの辞書を使う
-  const male = Object.create(null);
-  const female = Object.create(null);
-  const newFace = Object.create(null);
+  const players = ((event && event.players) || []).filter(p => p && typeof p === 'object');
+  // id や氏名が __proto__ / constructor などでも壊れないよう、プロトタイプ無しの辞書を使う
+  const groups = Object.create(null);   // key -> { rep, score }
+  const byNameSex = Object.create(null);   // '女|氏名' -> 一巡目の組の key（最初の 1 つ）
+  const keys = [];
+  const nameOf = p => String((p && p.name) || '').trim();
+  const sexKey = p => (p.isFemale === true ? '女' : '男') + '|' + nameOf(p);
+  const scoreOf = p => ((p.confirmed === true || lockedEvent) && typeof p.score === 'number') ? p.score : 0;
+  const addTo = (key, p) => {
+    if (!groups[key]) { groups[key] = { rep: p, score: 0 }; keys.push(key); }
+    groups[key].score += scoreOf(p);
+  };
 
-  const add = (dict, name, score) => { dict[name] = (dict[name] || 0) + score; };
-
-  ((event && event.players) || []).forEach(p => {
-    // CSV エクスポートは氏名の前後に空白が付くことがある。trim して合算する（表示名もこちらを使う）。
-    const name = String((p && p.name) || '').trim();
-    if (!name) return;
-    // 得点は「確定」された行だけ数える（採点途中の値は順位に出さない。ユーザー要望 2026-09-30）
-    const score = ((p.confirmed === true || lockedEvent) && typeof p.score === 'number') ? p.score : 0;
-    if (p.isFemale) add(female, name, score);
-    else add(male, name, score);
-    if (p.isNewFace) add(newFace, name, score);
+  // 行ごとの組の key。id の無い一巡目の行（ごく古いデータ）は行ごとに別の組にする
+  // （'id:' に寄せると id の無い行どうしが 1 人に合算されてしまう）。
+  const keyOf = new Array(players.length);
+  // 1 周目: 一巡目の行が組を作る（二巡目の行が配列の前にあっても代表は一巡目になる）
+  players.forEach((p, i) => {
+    if (EventStatus.roundOf(p) !== 1) return;
+    const key = (typeof p.id === 'string' && p.id) ? 'id:' + p.id : 'row:' + i;
+    keyOf[i] = key;
+    addTo(key, p);
+    const nk = sexKey(p);
+    if (!byNameSex[nk]) byNameSex[nk] = key;
+  });
+  // 2 周目: 二巡目以降の行
+  players.forEach((p, i) => {
+    if (EventStatus.roundOf(p) === 1) return;
+    const key = (typeof p.sourcePlayerId === 'string' && p.sourcePlayerId) ? 'id:' + p.sourcePlayerId
+      : (byNameSex[sexKey(p)] || ('name:' + sexKey(p)));
+    keyOf[i] = key;
+    addTo(key, p);
   });
 
-  const rank = dict => {
-    const entries = Object.keys(dict)
-      .map(name => ({ name: name, score: dict[name] }))
+  // CSV エクスポートは氏名の前後に空白が付くことがある。trim して表示する。
+  // 代表の氏名が空なら組の中の最初の空でない氏名を使い、それも無ければ出さない（従来どおり）。
+  const namesByKey = Object.create(null);
+  players.forEach((p, i) => {
+    const n = nameOf(p);
+    if (n && !namesByKey[keyOf[i]]) namesByKey[keyOf[i]] = n;
+  });
+
+  const male = [];
+  const female = [];
+  const newFace = [];
+  keys.forEach(key => {
+    const g = groups[key];
+    const name = nameOf(g.rep) || namesByKey[key] || '';
+    if (!name) return;
+    const entry = { name: name, score: g.score };
+    if (g.rep.isFemale === true) female.push(entry);
+    else male.push(entry);
+    if (g.rep.isNewFace === true) newFace.push(entry);
+  });
+
+  const rank = list => {
+    const entries = list.slice()
       // 同点は氏名順で安定させる
       .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ja'));
     let current = 1;
@@ -575,6 +651,20 @@ app.get('/api/events/:id', (req, res) => {
 // score は PATCH .../players/:playerId と同じ規則: 採点画面が送る値は常に整数
 // （Scoring.calcTotalScore が toInt で丸める）なので、-9999〜9999 の整数だけ受理し、
 // それ以外（1e9 や小数など）は 0 に丸める。
+// 得点・補正点の範囲（網羅検証 S4。設計書 2026-10-01 8 章）。
+// 得点は採点画面が送る合計（Scoring.calcTotalScore が toInt で丸める整数）。
+// 補正点は採点画面の入力欄で ±999 に制限する。PATCH は範囲外を 400 で丸ごと拒み、
+// 取り込み系（sanitizePlayerForSave）は黙って落とす。
+function isValidScore(v) {
+  return Number.isInteger(v) && v >= -9999 && v <= 9999;
+}
+function isValidAdjust(v) {
+  return Array.isArray(v) && v.length === 3 && v.every(n => Number.isInteger(n) && n >= -999 && n <= 999);
+}
+function isValidTotalAdjust(v) {
+  return Number.isInteger(v) && v >= -999 && v <= 999;
+}
+
 function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
   const out = {
     id: id,
@@ -594,10 +684,10 @@ function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
     rank: EventStatus.normalizeRank(typeof p.rank === 'string' ? p.rank.trim().slice(0, 20) : ''),
     rental: p.rental === true
   };
-  if (Array.isArray(p.adjust) && p.adjust.length === 3 && p.adjust.every(n => Number.isInteger(n))) {
-    out.adjust = p.adjust.slice();
-  }
-  if (Number.isInteger(p.totalAdjust)) out.totalAdjust = p.totalAdjust;
+  // 補正点は行・全体とも -999〜999 の整数（PATCH の isValidAdjust / isValidTotalAdjust と同じ。
+  // 網羅検証 S4）。範囲外は取り込まない（黙って落とす。取り込み系の流儀）。
+  if (isValidAdjust(p.adjust)) out.adjust = p.adjust.slice();
+  if (isValidTotalAdjust(p.totalAdjust)) out.totalAdjust = p.totalAdjust;
   if (typeof p.note === 'string') {
     const note = p.note.trim().slice(0, 200);
     if (note) out.note = note;
@@ -676,6 +766,19 @@ app.post('/api/events', (req, res) => {
       updatedAt: now,
       players: sanitizeEventPlayersForSave(body.players)
     };
+    // 選手の版（rev）は body から受け取らない（sanitizePlayerForSave が落とす）。既存の行を
+    // 上書きするときは、元の行の版を引き継ぎ、採点に関わる値が変わっていれば +1 する
+    // （丸ごとの保存を挟んでも採点画面の衝突検出が効くように。設計書 2026-10-01 1.1）。
+    if (prev && Array.isArray(prev.players)) {
+      const prevById = Object.create(null);
+      prev.players.forEach(p => { if (p && isValidId(p.id)) prevById[p.id] = p; });
+      event.players.forEach(p => {
+        const old = prevById[p.id];
+        if (!old) return;
+        const rev = EventStatus.revOf(old) + (revFieldsDiffer(old, p) ? 1 : 0);
+        if (rev > 0) p.rev = rev;
+      });
+    }
 
     // status はこの経路では変えない。状態を変える経路は POST /api/events/:id/status だけ。
     // body に status が入っていても無視する。既存の大会が status を持っていればその値を
@@ -774,18 +877,25 @@ app.patch('/api/events/:id', (req, res) => {
     if (body.settings !== undefined) {
       const s = (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings))
         ? body.settings : {};
-      // courts を省いた PATCH は部分更新（name だけ・requireBib だけ、等）として使われるので、
-      // 指定が無ければ既存のコート一覧を残す（[] にすると消えてしまう）。
-      let courts = (event.settings && Array.isArray(event.settings.courts)) ? event.settings.courts.slice() : [];
+      // settings はキーごとの部分更新（網羅検証 S16。設計書 2026-10-01 8 章）。
+      // 送られたキーだけ変え、送られなかったキーは今の値を残す。画面は変わったキーだけを送る
+      // （古い画面が開いた時点の courts を丸ごと送り返して、他の端末が足したコートを消さないため）。
+      // 送られたが真偽値でない requireBib / requireRank は従来どおり false。
+      // courts は送られたら置き換える（和集合にはしない。コートを消せなくなるため）。
+      const cur = (event.settings && typeof event.settings === 'object' && !Array.isArray(event.settings))
+        ? event.settings : {};
+      let courts = Array.isArray(cur.courts) ? cur.courts.slice() : [];
       if (s.courts !== undefined) {
         const courtsErr = validateCourtList(s.courts);
         if (courtsErr) return res.status(400).json({ error: courtsErr });
         courts = s.courts.slice();
       }
+      const requireBib = s.requireBib !== undefined ? s.requireBib === true : cur.requireBib === true;
+      const requireRank = s.requireRank !== undefined ? s.requireRank === true : cur.requireRank === true;
       // finalCourt（2026-09-22 の決戦コートの名前）は廃止。届いても無視して保存しない
       // （暫定ベスト8 は先頭コートの末尾に置く。設計書 2026-09-28）。既存の大会に残っている
       // finalCourt キーも、settings を送る PATCH で落ちる（どこからも読まないので害は無い）。
-      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courts };
+      event.settings = { requireBib: requireBib, requireRank: requireRank, courts: courts };
     }
 
     event.updatedAt = new Date().toISOString();
@@ -1058,6 +1168,18 @@ app.post('/api/events/:id/status', (req, res) => {
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     const from = EventStatus.of(event);
+    // 画面が見ていた状態（from）と今の状態が違えば断る（網羅検証 S19）。古い画面の「戻す」
+    // （prev は画面の状態から計算する）で想定外の状態へ行かないようにする。
+    // from を送らない古い画面は従来どおり（互換）。
+    const seenFrom = (req.body || {}).from;
+    if (typeof seenFrom === 'string' && seenFrom !== from) {
+      return res.status(409).json({
+        error: '大会の状態が変わっています。画面を読み直してください',
+        reason: 'stale',
+        status: from,
+        to: to
+      });
+    }
     if (!EventStatus.canTransition(from, to)) {
       return res.status(409).json({
         error: 'この状態からは進めません',
@@ -1068,6 +1190,19 @@ app.post('/api/events/:id/status', (req, res) => {
     }
 
     const players = Array.isArray(event.players) ? event.players : [];
+    // status を持たない大会（「確定」の機能より前の大会）が初めて遷移するときは、採点済みの行に
+    // 確定の印を付けて移行する（網羅検証 M6）。status を書いた時点から順位・選考は確定済みの行だけを
+    // 数えるので、付けないと得点が全部順位から消える。この後の検査で断る（409）ときは
+    // ファイルを書かないので、印も残らない。
+    if (typeof event.status !== 'string') {
+      players.forEach(p => {
+        if (p && EventStatus.isScored(p) && p.confirmed !== true) {
+          const before = Object.assign({}, p);
+          p.confirmed = true;
+          bumpRevIfChanged(before, p);
+        }
+      });
+    }
     // 一巡目の選手が1人もいなければ試合は始められない
     if (from === 'draft' && to === 'round1' &&
         players.filter(p => EventStatus.roundOf(p) === 1).length === 0) {
@@ -1114,7 +1249,10 @@ app.post('/api/events/:id/status', (req, res) => {
       round2Info = {
         created: gen.created, skipped: gen.skipped, existingCount: gen.existingCount,
         untrackedCount: gen.untrackedCount, unassignedCount: gen.unassignedCount,
-        finalistCount: gen.finalistCount, reordered: !!gen.reordered
+        finalistCount: gen.finalistCount, reordered: !!gen.reordered,
+        // 二巡目に採点済みがあって差分追加になったとき、決戦の印は選び直されない。
+        // 今の一巡目の確定得点との差を返し、画面が警告する（網羅検証 S18）。
+        finalistDiff: EventStatus.finalistDiff(gen.players)
       };
     }
 
@@ -1175,6 +1313,14 @@ app.post('/api/events/:id/players', (req, res) => {
     if (!name) {
       return res.status(400).json({ error: '選手名が必要です' });
     }
+    // 氏名 100 字・技名 50 字は PATCH・取り込みと同じ上限（網羅検証 S15）
+    if (name.length > NAME_MAX) {
+      return res.status(400).json({ error: NAME_TOO_LONG });
+    }
+    const techs = ['tech1', 'tech2', 'tech3'].map(k => (typeof body[k] === 'string' ? body[k].trim() : ''));
+    if (techs.some(t => t.length > TECH_NAME_MAX)) {
+      return res.status(400).json({ error: TECH_TOO_LONG });
+    }
     const court = typeof body.court === 'string' ? body.court.trim() : '';
     if (!isValidCourt(court)) {
       return res.status(400).json({ error: '不正なコート名です' });
@@ -1226,9 +1372,10 @@ app.post('/api/events/:id/players', (req, res) => {
       id: generateId(),
       name: name,
       order: buildOrder(court, isFemale, round, n),
-      tech1: typeof body.tech1 === 'string' ? body.tech1 : '',
-      tech2: typeof body.tech2 === 'string' ? body.tech2 : '',
-      tech3: typeof body.tech3 === 'string' ? body.tech3 : '',
+      // 前後の空白は落とす（残ると技得点表の完全一致に掛からず配点が 0 になる）
+      tech1: techs[0],
+      tech2: techs[1],
+      tech3: techs[2],
       score: 0,
       isNewFace: body.isNewFace === true,
       isFemale: isFemale,
@@ -1275,6 +1422,10 @@ function stripGenderSuffix(name) {
 
 // ── 選手の追加項目（ゼッケン番号・級位段位・真剣レンタル）の検証 ──
 // 設計書「選手の追加項目」。POST/PATCH の選手 API と bulk rows で共用する。
+const NAME_MAX = 100;
+const TECH_NAME_MAX = 50;
+const NAME_TOO_LONG = '選手名は100文字までです';
+const TECH_TOO_LONG = '技名は50文字までです';
 const BIB_INVALID = 'ゼッケン番号は1〜9999の整数で指定してください';
 const RANK_INVALID = '級位・段位は20文字までの文字列で指定してください';
 const RENTAL_INVALID = '真剣レンタルの指定が不正です';
@@ -1423,6 +1574,9 @@ function bulkFromRows(req, res, rows) {
     if (!name) {
       return res.status(400).json({ error: at + '選手名が必要です' });
     }
+    if (name.length > NAME_MAX) {
+      return res.status(400).json({ error: at + NAME_TOO_LONG });
+    }
     const court = typeof row.court === 'string' ? row.court.trim() : '';
     if (!isValidCourt(court)) {
       return res.status(400).json({ error: at + '不正なコート名です' });
@@ -1562,6 +1716,11 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
     if (names.length === 0) {
       return res.status(400).json({ error: '登録する名前がありません' });
     }
+    // 氏名 100 字は 1 名追加・PATCH と同じ上限（網羅検証 S15）。1 件でも長ければ 1 人も登録しない
+    const longIdx = names.findIndex(n => n.length > NAME_MAX);
+    if (longIdx !== -1) {
+      return res.status(400).json({ error: (longIdx + 1) + ' 人目: ' + NAME_TOO_LONG });
+    }
 
     const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
     if (!fs.existsSync(eventPath)) {
@@ -1676,12 +1835,25 @@ app.post('/api/events/:id/players/reorder', (req, res) => {
 // クライアントが書き込めてしまう。
 // court と round は order を組み立てる入力としてだけ使い、選手オブジェクトには保存しない
 // （巡目は order から導出できる値なので、二重に持つと不整合の元になる）。
-// 採点済みガードは掛けない（誤字修正は採点中でも必要。性別変更の警告はクライアント側）。
 // レンタル×抜刀の形と同じ形の回数制限（repeatable でない技の重複）の検証は
 // bulk rows（一括登録）だけで行う。この単体経路（採点画面・運営編集フォームからの
 // 1件ずつの更新）はクライアントが techniqueOptions で技の候補自体を絞り込んでおり、
 // 「試合開始」の可否は courts.js の startBlockers が別途まとめて見るため、ここで
 // 二重に検証しない（画面の赤枠もクライアント側の判定に任せる）。
+//
+// 検査の順（設計書 2026-10-01-audit-fixes-design.md 1・2・8 章）。検査で断るときは何も書かない。
+//   1. 形の検査（400）: score / adjust / totalAdjust の範囲（S4。黙って捨てずに要求全体を断る）、
+//      result、name、技名 50 字、baseRev の形、bib / rank / rental
+//   2. 採点の PATCH（score / result / adjust / totalAdjust / confirmed のどれかを含む）で baseRev があるとき:
+//        stale（409）… baseRev が今の rev と違い、採点の値が今と違う（M2 a）
+//        not_scorable（409）… その行の巡目が今の状態で採点できない（M2 b。force で越えられる）
+//      baseRev の無い採点の PATCH は当面受理する（更新前の画面の送信キューは 4xx を捨てるので、
+//      拒むとその端末の採点が黙って失われる。設計書 1.2）。
+//   3. linked（409）… 一巡目に元がある二巡目の行の氏名・性別・新人を変えようとした（M1。一巡目で直す）
+//   4. scored（409）… 採点済みの行の技・性別を変えようとした（S7。force で越えられる）
+//   5. bib（409）… ゼッケンの重複
+// 成功したら、一巡目の行の変更を sourcePlayerId でつながる二巡目の行に写し（M1）、
+// 採点に関わる値が変わった行の rev を +1 する。応答の player には必ず rev が入る。
 app.patch('/api/events/:id/players/:playerId', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -1701,20 +1873,21 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       return res.status(404).json({ error: '選手が見つかりません' });
     }
 
-    const body = req.body || {};
+    const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
     const player = event.players[playerIndex];
+    const before = Object.assign({}, player);
+    const force = body.force === true;
 
-    ['tech1', 'tech2', 'tech3'].forEach(key => {
-      if (typeof body[key] === 'string') player[key] = body[key];
-    });
-    // name は POST /api/events/:id/players（選手を1名追加）と同じ検証（trim 後 1〜100 文字）。
-    // 空白だけの名前を通すと、順位表から静かに選手が消える（trim した名前で集計するため）。
-    if (body.name !== undefined) {
-      const name = typeof body.name === 'string' ? body.name.trim() : '';
-      if (!name || name.length > 100) {
-        return res.status(400).json({ error: '選手名が必要です' });
-      }
-      player.name = name;
+    // ── 1. 形の検査（400）。ここではまだ何も書き換えない ──
+    // 得点・補正点は範囲外なら要求全体を断る（以前は黙って無視し、他の項目だけ保存していた。網羅検証 S4）。
+    if (body.score !== undefined && !isValidScore(body.score)) {
+      return res.status(400).json({ error: '得点は -9999〜9999 の整数で指定してください' });
+    }
+    if (body.adjust !== undefined && !isValidAdjust(body.adjust)) {
+      return res.status(400).json({ error: '補正点は3つとも -999〜999 の整数で指定してください' });
+    }
+    if (body.totalAdjust !== undefined && !isValidTotalAdjust(body.totalAdjust)) {
+      return res.status(400).json({ error: '全体補正は -999〜999 の整数で指定してください' });
     }
     // result は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード（バンドル取込・CSV拡張取込と
     // 同じ規則）。それ以外の文字列（手入力の誤りなど）が混じると採点画面の decodeResult が
@@ -1723,76 +1896,132 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       if (typeof body.result !== 'string' || body.result.length > 100 || !/^[012 ]*$/.test(body.result)) {
         return res.status(400).json({ error: 'result が不正です' });
       }
-      player.result = body.result;
     }
+    // name は POST /api/events/:id/players（選手を1名追加）と同じ検証（trim 後 1〜100 文字）。
+    // 空白だけの名前を通すと、順位表から静かに選手が消える（trim した名前で集計するため）。
+    let newName;
+    if (body.name !== undefined) {
+      newName = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!newName || newName.length > NAME_MAX) {
+        return res.status(400).json({ error: '選手名が必要です' });
+      }
+    }
+    // 技名は前後の空白を落とし、50 字まで（網羅検証 S15。残った空白は技得点表の完全一致に掛からない）
+    const newTechs = {};
+    for (const key of ['tech1', 'tech2', 'tech3']) {
+      if (typeof body[key] !== 'string') continue;
+      const t = body[key].trim();
+      if (t.length > TECH_NAME_MAX) return res.status(400).json({ error: TECH_TOO_LONG });
+      newTechs[key] = t;
+    }
+    if (body.baseRev !== undefined && !(Number.isInteger(body.baseRev) && body.baseRev >= 0)) {
+      return res.status(400).json({ error: 'baseRev が不正です' });
+    }
+    // ゼッケン番号・級位段位・真剣レンタル（設計書「選手の追加項目」）。
+    // 型が合わないものは 400 で断る（重複判定に関わる bib はもちろん、rank/rental も
+    // POST と同じ検証を通す）。
+    if (body.bib !== undefined && body.bib !== null && !isValidBibValue(body.bib)) {
+      return res.status(400).json({ error: BIB_INVALID });
+    }
+    if (body.rank !== undefined && !isValidRankValue(body.rank)) {
+      return res.status(400).json({ error: RANK_INVALID });
+    }
+    if (body.rental !== undefined && typeof body.rental !== 'boolean') {
+      return res.status(400).json({ error: RENTAL_INVALID });
+    }
+
+    // ── 2. 採点の PATCH の版と状態（409 stale / not_scorable） ──
+    const touchesScore = SCORE_FIELDS.some(k => body[k] !== undefined);
+    if (touchesScore && body.baseRev !== undefined) {
+      // この要求を当てたらどうなるか（採点の値だけ）。値が今と同じなら、タイムアウトで諦めたが
+      // 実は届いていた要求の再送なので衝突にしない。
+      const candidate = Object.assign({}, player);
+      if (body.score !== undefined) candidate.score = body.score;
+      if (body.result !== undefined) candidate.result = body.result;
+      if (body.adjust !== undefined) candidate.adjust = body.adjust;
+      if (body.totalAdjust !== undefined) candidate.totalAdjust = body.totalAdjust;
+      if (typeof body.confirmed === 'boolean') candidate.confirmed = body.confirmed;
+      if (body.baseRev !== EventStatus.revOf(player) && revFieldsDiffer(player, candidate, SCORE_FIELDS)) {
+        return res.status(409).json({
+          error: '別の端末で更新されています',
+          reason: 'stale',
+          player: playerWithRev(player)
+        });
+      }
+      // status を持たない旧データの大会は検査しない（M6 の移行前の互換）
+      if (typeof event.status === 'string' && !force && !EventStatus.isRowScorable(event.status, player)) {
+        return res.status(409).json({
+          error: 'この選手は今の状態では採点できません',
+          reason: 'not_scorable',
+          status: event.status,
+          player: playerWithRev(player)
+        });
+      }
+    }
+
+    // ── 3. 一巡目に元がある二巡目の行の氏名・性別・新人（409 linked。網羅検証 M1） ──
+    // 同じ選手を指す 2 行が食い違わないよう、一巡目の行で直して二巡目へ写す。
+    // 同じ値を送るのは通す（スマホの編集シートは全項目を送るため）。元の行が消えていれば直せる。
+    const hasSource = isValidId(player.sourcePlayerId) &&
+      event.players.some(p => p && p !== player && p.id === player.sourcePlayerId);
+    const nameChanges = newName !== undefined && newName !== String(player.name || '').trim();
+    const newFaceChanges = typeof body.isNewFace === 'boolean' && body.isNewFace !== (player.isNewFace === true);
+    const femaleChanges = typeof body.isFemale === 'boolean' && body.isFemale !== (player.isFemale === true);
+    if (hasSource && (nameChanges || newFaceChanges || femaleChanges)) {
+      return res.status(409).json({
+        error: '二巡目の行の氏名・性別・新人は一巡目の行で直してください',
+        reason: 'linked'
+      });
+    }
+
+    // ── 4. 採点済みの行の技・性別（409 scored。網羅検証 S7） ──
+    // 技の差し替えは result の長さを変えないので採点画面が気付けず、古い ○× を新しい技の配点で
+    // 読み直してしまう。性別は配点が男女で違う。画面が確認した上でだけ force で通す。
+    // 性別は二巡目の行にも写るので、写る先が採点済みでも同じ扱い。
+    const linkedRows = event.players.filter(p => p && p !== player && p.sourcePlayerId === player.id);
+    const techChanges = Object.keys(newTechs).some(k => newTechs[k] !== String(player[k] || '').trim());
+    if (!force && (
+      ((techChanges || femaleChanges) && EventStatus.isScored(player)) ||
+      (femaleChanges && linkedRows.some(p => EventStatus.isScored(p))))) {
+      return res.status(409).json({
+        error: '採点済みの選手の技・性別を変えると得点が変わります',
+        reason: 'scored',
+        player: playerWithRev(player)
+      });
+    }
+
+    // ── 5. ゼッケンの重複（409 bib） ──
+    if (body.bib !== undefined && body.bib !== null) {
+      const conflict = findBibConflict(event.players, body.bib, player.id);
+      if (conflict) {
+        return res.status(409).json({
+          error: bibConflictMessage(body.bib, conflict.name),
+          reason: 'bib'
+        });
+      }
+    }
+
+    // ── ここから書き換え（検査はすべて通った） ──
+    Object.keys(newTechs).forEach(k => { player[k] = newTechs[k]; });
+    if (newName !== undefined) player.name = newName;
+    if (body.result !== undefined) player.result = body.result;
     ['isNewFace', 'isFemale'].forEach(key => {
       if (typeof body[key] === 'boolean') player[key] = body[key];
     });
-    // ゼッケン番号・級位段位・真剣レンタル（設計書「選手の追加項目」）。
     // bib は null で未設定に戻せる（既存の「無ければキーを持たない」形に合わせてキー自体を消す）。
-    // 型が合わないものは 400 で断る（重複判定に関わる bib はもちろん、rank/rental も
-    // POST と同じ検証を通す）。
     if (body.bib !== undefined) {
-      if (body.bib === null) {
-        delete player.bib;
-      } else {
-        if (!isValidBibValue(body.bib)) {
-          return res.status(400).json({ error: BIB_INVALID });
-        }
-        const conflict = findBibConflict(event.players, body.bib, player.id);
-        if (conflict) {
-          return res.status(409).json({
-            error: bibConflictMessage(body.bib, conflict.name),
-            reason: 'bib'
-          });
-        }
-        player.bib = body.bib;
-      }
+      if (body.bib === null) delete player.bib;
+      else player.bib = body.bib;
     }
-    if (body.rank !== undefined) {
-      if (!isValidRankValue(body.rank)) {
-        return res.status(400).json({ error: RANK_INVALID });
-      }
-      player.rank = EventStatus.normalizeRank(body.rank);
-    }
-    if (body.rental !== undefined) {
-      if (typeof body.rental !== 'boolean') {
-        return res.status(400).json({ error: RENTAL_INVALID });
-      }
-      player.rental = body.rental;
-    }
-    // 一巡目の bib / rank / rental が変わったら、sourcePlayerId でその行に紐づく二巡目の行にも
-    // 同じ値を写す。二巡目生成が一巡目の値を複製しているのと同じ選手を指すため、PATCH で
-    // 一巡目だけ更新すると食い違ってしまう（名前は元から複製するだけで PATCH では追随させない。
-    // 名前は採点中に直接編集される可能性があり、二巡目側の呼び出し名を勝手に書き換えたくない）。
-    // player.id が二巡目行の sourcePlayerId でない（＝player が一巡目行でない）場合は
-    // 該当する行が無いので何もしない。
-    const bibRankRentalChanged = body.bib !== undefined || body.rank !== undefined || body.rental !== undefined;
-    if (bibRankRentalChanged) {
-      event.players.forEach(function(p) {
-        if (p && p.sourcePlayerId === player.id) {
-          if (body.bib !== undefined) {
-            if (Number.isInteger(player.bib)) p.bib = player.bib; else delete p.bib;
-          }
-          if (body.rank !== undefined) p.rank = player.rank;
-          if (body.rental !== undefined) p.rental = player.rental;
-        }
-      });
-    }
-    // 補正点（技ごと・全体）・備考・確定。型が合わないものは黙って無視する（他の項目と同じ）。
-    if (Array.isArray(body.adjust) && body.adjust.length === 3 &&
-        body.adjust.every(n => Number.isInteger(n))) {
-      player.adjust = body.adjust.slice();
-    }
-    if (Number.isInteger(body.totalAdjust)) player.totalAdjust = body.totalAdjust;
+    if (body.rank !== undefined) player.rank = EventStatus.normalizeRank(body.rank);
+    if (body.rental !== undefined) player.rental = body.rental;
+    // 補正点（技ごと・全体）・得点は上で範囲を検査済み。補正点で負の合計になりうるので負数も受理する。
+    if (body.adjust !== undefined) player.adjust = body.adjust.slice();
+    if (body.totalAdjust !== undefined) player.totalAdjust = body.totalAdjust;
+    if (body.score !== undefined) player.score = body.score;
+    // 備考・確定は型が合わなければ黙って無視する（従来どおり）。
     if (typeof body.note === 'string') player.note = body.note.trim().slice(0, 200);
     if (typeof body.confirmed === 'boolean') player.confirmed = body.confirmed;
-    // 補正点で負の合計になりうるので負数も受理する。NaN・Infinity は無視する。
-    // 採点画面が送る値は常に整数（Scoring.calcTotalScore が toInt で丸める）なので、
-    // -9999〜9999 の整数だけ受理する（それ以外は他の項目と同じく黙って無視する）。
-    if (Number.isInteger(body.score) && body.score >= -9999 && body.score <= 9999) {
-      player.score = body.score;
-    }
 
     // court / round / isFemale が来たときだけ order を組み立て直す。
     // ただし (コート, 性別, 巡目) が実際に変わったときだけにする。
@@ -1830,11 +2059,45 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       }
     }
 
+    // 一巡目の行の変更を、sourcePlayerId でその行に紐づく二巡目の行にも写す。
+    // 二巡目生成が一巡目の値を複製しているのと同じ選手を指すため、一巡目だけ更新すると食い違う。
+    //   bib / rank / rental … 従来どおり
+    //   name / isNewFace / isFemale … 網羅検証 M1（以前は写さず、氏名で合算する順位が 2 行に割れた）。
+    //     二巡目の行ではこの 3 つを直せない（上の linked）ので、一巡目で直したものがそのまま写る。
+    //     性別を写すとき、決戦の印の無い行は order の性別も組み直す（番号はその組の最大+1）。
+    //     決戦の行は order を変えない（候補は先頭コートの男子の末尾に置く約束のため）。
+    // player が一巡目行でなければ linkedRows は空なので何もしない。
+    const nameCopied = newName !== undefined && String(player.name || '') !== String(before.name || '');
+    linkedRows.forEach(p => {
+      const rowBefore = Object.assign({}, p);
+      if (body.bib !== undefined) {
+        if (Number.isInteger(player.bib)) p.bib = player.bib; else delete p.bib;
+      }
+      if (body.rank !== undefined) p.rank = player.rank;
+      if (body.rental !== undefined) p.rental = player.rental;
+      if (nameCopied) p.name = player.name;
+      if (newFaceChanges) p.isNewFace = player.isNewFace === true;
+      if (femaleChanges) {
+        p.isFemale = player.isFemale === true;
+        const parsed = parseOrder(p.order || '');
+        if (parsed && p.finalist !== true) {
+          const gender = p.isFemale ? '女子' : '男子';
+          if (parsed.gender !== gender) {
+            const others = event.players.filter(q => q !== p);
+            p.order = buildOrder(parsed.court, p.isFemale, parsed.round,
+              nextOrderNumber(others, parsed.court, gender, parsed.round));
+          }
+        }
+      }
+      bumpRevIfChanged(rowBefore, p);
+    });
+
+    bumpRevIfChanged(before, player);
     event.players[playerIndex] = player;
     event.updatedAt = new Date().toISOString();
 
     writeJsonAtomic(eventPath, event);
-    res.json({ success: true, player: player });
+    res.json({ success: true, player: playerWithRev(player) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1885,7 +2148,85 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
   }
 });
 
+// ── CSV の形式（設計書 2026-10-01-audit-fixes-design.md 5 章。網羅検証 M5） ──
+// 1 行目（見出し）を厳密に照合して形式を決める。見出しを見ずに列の位置だけで読むと、
+// Shift_JIS を UTF-8 として読んで化けた CSV や、違うファイルが「成功」として取り込まれてしまう。
+// 照合の前に各セルの空白（半角・全角）と先頭の BOM、見出しの末尾の空セル（Excel が付ける）を落とし、
+// 技の列は「技1」「技①」を同じものとして扱う（「技 1」は空白を落として「技1」）。
+//   簡易形式 … CSV_SIMPLE_COLS の先頭から 2 列以上（1 列目は「選手名」も可）。順番はサーバが採番
+//   従来形式 … 9 列 / 12 列（9＋ゼッケン等）/ 15 列（9＋補正点等）/ 18 列 / 20 列（18＋決戦・一巡目の行）
+const CSV_SIMPLE_COLS = ['名前', 'コート', '性別', '技①', '技②', '技③', '新人', 'ゼッケン', '級位段位', 'レンタル'];
+const CSV_STD_BASE = ['選手名', '順番', '技 1', '技 2', '技 3', '得点', '新人', '女子', '結果'];
+const CSV_STD_ADJ = ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定'];
+const CSV_EXTRA = ['ゼッケン', '級位段位', 'レンタル'];
+// 決戦の印と、二巡目の行が指す一巡目の行（その行の order）。書き出し→置換で往復させる。
+const CSV_ROUNDTRIP = ['決戦', '一巡目の行'];
+// 書き出す見出し（20 列の拡張形式。これだけが二巡目のある大会の置換に使える）
+const CSV_EXPORT_HEADER = CSV_STD_BASE.concat(CSV_STD_ADJ, CSV_EXTRA, CSV_ROUNDTRIP);
+
+function normalizeCsvHeaderCell(cell, index) {
+  let s = String(cell == null ? '' : cell);
+  if (index === 0) s = s.replace(/^﻿/, '');
+  s = s.replace(/[\s　]+/g, '');
+  return s.replace(/^技([①②③])$/, (m, d) => '技' + ('①②③'.indexOf(d) + 1));
+}
+
+function sameCsvHeader(actual, expected) {
+  if (actual.length !== expected.length) return false;
+  const want = expected.map(normalizeCsvHeaderCell);
+  return actual.every((c, i) => c === want[i]);
+}
+
+// 見出し行から形式を決める。既知の形式でなければ null。
+// 戻り値: { kind: 'simple', columns } | { kind: 'std', adj, extraBase, roundtrip }
+//   extraBase … ゼッケン列の位置（無ければ -1）
+function detectCsvFormat(headerRow) {
+  const cells = (headerRow || []).map(normalizeCsvHeaderCell);
+  while (cells.length > 0 && cells[cells.length - 1] === '') cells.pop();
+  if (cells.length >= 2 && cells[1] === 'コート') {
+    if (cells.length > CSV_SIMPLE_COLS.length) return null;
+    const want = CSV_SIMPLE_COLS.map(normalizeCsvHeaderCell);
+    for (let i = 0; i < cells.length; i++) {
+      if (i === 0 && (cells[0] === '名前' || cells[0] === '選手名')) continue;
+      if (cells[i] !== want[i]) return null;
+    }
+    return { kind: 'simple', columns: cells.length };
+  }
+  const candidates = [
+    { cols: CSV_STD_BASE, adj: false, extraBase: -1, roundtrip: false },
+    { cols: CSV_STD_BASE.concat(CSV_EXTRA), adj: false, extraBase: 9, roundtrip: false },
+    { cols: CSV_STD_BASE.concat(CSV_STD_ADJ), adj: true, extraBase: -1, roundtrip: false },
+    { cols: CSV_STD_BASE.concat(CSV_STD_ADJ, CSV_EXTRA), adj: true, extraBase: 15, roundtrip: false },
+    { cols: CSV_EXPORT_HEADER, adj: true, extraBase: 15, roundtrip: true }
+  ];
+  for (const c of candidates) {
+    if (sameCsvHeader(cells, c.cols)) {
+      return { kind: 'std', adj: c.adj, extraBase: c.extraBase, roundtrip: c.roundtrip };
+    }
+  }
+  return null;
+}
+
+// CSV のセルの数値。空は 0、数値として読めなければ 0。範囲と整数化は sanitizePlayerForSave が行う。
+function csvNumber(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (s === '') return 0;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
+// 補正点のセル。小数は切り捨てる（範囲外は sanitizePlayerForSave が落とす）。
+function csvInt(v) {
+  return Math.trunc(csvNumber(v));
+}
+
 // POST /api/events/:id/import : 選手データのCSVインポート
+// Body: { csvText, mode: 'replace' | 'append', force?, expectedCount? }
+// 検査の順（設計書 2026-10-01 5.2。最初に当たったもので返し、何も書かない）:
+//   locked（409）→ expectedCount の食い違い（409 stale。replace のときだけ）→ 文字化け（400 encoding）
+//   → 見出し（400 format）→ 二巡目がある大会の往復できない置換（409 round2_format）
+//   → 採点済みの置換（409。force で越えられる）→ 行ごとの検査（簡易形式のコート名は 400）
+// 値は sanitizePlayerForSave と同じ規則で洗う（氏名 100 字・技 trim 50 字・得点 -9999〜9999 の整数・
+// 補正点 ±999・級位段位の正規化など）。
 app.post('/api/events/:id/import', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -1895,12 +2236,61 @@ app.post('/api/events/:id/import', (req, res) => {
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     if (rejectIfLocked(res, event)) return;
-    const { csvText, mode, force } = req.body;
+    const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
+    const csvText = typeof body.csvText === 'string' ? body.csvText : '';
+    const mode = body.mode === 'replace' ? 'replace' : 'append';
+    const force = body.force === true;
+    const current = Array.isArray(event.players) ? event.players : [];
+
+    // 画面が見ていた選手数と違えば置換しない（0 名と表示している古い画面から、確認なしで
+    // 他の端末が登録した選手を消さないため。網羅検証 M5）。送らない古い画面は従来どおり。
+    if (mode === 'replace' && body.expectedCount !== undefined) {
+      if (!Number.isInteger(body.expectedCount) || body.expectedCount < 0) {
+        return res.status(400).json({ error: 'expectedCount が不正です' });
+      }
+      if (body.expectedCount !== current.length) {
+        return res.status(409).json({
+          error: '選手の人数が変わっています。画面を読み直してからやり直してください',
+          reason: 'stale',
+          playerCount: current.length
+        });
+      }
+    }
+
+    // UTF-8 として読めなかった文字（U+FFFD）が残っていれば断る。画面は Shift_JIS で読み直してから送る。
+    if (csvText.indexOf('�') !== -1) {
+      return res.status(400).json({
+        error: '文字化けした文字があります。CSV を UTF-8 か Shift_JIS で保存し直してください',
+        reason: 'encoding'
+      });
+    }
+
+    const lines = parseCSV(csvText);
+    if (lines.length === 0) {
+      return res.status(400).json({ error: '空のデータです' });
+    }
+    const fmt = detectCsvFormat(lines[0]);
+    if (!fmt) {
+      return res.status(400).json({
+        error: 'CSV の見出し（1 行目）が読み込める形式ではありません',
+        reason: 'format'
+      });
+    }
+
+    // 二巡目の行がある大会を、決戦の印と一巡目とのつながりを持たない形式で置き換えると、
+    // 決戦が消えて二巡目の行が追跡できなくなる。往復できる 20 列の形式だけ許す（force でも越えない）。
+    if (mode === 'replace' && current.some(p => EventStatus.roundOf(p) === 2) &&
+        !(fmt.kind === 'std' && fmt.roundtrip)) {
+      return res.status(409).json({
+        error: '二巡目がある大会は、CSV エクスポート（20 列）で書き出したファイルだけ置換できます',
+        reason: 'round2_format'
+      });
+    }
 
     // replace は players 配列を丸ごと置換するため、採点済みデータがあると
     // 他コートの採点まで消える。件数を返して拒否し、明示的な force のときだけ通す。
-    if (mode === 'replace' && force !== true) {
-      const scoredCount = (event.players || []).filter(EventStatus.isScored).length;
+    if (mode === 'replace' && !force) {
+      const scoredCount = current.filter(EventStatus.isScored).length;
       if (scoredCount > 0) {
         return res.status(409).json({
           error: '採点済みのデータがあります',
@@ -1909,35 +2299,23 @@ app.post('/api/events/:id/import', (req, res) => {
       }
     }
 
-    const lines = parseCSV(csvText);
-    if (lines.length === 0) {
-      return res.status(400).json({ error: '空のデータです' });
-    }
-    
-    // 先頭行で形式を判別する（設計書 T5「サーバー」の表）
-    //   2列目が「コート」 → 簡易7列（名前,コート,性別,技①,技②,技③,新人）。順番はサーバーが採番
-    //   それ以外          → 従来9列／拡張15列（補正点1..3,全体補正,備考,確定）。順番は CSV の値
-    // どちらの形式も末尾に ゼッケン,級位段位,レンタル の3列が続くことがある
-    // （設計書「選手の追加項目」。無ければ従来どおり読む）。
-    const header = lines[0].map(c => String(c || '').trim());
-    const isSimple = header[1] === 'コート';
     const dataLines = lines.slice(1);
-    const toInt = v => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : 0; };
     const truthy = v => ['○', '1', 'はい', '新人'].indexOf(String(v || '').trim()) !== -1;
     const femaleMark = v => ['女', '女子', '○', 'F', 'f'].indexOf(String(v || '').trim()) !== -1;
+    const mark = v => String(v == null ? '' : v).trim() === '○';
     // ゼッケンの重複（2件目以降）・範囲外の値は行ごと 400 にはせず「未設定」に落として
     // 取り込みを続ける。落とした件数は bibDropped として応答に含める（下の resolveBibDrops）。
     // append 時は既存選手の bib も重複判定に含める（replace/新規は空）。
     const existingBibsForImport = mode === 'replace' ? [] :
-      (event.players || []).filter(p => Number.isInteger(p && p.bib)).map(p => p.bib);
+      current.filter(p => Number.isInteger(p && p.bib)).map(p => p.bib);
 
     let importedPlayers;
     let bibDropped = { duplicate: 0, outOfRange: 0 };
-    if (isSimple) {
-      // 簡易7列の後ろに3列（ゼッケン,級位段位,レンタル）が続くことがある。
-      const hasExtra = header.length >= 10;
-      // 採番の土台: replace なら空、append なら既存の選手
-      const base = mode === 'replace' ? [] : (event.players || []);
+    if (fmt.kind === 'simple') {
+      // 簡易形式（名前,コート,性別,技①,技②,技③,新人[,ゼッケン,級位段位,レンタル] の先頭から）。
+      // 見出しに無い列は読まない。順番はサーバーが採番する（採番の土台: replace なら空、append なら既存）。
+      const has = i => fmt.columns > i;
+      const base = mode === 'replace' ? [] : current;
       importedPlayers = [];
       const rawBibs = [];
       for (let i = 0; i < dataLines.length; i++) {
@@ -1948,71 +2326,70 @@ app.post('/api/events/:id/import', (req, res) => {
         if (!isValidCourt(court)) {
           return res.status(400).json({ error: (i + 2) + ' 行目のコート名が不正です' });
         }
-        const isFemale = femaleMark(row[2]);
+        const isFemale = has(2) && femaleMark(row[2]);
         const gender = isFemale ? '女子' : '男子';
         const n = nextOrderNumber(base.concat(importedPlayers), court, gender, 1);
-        const player = {
-          id: generateId(),
-          name,
+        importedPlayers.push(sanitizePlayerForSave({
+          name: name,
           order: buildOrder(court, isFemale, 1, n),
           // 末尾に空白が残ると Scoring.findTechnique の完全一致に掛からず配点が
-          // 全部0になる（手入力・コピペ由来の空白を落とす）。
-          tech1: String(row[3] || '').trim(),
-          tech2: String(row[4] || '').trim(),
-          tech3: String(row[5] || '').trim(),
+          // 全部0になる（手入力・コピペ由来の空白は sanitizePlayerForSave が落とす）。
+          tech1: has(3) ? String(row[3] || '') : '',
+          tech2: has(4) ? String(row[4] || '') : '',
+          tech3: has(5) ? String(row[5] || '') : '',
           score: 0,
-          isNewFace: truthy(row[6]),
-          isFemale,
+          isNewFace: has(6) && truthy(row[6]),
+          isFemale: isFemale,
           result: '',
-          rank: EventStatus.normalizeRank(hasExtra ? String(row[8] || '').trim().slice(0, 20) : ''),
-          rental: hasExtra ? truthy(row[9]) : false
-        };
-        importedPlayers.push(player);
-        rawBibs.push(hasExtra ? row[7] : undefined);
+          rank: has(8) ? String(row[8] || '').trim().slice(0, 20) : '',
+          rental: has(9) && truthy(row[9])
+        }, generateId(), null, null));
+        rawBibs.push(has(7) ? row[7] : undefined);
       }
       const bibResult = resolveBibDrops(rawBibs, classifyBibCsv, existingBibsForImport);
       importedPlayers.forEach((p, i) => { if (bibResult.bibs[i] !== null) p.bib = bibResult.bibs[i]; });
       bibDropped = { duplicate: bibResult.duplicate, outOfRange: bibResult.outOfRange };
     } else {
-      // 拡張15列かどうかは先頭行（ヘッダー）の列数で一度だけ決める（設計書 T5 の表）。
-      // 行ごとに判定すると、行によって列数が違う崩れたCSVで挙動が揺れる。
-      // 10〜14列は従来どおり9列として読む（補正点・備考・確定は読まない）。
-      // さらにその後ろに3列（ゼッケン,級位段位,レンタル）が続くことがある。
-      const isExtended = header.length >= 15;
-      const extBase = isExtended ? 15 : 9;
-      const hasExtra = header.length >= extBase + 3;
-      const rows = dataLines.map(row => {
-        // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定][,ゼッケン,級位段位,レンタル]
-        const p = {
-          id: generateId(),
-          name: row[0] || '',
-          order: row[1] || '',
-          tech1: row[2] || '',
-          tech2: row[3] || '',
-          tech3: row[4] || '',
-          score: parseFloat(row[5]) || 0,
-          isNewFace: row[6] === '○',
-          isFemale: row[7] === '○',
+      // 従来形式。列の意味は見出しで決まる（行ごとに列数を見ない。崩れた CSV で挙動を揺らさない）。
+      // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定]
+      //   [,ゼッケン,級位段位,レンタル][,決戦,一巡目の行]
+      const rows = [];
+      dataLines.forEach(row => {
+        const raw = {
+          name: String(row[0] || ''),
+          order: String(row[1] || '').trim(),
+          tech1: String(row[2] || ''),
+          tech2: String(row[3] || ''),
+          tech3: String(row[4] || ''),
+          score: csvNumber(row[5]),
+          isNewFace: mark(row[6]),
+          isFemale: mark(row[7]),
           // 結果は 1=○, 0=×, 2=△（減点成功）, 空白=未入力 のエンコード。それ以外（手入力・
-          // 崩れたCSV由来の誤り）が混じっていたら PATCH .../players/:id やバンドル取込と
-          // 同じ規則で空に落とす（採点画面の decodeResult が読めない文字列を保存しない）。
-          result: (typeof row[8] === 'string' && row[8].length <= 100 && /^[012 ]*$/.test(row[8]))
-            ? row[8] : ''
+          // 崩れたCSV由来の誤り）は sanitizePlayerForSave が空に落とす。空白に意味があるので trim しない。
+          result: typeof row[8] === 'string' ? row[8] : ''
         };
-        if (isExtended) {
-          p.adjust = [toInt(row[9]), toInt(row[10]), toInt(row[11])];
-          p.totalAdjust = toInt(row[12]);
-          p.note = String(row[13] || '').trim().slice(0, 200);
-          p.confirmed = String(row[14] || '').trim() === '○';
+        if (fmt.adj) {
+          raw.adjust = [csvInt(row[9]), csvInt(row[10]), csvInt(row[11])];
+          raw.totalAdjust = csvInt(row[12]);
+          raw.note = String(row[13] || '');
+          raw.confirmed = mark(row[14]);
         }
-        p.rank = hasExtra ? String(row[extBase + 1] || '').trim().slice(0, 20) : '';
-        p.rental = hasExtra ? truthy(row[extBase + 2]) : false;
-        return { player: p, rawBib: hasExtra ? row[extBase] : undefined };
-      }).filter(r => r.player.name !== ''); // 空行等を除外
+        if (fmt.extraBase >= 0) {
+          raw.rank = String(row[fmt.extraBase + 1] || '').trim().slice(0, 20);
+          raw.rental = truthy(row[fmt.extraBase + 2]);
+        }
+        if (fmt.roundtrip) raw.finalist = mark(row[18]);
+        const p = sanitizePlayerForSave(raw, generateId(), null, null);
+        if (!p.name) return;   // 空行等を除外（氏名は trim して見る）
+        rows.push({
+          player: p,
+          rawBib: fmt.extraBase >= 0 ? row[fmt.extraBase] : undefined,
+          sourceOrder: fmt.roundtrip ? String(row[19] || '').trim() : ''
+        });
+      });
       // 拡張形式は「順番」列（p.order）から巡目が分かる。二巡目以降の行は一巡目の複製と
       // 同じ bib を持つのが正常な状態なので、重複判定の対象外にして値をそのまま通す
-      // （レビュー修正。簡易7列形式は順番をサーバーが採番するので常に一巡目＝対象、
-      // ここでは触らない）。
+      // （レビュー修正。簡易形式は順番をサーバーが採番するので常に一巡目＝対象）。
       const roundOfRow = rows.map(r => EventStatus.roundOf(r.player));
       const round1RawBibs = rows.filter((r, i) => roundOfRow[i] === 1).map(r => r.rawBib);
       const bibResult = resolveBibDrops(round1RawBibs, classifyBibCsv, existingBibsForImport);
@@ -2028,12 +2405,26 @@ app.post('/api/events/:id/import', (req, res) => {
         return r.player;
       });
       bibDropped = { duplicate: bibResult.duplicate, outOfRange: bibResult.outOfRange };
+      // 20 列の形式: 二巡目の行の「一巡目の行」（一巡目の order）を、取り込んだ一巡目の行の id に
+      // つなぎ直す（sourcePlayerId の往復）。order がちょうど 1 行に一致するときだけ。
+      if (fmt.roundtrip) {
+        const byOrder = Object.create(null);
+        importedPlayers.forEach((p, i) => {
+          if (roundOfRow[i] !== 1 || !p.order) return;
+          byOrder[p.order] = byOrder[p.order] ? null : p;   // 2 行目以降は曖昧（null）
+        });
+        rows.forEach((r, i) => {
+          if (roundOfRow[i] === 1 || !r.sourceOrder) return;
+          const src = byOrder[r.sourceOrder];
+          if (src) r.player.sourcePlayerId = src.id;
+        });
+      }
     }
 
     if (mode === 'replace') {
       event.players = importedPlayers;
     } else {
-      event.players = (event.players || []).concat(importedPlayers);
+      event.players = current.concat(importedPlayers);
     }
 
     event.updatedAt = new Date().toISOString();
@@ -2046,6 +2437,8 @@ app.post('/api/events/:id/import', (req, res) => {
 });
 
 // GET /api/events/:id/export : 大会の選手データをCSVエクスポート
+// 20 列の拡張形式（CSV_EXPORT_HEADER）。決戦の印と「一巡目の行」（sourcePlayerId が指す行の order）を
+// 出すので、書き出し→置換取り込みで決戦と一巡目とのつながりが往復する（網羅検証 M5）。
 app.get('/api/events/:id/export', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -2054,14 +2447,17 @@ app.get('/api/events/:id/export', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
-    
-    const header = ['選手名', '順番', '技 1', '技 2', '技 3', '得点', '新人', '女子', '結果',
-                    '補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定',
-                    'ゼッケン', '級位段位', 'レンタル'];
-    const rows = [header];
+    const players = Array.isArray(event.players) ? event.players : [];
+    const byId = Object.create(null);
+    players.forEach(p => { if (p && typeof p.id === 'string') byId[p.id] = p; });
 
-    for (const p of (event.players || [])) {
+    const rows = [CSV_EXPORT_HEADER];
+
+    for (const p of players) {
+      if (!p) continue;
       const adj = Array.isArray(p.adjust) ? p.adjust : [0, 0, 0];
+      const src = (typeof p.sourcePlayerId === 'string' && Object.prototype.hasOwnProperty.call(byId, p.sourcePlayerId))
+        ? byId[p.sourcePlayerId] : null;
       rows.push([
         p.name || '',
         p.order || '',
@@ -2080,13 +2476,15 @@ app.get('/api/events/:id/export', (req, res) => {
         p.confirmed === true ? '○' : '',
         Number.isInteger(p.bib) ? p.bib : '',
         p.rank || '',
-        p.rental === true ? '○' : ''
+        p.rental === true ? '○' : '',
+        (p.finalist === true && EventStatus.roundOf(p) === 2) ? '○' : '',
+        src ? (src.order || '') : ''
       ]);
     }
-    
+
     const csvContent = rows.map(row => row.map(escapeCSV).join(',')).join('\r\n');
-    const bom = '\uFEFF';
-    
+    const bom = '﻿';
+
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="event_${req.params.id}.csv"`);
     res.send(bom + csvContent);
@@ -2165,7 +2563,107 @@ app.get('/api/events/:id/techniques', (req, res) => {
   }
 });
 
+// 技得点表の差し替えで、選手が使っている技が消えないかを調べる（網羅検証 M3。設計書 2026-10-01 3 章）。
+// 選手の技名（接尾辞なしの表示名のことがある）を選手の性別で今の表に解決し、新しい表でも
+// 解決できなければ「消える技」。今の表でも解決できない技名（もともと表に無い）は数えない。
+// renames（[{ from, to }]。表の名前）の from に解決される技は、選手の技名を付け替える案を作る:
+//   選手の値が from そのもの → to、接尾辞なしの表示名 → to の接尾辞を外した名前
+//   （新しい表で同じ性別に解決できることを確かめる。できなければ消える技のまま）。
+// players は書き換えない。戻り値: { vanished: [{ name, count }]（今の表の順）, count, changes: [{ player, key, value }] }
+function planTechniqueChange(players, oldList, newList, renames) {
+  const renameTo = Object.create(null);
+  (renames || []).forEach(r => { renameTo[r.from] = r.to; });
+  const vanishedRows = Object.create(null);   // 今の表の名前 -> 行の数
+  const changes = [];
+  let count = 0;
+  (players || []).forEach(p => {
+    if (!p || typeof p !== 'object') return;
+    const isFemale = p.isFemale === true;
+    let affected = false;
+    const seenHere = Object.create(null);
+    ['tech1', 'tech2', 'tech3'].forEach(key => {
+      const v = String(p[key] == null ? '' : p[key]).trim();
+      if (!v) return;
+      const oldRes = resolveTechnique(oldList, v, isFemale);
+      if (!oldRes) return;
+      if (resolveTechnique(newList, v, isFemale)) return;
+      if (Object.prototype.hasOwnProperty.call(renameTo, oldRes.name)) {
+        const to = renameTo[oldRes.name];
+        const value = v === oldRes.name ? to : stripGenderSuffix(to);
+        const res2 = resolveTechnique(newList, value, isFemale);
+        if (res2 && res2.name === to) {
+          changes.push({ player: p, key: key, value: value });
+          return;
+        }
+      }
+      affected = true;
+      if (!seenHere[oldRes.name]) {
+        seenHere[oldRes.name] = true;
+        vanishedRows[oldRes.name] = (vanishedRows[oldRes.name] || 0) + 1;
+      }
+    });
+    if (affected) count++;
+  });
+  const vanished = (oldList || [])
+    .filter(t => t && Object.prototype.hasOwnProperty.call(vanishedRows, t.name))
+    .map(t => ({ name: t.name, count: vanishedRows[t.name] }));
+  return { vanished: vanished, count: count, changes: changes };
+}
+
+// renames の検証。戻り値: エラー文字列 or null（妥当）。
+function validateTechniqueRenames(renames, oldList, newList) {
+  if (renames === undefined || renames === null) return null;
+  if (!Array.isArray(renames) || renames.length > 200) return '技名の付け替えの指定が不正です';
+  const has = (list, name) => (list || []).some(t => t && t.name === name);
+  const seen = Object.create(null);
+  for (const r of renames) {
+    if (!r || typeof r !== 'object' || typeof r.from !== 'string' || typeof r.to !== 'string' ||
+        !r.from || !r.to) {
+      return '技名の付け替えの指定が不正です';
+    }
+    if (seen[r.from]) return '付け替え元「' + r.from + '」が重複しています';
+    seen[r.from] = true;
+    if (!has(oldList, r.from)) return '付け替え元「' + r.from + '」は今の技得点表にありません';
+    if (has(newList, r.from)) return '付け替え元「' + r.from + '」が新しい技得点表にも残っています';
+    if (!has(newList, r.to)) return '付け替え先「' + r.to + '」は新しい技得点表にありません';
+  }
+  return null;
+}
+
+// 技得点表の差し替えの共通部分（PUT と DELETE）。使用中の技が消えるなら 409 tech_in_use を返して true。
+// 消えないなら付け替えを選手に当て（版の項目なので rev +1）、付け替えた行の数を out.renamed に入れて false。
+function applyTechniqueChange(res, event, newList, renames, out) {
+  const oldList = effectiveTechniques(event);
+  const plan = planTechniqueChange(event.players, oldList, newList, renames);
+  if (plan.vanished.length > 0) {
+    res.status(409).json({
+      error: '選手が使っている技が技得点表から消えます（' +
+        plan.vanished.map(v => v.name).join('、') + '。' + plan.count + ' 名）',
+      reason: 'tech_in_use',
+      names: plan.vanished.map(v => v.name),
+      count: plan.count,
+      usages: plan.vanished
+    });
+    return true;
+  }
+  const touched = [];
+  plan.changes.forEach(c => {
+    if (touched.indexOf(c.player) === -1) touched.push(c.player);
+  });
+  touched.forEach(p => {
+    const before = Object.assign({}, p);
+    plan.changes.filter(c => c.player === p).forEach(c => { p[c.key] = c.value; });
+    bumpRevIfChanged(before, p);
+  });
+  out.renamed = touched.length;
+  return false;
+}
+
 // PUT /api/events/:id/techniques : その大会の技リストを置き換える
+// Body: { techniques, renames?: [{ from, to }] }
+// 選手が使っている技が消える差し替えは 409 tech_in_use（{ names, count, usages }）で断る。
+// 改名のときは renames（今の表の名前 → 新しい表の名前）を付けて送り直すと、選手の技名も付け替える
+// （設計書 2026-10-01 3.1）。削除は拒否のみ（採点画面でその行が 0 点になり、保存で ○× が消えるため）。
 app.put('/api/events/:id/techniques', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -2178,10 +2676,15 @@ app.put('/api/events/:id/techniques', (req, res) => {
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     if (rejectIfLocked(res, event)) return;
-    event.techniques = cloneTechniques(body.techniques);
+    const newList = cloneTechniques(body.techniques);
+    const renameErr = validateTechniqueRenames(body.renames, effectiveTechniques(event), newList);
+    if (renameErr) return res.status(400).json({ error: renameErr });
+    const out = { renamed: 0 };
+    if (applyTechniqueChange(res, event, newList, body.renames, out)) return;
+    event.techniques = newList;
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
-    res.json({ success: true, techniques: event.techniques });
+    res.json({ success: true, techniques: event.techniques, renamed: out.renamed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2189,6 +2692,7 @@ app.put('/api/events/:id/techniques', (req, res) => {
 
 // DELETE /api/events/:id/techniques : 雛形の複製で置き換える（「雛形に戻す」）
 // 雛形との連動状態には戻さない。戻すと、あとで雛形を変えたときに採点中の大会の配点が動く。
+// 選手が使っている技が雛形に無ければ PUT と同じく 409 tech_in_use（付け替えは無し）。
 app.delete('/api/events/:id/techniques', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -2198,7 +2702,9 @@ app.delete('/api/events/:id/techniques', (req, res) => {
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     if (rejectIfLocked(res, event)) return;
-    event.techniques = cloneTechniques(readTechniques().techniques);
+    const newList = cloneTechniques(readTechniques().techniques);
+    if (applyTechniqueChange(res, event, newList, null, { renamed: 0 })) return;
+    event.techniques = newList;
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
     res.json({ success: true, techniques: event.techniques });
@@ -2492,39 +2998,45 @@ app.post('/api/events/import', (req, res) => {
 // （生成できなければ状態も進めない＝「失敗したら遷移も取り消す」）。
 // この関数は同期のまま維持すること（server/index.js 冒頭の【不変条件】）。
 
+// 二巡目の並びに使う一巡目の得点。確定済みの得点だけ（未確定は 0 扱い＝先頭側。網羅検証 S1）。
+// 順位・暫定ベスト8 の選考と同じ基準にそろえる（採点途中の値で並びを決めない）。
 function scoreOf(p) {
-  return (p && typeof p.score === 'number') ? p.score : 0;
+  return EventStatus.confirmedScoreOf(p);
 }
 
-// 暫定ベスト8。一般男子（isFemale が true でない＝新人も含む。computeRanking と同じ規則）の
-// 一巡目の得点上位 8 名。0 点は含めない。8 位が同点なら全員（同点同順位）。8 名未満なら全員。
-// 戻り値: { <playerId>: true }（選手 id が '__proto__' でも壊れない辞書）
+// 暫定ベスト8 の選考は status.js の EventStatus.pickFinalists（finalistDiff と同じ判定。網羅検証 S18）。
 function pickFinalists(src) {
-  const out = Object.create(null);
-  // 選考に使うのは確定済みの得点だけ（順位・決戦の表と同じ基準。QA 指摘 2026-09-30）
-  const males = src
-    .filter(p => p.isFemale !== true && p.confirmed === true && scoreOf(p) > 0)
-    .slice()
-    .sort((a, b) => scoreOf(b) - scoreOf(a) || (a.order || '').localeCompare(b.order || ''));
-  if (males.length === 0) return out;
-  const cut = scoreOf(males.length >= 8 ? males[7] : males[males.length - 1]);
-  males.forEach(p => { if (scoreOf(p) >= cut) out[p.id] = true; });
-  return out;
+  return EventStatus.pickFinalists(src);
 }
 
-// 決戦以外の並び（従来どおり）: 女子が先、その中で一巡目の得点が低い順、同点は order 順。
+// 同点のときの一巡目の試技順。order を文字列で比べると 'A-男子-1-10' が 'A-男子-1-2' より前に来るので、
+// コート（文字列）→ 男子が先 → 番号（数値）で比べる（網羅検証 S1。Courts.compareOrder と同じ考え方）。
+function compareRound1Order(a, b) {
+  const x = parseOrder(a && a.order);
+  const y = parseOrder(b && b.order);
+  if (!x || !y) {
+    if (x || y) return x ? -1 : 1;   // 解析できない行は後ろ（二巡目の元にはならないが念のため）
+    return String((a && a.order) || '').localeCompare(String((b && b.order) || ''));
+  }
+  if (x.court !== y.court) return x.court < y.court ? -1 : 1;
+  if (x.gender !== y.gender) return x.gender === '男子' ? -1 : 1;
+  return x.number - y.number;
+}
+
+// 決戦以外の並び: 女子が先、その中で一巡目の確定得点が低い順、同点は一巡目の試技順。
+// 番号はコート×性別ごとに振るので、実際に効くのは「その組の中で低い順」。
 function compareForRound2(a, b) {
   const fa = a.isFemale === true ? 0 : 1;
   const fb = b.isFemale === true ? 0 : 1;
   if (fa !== fb) return fa - fb;
   if (scoreOf(a) !== scoreOf(b)) return scoreOf(a) - scoreOf(b);
-  return (a.order || '').localeCompare(b.order || '');
+  return compareRound1Order(a, b);
 }
 
-// 決戦の並び: 一巡目の得点が低い順、同点は一巡目の order 順（設計書の決定）。
+// 決戦の並び: 一巡目の確定得点が低い順、同点は一巡目の試技順（設計書の決定）。
 function compareByScoreAsc(a, b) {
   if (scoreOf(a) !== scoreOf(b)) return scoreOf(a) - scoreOf(b);
-  return (a.order || '').localeCompare(b.order || '');
+  return compareRound1Order(a, b);
 }
 
 // 一巡目の行から二巡目の行を1つ作る。
@@ -2556,7 +3068,8 @@ function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
 }
 
 // 二巡目の行を生成する（純粋関数）。
-// 並べ替えは 決戦以外→女子先→得点昇順→同点は order 順、決戦は得点昇順→同点は order 順。
+// 並べ替えは 決戦以外→女子先→一巡目の確定得点の昇順→同点は一巡目の試技順（番号は数値で）、
+// 決戦は確定得点の昇順→同点は一巡目の試技順（網羅検証 S1。未確定の得点は 0 扱い）。
 // 採番は コート×性別ごとに1から。決戦の候補は先頭のコート（EventStatus.firstCourt）の
 // 男子に、通常の行を採番し終えてから続き番号で置く（A-男子-2-(k+1)〜。設計書 2026-09-28）。
 // 一巡目の行は一切変更せず、新規行を末尾に追記するだけにする。
@@ -2698,6 +3211,8 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
       // 二巡目準備で入れた備考と確定は付け直しても残す（採点済みの行はここに来ない）
       if (typeof old.note === 'string' && old.note) row.note = old.note;
       if (old.confirmed === true) row.confirmed = true;
+      // 版も引き継ぐ（同じ行の入れ物のまま並びだけ変えるので、採点画面の控えと食い違わせない）
+      if (EventStatus.revOf(old) > 0) row.rev = EventStatus.revOf(old);
     } else {
       row = buildRound2Row(base, newRows, p, court, isFemale, false);
     }
@@ -2754,7 +3269,9 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
       untrackedCount: result.untrackedCount,
       unassignedCount: result.unassignedCount,
       finalistCount: result.finalistCount,
-      reordered: !!result.reordered
+      reordered: !!result.reordered,
+      // 差分追加では決戦の印を選び直さないので、今の一巡目の確定得点との差を返す（網羅検証 S18）
+      finalistDiff: EventStatus.finalistDiff(result.players)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2922,24 +3439,29 @@ app.get('/api/events/:id/history', (req, res) => {
 });
 
 // POST /api/events/:id/history : 採点履歴保存
+// 本文をそのまま積むと、任意のキーや巨大な値が履歴ファイルに入り、存在しない大会の履歴も作れた
+// （網羅検証 S15）。許可した項目だけを残し、長さを切る。action は必須。大会が無ければ 404。
+// 壊れた履歴ファイルでも 500 にしない（appendHistory が空から積み直す）。
+const HISTORY_STRING_KEYS = ['action', 'detail', 'playerName', 'playerId', 'techName', 'strike', 'value', 'court'];
+const HISTORY_NUMBER_KEYS = ['techRow', 'round'];
 app.post('/api/events/:id/history', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
-    const historyPath = path.join(HISTORY_DIR, `${req.params.id}.json`);
-    let data = { eventId: req.params.id, entries: [] };
-    
-    if (fs.existsSync(historyPath)) {
-      data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+    if (!fs.existsSync(path.join(EVENTS_DIR, `${req.params.id}.json`))) {
+      return res.status(404).json({ error: '大会が見つかりません' });
     }
-    
-    const entry = {
-      ...req.body,
-      timestamp: new Date().toISOString()
-    };
-    
-    data.entries.push(entry);
-    
-    writeJsonAtomic(historyPath, data);
+    const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
+    const entry = {};
+    HISTORY_STRING_KEYS.forEach(k => {
+      if (typeof body[k] === 'string') entry[k] = body[k].slice(0, k === 'detail' ? 500 : 200);
+    });
+    HISTORY_NUMBER_KEYS.forEach(k => {
+      if (typeof body[k] === 'number' && Number.isFinite(body[k])) entry[k] = body[k];
+    });
+    if (!entry.action) {
+      return res.status(400).json({ error: 'action が必要です' });
+    }
+    appendHistory(req.params.id, entry);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

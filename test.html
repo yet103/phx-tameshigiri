@@ -490,8 +490,11 @@
       stRes.event.settings, { requireBib: true, requireRank: true, courts: [] });
     assert('PATCH: 保存した settings が大会に残る',
       (await Api.loadEvent(stEvent.id)).settings, { requireBib: true, requireRank: true, courts: [] });
+    // settings はキーごとの部分更新（網羅検証 S16 2026-10-01）。送らなかった requireRank は残る。
     var stResBad = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: 'yes' } });
-    assert('PATCH: 真偽値でない値は false 扱い', stResBad.event.settings, { requireBib: false, requireRank: false, courts: [] });
+    assert('PATCH: 真偽値でない値は false 扱い（送らなかったキーはそのまま）', stResBad.event.settings, { requireBib: false, requireRank: true, courts: [] });
+    var stResRank = await Api.updateEventInfo(stEvent.id, { settings: { requireRank: false } });
+    assert('PATCH: requireRank だけ送ると requireRank だけ変わる（S16）', stResRank.event.settings, { requireBib: false, requireRank: false, courts: [] });
 
     // settings.courts（コート一覧。設計書「コート一覧」。検証は Courts.validateCourtList と同じ規則）
     var stCourtsOk = await Api.updateEventInfo(stEvent.id, { settings: { courts: ['A', 'B', '稽古'] } });
@@ -511,6 +514,10 @@
     var stCourtsOmit = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: true } });
     assert('PATCH: courts を省くと requireBib だけ変わり courts は残る',
       stCourtsOmit.event.settings, { requireBib: true, requireRank: false, courts: ['A', 'B', '稽古'] });
+    // settings を丸ごと送らなくても、送ったキーだけ変わる（S16。古い画面の courts で他端末の追加を消さない）
+    var stRankOnly = await Api.updateEventInfo(stEvent.id, { settings: { requireRank: true } });
+    assert('PATCH: requireRank だけ送ると requireBib と courts は残る（S16）',
+      stRankOnly.event.settings, { requireBib: true, requireRank: true, courts: ['A', 'B', '稽古'] });
     assert('PATCH: courts を省いた更新後も保存された courts が残る',
       (await Api.loadEvent(stEvent.id)).settings.courts, ['A', 'B', '稽古']);
     await Api.deleteEvent(stEvent.id);
@@ -722,10 +729,11 @@
     await Api.createPlayer(csvExtEvent.id, { name: 'CSV 一郎', court: 'A', bib: 3, rank: '初段', rental: true });
     var csvExtOut = await Api.exportCsv(csvExtEvent.id);
     var csvExtHead = csvExtOut.replace(/^﻿/, '').split('\r\n')[0];
-    assert('export: ヘッダー末尾にゼッケン・級位段位・レンタル',
-      csvExtHead.split(',').slice(-3), ['ゼッケン', '級位段位', 'レンタル']);
+    // 書き出しは 20 列（ゼッケン・級位段位・レンタルの後ろに 決戦・一巡目の行。網羅検証 M5 2026-10-01）
+    assert('export: ゼッケン・級位段位・レンタルの列（16〜18 列目）',
+      csvExtHead.split(',').slice(15, 18), ['ゼッケン', '級位段位', 'レンタル']);
     var csvExtRow = csvExtOut.replace(/^﻿/, '').split('\r\n').filter(function(l) { return l.indexOf('CSV 一郎') === 0; })[0];
-    assert('export: ゼッケン・級位段位・レンタルの値', csvExtRow.split(',').slice(-3), ['3', '初段', '○']);
+    assert('export: ゼッケン・級位段位・レンタルの値', csvExtRow.split(',').slice(15, 18), ['3', '初段', '○']);
 
     var csvSimpleExtra = '名前,コート,性別,技①,技②,技③,新人,ゼッケン,級位段位,レンタル\n' +
       'CSV簡易 太郎,A,男,,,,,7,弐段,○';
@@ -801,21 +809,26 @@
     assert('PATCH note は trim', padRes.player.note, '審判メモ');
     assert('PATCH confirmed を保存', padRes.player.confirmed, true);
     assert('PATCH 負の score を受理', padRes.player.score, -4);
+    // 網羅検証 S4（2026-10-01）: 範囲外・形の違う adjust / totalAdjust / score は黙って捨てず、
+    // 要求全体を 400 で断る（他の項目も書かない）。
     var badRes = await Api.updatePlayerInfo(padEvent.id, padP.id, {
       adjust: [1, 2], totalAdjust: 1.5, note: 12, confirmed: 'yes', score: NaN
     });
-    assert('PATCH 長さ3でない adjust は無視', badRes.player.adjust, [1, -2, 0]);
-    assert('PATCH 整数でない totalAdjust は無視', badRes.player.totalAdjust, -3);
-    assert('PATCH 文字列でない note は無視', badRes.player.note, '審判メモ');
-    assert('PATCH 真偽値でない confirmed は無視', badRes.player.confirmed, true);
+    assert('PATCH 形の違う adjust・totalAdjust・score は 400（S4）', badRes.status, 400);
+    var badAfter = (await Api.loadEvent(padEvent.id)).players.filter(function(p) { return p.id === padP.id; })[0];
+    assert('PATCH 400 のあとも adjust は変わらない', badAfter.adjust, [1, -2, 0]);
+    assert('PATCH 400 のあとも totalAdjust は変わらない', badAfter.totalAdjust, -3);
+    var badRes2 = await Api.updatePlayerInfo(padEvent.id, padP.id, { note: 12, confirmed: 'yes' });
+    assert('PATCH 文字列でない note は無視', badRes2.player.note, '審判メモ');
+    assert('PATCH 真偽値でない confirmed は無視', badRes2.player.confirmed, true);
     var csvOut = await Api.exportCsv(padEvent.id);
     var csvHead = csvOut.replace(/^\uFEFF/, '').split('\r\n')[0];
-    assert('export は18列', csvHead.split(',').length, 18);
+    assert('export は20列（決戦・一巡目の行を含む。M5）', csvHead.split(',').length, 20);
     assert('export のヘッダー末尾', csvHead.split(',').slice(9),
-      ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定', 'ゼッケン', '級位段位', 'レンタル']);
+      ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定', 'ゼッケン', '級位段位', 'レンタル', '決戦', '一巡目の行']);
     var csvRow = csvOut.replace(/^\uFEFF/, '').split('\r\n').filter(function(l) { return l.indexOf('補正 太郎') === 0; })[0];
     assert('export に補正点・確定・追加項目（未設定）が出る', csvRow.split(',').slice(9),
-      ['1', '-2', '0', '-3', '審判メモ', '○', '', '', '']);
+      ['1', '-2', '0', '-3', '審判メモ', '○', '', '', '', '', '']);
     var longNote = new Array(202).join('あ');   // 201文字
     var longRes = await Api.updatePlayerInfo(padEvent.id, padP.id, { note: longNote });
     assert('PATCH note は200文字で切る', longRes.player.note.length, 200);
@@ -2639,6 +2652,386 @@
     assert('status の無いバンドルは選手から推定される（未採点のみ → draft）',
       (await Api.loadEvent(bsNoStatusImported.id)).status, 'draft');
     await Api.deleteEvent(bsNoStatusImported.id);
+
+    // ==== 網羅バグ検証の修正（設計書 2026-10-01-audit-fixes-design.md）: サーバの約束 ====
+    var h2audit = document.createElement('h2');
+    h2audit.textContent = '網羅検証の修正（サーバ）';
+    results.appendChild(h2audit);
+
+    // 生の fetch（Api.* はまだ 409 の本文を返さないものがあるので、状態と本文をそのまま見る）
+    async function au(url, method, body) {
+      var res = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body)
+      });
+      var json = null;
+      try { json = await res.json(); } catch (e) { /* 本文が JSON でなくてもよい */ }
+      return { status: res.status, json: json || {} };
+    }
+    function auPatch(eventId, playerId, body) {
+      return au('/api/events/' + eventId + '/players/' + playerId, 'PATCH', body);
+    }
+    async function auPlayers(eventId) { return (await Api.loadEvent(eventId)).players; }
+    function auById(list, id) { return list.filter(function(p) { return p.id === id; })[0]; }
+    function auR2Of(list, id) {
+      return list.filter(function(p) { return p.sourcePlayerId === id; })[0];
+    }
+
+    // ---- M2: rev と baseRev（409 stale / not_scorable） ----
+    var m2Ev = (await Api.saveEvent({ name: '監査修正テスト M2', date: '2026-10-01', venue: '', players: [] })).id;
+    var m2Bulk = await Api.createPlayersBulk(m2Ev, { rows: [
+      { name: '版 一郎', court: 'A', isFemale: false },
+      { name: '版 二郎', court: 'A', isFemale: false }
+    ] });
+    var m2A = m2Bulk.players[0].id;
+    var m2B = m2Bulk.players[1].id;
+    assert('M2: 新しい行は rev を持たない（0 とみなす）',
+      EventStatus.revOf(auById(await auPlayers(m2Ev), m2A)), 0);
+    var m2Draft = await auPatch(m2Ev, m2A, { score: 10, result: '1    ', baseRev: 0 });
+    assert('M2: 準備中に baseRev 付きの採点は 409 not_scorable',
+      [m2Draft.status, m2Draft.json.reason, m2Draft.json.status], [409, 'not_scorable', 'draft']);
+    assert('M2: not_scorable の応答に今の行（rev 入り）が付く', m2Draft.json.player && m2Draft.json.player.rev, 0);
+    var m2Force = await auPatch(m2Ev, m2A, { score: 10, result: '1    ', baseRev: 0, force: true });
+    assert('M2: force なら状態の検査を越えて保存し rev が 1 になる',
+      [m2Force.status, m2Force.json.player.score, m2Force.json.player.rev], [200, 10, 1]);
+    await Api.changeStatus(m2Ev, 'round1');
+    var m2Stale = await auPatch(m2Ev, m2A, { score: 20, result: '1    ', baseRev: 0 });
+    assert('M2: 古い baseRev で違う値を送ると 409 stale',
+      [m2Stale.status, m2Stale.json.reason], [409, 'stale']);
+    assert('M2: stale の応答にサーバの今の行が付く',
+      [m2Stale.json.player.score, m2Stale.json.player.rev], [10, 1]);
+    assert('M2: stale のときは何も書かない', auById(await auPlayers(m2Ev), m2A).score, 10);
+    var m2Same = await auPatch(m2Ev, m2A, { score: 10, result: '1    ', baseRev: 0 });
+    assert('M2: 古い baseRev でも値が今と同じなら 200（届いていた要求の再送）',
+      [m2Same.status, m2Same.json.player.rev], [200, 1]);
+    var m2Ok = await auPatch(m2Ev, m2A, { score: 20, result: '1    ', baseRev: 1 });
+    assert('M2: 今の rev を baseRev にすれば保存でき rev +1',
+      [m2Ok.status, m2Ok.json.player.score, m2Ok.json.player.rev], [200, 20, 2]);
+    var m2Note = await auPatch(m2Ev, m2A, { note: '備考だけ' });
+    assert('M2: 備考だけの PATCH は baseRev なしで通り、rev は上がらない',
+      [m2Note.status, m2Note.json.player.rev], [200, 2]);
+    var m2Name = await auPatch(m2Ev, m2A, { name: '版 一郎改' });
+    assert('M2: 氏名の直しでは rev は上がらない', m2Name.json.player.rev, 2);
+    var m2Compat = await auPatch(m2Ev, m2A, { score: 30, result: '1    ' });
+    assert('M2: baseRev の無い採点の PATCH は当面受理する（互換）',
+      [m2Compat.status, m2Compat.json.player.score, m2Compat.json.player.rev], [200, 30, 3]);
+    var m2BadRev = await auPatch(m2Ev, m2A, { score: 30, baseRev: 'x' });
+    assert('M2: baseRev が整数でなければ 400', m2BadRev.status, 400);
+    var m2Tech = await auPatch(m2Ev, m2B, { tech1: '真' });
+    assert('M2: 技の変更で rev +1（版の項目）', m2Tech.json.player.rev, 1);
+    var m2Conf = await auPatch(m2Ev, m2A, { confirmed: true, baseRev: 3 });
+    assert('M2: 確定も採点の PATCH（rev +1）', [m2Conf.status, m2Conf.json.player.rev], [200, 4]);
+    // 一巡目を終了したあとに一巡目の行の採点が届いても受け付けない（決戦から漏れる事故を防ぐ）
+    var m2Done = await au('/api/events/' + m2Ev + '/status', 'POST', { to: 'round1_done', from: 'round1' });
+    assert('M2/S19: from が今の状態と同じなら遷移できる', m2Done.status, 200);
+    var m2Late = await auPatch(m2Ev, m2B, { score: 50, result: '1    ', confirmed: true, baseRev: 1 });
+    assert('M2: 一巡目終了のあとの一巡目の採点は 409 not_scorable',
+      [m2Late.status, m2Late.json.reason, m2Late.json.status], [409, 'not_scorable', 'round1_done']);
+    var m2NoteLate = await auPatch(m2Ev, m2B, { note: '終了後の備考' });
+    assert('M2: 採点以外の項目は状態に関わらず直せる', m2NoteLate.status, 200);
+    await Api.changeStatus(m2Ev, 'round2');
+    var m2Ps = await auPlayers(m2Ev);
+    var m2A2 = auR2Of(m2Ps, m2A);   // 30 点確定の男子 → 決戦
+    var m2B2 = auR2Of(m2Ps, m2B);   // 未確定 → 通常の二巡目
+    assert('M2: 前提（一郎は決戦、二郎は通常の二巡目）', [m2A2.finalist === true, m2B2.finalist === true], [true, false]);
+    var m2R2 = await auPatch(m2Ev, m2B2.id, { score: 5, result: '1    ', baseRev: 0 });
+    assert('M2: 二巡目 進行中の通常の二巡目の行は採点できる', m2R2.status, 200);
+    var m2Fin = await auPatch(m2Ev, m2A2.id, { score: 5, result: '1    ', baseRev: 0 });
+    assert('M2: 二巡目 進行中の決戦の行は 409 not_scorable', [m2Fin.status, m2Fin.json.reason], [409, 'not_scorable']);
+    var m2R1 = await auPatch(m2Ev, m2A, { score: 1, baseRev: 4 });
+    assert('M2: 二巡目 進行中の一巡目の行は 409 not_scorable', [m2R1.status, m2R1.json.reason], [409, 'not_scorable']);
+    // S19: 画面が見ていた状態と違えば 409 stale（古い画面の「戻す」で想定外の状態に行かない）
+    var m2StaleSt = await au('/api/events/' + m2Ev + '/status', 'POST', { to: 'round1_done', from: 'round2_done' });
+    assert('S19: from が今の状態と違えば 409 stale と今の状態',
+      [m2StaleSt.status, m2StaleSt.json.reason, m2StaleSt.json.status], [409, 'stale', 'round2']);
+    assert('S19: stale のときは状態を変えない', (await Api.loadEvent(m2Ev)).status, 'round2');
+    await Api.deleteEvent(m2Ev);
+
+    // ---- S4: 得点・補正点の範囲外は 400 で要求全体を断る ----
+    var s4Ev = (await Api.saveEvent({ name: '監査修正テスト S4', date: '2026-10-01', venue: '', players: [] })).id;
+    var s4P = (await Api.createPlayersBulk(s4Ev, { rows: [{ name: '範囲 太郎', court: 'A' }] })).players[0].id;
+    assert('S4: score 100000 は 400', (await auPatch(s4Ev, s4P, { score: 100000 })).status, 400);
+    assert('S4: score 1.5 は 400', (await auPatch(s4Ev, s4P, { score: 1.5 })).status, 400);
+    assert('S4: adjust に 1000 は 400', (await auPatch(s4Ev, s4P, { adjust: [1000, 0, 0] })).status, 400);
+    assert('S4: adjust の長さ 2 は 400', (await auPatch(s4Ev, s4P, { adjust: [1, 2] })).status, 400);
+    assert('S4: totalAdjust -1000 は 400', (await auPatch(s4Ev, s4P, { totalAdjust: -1000 })).status, 400);
+    var s4Mixed = await auPatch(s4Ev, s4P, { note: '書かない', score: 1.5 });
+    assert('S4: 400 のときは他の項目（備考）も書かない',
+      [s4Mixed.status, auById(await auPlayers(s4Ev), s4P).note], [400, undefined]);
+    var s4Edge = await auPatch(s4Ev, s4P, { adjust: [999, -999, 0], totalAdjust: 999, score: -9999 });
+    assert('S4: 境界値（±999・-9999）は保存できる',
+      [s4Edge.status, s4Edge.json.player.adjust, s4Edge.json.player.totalAdjust, s4Edge.json.player.score],
+      [200, [999, -999, 0], 999, -9999]);
+    await Api.deleteEvent(s4Ev);
+
+    // ---- M1: 一巡目の氏名・性別・新人を二巡目へ写す、二巡目の行では直せない ----
+    var m1Ev = (await Api.saveEvent({ name: '監査修正テスト M1', date: '2026-10-01', venue: '', players: [] })).id;
+    var m1Bulk = await Api.createPlayersBulk(m1Ev, { rows: [
+      { name: '写 一郎', court: 'A' }, { name: '写 二郎', court: 'A' }, { name: '写 三郎', court: 'A' }
+    ] });
+    var m1A = m1Bulk.players[0].id, m1B = m1Bulk.players[1].id, m1C = m1Bulk.players[2].id;
+    await Api.changeStatus(m1Ev, 'round1');
+    await auPatch(m1Ev, m1C, { score: 12, result: '1    ', confirmed: true });
+    await Api.changeStatus(m1Ev, 'round1_done');
+    var m1Name = await auPatch(m1Ev, m1A, { name: '写 一郎改', isNewFace: true });
+    var m1Ps = await auPlayers(m1Ev);
+    var m1A2 = auR2Of(m1Ps, m1A);
+    assert('M1: 一巡目の氏名・新人の変更が二巡目の行に写る',
+      [m1Name.status, m1A2.name, m1A2.isNewFace], [200, '写 一郎改', true]);
+    assert('M1: 氏名・新人の写しでは二巡目の行の rev は上がらない', EventStatus.revOf(m1A2), 0);
+    var m1Linked = await auPatch(m1Ev, m1A2.id, { name: '別の名前' });
+    assert('M1: 二巡目の行で氏名を変えると 409 linked', [m1Linked.status, m1Linked.json.reason], [409, 'linked']);
+    var m1LinkedSex = await auPatch(m1Ev, m1A2.id, { isFemale: true });
+    assert('M1: 二巡目の行で性別を変えると 409 linked', m1LinkedSex.json.reason, 'linked');
+    var m1Same = await auPatch(m1Ev, m1A2.id, { name: '写 一郎改', isNewFace: true, isFemale: false, rank: '初段' });
+    assert('M1: 二巡目の行に同じ値を送るのは通る（編集シートは全項目を送る）', m1Same.status, 200);
+    var m1Sex = await auPatch(m1Ev, m1B, { isFemale: true });
+    var m1B2 = auR2Of(await auPlayers(m1Ev), m1B);
+    assert('M1: 一巡目の性別の変更が二巡目の行に写り、order の性別も組み直す',
+      [m1Sex.status, m1B2.isFemale, /^A-女子-2-\d+$/.test(m1B2.order)], [200, true, true]);
+    assert('M1: 性別の写しは版の項目なので二巡目の行の rev +1', EventStatus.revOf(m1B2), 1);
+    // S7: 採点済みの行の技・性別は force なしでは 409 scored
+    var m1Scored = await auPatch(m1Ev, m1C, { isFemale: true });
+    assert('S7: 採点済みの行の性別を変えると 409 scored', [m1Scored.status, m1Scored.json.reason], [409, 'scored']);
+    var m1ScoredTech = await auPatch(m1Ev, m1C, { tech1: '真' });
+    assert('S7: 採点済みの行の技を変えると 409 scored', m1ScoredTech.json.reason, 'scored');
+    var m1SameTech = await auPatch(m1Ev, m1C, { tech1: '', tech2: '' });
+    assert('S7: 採点済みの行でも技が変わらなければ通る', m1SameTech.status, 200);
+    var m1ForceTech = await auPatch(m1Ev, m1C, { tech1: '真', force: true });
+    assert('S7: force なら採点済みの行の技を変えられる（rev +1）',
+      [m1ForceTech.status, m1ForceTech.json.player.tech1, m1ForceTech.json.player.rev], [200, '真', 2]);
+    // 二巡目の行が採点済みなら、一巡目の性別の変更（写し先）も scored
+    await Api.changeStatus(m1Ev, 'round2');
+    var m1A2now = auR2Of(await auPlayers(m1Ev), m1A);
+    await auPatch(m1Ev, m1A2now.id, { score: 3, result: '1    ', baseRev: 0 });
+    var m1Prop = await auPatch(m1Ev, m1A, { isFemale: true });
+    assert('S7: 写し先の二巡目の行が採点済みなら一巡目の性別の変更も 409 scored', m1Prop.json.reason, 'scored');
+    await Api.deleteEvent(m1Ev);
+
+    // ---- S15: 氏名 100 字・技名 50 字（trim）・一括登録の氏名・履歴の許可項目 ----
+    var s15Ev = (await Api.saveEvent({ name: '監査修正テスト S15', date: '2026-10-01', venue: '', players: [] })).id;
+    var s15Long = await au('/api/events/' + s15Ev + '/players', 'POST', { name: new Array(102).join('あ'), court: 'A' });
+    assert('S15: POST players 101 字の氏名は 400', s15Long.status, 400);
+    var s15LongTech = await au('/api/events/' + s15Ev + '/players', 'POST', { name: '技長', court: 'A', tech1: new Array(52).join('技') });
+    assert('S15: POST players 51 字の技名は 400', s15LongTech.status, 400);
+    var s15Trim = await au('/api/events/' + s15Ev + '/players', 'POST', { name: '技空白', court: 'A', tech1: ' 真 ' });
+    assert('S15: POST players の技名は trim して保存', s15Trim.json.player && s15Trim.json.player.tech1, '真');
+    var s15PatchTech = await auPatch(s15Ev, s15Trim.json.player.id, { tech2: new Array(52).join('技') });
+    assert('S15: PATCH の 51 字の技名は 400', s15PatchTech.status, 400);
+    var s15PatchTrim = await auPatch(s15Ev, s15Trim.json.player.id, { tech2: ' 連 ' });
+    assert('S15: PATCH の技名も trim', s15PatchTrim.json.player.tech2, '連');
+    var s15Bulk = await Api.createPlayersBulk(s15Ev, { court: 'A', names: ['短い', new Array(102).join('名')] });
+    assert('S15: 一括登録（名前だけ）の 101 字の氏名は 400', !!(s15Bulk && s15Bulk.error), true);
+    var s15Rows = await Api.createPlayersBulk(s15Ev, { rows: [{ name: new Array(102).join('名'), court: 'A' }] });
+    assert('S15: 一括登録（行の形）の 101 字の氏名は 400', /^1 行目: /.test((s15Rows && s15Rows.error) || ''), true);
+    var s15Hist = await au('/api/events/' + s15Ev + '/history', 'POST', { action: 'test_entry', detail: 'x', evil: 'y', techRow: 2 });
+    var s15HistLoaded = await Api.loadHistory(s15Ev);
+    var s15Last = s15HistLoaded.entries[s15HistLoaded.entries.length - 1];
+    assert('S15: 履歴は許可した項目だけ残す',
+      [s15Hist.status, s15Last.action, s15Last.detail, s15Last.techRow, s15Last.evil], [200, 'test_entry', 'x', 2, undefined]);
+    assert('S15: 履歴の action が無ければ 400',
+      (await au('/api/events/' + s15Ev + '/history', 'POST', { detail: 'x' })).status, 400);
+    assert('S15: 無い大会の履歴は 404',
+      (await au('/api/events/nosuchevent1001/history', 'POST', { action: 'x' })).status, 404);
+    await Api.deleteEvent(s15Ev);
+
+    // ---- M3: 使用中の技を技得点表から消さない（tech_in_use）と改名の付け替え ----
+    var m3Ev = (await Api.saveEvent({ name: '監査修正テスト M3', date: '2026-10-01', venue: '', players: [] })).id;
+    function m3T(name, first) { return { name: name, strikes: [first, null, null, null] }; }
+    var m3Base = [m3T('甲', 5), m3T('乙', 6), m3T('丙(男)', 7), m3T('丙(女)', 8)];
+    var m3Put0 = await au('/api/events/' + m3Ev + '/techniques', 'PUT', { techniques: m3Base });
+    assert('M3: 選手のいない大会の技得点表は保存できる', m3Put0.status, 200);
+    var m3Bulk = await Api.createPlayersBulk(m3Ev, { rows: [
+      { name: '技 男', court: 'A', isFemale: false, tech1: '甲', tech2: '丙' },
+      { name: '技 女', court: 'A', isFemale: true, tech1: '乙', tech2: '丙' }
+    ] });
+    var m3M = m3Bulk.players[0].id, m3F = m3Bulk.players[1].id;
+    var m3NoRename = await au('/api/events/' + m3Ev + '/techniques', 'PUT',
+      { techniques: [m3T('甲改', 5), m3T('丙(男)', 7), m3T('丙(女)', 8)] });
+    assert('M3: 使っている技が消えると 409 tech_in_use（names は今の表の名前・count は行の数）',
+      [m3NoRename.status, m3NoRename.json.reason, m3NoRename.json.names, m3NoRename.json.count],
+      [409, 'tech_in_use', ['甲', '乙'], 2]);
+    assert('M3: usages は技ごとの行の数', m3NoRename.json.usages, [{ name: '甲', count: 1 }, { name: '乙', count: 1 }]);
+    assert('M3: 409 のときは技得点表を書かない',
+      (await Api.loadEvent(m3Ev)).techniques.map(function(t) { return t.name; }), ['甲', '乙', '丙(男)', '丙(女)']);
+    var m3Partial = await au('/api/events/' + m3Ev + '/techniques', 'PUT',
+      { techniques: [m3T('甲改', 5), m3T('丙(男)', 7), m3T('丙(女)', 8)], renames: [{ from: '甲', to: '甲改' }] });
+    assert('M3: 付け替えを指定しても、まだ消える技があれば 409（残りだけ数える）',
+      [m3Partial.status, m3Partial.json.names, m3Partial.json.count], [409, ['乙'], 1]);
+    var m3BadRename = await au('/api/events/' + m3Ev + '/techniques', 'PUT',
+      { techniques: m3Base, renames: [{ from: '無い技', to: '甲' }] });
+    assert('M3: 付け替え元が今の表に無ければ 400', m3BadRename.status, 400);
+    var m3BadRename2 = await au('/api/events/' + m3Ev + '/techniques', 'PUT',
+      { techniques: m3Base, renames: [{ from: '甲', to: '甲' }] });
+    assert('M3: 付け替え元が新しい表にも残っていれば 400', m3BadRename2.status, 400);
+    var m3Rename = await au('/api/events/' + m3Ev + '/techniques', 'PUT', {
+      techniques: [m3T('甲改', 5), m3T('乙', 6), m3T('丁(男)', 7), m3T('丙(女)', 8)],
+      renames: [{ from: '甲', to: '甲改' }, { from: '丙(男)', to: '丁(男)' }]
+    });
+    var m3Ps = await auPlayers(m3Ev);
+    assert('M3: 改名は選手の技名も付け替える（接尾辞なしの表示名は接尾辞なしで）',
+      [m3Rename.status, m3Rename.json.renamed, auById(m3Ps, m3M).tech1, auById(m3Ps, m3M).tech2], [200, 1, '甲改', '丁']);
+    assert('M3: 付け替えた行は rev +1、触れない行はそのまま',
+      [EventStatus.revOf(auById(m3Ps, m3M)), EventStatus.revOf(auById(m3Ps, m3F)), auById(m3Ps, m3F).tech2], [1, 0, '丙']);
+    var m3Reset = await au('/api/events/' + m3Ev + '/techniques', 'DELETE');
+    assert('M3: 雛形に戻すと使っている技が消えるなら 409 tech_in_use', [m3Reset.status, m3Reset.json.reason], [409, 'tech_in_use']);
+    // もともと表に無い技名（手入力の誤りなど）は数えない
+    await auPatch(m3Ev, m3F, { tech3: 'ナゾの技' });
+    var m3Unknown = await au('/api/events/' + m3Ev + '/techniques', 'PUT',
+      { techniques: [m3T('甲改', 5), m3T('乙', 6), m3T('丁(男)', 7), m3T('丙(女)', 8), m3T('戊', 1)] });
+    assert('M3: もともと表に無い技名は tech_in_use に数えない', m3Unknown.status, 200);
+    assert('M3: startBlockers は技得点表に無い技を止める（unknownTech）',
+      Courts.startBlockers(await Api.loadEvent(m3Ev), await auPlayers(m3Ev)).map(function(b) { return b.kind; }), ['unknownTech']);
+    await Api.deleteEvent(m3Ev);
+
+    // ---- M5: CSV の見出しの厳密な照合・expectedCount・20 列の往復・値の洗浄 ----
+    var m5Ev = (await Api.saveEvent({ name: '監査修正テスト M5', date: '2026-10-01', venue: '', players: [] })).id;
+    var m5Hdr9 = '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果';
+    var m5Unknown = await au('/api/events/' + m5Ev + '/import', 'POST', { csvText: 'foo,bar\nx,y', mode: 'replace' });
+    assert('M5: 知らない見出しは 400 format', [m5Unknown.status, m5Unknown.json.reason], [400, 'format']);
+    var m5Ten = await au('/api/events/' + m5Ev + '/import', 'POST', { csvText: m5Hdr9 + ',余分\n甲,A-男子-1-1,,,,0,,,,', mode: 'replace' });
+    assert('M5: 9 列の後ろに知らない列があれば 400 format', m5Ten.json.reason, 'format');
+    var m5Garbled = await au('/api/events/' + m5Ev + '/import', 'POST', { csvText: m5Hdr9 + '\n��,A-男子-1-1,,,,0,,,', mode: 'replace' });
+    assert('M5: 文字化け（U+FFFD）は 400 encoding', [m5Garbled.status, m5Garbled.json.reason], [400, 'encoding']);
+    var m5Variant = await au('/api/events/' + m5Ev + '/import', 'POST',
+      { csvText: '﻿選手名,順番,技1,技2,技3,得点,新人,女子,結果\n表記 太郎,A-男子-1-1, 真 ,,,12.7,,,1    ', mode: 'replace' });
+    var m5VarP = (await auPlayers(m5Ev))[0];
+    assert('M5: 「技1」表記と BOM の見出しも読む・技名は trim・得点の小数は切り捨て',
+      [m5Variant.status, m5VarP.tech1, m5VarP.score], [200, '真', 12]);
+    var m5Simple = await au('/api/events/' + m5Ev + '/import', 'POST',
+      { csvText: '名前,コート,性別,,\n簡易 花子,B,女', mode: 'append' });
+    assert('M5: 簡易形式は末尾の空の見出しセルを無視して読む', m5Simple.status, 200);
+    var m5Sanit = await au('/api/events/' + m5Ev + '/import', 'POST', { csvText:
+      '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果,補正点1,補正点2,補正点3,全体補正,備考,確定,ゼッケン,級位段位,レンタル\n' +
+      new Array(102).join('長') + ',A-男子-1-2,,,,1e9,,,,1000,0,0,5,,○,,二段,\n', mode: 'append', force: true });
+    var m5SanP = (await auPlayers(m5Ev)).filter(function(p) { return p.order === 'A-男子-1-2'; })[0];
+    assert('M5: 取り込みの値を洗う（氏名 100 字・得点 1e9 は 0・補正点 1000 は落とす・段位の正規化）',
+      [m5Sanit.status, m5SanP.name.length, m5SanP.score, m5SanP.adjust, m5SanP.totalAdjust, m5SanP.rank],
+      [200, 100, 0, undefined, 5, '弐段']);
+    var m5Count = (await auPlayers(m5Ev)).length;
+    var m5StaleImp = await au('/api/events/' + m5Ev + '/import', 'POST',
+      { csvText: m5Hdr9 + '\n新 太郎,A-男子-1-1,,,,0,,,', mode: 'replace', force: true, expectedCount: 0 });
+    assert('M5: expectedCount が今の人数と違えば 409 stale と今の人数',
+      [m5StaleImp.status, m5StaleImp.json.reason, m5StaleImp.json.playerCount], [409, 'stale', m5Count]);
+    assert('M5: stale のときは置き換えない', (await auPlayers(m5Ev)).length, m5Count);
+    // 20 列の往復: 一巡目を終了して二巡目（決戦あり）を作り、書き出して置換で戻す
+    await Api.importCsv(m5Ev, m5Hdr9 + '\n往 一郎,A-男子-1-1,,,,30,,,1    \n往 二郎,A-男子-1-2,,,,0,,,\n往 花子,A-女子-1-1,,,,0,,○,', 'replace', true);
+    var m5Ps0 = await auPlayers(m5Ev);
+    await auPatch(m5Ev, m5Ps0[0].id, { confirmed: true });
+    await Api.changeStatus(m5Ev, 'round1');
+    await Api.changeStatus(m5Ev, 'round1_done');
+    var m5Before = await auPlayers(m5Ev);
+    var m5Csv = await Api.exportCsv(m5Ev);
+    var m5Head = m5Csv.replace(/^﻿/, '').split('\r\n')[0].split(',');
+    assert('M5: 書き出しは 20 列で末尾に 決戦・一巡目の行', [m5Head.length, m5Head.slice(18)], [20, ['決戦', '一巡目の行']]);
+    var m5Fmt15 = await au('/api/events/' + m5Ev + '/import', 'POST', { csvText: m5Hdr9 + '\n誰か,A-男子-1-1,,,,0,,,', mode: 'replace', force: true });
+    assert('M5: 二巡目がある大会を往復できない形式で置換すると 409 round2_format',
+      [m5Fmt15.status, m5Fmt15.json.reason], [409, 'round2_format']);
+    var m5Round = await au('/api/events/' + m5Ev + '/import', 'POST',
+      { csvText: m5Csv, mode: 'replace', force: true, expectedCount: m5Before.length });
+    var m5After = await auPlayers(m5Ev);
+    function m5Shape(list) {
+      var byId = {};
+      list.forEach(function(p) { byId[p.id] = p; });
+      return list.map(function(p) {
+        var src = p.sourcePlayerId ? byId[p.sourcePlayerId] : null;
+        return [p.name, p.order, p.finalist === true, src ? src.order : '', p.confirmed === true, p.score];
+      }).sort();
+    }
+    assert('M5: 20 列の置換で決戦の印と一巡目とのつながりが往復する',
+      [m5Round.status, m5Shape(m5After)], [200, m5Shape(m5Before)]);
+    assert('M5: 往復のあとも決戦があるので round2 → round2_done は止まる',
+      (await Api.changeStatus(m5Ev, 'round2')).ok && (await Api.changeStatus(m5Ev, 'round2_done')).reason, 'finale_pending');
+    await Api.deleteEvent(m5Ev);
+
+    // ---- M1: 順位は一巡目の行ごとに合算（同姓同名の別人を合算しない・旧データは氏名で） ----
+    var rkEv = (await Api.saveEvent({ name: '監査修正テスト 合算', date: '2026-10-01', venue: '', players: [] })).id;
+    await Api.importCsv(rkEv,
+      '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果,補正点1,補正点2,補正点3,全体補正,備考,確定\n' +
+      '同名,A-男子-1-1,,,,10,,,1    ,0,0,0,0,,○\n' +
+      '同名,A-男子-1-2,,,,20,,,1    ,0,0,0,0,,○\n' +
+      '旧名,B-男子-1-1,,,,5,,,1    ,0,0,0,0,,○\n' +
+      '旧名,B-男子-2-1,,,,3,,,1    ,0,0,0,0,,○\n', 'replace', true);
+    var rkRank = await Api.loadRanking(rkEv);
+    assert('M1: 同姓同名の別人は別々に並ぶ（一巡目の行ごと）',
+      rkRank.rankings.male.map(function(r) { return [r.name, r.score]; }), [['同名', 20], ['同名', 10], ['旧名', 8]]);
+    // 一巡目の氏名を直しても二巡目と 2 行に割れない
+    var rkPs = await auPlayers(rkEv);
+    var rkFirst = rkPs.filter(function(p) { return p.order === 'A-男子-1-1'; })[0];
+    await Api.changeStatus(rkEv, 'round1');
+    // 旧名の二巡目の行は追跡できない（CSV 由来）ので、確認済みとして force で進める
+    await Api.changeStatus(rkEv, 'round1_done', { force: true });
+    var rkR2 = auR2Of(await auPlayers(rkEv), rkFirst.id);
+    await auPatch(rkEv, rkR2.id, { score: 7, result: '1    ', confirmed: true, force: true, baseRev: 0 });
+    await auPatch(rkEv, rkFirst.id, { name: '改名 一郎' });
+    var rkRank2 = await Api.loadRanking(rkEv);
+    assert('M1: 一巡目の氏名を直しても一巡目＋二巡目が 1 行に合算される',
+      rkRank2.rankings.male.filter(function(r) { return r.name === '改名 一郎'; }).map(function(r) { return r.score; }), [17]);
+    await Api.deleteEvent(rkEv);
+
+    // ---- M6: status の無い大会の初めての遷移で、採点済みの行を確定に移す ----
+    var m6Bundle = { format: 'phx-tameshigiri-event', version: 1, event: { name: '監査修正テスト M6', players: [
+      { id: 'm6a', name: '旧 一郎', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 25, result: '1    ', isNewFace: false, isFemale: false },
+      { id: 'm6b', name: '旧 二郎', order: 'A-男子-1-2', tech1: '', tech2: '', tech3: '', score: 0, result: '', isNewFace: false, isFemale: false }
+    ] } };
+    var m6Id = (await Api.importBundle(m6Bundle)).id;
+    assert('M6: 前提（status の無い大会は採点済みから round1 と推定）', (await Api.loadEvent(m6Id)).status, 'round1');
+    var m6Tr = await Api.changeStatus(m6Id, 'round1_done');
+    var m6Ps = await auPlayers(m6Id);
+    assert('M6: 初めての遷移で採点済みの行に確定の印が付き、未採点には付かない',
+      [m6Tr.ok, auById(m6Ps, 'm6a').confirmed, auById(m6Ps, 'm6b').confirmed], [true, true, undefined]);
+    assert('M6: 移行した得点は順位に残る',
+      (await Api.loadRanking(m6Id)).rankings.male.map(function(r) { return [r.name, r.score]; }), [['旧 一郎', 25], ['旧 二郎', 0]]);
+    assert('M6: 移行した得点で暫定ベスト8 が選ばれる', auR2Of(m6Ps, 'm6a').finalist, true);
+    await Api.deleteEvent(m6Id);
+
+    // ---- S1: 二巡目は一巡目の確定得点の低い順、同点は試技順の番号を数値で ----
+    var s1Ev = (await Api.saveEvent({ name: '監査修正テスト S1', date: '2026-10-01', venue: '', players: [] })).id;
+    var s1Rows = [];
+    for (var s1i = 1; s1i <= 11; s1i++) s1Rows.push({ name: '並 ' + s1i, court: 'A', isFemale: false });
+    s1Rows.push({ name: '女 確定10', court: 'A', isFemale: true });
+    s1Rows.push({ name: '女 未確定50', court: 'A', isFemale: true });
+    s1Rows.push({ name: '女 確定5', court: 'A', isFemale: true });
+    var s1Created = (await Api.createPlayersBulk(s1Ev, { rows: s1Rows })).players;
+    await Api.changeStatus(s1Ev, 'round1');
+    await auPatch(s1Ev, s1Created[11].id, { score: 10, result: '1    ', confirmed: true });
+    await auPatch(s1Ev, s1Created[12].id, { score: 50, result: '1    ' });
+    await auPatch(s1Ev, s1Created[13].id, { score: 5, result: '1    ', confirmed: true });
+    var s1Tr = await Api.changeStatus(s1Ev, 'round1_done');
+    var s1Ps = await auPlayers(s1Ev);
+    function s1Seq(sex) {
+      var byId = {};
+      s1Ps.forEach(function(p) { byId[p.id] = p; });
+      return s1Ps.filter(function(p) { return Courts.roundOf(p) === 2 && Courts.sexOf(p) === sex; })
+        .sort(Courts.compareOrder).map(function(p) { return byId[p.sourcePlayerId].name; });
+    }
+    assert('S1: 同点は一巡目の試技順の番号を数値で比べる（10 番が 2 番より前に来ない）',
+      s1Seq('男子'), ['並 1', '並 2', '並 3', '並 4', '並 5', '並 6', '並 7', '並 8', '並 9', '並 10', '並 11']);
+    assert('S1: 並べる得点は確定済みだけ（未確定は 0 扱いで先頭側）',
+      s1Seq('女子'), ['女 未確定50', '女 確定5', '女 確定10']);
+    assert('S18: 一巡目の終了の応答に選考の差（finalistDiff）が入る',
+      s1Tr.round2 && s1Tr.round2.finalistDiff && s1Tr.round2.finalistDiff.changed, false);
+    await Api.deleteEvent(s1Ev);
+
+    // ---- S18: 一巡目の終了のあとに一巡目の確定が変わると、選考の差が出る ----
+    var s18Ev = (await Api.saveEvent({ name: '監査修正テスト S18', date: '2026-10-01', venue: '', players: [] })).id;
+    var s18Created = (await Api.createPlayersBulk(s18Ev, { rows: [
+      { name: '選 一郎', court: 'A' }, { name: '選 二郎', court: 'A' }
+    ] })).players;
+    await Api.changeStatus(s18Ev, 'round1');
+    await auPatch(s18Ev, s18Created[0].id, { score: 10, result: '1    ', confirmed: true });
+    await Api.changeStatus(s18Ev, 'round1_done');
+    assert('S18: 選び直す必要が無ければ changed: false', EventStatus.finalistDiff(await auPlayers(s18Ev)).changed, false);
+    await auPatch(s18Ev, s18Created[1].id, { score: 12, result: '1    ', confirmed: true, force: true, baseRev: 0 });
+    var s18Diff = EventStatus.finalistDiff(await auPlayers(s18Ev));
+    assert('S18: 一巡目終了のあとで確定した一巡目の行が「入るべき選手」に出る',
+      [s18Diff.changed, s18Diff.missing.map(function(r) { return r.name; }), s18Diff.extra, s18Diff.round2Scored],
+      [true, ['選 二郎'], [], false]);
+    var s18Gen = await au('/api/events/' + s18Ev + '/rounds/2/generate', 'POST', { force: true });
+    assert('S18: 二巡目の差分追加の応答にも finalistDiff が入る',
+      s18Gen.json.finalistDiff && s18Gen.json.finalistDiff.changed, true);
+    await Api.deleteEvent(s18Ev);
   }
 
   (async function() {
@@ -3203,14 +3596,21 @@
     assert('statusConfirmMessage: round1_done → round2',
       Courts.statusConfirmMessage('round1_done', 'round2', tcP),
       '⚠ 二巡目の技が未入力の選手が 1名います。\nこのまま二巡目を開始しますか？');
-    assert('statusConfirmMessage: round1_done → final（二巡目なしで終了）',
+    // 網羅検証 S2（2026-10-01）: 最終結果の前に未確定の件数を出す（round1_done → final は一巡目だけ）
+    assert('statusConfirmMessage: round1_done → final（二巡目なしで終了）は一巡目の未確定を出す',
       Courts.statusConfirmMessage('round1_done', 'final', tcP),
+      '⚠ 未確定が 一巡目 1名 います（未確定の得点は順位に入りません）。\n二巡目を行わずに最終結果にします。\nよろしいですか？');
+    assert('statusConfirmMessage: round1_done → final で全員確定なら従来の文言',
+      Courts.statusConfirmMessage('round1_done', 'final', [tcP[0], tcP[2]]),
       '二巡目を行わずに最終結果にします。\nよろしいですか？');
     assert('statusConfirmMessage: round2 → round2_done',
       Courts.statusConfirmMessage('round2', 'round2_done', tcP),
       '二巡目の未確定が 1名います。\n二巡目を終了しますか？');
-    assert('statusConfirmMessage: round2_done → final',
+    assert('statusConfirmMessage: round2_done → final は全巡目の未確定を出す（S2）',
       Courts.statusConfirmMessage('round2_done', 'final', tcP),
+      '⚠ 未確定が 一巡目 1名・二巡目 1名 います（未確定の得点は順位に入りません）。\n得点・選手・技を編集できなくなります。\n最終結果を確定しますか？');
+    assert('statusConfirmMessage: round2_done → final で全員確定なら従来の文言',
+      Courts.statusConfirmMessage('round2_done', 'final', [tcP[0]]),
       '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？');
     assert('statusConfirmMessage: final → archived',
       Courts.statusConfirmMessage('final', 'archived', tcP),
@@ -3273,8 +3673,9 @@
     // ---- 段階表示の件数 ----
     assert('stageCountText: round2_final は決戦だけを数える',
       Courts.stageCountText('round2_final', cfP), '決戦 確定 1 / 2');
-    assert('stageCountText: round2 は二巡目全体を数える（従来どおり）',
-      Courts.stageCountText('round2', cfP), '確定 2 / 4');
+    // 網羅検証 S12（2026-10-01）: 二巡目 進行中は決戦の行を除いて数える（決戦は「決戦を開始」の後）
+    assert('stageCountText: round2 は決戦の行を除いて数える（S12）',
+      Courts.stageCountText('round2', cfP), '確定 1 / 2');
     assert('progressRound: round2_final は二巡目', Courts.progressRound('round2_final', cfP), 2);
 
     // ---- 試合開始を止める条件は決戦で変わらない ----
@@ -3786,10 +4187,97 @@
     assert('prev: round1 → draft', EventStatus.prev('round1', R1_ONLY), 'draft');
     assert('prev: round1_done → round1', EventStatus.prev('round1_done', R1_ONLY), 'round1');
     assert('prev: round2 → round1_done', EventStatus.prev('round2', R1_R2), 'round1_done');
-    assert('prev: final は二巡目があれば round2_done', EventStatus.prev('final', R1_R2), 'round2_done');
+    // 網羅検証 S11（2026-10-01）: 二巡目の行があるだけでは round2_done に戻さない。
+    // 一巡目の終了で二巡目の行は必ず作られるので、「二巡目を行わず最終結果へ」の後の「戻す」が
+    // 二巡目終了に行ってしまう。採点済みか確定済みの行があるときだけ round2_done。
+    assert('prev: final は二巡目に採点済みの行があれば round2_done',
+      EventStatus.prev('final', [{ order: 'A-男子-1-1' }, { order: 'A-男子-2-1', score: 5, result: '1    ' }]), 'round2_done');
+    assert('prev: final は二巡目に確定済みの行があれば round2_done',
+      EventStatus.prev('final', [{ order: 'A-男子-1-1' }, { order: 'A-男子-2-1', score: 0, confirmed: true }]), 'round2_done');
+    assert('prev: final は二巡目の行があっても誰も採点していなければ round1_done（S11）',
+      EventStatus.prev('final', R1_R2), 'round1_done');
     assert('prev: final は二巡目が無ければ round1_done', EventStatus.prev('final', R1_ONLY), 'round1_done');
     assert('prev: final で players が無くても落ちない', EventStatus.prev('final', null), 'round1_done');
     assert('prev: archived → final', EventStatus.prev('archived', R1_ONLY), 'final');
+
+    // ---- 網羅検証の修正（設計書 2026-10-01）: 共通関数 ----
+    // isRowScorable: 状態が採点できる・行の巡目がその状態の巡目・決戦の制限の 3 つ（not_scorable の判定）
+    var RS1 = { order: 'A-男子-1-1' };
+    var RS2 = { order: 'A-男子-2-1' };
+    var RSF = { order: 'A-男子-2-2', finalist: true };
+    assert('isRowScorable: round1 は一巡目の行だけ',
+      [EventStatus.isRowScorable('round1', RS1), EventStatus.isRowScorable('round1', RS2)], [true, false]);
+    assert('isRowScorable: round1_done・draft・round2_done・final は採点できない',
+      ['round1_done', 'draft', 'round2_done', 'final'].map(function(s) { return EventStatus.isRowScorable(s, RS1); }),
+      [false, false, false, false]);
+    assert('isRowScorable: round2 は決戦以外の二巡目の行だけ',
+      [EventStatus.isRowScorable('round2', RS1), EventStatus.isRowScorable('round2', RS2), EventStatus.isRowScorable('round2', RSF)],
+      [false, true, false]);
+    assert('isRowScorable: round2_final は決戦の行だけ',
+      [EventStatus.isRowScorable('round2_final', RS2), EventStatus.isRowScorable('round2_final', RSF)], [false, true]);
+    assert('isRowScorable: 行が無ければ false', EventStatus.isRowScorable('round1', null), false);
+    assert('revOf: 無い・壊れた値は 0、整数はそのまま',
+      [EventStatus.revOf({}), EventStatus.revOf(null), EventStatus.revOf({ rev: -1 }), EventStatus.revOf({ rev: 1.5 }),
+       EventStatus.revOf({ rev: '3' }), EventStatus.revOf({ rev: 4 })], [0, 0, 0, 0, 0, 4]);
+
+    // pickFinalists: 一般男子・確定済み・得点 > 0 の上位 8、8 位同点は全員
+    var PF = [];
+    for (var pfi = 1; pfi <= 10; pfi++) PF.push({ id: 'm' + pfi, order: 'A-男子-1-' + pfi, score: 100 - pfi * 5, confirmed: true });
+    PF[8].score = PF[7].score;   // 9 人目が 8 位と同点
+    PF.push({ id: 'f1', order: 'A-女子-1-1', isFemale: true, score: 99, confirmed: true });
+    PF.push({ id: 'u1', order: 'A-男子-1-11', score: 99 });   // 未確定
+    PF.push({ id: 'z1', order: 'A-男子-1-12', score: 0, confirmed: true });
+    assert('pickFinalists: 確定済みの一般男子の上位 8（8 位同点は全員、女子・未確定・0 点は除く）',
+      Object.keys(EventStatus.pickFinalists(PF)).sort(), ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9']);
+    assert('pickFinalists: 空でも落ちない', Object.keys(EventStatus.pickFinalists([])), []);
+
+    // finalistDiff: 選ぶべき候補と決戦の印の差（S18）
+    var FD = [
+      { id: 'a', name: '甲', order: 'A-男子-1-1', score: 20, confirmed: true },
+      { id: 'b', name: '乙', order: 'A-男子-1-2', score: 10, confirmed: true },
+      { id: 'c', name: '丙', order: 'A-男子-1-3', score: 0 },
+      { id: 'a2', order: 'A-男子-2-2', sourcePlayerId: 'a', finalist: true },
+      { id: 'c2', order: 'A-男子-2-3', sourcePlayerId: 'c', finalist: true },
+      { id: 'b2', order: 'A-男子-2-1', sourcePlayerId: 'b' }
+    ];
+    var fdRes = EventStatus.finalistDiff(FD);
+    assert('finalistDiff: 入るべき選手と外れるべき選手を出す',
+      [fdRes.changed, fdRes.missing, fdRes.extra, fdRes.round2Scored],
+      [true, [{ id: 'b', name: '乙', score: 10 }], [{ id: 'c', name: '丙', score: 0 }], false]);
+    assert('finalistDiff: 二巡目の行が無ければ changed: false（まだ選んでいない）',
+      EventStatus.finalistDiff(FD.slice(0, 3)).changed, false);
+    var fdScored = FD.concat([]);
+    fdScored[5] = { id: 'b2', order: 'A-男子-2-1', sourcePlayerId: 'b', score: 5, result: '1    ' };
+    assert('finalistDiff: 二巡目に採点済みがあれば round2Scored: true', EventStatus.finalistDiff(fdScored).round2Scored, true);
+    assert('finalistDiffMessage: 差があれば入るべき・外れるべきと、戻して選び直す案内',
+      Courts.finalistDiffMessage(fdRes),
+      '⚠ 暫定ベスト8 が、今の一巡目の確定得点で選び直した結果と違います。\n' +
+      '入るべき選手: 乙（10点）\n外れるべき選手: 丙（0点）\n' +
+      '「戻す」で一巡目に戻して一巡目を終了し直すと選び直せます。');
+    assert('finalistDiffMessage: 二巡目に採点済みがあれば自動では選び直さない旨',
+      /自動では選び直しません/.test(Courts.finalistDiffMessage(EventStatus.finalistDiff(fdScored))), true);
+    assert('finalistDiffMessage: 差が無ければ空文字', Courts.finalistDiffMessage({ changed: false }), '');
+
+    // unknownTechs / startBlockers の unknownTech（M3）
+    var UT_TECH = [{ name: '甲', strikes: [5, null, null, null] }, { name: '丙(男)', strikes: [7, null, null, null] }];
+    assert('unknownTechs: 技得点表で解決できない技名だけ（性別の接尾辞・前後の空白は解決する）',
+      Courts.unknownTechs({ order: 'A-男子-1-1', tech1: ' 甲 ', tech2: '丙', tech3: '丁' }, UT_TECH), ['丁']);
+    assert('unknownTechs: 女子には (男) の技は解決されない',
+      Courts.unknownTechs({ order: 'A-女子-1-1', isFemale: true, tech1: '丙' }, UT_TECH), ['丙']);
+    assert('unknownTechs: 空の枠は数えない', Courts.unknownTechs({ order: 'A-男子-1-1', tech1: '', tech2: '甲' }, UT_TECH), []);
+    var UT_PS = [
+      { name: '表外', order: 'A-男子-1-1', tech1: '丁' },
+      { name: '二巡目', order: 'A-男子-2-1', tech1: '丁' },
+      { name: '正常', order: 'A-男子-1-2', tech1: '甲' }
+    ];
+    assert('startBlockers: 一巡目で技得点表に無い技を選んでいる選手は unknownTech',
+      Courts.startBlockers({ settings: {}, techniques: UT_TECH }, UT_PS).map(function(b) {
+        return [b.kind, b.players.map(function(p) { return p.name; })];
+      }), [['unknownTech', ['表外']]]);
+    assert('startBlockers: 技リストが配列でなければ unknownTech を見ない',
+      Courts.startBlockers({ settings: {} }, UT_PS), []);
+    assert('blockerMessage: unknownTech の文言',
+      Courts.blockerMessage([{ kind: 'unknownTech', players: [UT_PS[0]] }]), '技得点表に無い技を選んでいる: 1 名（表外）');
 
     var FIN_ROWS = [
       { order: 'A-男子-1-1', score: 30 },

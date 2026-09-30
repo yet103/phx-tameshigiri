@@ -379,7 +379,11 @@ var Courts = (function() {
     }
     var r = EventStatus.scoringRound(status);
     if (r) {
-      var rows = list.filter(function(p) { return roundOf(p) === r; });
+      // 二巡目 進行中は決戦の行を除いて数える（決戦の行は「決戦を開始」の後に斬るので、
+      // 入れると「確定 n / N」がいつまでも埋まらない。網羅検証 S12）。
+      var rows = list.filter(function(p) {
+        return roundOf(p) === r && !(status === 'round2' && p && p.finalist === true);
+      });
       return '確定 ' + rows.filter(isConfirmed).length + ' / ' + rows.length;
     }
     if (status === 'draft') {
@@ -399,6 +403,19 @@ var Courts = (function() {
   // 「〜が 3名います」「〜がいません」。0 名のときに「0名います」と出さない。
   function countPhrase(prefix, n) {
     return n > 0 ? prefix + 'が ' + n + '名います。' : prefix + 'がいません。';
+  }
+
+  // 最終結果を確定する前の未確定の件数（網羅検証 S2）。未確定の得点は順位に入らないので、
+  // 確定してから気付かないよう巡目ごとに出す。0 の巡目は書かない。全員確定なら ''。
+  // rounds は数える巡目（round1_done → final は二巡目を行わないので一巡目だけ）。
+  function unconfirmedWarning(list, rounds) {
+    var parts = [];
+    rounds.forEach(function(n) {
+      var c = list.filter(function(p) { return roundOf(p) === n && !isConfirmed(p); }).length;
+      if (c > 0) parts.push((n === 1 ? '一巡目 ' : '二巡目 ') + c + '名');
+    });
+    if (parts.length === 0) return '';
+    return '⚠ 未確定が ' + parts.join('・') + ' います（未確定の得点は順位に入りません）。\n';
   }
 
   // 「未確定」= 確定の印が無い行（得点は確定で初めて反映されるので、進める前の確認もこの基準で数える。QA 指摘 2026-09-30）
@@ -422,7 +439,7 @@ var Courts = (function() {
       return '⚠ 二巡目の技が未入力の選手が ' + missing2 + '名います。\nこのまま二巡目を開始しますか？';
     }
     if (from === 'round1_done' && to === 'final') {
-      return '二巡目を行わずに最終結果にします。\nよろしいですか？';
+      return unconfirmedWarning(list, [1]) + '二巡目を行わずに最終結果にします。\nよろしいですか？';
     }
     if (from === 'round2' && to === 'round2_final') {
       // 決戦に出ない選手（暫定ベスト8 以外）が全員斬り終わっているかを数える
@@ -443,7 +460,7 @@ var Courts = (function() {
       return '最終結果に戻します。よろしいですか？';
     }
     if (to === 'final') {
-      return '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？';
+      return unconfirmedWarning(list, [1, 2]) + '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？';
     }
     if (to === 'archived') {
       return '一覧のアーカイブ欄に移り、採点画面の選択肢から消えます。\nアーカイブしますか？';
@@ -458,6 +475,8 @@ var Courts = (function() {
   //   rank   : event.settings.requireRank かつ一巡目で rank が未入力（空白のみを含む）の選手
   //   rental : rental の選手で、tech1〜3 に drawn でない技が入っている選手（巡目を問わない。
   //            この判定を使う画面は一巡目しかない状態で呼ぶが、関数自体は巡目を絞らない）
+  //   repeat : 一巡目で同じ形（repeatable でない技）を 2 回以上選んでいる選手
+  //   unknownTech : 一巡目で技得点表に無い技を選んでいる選手（event.techniques が配列のときだけ）
   // event が無くても settings なしとして扱う。技リストは event.techniques（無ければ空）。
   function startBlockers(event, players) {
     var list = players || [];
@@ -492,7 +511,50 @@ var Courts = (function() {
       return duplicateForms([p.tech1, p.tech2, p.tech3], techniques, isFemale).length > 0;
     });
     if (repeatBad.length > 0) blockers.push({ kind: 'repeat', players: repeatBad });
+    // 技得点表に無い技（一巡目だけ見る。網羅検証 M3）。採点画面ではその行を採点できず、
+    // 保存すると ○× が消えるので、試合を始める前に止める。技リストが配列でない
+    // （呼び出し側が技リストを渡していない）ときは判定しない。
+    if (Array.isArray(event && event.techniques)) {
+      var unknownBad = list.filter(function(p) {
+        return p && roundOf(p) === 1 && unknownTechs(p, techniques).length > 0;
+      });
+      if (unknownBad.length > 0) blockers.push({ kind: 'unknownTech', players: unknownBad });
+    }
     return blockers;
+  }
+
+  // 選手の技名のうち、技得点表（techniques）で解決できないもの（重複は 1 つにまとめる。枠の順）。
+  // 空の枠は数えない。前後の空白は落として解決する（CSV 由来の空白で配点が 0 にならないように）。
+  // 採点画面は、これが空でない選手の保存・確定を止めて行を赤く示す（網羅検証 M3）。
+  function unknownTechs(player, techniques) {
+    if (!player) return [];
+    var isFemale = sexOf(player) === '女子';
+    var out = [];
+    [player.tech1, player.tech2, player.tech3].forEach(function(name) {
+      var n = String(name == null ? '' : name).trim();
+      if (!n || out.indexOf(n) !== -1) return;
+      if (!resolveTechnique(techniques, n, isFemale)) out.push(n);
+    });
+    return out;
+  }
+
+  // 選考の差（EventStatus.finalistDiff の戻り値）の警告文（網羅検証 S18）。差が無ければ ''。
+  // 試合進行（PC・スマホ）と遷移の応答の両方で使う。名前は先頭 BLOCKER_NAME_LIMIT 名まで。
+  function finalistDiffMessage(diff) {
+    if (!diff || !diff.changed) return '';
+    function names(list) {
+      var all = list || [];
+      var s = all.slice(0, BLOCKER_NAME_LIMIT).map(function(r) { return r.name + '（' + r.score + '点）'; }).join('、');
+      if (all.length > BLOCKER_NAME_LIMIT) s += '…ほか ' + (all.length - BLOCKER_NAME_LIMIT) + ' 名';
+      return s;
+    }
+    var lines = ['⚠ 暫定ベスト8 が、今の一巡目の確定得点で選び直した結果と違います。'];
+    if (diff.missing && diff.missing.length > 0) lines.push('入るべき選手: ' + names(diff.missing));
+    if (diff.extra && diff.extra.length > 0) lines.push('外れるべき選手: ' + names(diff.extra));
+    lines.push(diff.round2Scored
+      ? '二巡目に採点済みの選手がいるため、自動では選び直しません。決戦の選手を確認してください。'
+      : '「戻す」で一巡目に戻して一巡目を終了し直すと選び直せます。');
+    return lines.join('\n');
   }
 
   // startBlockers の結果を alert の文言にする（改行で連ねる）。空配列なら空文字。
@@ -500,7 +562,8 @@ var Courts = (function() {
     bib: 'ゼッケン番号が未入力',
     rank: '級位・段位が未入力',
     rental: 'レンタルなのに抜刀してからの形以外の技を選んでいる',
-    repeat: '同じ形を 2 回以上選んでいる'
+    repeat: '同じ形を 2 回以上選んでいる',
+    unknownTech: '技得点表に無い技を選んでいる'
   };
   // alert に全員の名前を並べると長くなりすぎるので、先頭 BLOCKER_NAME_LIMIT 名までにして
   // 残りは件数だけ添える（レビュー修正）。
@@ -825,6 +888,8 @@ var Courts = (function() {
     stageCountText: stageCountText,
     statusConfirmMessage: statusConfirmMessage,
     startBlockers: startBlockers,
+    unknownTechs: unknownTechs,
+    finalistDiffMessage: finalistDiffMessage,
     blockerMessage: blockerMessage,
     bibDroppedMessage: bibDroppedMessage,
     parsePasteRows: parsePasteRows,

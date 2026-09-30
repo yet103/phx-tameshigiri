@@ -111,10 +111,16 @@ var Share = (function() {
     elHead.appendChild(meta);
   }
 
+  // 決戦の表を出す状態。二巡目準備（round1_done）ではまだ候補名を公開しない（形の登録中で、
+  // 一巡目の直しで選び直すこともある）。最終結果（final）以降は順位が確定しているので
+  // 「決戦（暫定）」を残さない（網羅検証 S11。2026-10-01）。
+  var FINALE_STATES = ['round2', 'round2_final', 'round2_done'];
+
   // 決戦（暫定ベスト8）の表。finale が無ければ何も足さない。
   // 順位の上に出す（いま会場で進んでいるのは決戦なので、参加者が最初に見たいもの）。
   function renderFinale(finale) {
     if (!finale || !Array.isArray(finale.rows) || finale.rows.length === 0) return null;
+    if (FINALE_STATES.indexOf(finale.status) === -1) return null;
     var section = document.createElement('section');
     section.className = 'share-section share-finale';
 
