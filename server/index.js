@@ -2,8 +2,13 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { createAuth, isPublicApi } = require('./auth');
-const { classify } = require('./static-policy');
+const {
+  createAuth, isPublicApi, resolvePrincipal, isCrossOrigin, createRateLimiter,
+  sessionCookieName, parseCookies, buildSessionCookie, sendScorerForbiddenPage, sendSessionInvalidPage
+} = require('./auth');
+const { classify, normalize: normalizeStaticPath, scorerAllowed } = require('./static-policy');
+const credentialsLib = require('./credentials');
+const authz = require('./authz');
 // 大会の状態。クライアント（<script src="status.js">）と同じファイルを読む。
 // 判定を2箇所に持たないため、状態に関わる分岐は必ずこのモジュールを通す。
 const EventStatus = require('../status.js');
@@ -13,13 +18,23 @@ const app = express();
 // ルートに一致する一方、認証ミドルウェアの '/api/' 判定をすり抜ける。
 app.set('case sensitive routing', true);
 const PORT = process.env.PORT || 3457;
+// nginx が X-Forwarded-For を渡していると確かめてから設定する（例 'loopback, uniquelocal'）。
+// ポート 3457 が外から届く間は設定しない（X-Forwarded-For を偽装できるため。設計書 2026-10-03 3.6）。
+if (process.env.TRUST_PROXY) {
+  const tp = process.env.TRUST_PROXY.trim();
+  app.set('trust proxy', /^\d+$/.test(tp) ? Number(tp) : tp);
+}
 
-// データ保存先ディレクトリ
-const DATA_DIR = path.join(__dirname, 'data');
+// データ保存先ディレクトリ。テストは TMG_DATA_DIR で一時ディレクトリに向ける
+// （開発機の大会に触らない。設計書 2026-10-03 4.9）。未設定なら今どおり server/data。
+const DATA_DIR = process.env.TMG_DATA_DIR ? path.resolve(process.env.TMG_DATA_DIR) : path.join(__dirname, 'data');
 const EVENTS_DIR = path.join(DATA_DIR, 'events');
 const TECHNIQUES_DIR = path.join(DATA_DIR, 'techniques');
 const HISTORY_DIR = path.join(DATA_DIR, 'history');
 const LINKS_DIR = path.join(DATA_DIR, 'links');
+// 招待・セッション・AI 用キー・監査ログ（server/credentials.js）。静的配信の許可リストに無く、
+// server/ 配下の実パスは 404 なので外には出ない。
+const AUTH_DIR = path.join(DATA_DIR, 'auth');
 
 // 起動時にディレクトリ自動生成
 fs.mkdirSync(EVENTS_DIR, { recursive: true });
@@ -300,7 +315,10 @@ function writeJsonAtomic(filePath, data) {
 // クライアントの Api.addHistory（POST /api/events/:id/history）と同じ形で書く。
 // 状態の遷移は「状態を書く」と「履歴に残す」を1つの操作にしたいので、
 // クライアントに addHistory を呼ばせず、サーバーがここで積む。
-function appendHistory(eventId, entry) {
+// principal（req.principal）を渡すと、誰が操作したか（actor）をサーバーが付ける
+// （'運営' / '採点端末（<ラベル>）' / 'AI（<ラベル>）'。設計書 2026-10-03 5.6）。
+function appendHistory(eventId, entry, principal) {
+  if (principal) entry = Object.assign({}, entry, { actor: authz.actorLabel(principal) });
   const historyPath = path.join(HISTORY_DIR, `${eventId}.json`);
   let data = { eventId: eventId, entries: [] };
   if (fs.existsSync(historyPath)) {
@@ -545,23 +563,592 @@ if (!auth.enabled) {
 // CORS は返さない。全ページが同一オリジンから fetch しており、
 // Access-Control-Allow-Origin: * を出すと外部サイトから API を叩く余地が残る。
 
-// API の認証。本文を読む前に弾く（無認証の巨大 JSON をメモリに載せない、
-// body-parser の 400/413 を無認証クライアントに見せない）。
-// 共有リンク越しの読み出し（isPublicApi）だけ無認証で通す。
+// ── 招待リンク・AI 用キー（設計書 docs/superpowers/specs/2026-10-03-invite-links-and-ai-key-design.md） ──
+// CSRF の確認で Origin と比べる公開 URL（秘密ではないので docker-compose.yml に直書き）。
+const PUBLIC_ORIGIN = (process.env.PUBLIC_ORIGIN || '').trim().replace(/\/+$/, '');
+if (IS_PRODUCTION && !PUBLIC_ORIGIN) {
+  console.warn('⚠ PUBLIC_ORIGIN が未設定です。書き込みの出所の確認は Sec-Fetch-Site だけで行います');
+}
+// セッション Cookie。本番は __Host- 付きで常に Secure（req.secure は trust proxy なしでは偽なので見ない）。
+const COOKIE_NAME = sessionCookieName(IS_PRODUCTION);
+const COOKIE_SECURE = IS_PRODUCTION || process.env.COOKIE_SECURE === '1';
+const MINUTE_MS = 60 * 1000;
+
+// 大会ファイルを同期で読む（無い・壊れている・不正な ID は null）。認可の判定で使う。
+function loadEventSync(id) {
+  if (!isValidId(id)) return null;
+  const p = path.join(EVENTS_DIR, `${id}.json`);
+  try {
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, 'utf-8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+const credentials = credentialsLib.createCredentials({
+  dir: AUTH_DIR,
+  eventExists: id => isValidId(id) && fs.existsSync(path.join(EVENTS_DIR, `${id}.json`))
+});
+// 古い招待・セッション・AI キーの掃除（起動時と 1 時間に 1 回。同期）
+credentials.cleanup();
+setInterval(() => {
+  try { credentials.cleanup(); } catch (e) { console.error('認証データの掃除に失敗: ' + e.message); }
+}, 60 * MINUTE_MS).unref();
+// 速度制限（メモリ上。req.ip は trust proxy が無い今は nginx のアドレスで、実質は全体の上限）
+const limiter = createRateLimiter();
+setInterval(() => limiter.sweep(), MINUTE_MS).unref();
+
+// 監査ログの actor
+function auditActor(principal) {
+  const k = principal && principal.kind;
+  if (k === 'ai') return 'AI';
+  return k || 'anonymous';
+}
+
+// AI が作った大会の同時に存在できる数（D13）
+const AI_EVENT_QUOTA = 20;
+function countAiEvents() {
+  return fs.readdirSync(EVENTS_DIR).filter(f => f.endsWith('.json')).filter(f => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, f), 'utf-8')).createdBy === 'ai';
+    } catch (e) {
+      return false;
+    }
+  }).length;
+}
+
+// AI の作成（POST /api/events・コピー・テンプレート）の検査。名前が「テスト用」で始まらなければ 403 sandbox、
+// AI が作った大会が上限に達していれば 409 sandbox_quota。拒んだら true（`if (rejectAiCreate(…)) return;`）。
+function rejectAiCreate(req, res, name) {
+  const d = authz.checkAiCreateName(req.principal, name);
+  if (d) { authz.sendDeny(res, d); return true; }
+  if (req.principal && req.principal.kind === 'ai' && countAiEvents() >= AI_EVENT_QUOTA) {
+    res.status(409).json({
+      error: 'AI が作った大会が ' + AI_EVENT_QUOTA + ' 件あります。不要な大会を消してから作ってください',
+      reason: 'sandbox_quota', limit: AI_EVENT_QUOTA
+    });
+    return true;
+  }
+  return false;
+}
+
+// AI が作った大会の印（一覧で既定で隠す test と、AI が消せる大会の createdBy。D11・D12）
+function markAiCreated(req, event) {
+  if (req.principal && req.principal.kind === 'ai') {
+    event.test = true;
+    event.createdBy = 'ai';
+  }
+}
+
+function sendRateLimited(res, retryAfter) {
+  res.set('Retry-After', String(retryAfter));
+  res.status(429).json({ error: '回数の上限に達しました。しばらく待ってからやり直してください', reason: 'rate_limited', retryAfter: retryAfter });
+}
+
+const AI_KEY_ERRORS = {
+  key_invalid: 'AI 用キーが無効です',
+  key_expired: 'AI 用キーの期限が切れています',
+  key_revoked: 'AI 用キーは取り消されています'
+};
+
+// AI の 1 日の上限は日本時間で区切る。次の日本時間 0 時までの秒数。
+function secondsUntilJstMidnight() {
+  const end = credentialsLib.endOfDayJst(credentialsLib.jstDateOf(Date.now()));
+  return Math.max(1, Math.ceil((end.getTime() + 1 - Date.now()) / 1000));
+}
+
+// AI の書き込みが 2xx で終わったとき、その大会の履歴に積む要点（設計書 5.6）
+function aiHistorySummary(req, res, matched, eventId) {
+  const route = matched.route;
+  const b = (req.body && typeof req.body === 'object') ? req.body : {};
+  const jb = (res.locals.jsonBody && typeof res.locals.jsonBody === 'object') ? res.locals.jsonBody : {};
+  const ev = loadEventSync(eventId);
+  switch (route.pattern) {
+    case '/api/events/:id/players/:playerId': {
+      const p = ev && Array.isArray(ev.players) ? ev.players.find(x => x && x.id === matched.params.playerId) : null;
+      const who = p ? String(p.name || '') : matched.params.playerId;
+      const scoring = ['score', 'result', 'adjust', 'totalAdjust', 'confirmed'].some(k => b[k] !== undefined);
+      return '選手 ' + who + (scoring ? ' の採点' : ' の変更');
+    }
+    case '/api/events/:id/status':
+      return '状態を「' + (EventStatus.LABELS[b.to] || b.to) + '」へ';
+    case '/api/events/:id/players/bulk':
+      return '選手 ' + (jb.created || 0) + ' 名を追加';
+    case '/api/events/:id/players':
+      return '選手 ' + (typeof b.name === 'string' ? b.name.trim() : '') + ' を追加';
+    case '/api/events':
+    case '/api/events/from-template':
+    case '/api/events/:id/copy':
+      return '大会「' + (ev ? ev.name : '') + '」を作成';
+    default:
+      return '';
+  }
+}
+
+// API の認証と認可。本文を読む前に弾く（無認証の巨大 JSON をメモリに載せない、
+// body-parser の 400/413 を無認証クライアントに見せない）。すべて同期。
+//   1. 主体の解決（server/auth.js の resolvePrincipal。Basic → Bearer → Cookie → 開発の運営）
+//      ページの配信（下の許可リスト）でも req.principal を使うので、全リクエストで解決する。
+//   2. Bearer の誤りは 401 で止める（失敗の回数制限つき）。AI は回数制限と監査・履歴の記録。
+//   3. CSRF（Cookie・Basic・開発の運営の GET/HEAD 以外に同じオリジンを求める）
+//   4. ルートの判定表（server/authz.js。表に無いものは運営以外拒否）
 // 401 に WWW-Authenticate を付けないのは、共有ページを見ている観客の画面に
 // ブラウザのパスワードダイアログが出ないようにするため。運営端末は保護された
 // HTML を開いた時点で認証済みなので、fetch にはブラウザが自動で資格情報を付ける。
 // パスは小文字化して判定する（case sensitive routing と二重の守り。/API/ を素通りさせない）。
 app.use((req, res, next) => {
+  const principal = resolvePrincipal(req, { auth, credentials, cookieName: COOKIE_NAME });
+  req.principal = principal;
+  if (principal.kind === 'scorer') credentials.touchSession(principal.session);
+
   const p = req.path.toLowerCase();
   if (!p.startsWith('/api/')) return next();
+  const isRead = req.method === 'GET' || req.method === 'HEAD';
+  const matched = authz.matchRoute(req.method, req.path);
+
+  // Bearer の誤り・期限切れ・取り消し（Cookie に落とさない）
+  if (principal.bearer) {
+    const failKey = 'bearer-fail:' + req.ip;
+    const wait = limiter.check(failKey, 10, MINUTE_MS);
+    if (wait) return sendRateLimited(res, wait);
+    limiter.hitAndBlock(failKey, 10, MINUTE_MS, MINUTE_MS);
+    credentials.audit({
+      actor: 'anonymous', action: 'ai.fail', reason: principal.reason, ip: req.ip,
+      method: req.method, route: matched ? matched.route.pattern : null
+    });
+    return res.status(401).json({ error: AI_KEY_ERRORS[principal.reason] || '認証が必要です', reason: principal.reason });
+  }
+
+  if (principal.kind === 'ai') {
+    const key = principal.key;
+    const lim = key.limits || credentialsLib.constants.DEFAULT_AI_LIMITS;
+    const params = matched ? matched.params : {};
+    // 監査ログ（AI の全リクエスト。GET も、拒否も）と、書き込みの履歴（5.6）
+    const origJson = res.json.bind(res);
+    res.json = body => { res.locals.jsonBody = body; return origJson(body); };
+    // 応答を送る直前（res.end）に同期で書く（'finish' だと、応答を受け取ったクライアントより後になることがある）
+    let recorded = false;
+    const origEnd = res.end.bind(res);
+    res.end = function(...args) {
+      if (!recorded) {
+        recorded = true;
+        recordAiRequest();
+      }
+      return origEnd(...args);
+    };
+    const recordAiRequest = () => {
+      try {
+        const jb = res.locals.jsonBody;
+        const createdId = (matched && authz.ROUTES_CREATE.has(matched.route.pattern) && jb && isValidId(jb.id)) ? jb.id : null;
+        const bodyEventId = (matched && matched.route.pattern === '/api/links' && req.body && isValidId(req.body.targetId))
+          ? req.body.targetId : null;
+        // 作る系（コピーを含む）は新しい大会、それ以外は URL の大会、POST /api/links は本文の大会
+        const eventId = createdId ||
+          ((isValidId(params.id) && matched && matched.route.pattern.startsWith('/api/events/:id')) ? params.id : bodyEventId);
+        credentials.audit({
+          actor: 'AI', action: 'api', keyId: key.id, method: req.method,
+          route: matched ? matched.route.pattern : req.path.slice(0, 200),
+          eventId: eventId || undefined, status: res.statusCode
+        });
+        const deleted = matched && matched.route.method === 'DELETE' && matched.route.pattern === '/api/events/:id';
+        if (!isRead && matched && !deleted && res.statusCode >= 200 && res.statusCode < 300 && eventId &&
+            fs.existsSync(path.join(EVENTS_DIR, `${eventId}.json`))) {
+          const summary = aiHistorySummary(req, res, matched, eventId);
+          appendHistory(eventId, {
+            action: 'ai_api',
+            detail: (req.method + ' ' + matched.route.pattern + (summary ? ' ' + summary : '')).slice(0, 500)
+          }, principal);
+        }
+      } catch (e) {
+        console.error('AI の操作の記録に失敗: ' + e.message);
+      }
+    };
+    // 回数制限（キーごと。D9）。拒んだ要求は数えない
+    const dayKey = 'ai-day:' + key.id + ':' + credentialsLib.jstDateOf(Date.now());
+    let wait = limiter.check('ai-min:' + key.id, lim.perMinute, MINUTE_MS);
+    if (!wait && !isRead) wait = limiter.check('ai-wmin:' + key.id, lim.writesPerMinute, MINUTE_MS);
+    if (!wait && limiter.check(dayKey, lim.perDay, 24 * 60 * MINUTE_MS)) wait = secondsUntilJstMidnight();
+    if (wait) return sendRateLimited(res, wait);
+    limiter.hit('ai-min:' + key.id, MINUTE_MS);
+    if (!isRead) limiter.hit('ai-wmin:' + key.id, MINUTE_MS);
+    limiter.hit(dayKey, 24 * 60 * MINUTE_MS);
+    credentials.recordAiUse(key);
+  }
+
+  if (isCrossOrigin(req, principal, { publicOrigin: PUBLIC_ORIGIN, production: IS_PRODUCTION })) {
+    return res.status(403).json({ error: '別のサイトからの操作は受け付けません', reason: 'origin' });
+  }
   if (isPublicApi(req.method, p)) return next();
-  if (auth.isAuthorized(req)) return next();
-  auth.rejectApi(res);
+  const denied = authz.authorize(principal, matched, { loadEvent: loadEventSync });
+  if (denied) return authz.sendDeny(res, denied);
+  next();
+});
+
+// POST /api/join : 招待の鍵をセッション Cookie に交換する（無認証。設計書 5.1）
+// express.json（50mb）より前に、2kb の本文だけを読む形で登録する（無認証の大きな本文を読まない）。
+// 鍵は本文の key だけから読む（クエリの ?k= は読まない。ログに残る経路を作らない）。
+//   confirm: false … 下見。セッションも Cookie も作らない（リンクの下見で端末が登録されないように）
+//   confirm: true  … 端末数に空きがあればセッションを作って Set-Cookie
+const joinJson = express.json({ limit: '2kb' });
+const JOIN_ERRORS = {
+  key_invalid: 'この QR は読み取れませんでした',
+  invite_revoked: 'この QR は取り消されています',
+  invite_expired: 'この QR は期限切れです'
+};
+app.post('/api/join', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  joinJson(req, res, err => {
+    if (err) {
+      return res.status(err.status === 413 ? 413 : 400).json({ error: '本文が不正です', reason: 'bad_request' });
+    }
+    try {
+      handleJoin(req, res);
+    } catch (e) {
+      console.error('join の処理に失敗: ' + e.message);
+      res.status(500).json({ error: '登録に失敗しました' });
+    }
+  });
+});
+
+function handleJoin(req, res) {
+  const ip = req.ip;
+  const allKey = 'join-all:' + ip;
+  const failKey = 'join-fail:' + ip;
+  let wait = limiter.check(allKey, 30, MINUTE_MS);
+  if (wait) return sendRateLimited(res, wait);
+  limiter.hit(allKey, MINUTE_MS);
+
+  const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
+  const confirm = body.confirm === true;
+  const r = credentials.checkInviteKey(typeof body.key === 'string' ? body.key : '');
+  if (!r.ok) {
+    wait = limiter.check(failKey, 10, MINUTE_MS);
+    if (wait) return sendRateLimited(res, wait);
+    limiter.hitAndBlock(failKey, 10, MINUTE_MS, MINUTE_MS);
+    credentials.audit({
+      actor: 'anonymous', action: 'join.fail', reason: r.reason,
+      inviteId: r.invite ? r.invite.id : undefined, ip: ip
+    });
+    const out = { error: JOIN_ERRORS[r.reason], reason: r.reason };
+    if (r.reason === 'invite_expired') out.expiresAt = r.invite.expiresAt;
+    return res.status(401).json(out);
+  }
+
+  const inv = r.invite;
+  const event = loadEventSync(inv.eventId) || {};
+  const nowIso = new Date().toISOString();
+  const info = {
+    role: inv.role, eventId: inv.eventId, eventName: event.name || '', court: inv.court,
+    label: inv.label, expiresAt: inv.expiresAt, now: nowIso
+  };
+  // 同じ端末が同じ招待で入り直した（Cookie に同じ招待の有効なセッションがある）なら、
+  // 古いセッションを取り消してから新しいセッションを作る（数を増やさない。ID は必ず新しく作る）
+  const mine = parseCookies(req.headers.cookie)
+    .filter(c => c.name === COOKIE_NAME)
+    .map(c => credentials.verifySessionCookie(c.value))
+    .filter(v => v.ok && v.session.inviteId === inv.id)
+    .map(v => v.session);
+  const active = credentials.activeSessionCount(inv.id);
+  const devices = { active: active, max: inv.maxDevices };
+  if (!confirm) return res.json(Object.assign(info, { devices: devices, rejoin: mine.length > 0 }));
+
+  if (active - mine.length >= inv.maxDevices) {
+    credentials.audit({ actor: 'anonymous', action: 'join.fail', reason: 'device_limit', inviteId: inv.id, ip: ip });
+    return res.status(409).json({
+      error: 'この QR で登録できる端末の数に達しています', reason: 'device_limit', devices: devices
+    });
+  }
+  mine.forEach(s => {
+    credentials.revokeSession(s.id);
+    credentials.audit({ actor: 'scorer', action: 'session.revoke', reason: 'rejoin', inviteId: inv.id, sessionId: s.id });
+  });
+  const created = credentials.createSession(inv, req.headers['user-agent']);
+  credentials.audit({
+    actor: 'scorer', action: 'session.create', inviteId: inv.id, sessionId: created.session.id,
+    ip: ip, ua: created.session.device.summary
+  });
+  res.set('Set-Cookie', buildSessionCookie(COOKIE_NAME, created.cookieValue,
+    (Date.parse(inv.expiresAt) - Date.now()) / 1000, COOKIE_SECURE));
+  const next = '/scoring.html#event/' + encodeURIComponent(inv.eventId) +
+    (inv.court ? '/' + encodeURIComponent(inv.court) : '');
+  res.json(Object.assign(info, { next: next }));
+}
+
+// POST /api/session/logout : この端末の登録を解除する（自分の Cookie だけ。本文は読まない）
+// そのセッションに revokedAt を書き、Cookie を消す。HTML のフォーム（401/403 のページ）から来たら 303 で / へ。
+app.post('/api/session/logout', (req, res) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    parseCookies(req.headers.cookie).filter(c => c.name === COOKIE_NAME).forEach(c => {
+      const t = credentialsLib.parseToken('session', c.value);
+      if (!t) return;
+      const s = credentials.getSession(t.id);
+      if (!s || !credentialsLib.verifySecret(t.secret, s.secretHash)) return;
+      if (!s.revokedAt) {
+        credentials.revokeSession(s.id);
+        credentials.audit({ actor: 'scorer', action: 'session.revoke', reason: 'logout', inviteId: s.inviteId, sessionId: s.id });
+      }
+    });
+    res.set('Set-Cookie', buildSessionCookie(COOKIE_NAME, '', 0, COOKIE_SECURE));
+    const ct = String(req.headers['content-type'] || '').toLowerCase();
+    if (ct.startsWith('application/x-www-form-urlencoded')) return res.redirect(303, '/');
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ペイロードサイズ制限を緩和
 app.use(express.json({ limit: '50mb' }));
+
+// ── セッション・招待・AI 用キーの API（設計書 2026-10-03 5.1。認可は server/authz.js の表） ──
+
+// GET /api/session : 今の主体（誰でも）。採点画面は role: 'scorer' のとき採点専用モードにする。
+app.get('/api/session', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const pr = req.principal || {};
+  const out = { role: 'none', via: null, scope: null, label: null, expiresAt: null, now: new Date().toISOString(), reason: null };
+  if (pr.kind === 'admin') {
+    out.role = 'admin';
+    out.via = pr.via;
+  } else if (pr.kind === 'scorer') {
+    const ev = loadEventSync(pr.eventId) || {};
+    out.role = 'scorer';
+    out.via = 'session';
+    out.scope = { eventId: pr.eventId, eventName: ev.name || '', court: pr.court };
+    out.label = pr.label;
+    out.expiresAt = pr.expiresAt;
+  } else if (pr.kind === 'ai') {
+    out.role = 'ai';
+    out.via = 'bearer';
+    out.label = pr.label;
+    out.expiresAt = pr.expiresAt;
+  } else {
+    out.reason = pr.reason || 'auth_required';
+  }
+  res.json(out);
+});
+
+// 招待を一覧の形にする（大会名を足す）
+function inviteListItem(inv) {
+  const ev = loadEventSync(inv.eventId);
+  return credentials.inviteView(inv, ev ? (ev.name || '') : null);
+}
+
+// POST /api/invites : 採点の招待を発行する（運営）。key を返すのはこの 1 回だけ。
+// 本文: { role: 'scorer', eventId, court: 'A' | null, label?, expiresAt?, expiresPreset?, maxDevices? }
+//   expiresPreset … 'event'（既定。大会の日の終わり、日付が無い・過去なら今日の終わり）/ 'today' / 'tomorrow'。
+//                   画面が端末の時計で日付を計算しないための追加（T7）。expiresAt があればそちらが優先。
+app.post('/api/invites', (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
+    if (body.role !== 'scorer') {
+      return res.status(400).json({ error: '発行できるのは採点の招待だけです', reason: 'bad_role' });
+    }
+    if (!isValidId(body.eventId)) {
+      return res.status(400).json({ error: '不正な大会IDです', reason: 'bad_event' });
+    }
+    const event = loadEventSync(body.eventId);
+    if (!event) return res.status(404).json({ error: '大会が見つかりません' });
+
+    let court = null;
+    if (body.court !== null && body.court !== undefined && body.court !== '') {
+      const courts = new Set((event.settings && Array.isArray(event.settings.courts)) ? event.settings.courts : []);
+      (Array.isArray(event.players) ? event.players : []).forEach(p => { if (p) courts.add(courtOf(p)); });
+      if (!isValidCourt(body.court) || !courts.has(body.court)) {
+        return res.status(400).json({ error: 'この大会に無いコートです', reason: 'unknown_court' });
+      }
+      court = body.court;
+    }
+
+    if (body.label !== undefined && typeof body.label !== 'string') {
+      return res.status(400).json({ error: 'ラベルが不正です', reason: 'bad_label' });
+    }
+    let label = credentialsLib.cleanLabel(body.label);
+    if (label.length > credentialsLib.constants.LABEL_MAX) {
+      return res.status(400).json({ error: 'ラベルは 40 文字までです', reason: 'bad_label' });
+    }
+    if (!label) label = court === null ? '全コート' : court + ' コート';
+
+    const C = credentialsLib.constants;
+    let maxDevices = C.DEFAULT_MAX_DEVICES;
+    if (body.maxDevices !== undefined) {
+      if (!Number.isInteger(body.maxDevices) || body.maxDevices < 1 || body.maxDevices > C.MAX_DEVICES_LIMIT) {
+        return res.status(400).json({ error: '端末の数は 1〜5 です', reason: 'bad_max_devices' });
+      }
+      maxDevices = body.maxDevices;
+    }
+
+    const nowMs = Date.now();
+    let expires;
+    if (body.expiresAt !== undefined) {
+      expires = credentialsLib.parseExpiry(body.expiresAt, nowMs, C.INVITE_MIN_MS, C.INVITE_MAX_MS);
+    } else {
+      // 型の期限は「今より後」と上限 7 日だけを見る（23:55 に発行した「今日の終わり」も通す）。
+      // 大会の日が 7 日より先なら断る（その日が近づいてから発行する）
+      expires = credentialsLib.inviteExpiryFromPreset(body.expiresPreset, event.date, nowMs);
+      if (expires && (expires.getTime() <= nowMs || expires.getTime() > nowMs + C.INVITE_MAX_MS)) {
+        expires = null;
+      }
+    }
+    if (!expires) {
+      return res.status(400).json({ error: '期限は今から 10 分後〜7 日後で指定してください', reason: 'bad_expiry' });
+    }
+
+    const created = credentials.createInvite({
+      role: 'scorer', eventId: body.eventId, court: court, label: label,
+      expiresAt: expires.toISOString(), maxDevices: maxDevices
+    });
+    credentials.audit({
+      actor: auditActor(req.principal), action: 'invite.create', inviteId: created.invite.id,
+      eventId: body.eventId, court: court
+    });
+    res.set('Cache-Control', 'no-store');
+    res.status(201).json({
+      invite: inviteListItem(created.invite),
+      key: created.key,
+      joinPath: '/join#k=' + created.key
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/invites?eventId=… : 招待と端末の一覧（運営）。secretHash・鍵は返さない。新しい順。
+app.get('/api/invites', (req, res) => {
+  try {
+    const eventId = typeof req.query.eventId === 'string' && req.query.eventId !== '' ? req.query.eventId : null;
+    const list = credentials.listInvites()
+      .filter(inv => eventId === null || inv.eventId === eventId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map(inviteListItem);
+    res.set('Cache-Control', 'no-store');
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/invites/:id/revoke : 招待を取り消す（運営）。その招待で登録した全端末が次のリクエストから 401。
+app.post('/api/invites/:id/revoke', (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: '不正な招待IDです' });
+    const r = credentials.revokeInvite(req.params.id, 'manual');
+    if (!r) return res.status(404).json({ error: '招待が見つかりません' });
+    credentials.audit({
+      actor: auditActor(req.principal), action: 'invite.revoke', reason: 'manual',
+      inviteId: req.params.id, eventId: r.invite.eventId, revokedSessions: r.revokedSessions
+    });
+    res.json({ success: true, revokedSessions: r.revokedSessions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sessions/:id/revoke : その端末だけ外す（運営）
+app.post('/api/sessions/:id/revoke', (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: '不正な端末IDです' });
+    const s = credentials.revokeSession(req.params.id);
+    if (!s) return res.status(404).json({ error: '端末が見つかりません' });
+    credentials.audit({
+      actor: auditActor(req.principal), action: 'session.revoke', reason: 'manual',
+      inviteId: s.inviteId, sessionId: s.id
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/ai-keys : AI 用キーを発行する（運営）。key を返すのはこの 1 回だけ。
+// 本文: { label, expiresAt?, expiresInDays?, limits? }
+//   既定の期限は 30 日後の日本時間の終わり、上限 90 日（D10）。expiresInDays（1〜90）はその日数後の日の終わり
+//   （画面が端末の時計で日付を計算しないための追加）。limits は { perMinute, writesPerMinute, perDay }（D9）。
+app.post('/api/ai-keys', (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
+    const C = credentialsLib.constants;
+    if (body.label !== undefined && typeof body.label !== 'string') {
+      return res.status(400).json({ error: 'ラベルが不正です', reason: 'bad_label' });
+    }
+    const label = credentialsLib.cleanLabel(body.label);
+    if (!label || label.length > C.LABEL_MAX) {
+      return res.status(400).json({ error: 'ラベルは 1〜40 文字で指定してください', reason: 'bad_label' });
+    }
+    const nowMs = Date.now();
+    const maxEnd = credentialsLib.endOfJstDayPlus(nowMs, C.AI_KEY_MAX_DAYS).getTime();
+    let expires = null;
+    if (body.expiresAt !== undefined) {
+      expires = credentialsLib.parseExpiry(body.expiresAt, nowMs, C.INVITE_MIN_MS, maxEnd - nowMs);
+    } else if (body.expiresInDays !== undefined) {
+      if (Number.isInteger(body.expiresInDays) && body.expiresInDays >= 1 && body.expiresInDays <= C.AI_KEY_MAX_DAYS) {
+        expires = credentialsLib.endOfJstDayPlus(nowMs, body.expiresInDays);
+      }
+    } else {
+      expires = credentialsLib.endOfJstDayPlus(nowMs, C.AI_KEY_DEFAULT_DAYS);
+    }
+    if (!expires) {
+      return res.status(400).json({ error: '期限は今から 10 分後〜90 日後で指定してください', reason: 'bad_expiry' });
+    }
+    const limits = credentialsLib.normalizeAiLimits(body.limits);
+    if (!limits) {
+      return res.status(400).json({ error: '回数の上限が不正です', reason: 'bad_limits' });
+    }
+    const created = credentials.createAiKey({ label: label, expiresAt: expires.toISOString(), limits: limits });
+    credentials.audit({ actor: auditActor(req.principal), action: 'aikey.create', keyId: created.aiKey.id });
+    res.set('Cache-Control', 'no-store');
+    res.status(201).json({ aiKey: credentials.aiKeyView(created.aiKey), key: created.key });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/ai-keys : AI 用キーの一覧（運営）。新しい順。secretHash・キーは返さない。
+app.get('/api/ai-keys', (req, res) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(credentials.listAiKeys()
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map(credentials.aiKeyView));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/ai-keys/:id/revoke : AI 用キーを取り消す（運営）。次の呼び出しから 401 key_revoked。
+app.post('/api/ai-keys/:id/revoke', (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: '不正なキーIDです' });
+    const k = credentials.revokeAiKey(req.params.id);
+    if (!k) return res.status(404).json({ error: 'キーが見つかりません' });
+    credentials.audit({ actor: auditActor(req.principal), action: 'aikey.revoke', keyId: k.id });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/ai/whoami : AI 用キーの確認（AI だけ）。残りの回数はこの呼び出しを数えたあとの値。
+app.get('/api/ai/whoami', (req, res) => {
+  const pr = req.principal;
+  const lim = pr.key.limits || credentialsLib.constants.DEFAULT_AI_LIMITS;
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    keyId: pr.keyId,
+    label: pr.label,
+    expiresAt: pr.expiresAt,
+    now: new Date().toISOString(),
+    limits: Object.assign({}, lim),
+    remaining: {
+      minute: limiter.remaining('ai-min:' + pr.keyId, lim.perMinute),
+      writesMinute: limiter.remaining('ai-wmin:' + pr.keyId, lim.writesPerMinute),
+      day: limiter.remaining('ai-day:' + pr.keyId + ':' + credentialsLib.jstDateOf(Date.now()), lim.perDay)
+    },
+    sandboxPrefix: authz.SANDBOX_PREFIX
+  });
+});
 
 // ────────────────────────────────────────
 // API ルート
@@ -592,12 +1179,16 @@ app.use(express.json({ limit: '50mb' }));
 // ── Event API ──
 
 // GET /api/events : 大会一覧
+// 採点の鍵の端末には自分の大会 1 件だけを返す。AI には各行に sandbox（名前が「テスト用」で始まる）と
+// createdByAi を足す（設計書 2026-10-03 5.2 の 1）。
 app.get('/api/events', (req, res) => {
   try {
-    const files = fs.readdirSync(EVENTS_DIR).filter(f => f.endsWith('.json'));
+    const pr = req.principal || {};
+    let files = fs.readdirSync(EVENTS_DIR).filter(f => f.endsWith('.json'));
+    if (pr.kind === 'scorer') files = files.filter(f => f === `${pr.eventId}.json`);
     const events = files.map(file => {
       const data = JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, file), 'utf-8'));
-      return {
+      const row = {
         id: data.id,
         name: data.name,
         date: data.date,
@@ -610,6 +1201,11 @@ app.get('/api/events', (req, res) => {
         // テスト大会の印（既定 false。設計書「テスト大会」。一覧では既定非表示にするための印）
         test: data.test === true
       };
+      if (pr.kind === 'ai') {
+        row.sandbox = authz.isSandboxEvent(data);
+        row.createdByAi = data.createdBy === 'ai';
+      }
+      return row;
     });
     // updatedAt 降順ソート
     events.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
@@ -636,6 +1232,8 @@ app.get('/api/events/:id', (req, res) => {
     data.status = EventStatus.of(data);
     // テスト大会の印（既定 false。ファイルに無ければ false のまま返す）。
     data.test = data.test === true;
+    // AI には砂場（AI が書き込めるか）を足す（設計書 2026-10-03 5.4）
+    if (req.principal && req.principal.kind === 'ai') data.sandbox = authz.isSandboxEvent(data);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -736,12 +1334,19 @@ function sanitizeEventPlayersForSave(list) {
 // POST /api/events : 大会作成・更新
 // body を丸ごと信用しない。ここで書き出す event オブジェクトはこの関数が組み立てた
 // フィールドだけを持つ（許すキーは id/name/date/venue/createdAt/updatedAt/players/
-// techniques/settings/status/shareToken/test。live はこの経路では書かない）。
+// techniques/settings/status/shareToken/test/createdBy。live はこの経路では書かない）。
+// AI（Bearer）は新規作成だけ（id を送れば 403 sandbox）、名前は「テスト用」で始まるものだけ。
+// AI が作った大会には test: true と createdBy: 'ai' を付ける（設計書 2026-10-03 5.4・D12）。
 // body にしか無い未知のキー（live・techniquesSource・その他）は最初から event に
 // コピーしないので、自然に落ちる。
 app.post('/api/events', (req, res) => {
   try {
     const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
+    const isAi = !!(req.principal && req.principal.kind === 'ai');
+    // AI に既存の大会を丸ごと上書きさせない（新規作成だけ）
+    if (isAi && body.id !== undefined) {
+      return res.status(403).json({ error: 'AI は大会 ID を指定して保存できません（新規作成だけ）', reason: 'sandbox' });
+    }
 
     let id = body.id;
     if (!id) {
@@ -768,6 +1373,7 @@ app.post('/api/events', (req, res) => {
     if (!name || name.length > 100) {
       return res.status(400).json({ error: '大会名が不正です（1〜100文字）' });
     }
+    if (rejectAiCreate(req, res, name)) return;
     const date = typeof body.date === 'string' ? body.date.slice(0, 20) : '';
     const venue = typeof body.venue === 'string' ? body.venue.slice(0, 100) : '';
 
@@ -812,6 +1418,12 @@ app.post('/api/events', (req, res) => {
     // test（テスト大会の印）も同じ理由でこの経路では変えない。body に入っていても無視し、
     // 既存の大会が test:true を持っていればそのまま引き継ぐ（テンプレート API だけが true にする）。
     if (prev && prev.test === true) event.test = true;
+    // createdBy（誰が作ったか。今は AI が作った大会の 'ai' だけ）も test と同じ扱い。body は無視して引き継ぐ
+    if (prev && typeof prev.createdBy === 'string') event.createdBy = prev.createdBy;
+    if (isAi && !exists) {
+      event.test = true;
+      event.createdBy = 'ai';
+    }
 
     // shareToken は body から常に捨てる（他の大会の shareToken を書き込めると、その大会を
     // 削除したときに無関係な大会の共有 URL が孤児のまま生き残る）。既存の値だけを引き継ぐ。
@@ -877,6 +1489,9 @@ app.patch('/api/events/:id', (req, res) => {
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
     if (rejectIfLocked(res, event)) return;
     const body = req.body || {};
+    // AI の改名は「テスト用 → テスト用」だけ（設計書 2026-10-03 5.4・T14）
+    const renameDenied = authz.checkAiRename(req.principal, body);
+    if (renameDenied) return authz.sendDeny(res, renameDenied);
 
     // name は必須ではない（送られてきたときだけ検証して差し替える）
     if (body.name !== undefined) {
@@ -955,6 +1570,11 @@ app.delete('/api/events/:id', (req, res) => {
     if (fs.existsSync(historyPath)) {
       fs.unlinkSync(historyPath);
     }
+    // その大会の採点の招待を取り消す（端末は次のリクエストから 401。設計書 2026-10-03 4.8）
+    const revokedInvites = credentials.revokeInvitesForEvent(req.params.id);
+    if (revokedInvites) {
+      credentials.audit({ actor: auditActor(req.principal), action: 'invite.revoke', reason: 'event_deleted', eventId: req.params.id, count: revokedInvites });
+    }
     // 存在しなくても成功とする
     res.json({ success: true });
   } catch (err) {
@@ -981,6 +1601,8 @@ app.post('/api/events/:id/copy', (req, res) => {
     if (!name || name.length > 100) {
       return res.status(400).json({ error: '大会名が不正です（1〜100文字）' });
     }
+    // AI は新しい名前が「テスト用」なら本番の大会からもコピーできる（コピー元は読むだけ）
+    if (rejectAiCreate(req, res, name)) return;
     const src = JSON.parse(fs.readFileSync(srcPath, 'utf-8'));
     const now = new Date().toISOString();
     const id = generateId();
@@ -1038,6 +1660,7 @@ app.post('/api/events/:id/copy', (req, res) => {
         courts: sanitizeCourtList(src.settings.courts)
       };
     }
+    markAiCreated(req, event);
     writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
     res.status(201).json({ success: true, id: id, playerCount: players.length });
   } catch (err) {
@@ -1138,6 +1761,7 @@ app.post('/api/events/from-template', (req, res) => {
     if (!name || name.length > 100) {
       return res.status(400).json({ error: '大会名が不正です（1〜100文字）' });
     }
+    if (rejectAiCreate(req, res, name)) return;
     const now = new Date().toISOString();
     const id = generateId();
     const techniques = cloneTechniques(readTechniques().techniques);
@@ -1160,6 +1784,7 @@ app.post('/api/events/from-template', (req, res) => {
       event.test = true;
       event.players = buildSystestPlayers(techniques);
     }
+    markAiCreated(req, event);
 
     writeJsonAtomic(path.join(EVENTS_DIR, `${id}.json`), event);
     res.status(201).json({ success: true, id: id, playerCount: event.players.length });
@@ -1305,7 +1930,7 @@ app.post('/api/events/:id/status', (req, res) => {
       detail: EventStatus.LABELS[from] + ' → ' + EventStatus.LABELS[to] +
         (round2Info ? '（二巡目 ' + round2Info.created + ' 名を生成。決戦 ' +
                       round2Info.finalistCount + ' 名）' : '')
-    });
+    }, req.principal);
     res.json({ success: true, status: to, round2: round2Info });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1907,6 +2532,13 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     const player = event.players[playerIndex];
     const before = Object.assign({}, player);
     const force = body.force === true;
+
+    // ── 採点の鍵の端末（設計書 2026-10-03 5.3） ──
+    // 許すのは採点の項目（score result adjust totalAdjust confirmed note）と baseRev だけ。それ以外が 1 つでも
+    // あれば 403 field（force も）。行のコートが鍵のコートでなければ 403 scope（未分類も）。採点の項目を
+    // 送るなら baseRev は必須（400）。行の読み込みと書き換えの間に await が無いので、ここで見た行を書き換える。
+    const scorerDenied = authz.checkScorerPatch(req.principal, player, body, courtOf);
+    if (scorerDenied) return authz.sendDeny(res, scorerDenied);
 
     // ── 0. 更新前の画面の補正点（レビュー指摘 9） ──
     // 更新前の採点画面は補正点の入力に上限が無く、baseRev も送らない。その送信キューは 4xx を
@@ -3352,7 +3984,7 @@ function getOwn(obj, key) {
 const DEFAULT_LIVE_TIMER = { sec: 300, running: false };
 
 // PUT /api/events/:id/live/:court : そのコートのライブ状態を置き換える
-// 認証は他の採点 API と同じ扱い（現状は無し）。
+// 認可は他の採点 API と同じ扱い（採点の鍵は自分のコートだけ。server/authz.js）。
 // timer を省略したときは既存の値を据え置く（選手だけ切り替えた場合など）。
 // event.updatedAt は動かさない。共有ページ（share.js）は updatedAt の変化で
 // 順位を描き直すので、選手を切り替えるたびに動かすと無駄な再描画を呼ぶ。
@@ -3376,10 +4008,13 @@ app.put('/api/events/:id/live/:court', (req, res) => {
       if (!isValidId(body.playerId)) {
         return res.status(400).json({ error: '不正な選手IDです' });
       }
-      const found = (event.players || []).some(p => p && p.id === body.playerId);
+      const found = (event.players || []).find(p => p && p.id === body.playerId);
       if (!found) {
         return res.status(400).json({ error: '選手が見つかりません' });
       }
+      // 採点の鍵の端末は、そのコートの行だけ映せる（設計書 2026-10-03 5.2 の 23）
+      const liveDenied = authz.checkScorerLive(req.principal, found, courtOf);
+      if (liveDenied) return authz.sendDeny(res, liveDenied);
       playerId = body.playerId;
     }
 
@@ -3512,7 +4147,8 @@ app.post('/api/events/:id/history', (req, res) => {
     if (!entry.action) {
       return res.status(400).json({ error: 'action が必要です' });
     }
-    appendHistory(req.params.id, entry);
+    // actor は本文から受けず、サーバーが主体から付ける（設計書 2026-10-03 5.6）
+    appendHistory(req.params.id, entry, req.principal);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3541,6 +4177,9 @@ app.post('/api/links', (req, res) => {
       return res.status(404).json({ error: '大会が見つかりません' });
     }
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    // AI は「テスト用」の大会だけ（設計書 2026-10-03 5.2 の 29）
+    const linkDenied = authz.checkAiBodyEvent(req.principal, event);
+    if (linkDenied) return authz.sendDeny(res, linkDenied);
 
     // 発行済みならそのまま返す。リンクを配ったあとに変わると困る。
     if (isValidId(event.shareToken)) {
@@ -3715,13 +4354,44 @@ app.use((req, res, next) => {
 
 // 許可リスト。表にあるファイルだけ配信し、運営用は認証してから返す（server/static-policy.js）。
 // 未定義の /api/ パスもここで 404 にする。
+// 保護ページは主体ごとに（設計書 2026-10-03 6.5）:
+//   運営 … 今どおり 200
+//   採点の鍵の端末 … SCORER_FILES（採点画面とその依存）だけ 200。/ と /index.html は /scoring.html へ 302、
+//                   他の保護ページは 403 の HTML（ダイアログなし）
+//   無効な Cookie … 401 の HTML（期限切れ・取り消し済み。ダイアログなし）
+//   AI（Bearer）… 401（ページは開けない）
+//   何も無い … 401 + WWW-Authenticate（今どおり）
+const JOIN_PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; " +
+  "frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 app.use((req, res, next) => {
   if (req.path.toLowerCase().startsWith('/api/')) {
     return res.status(404).json({ error: '見つかりません' });
   }
   const kind = classify(req.path, { production: IS_PRODUCTION });
   if (!kind) return res.status(404).end();
-  if (kind === 'protected' && !auth.isAuthorized(req)) return auth.rejectPage(res);
+  const rel = normalizeStaticPath(req.path);
+  if (rel === 'join.html') {
+    // 招待の鍵を読み取って開くページ。鍵（#k=…）を外に出さない・埋め込ませない（6.1）
+    res.set('Referrer-Policy', 'no-referrer');
+    res.set('Content-Security-Policy', JOIN_PAGE_CSP);
+    res.set('Cache-Control', 'no-store');
+    // /join（拡張子なし）は join.html を返す（リンクを短くするため）
+    if (req.path !== '/join.html') req.url = '/join.html';
+  }
+  if (kind === 'protected') {
+    const pr = req.principal || {};
+    if (pr.kind === 'admin') return next();
+    if (pr.kind === 'scorer') {
+      if (rel === 'index.html') return res.redirect(302, '/scoring.html');
+      if (scorerAllowed(req.path)) return next();
+      return sendScorerForbiddenPage(res, pr);
+    }
+    if (pr.kind === 'anonymous' && pr.cookie) return sendSessionInvalidPage(res, pr.reason);
+    if (pr.kind === 'ai' || pr.bearer) {
+      return res.status(401).type('text/plain').send('認証が必要です');
+    }
+    return auth.rejectPage(res);
+  }
   next();
 });
 

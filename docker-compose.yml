@@ -15,6 +15,12 @@ services:
       # 未設定なら compose が起動前に止まる（無防備なまま上げない）。
       - AUTH_USER=${AUTH_USER:?AUTH_USER を .env に設定してください}
       - AUTH_PASS=${AUTH_PASS:?AUTH_PASS を .env に設定してください}
+      # 公開 URL（秘密ではない）。採点端末の Cookie で書き込むとき、別のサイトからの要求でないことを
+      # Origin ヘッダーと比べて確かめる（設計書 2026-10-03-invite-links-and-ai-key-design.md 3.4）。
+      - PUBLIC_ORIGIN=https://tameshigiri.phx-base.org
+      # nginx が X-Forwarded-For を渡していると確かめたら .env に TRUST_PROXY=loopback, uniquelocal などを書く
+      # （速度制限を接続元ごとにするため。ポート 3457 が外から届く間は設定しない）。未設定なら無効。
+      - TRUST_PROXY=${TRUST_PROXY:-}
 
 volumes:
   tameshigiri-data:
