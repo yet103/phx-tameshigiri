@@ -296,6 +296,32 @@ const secrets = [];   // 出力に出てはいけない文字列
 let vaultTouched = false;
 
 try {
+  // ── 採点の計算はこのリポジトリのコードだけ（接続先からコードを取って実行しない）──
+  await check('scoring-vm: scoring.js と status.js はこのリポジトリから読む。接続先から取らない。vm の文脈にホストの値が無い', async () => {
+    const sv = await import('./scoring-vm.mjs');
+    const { Scoring, source } = sv.loadScoring();
+    assert.equal(source, 'local');
+    // 文脈の中で作った TECHNIQUES（技を設定する前の既定）から constructor をたどっても process に届かない
+    const inner = Scoring.findTechnique.constructor;   // 文脈の Function
+    assert.notEqual(inner, Function);
+    assert.equal(inner('return typeof process')(), 'undefined');
+    assert.equal(inner('return typeof require')(), 'undefined');
+    const techs = inner('return TECHNIQUES')();
+    assert.ok(Array.isArray(techs) && techs.length === 0);
+    assert.equal(techs.constructor.constructor('return typeof process')(), 'undefined', 'TECHNIQUES がホストの配列');
+    const EventStatus = sv.loadStatus();
+    assert.equal(typeof EventStatus.isScoringOpen, 'function');
+    assert.equal(EventStatus.isScoringOpen.constructor('return typeof process')(), 'undefined');
+    // API はコードの取得口を持たない。通信は request（JSON の API）だけ
+    const { createApi } = await import('./api.mjs');
+    const seen = [];
+    const api = createApi({ baseUrl: 'http://127.0.0.1:9', keyStore: { getKey: async () => null, forget() {} }, fetchImpl: async u => { seen.push(u); throw new Error('no'); } });
+    assert.equal(api.fetchPublicText, undefined);
+    const src = fs.readFileSync(path.join(HERE, 'scoring-vm.mjs'), 'utf8') + fs.readFileSync(path.join(HERE, 'tools.mjs'), 'utf8');
+    assert.ok(!/fetchPublicText|['"]\/scoring\.js['"]/.test(src), 'scoring.js を接続先から取るコードが残っている');
+    assert.equal(seen.length, 0);
+  });
+
   // ── 準備: キーの発行（Basic）と「本番風」の大会 ──
   const issued = await http(base, 'POST', '/api/ai-keys', { label: 'MCP テスト', limits: WIDE }, BASIC);
   assert.equal(issued.status, 201, issued.text);

@@ -112,12 +112,6 @@ export function createApi({ baseUrl, keyStore, fetchImpl }) {
     return json;
   }
 
-  // 公開ファイル（/scoring.js）の取得。キーは付けない（公開ファイルなので要らない）。
-  async function fetchPublicText(path) {
-    const res = await doFetch(baseUrl + path, { redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res.text();
-  }
-
-  return { request, fetchPublicText, baseUrl };
+  // 接続先からコード（/scoring.js など）は取らない。採点の計算はこのリポジトリの scoring.js（scoring-vm.mjs）。
+  return { request, baseUrl };
 }

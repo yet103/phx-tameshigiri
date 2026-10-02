@@ -414,7 +414,7 @@ export function createHandlers(api) {
         throw badInput('rows の数（' + a.rows.length + '）が技の数（' + techs.length + ': ' + techs.join(' / ') + '）と合いません', { techniques: techs });
       }
       const isFemale = player.isFemale === true;
-      const { Scoring } = await loadScoring(api);
+      const { Scoring } = loadScoring();
       Scoring.setTechniques(Array.isArray(ev.techniques) ? ev.techniques : []);
       const rows = techs.map((name, i) => {
         const tech = Scoring.findTechnique(name, isFemale);
@@ -454,7 +454,7 @@ export function createHandlers(api) {
       const inScope = all.filter(p => roundOf(p) === EventStatus.scoringRound(status) && (court === undefined || courtOf(p) === court));
       const targets = inScope.filter(p => EventStatus.isRowScorable(status, p) && p.confirmed !== true && techsOf(p).length > 0)
         .sort(rowSort(status));
-      const { Scoring } = await loadScoring(api);
+      const { Scoring } = loadScoring();
       const rnd = mulberry32(seed);
       const done = [];
       for (const p of targets) {

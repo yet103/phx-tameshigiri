@@ -1,9 +1,10 @@
 // 採点画面と同じ計算（設計書 2026-10-03 7.1・7.3）。
-// - scoring.js（得点の計算・result の符号化）は接続先のサーバーから取って vm で読む（公開ファイル。予行スクリプトと同じ）。
-//   取れなければ、このリポジトリの scoring.js を読む。
-// - status.js（EventStatus.isRowScorable など）はサーバーでは保護ファイル（AI 用キーでは 401）なので、
-//   このリポジトリの status.js を読む。採点できるかの最終判定はサーバー（409 not_scorable）がするので、
+// - scoring.js（得点の計算・result の符号化）と status.js（EventStatus.isRowScorable など）は、
+//   どちらもこのリポジトリのファイルだけを読む。接続先のサーバーからコードは取らない
+//   （vm は安全境界ではないので、サーバーが乗っ取られたときに利用者の PC でコードが動かないように）。
+//   採点できるかの最終判定はサーバー（409 not_scorable）がするので、
 //   ここでの判定は「どの行を採点しに行くか」の選び方にだけ使う。
+// - vm の文脈にはホスト（Node）の値を一切渡さない。scoring.js が参照する TECHNIQUES も文脈の中で作る。
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,38 +13,29 @@ import vm from 'node:vm';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 
-function runScript(code, globals, exportName, filename) {
-  const ctx = vm.createContext(Object.assign({}, globals));
-  vm.runInContext(code, ctx, { filename, timeout: 2000 });
+// prelude は文脈の中で実行するコード（文字列）。ホストのオブジェクトは渡さない。
+function runLocalScript(file, exportName, prelude) {
+  const code = readFileSync(path.join(REPO_ROOT, file), 'utf8');
+  const ctx = vm.createContext({});
+  if (prelude) vm.runInContext(prelude, ctx, { filename: file + ':prelude' });
+  vm.runInContext(code, ctx, { filename: file, timeout: 2000 });
   const v = ctx[exportName];
   if (!v) throw new Error(exportName + ' が見つかりません');
   return v;
 }
 
-let scoringPromise = null;
-// api.fetchPublicText を使ってサーバーの /scoring.js を読む（1 プロセスで 1 回）
-export function loadScoring(api) {
-  if (!scoringPromise) {
-    scoringPromise = (async () => {
-      try {
-        const code = await api.fetchPublicText('/scoring.js');
-        return { Scoring: runScript(code, { TECHNIQUES: [] }, 'Scoring', 'scoring.js'), source: 'server' };
-      } catch (e) {
-        const code = readFileSync(path.join(REPO_ROOT, 'scoring.js'), 'utf8');
-        return { Scoring: runScript(code, { TECHNIQUES: [] }, 'Scoring', 'scoring.js'), source: 'local' };
-      }
-    })();
-    scoringPromise.catch(() => { scoringPromise = null; });
+let scoringModule = null;
+// このリポジトリの scoring.js を読む（1 プロセスで 1 回）
+export function loadScoring() {
+  if (!scoringModule) {
+    scoringModule = { Scoring: runLocalScript('scoring.js', 'Scoring', 'var TECHNIQUES = [];'), source: 'local' };
   }
-  return scoringPromise;
+  return scoringModule;
 }
 
 let statusModule = null;
 export function loadStatus() {
-  if (!statusModule) {
-    const code = readFileSync(path.join(REPO_ROOT, 'status.js'), 'utf8');
-    statusModule = runScript(code, {}, 'EventStatus', 'status.js');
-  }
+  if (!statusModule) statusModule = runLocalScript('status.js', 'EventStatus');
   return statusModule;
 }
 
