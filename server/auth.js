@@ -72,10 +72,17 @@ function createAuth(opts) {
     return u && p;
   }
 
-  // ページ向け 401: ブラウザにダイアログを出させる
+  // ページ向け 401: ブラウザにダイアログを出させる。本文はダイアログを閉じたときに見える。
+  // 採点端末（Cookie が消えた・ホーム画面のアプリで Cookie が別）が戻れるよう /join への案内を置く。
   function rejectPage(res) {
     res.set('WWW-Authenticate', 'Basic realm="phx-tameshigiri", charset="UTF-8"');
-    res.status(401).type('text/plain').send('認証が必要です');
+    res.set('Cache-Control', 'no-store');
+    res.status(401).type('html').send(pageShell('認証が必要です',
+      '<h1>認証が必要です</h1>' +
+      '<p>運営の方は、運営の ID・パスワードを入れてください（ページを再読み込みすると、もう一度聞かれます）。</p>' +
+      '<p>採点端末の方は、運営から受け取った QR をもう一度読み取ってください。' +
+      'QR の URL を貼り付けて登録することもできます（<a href="/join">/join</a>）。</p>' +
+      '<p><a class="btn" href="/join">QR の URL を貼り付けて登録する</a></p>'));
   }
 
   // API 向け 401: WWW-Authenticate を付けない（観客の画面にダイアログを出さない）

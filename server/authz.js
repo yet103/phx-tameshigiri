@@ -128,9 +128,13 @@ const DENY_ROLE = () => deny(403, 'role', 'この操作は許可されていま�
 const DENY_SCOPE = () => deny(403, 'scope', 'この端末の登録では操作できない大会・コートです');
 const DENY_SANDBOX = () => deny(403, 'sandbox', 'AI が書き込めるのは名前が「テスト用」で始まる大会だけです');
 
+// ctx.loadEvent が返す「大会ファイルはあるが読めない」の印（壊れた JSON など）。
+// 名前で砂場か判定できないので、AI には 403 sandbox（無い大会の null とは分ける。null はハンドラの 404 に任せる）
+const UNREADABLE = Object.freeze({ unreadable: true });
+
 // 粗い認可（本文を読む前）。戻り値: null（通す）か { status, body }。
 // matched: matchRoute の戻り値（null は表に無い）。
-// ctx.loadEvent(id): 大会ファイルを同期で読む（無ければ null）。
+// ctx.loadEvent(id): 大会ファイルを同期で読む（無ければ null、あるが読めなければ UNREADABLE）。
 function authorize(principal, matched, ctx) {
   const kind = principal && principal.kind;
   const route = matched && matched.route;
@@ -162,6 +166,9 @@ function authorize(principal, matched, ctx) {
   if (rule === 'sandbox' || rule === 'sandbox-own') {
     const event = ctx && ctx.loadEvent ? ctx.loadEvent(params.id) : null;
     if (!event) return null;   // 大会が無ければハンドラの 404 に任せる
+    if (event === UNREADABLE || event.unreadable === true) {
+      return deny(403, 'sandbox', '大会ファイルが読めないため、AI からは操作できません');
+    }
     if (!isSandboxEvent(event)) return DENY_SANDBOX();
     if (rule === 'sandbox-own' && event.createdBy !== 'ai') {
       return deny(403, 'sandbox', 'AI が削除できるのは AI が作った「テスト用」の大会だけです');
@@ -237,7 +244,7 @@ function actorLabel(principal) {
 const ROUTES_CREATE = new Set(['/api/events', '/api/events/from-template', '/api/events/:id/copy']);
 
 module.exports = {
-  ROUTES, ROUTES_CREATE, SANDBOX_PREFIX,
+  ROUTES, ROUTES_CREATE, SANDBOX_PREFIX, UNREADABLE,
   matchRoute, authorize,
   isSandboxName, isSandboxEvent,
   checkScorerPatch, checkScorerLive, checkAiCreateName, checkAiRename, checkAiBodyEvent,

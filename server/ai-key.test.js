@@ -3,6 +3,7 @@
 // データは TMG_DATA_DIR の一時ディレクトリ（開発機の大会に触らない）。実行: npm test
 const assert = require('assert');
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const { createRunner, makeDataDir, removeDataDir, withServer: withServerIn, basic, get, api } = require('./test-support');
 const cred = require('./credentials');
@@ -351,6 +352,82 @@ test('開発・認証なし: AI 用キーも発行でき、Bearer は AI とし�
     const no = await api(base, 'POST', '/api/events', { name: '本番' }, bearer(r.body.key));
     assert.strictEqual(no.body.reason, 'sandbox');
   });
+});
+
+// ── レビューの指摘（2026-10-03） ──
+// 本文をゆっくり送る要求（前半を送って待ち、合図で後半を送る）。戻り値: { send(rest), done: Promise<{ status, body }> }
+function slowJson(base, method, p, headers, firstHalf) {
+  const u = new URL(base + p);
+  let resolveDone, rejectDone;
+  const done = new Promise((res, rej) => { resolveDone = res; rejectDone = rej; });
+  const req = http.request({
+    host: u.hostname, port: u.port, path: u.pathname, method: method,
+    headers: Object.assign({ 'Content-Type': 'application/json', 'Transfer-Encoding': 'chunked' }, headers)
+  }, res => {
+    let text = '';
+    res.setEncoding('utf8');
+    res.on('data', d => { text += d; });
+    res.on('end', () => {
+      let body = text;
+      try { body = JSON.parse(text); } catch (e) { /* 文字列 */ }
+      resolveDone({ status: res.statusCode, body: body });
+    });
+  });
+  req.on('error', rejectDone);
+  req.setTimeout(10000, () => req.destroy(new Error('timeout')));
+  req.write(firstHalf);
+  return { send(rest) { req.end(rest); }, done };
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+test('砂場の再判定（R4）: 本文を読む間に運営が本番の名前に変えたら、AI の書き込みは 403 sandbox', async () => {
+  await withServer(AUTH_DEV, async base => {
+    const k = await issueKey(base, '遅い本文', WIDE);
+    const ev = await adminEvent(base, 'テスト用 遅い本文');
+    // 比べるため: 改名しなければ通る
+    const ctl = slowJson(base, 'PATCH', '/api/events/' + ev + '/players/pa1', bearer(k.key), '{"note":');
+    await sleep(200);
+    ctl.send('"そのまま"}');
+    const ctlRes = await ctl.done;
+    assert.strictEqual(ctlRes.status, 200, JSON.stringify(ctlRes.body));
+    // 前半を送ったところで運営が改名 → 後半を送る
+    const s = slowJson(base, 'PATCH', '/api/events/' + ev + '/players/pa1', bearer(k.key), '{"note":');
+    await sleep(200);
+    const ren = await api(base, 'PATCH', '/api/events/' + ev, { name: '本番に変えた大会' }, B);
+    assert.strictEqual(ren.status, 200, JSON.stringify(ren.body));
+    s.send('"改名のあと"}');
+    const r = await s.done;
+    assert.deepStrictEqual([r.status, r.body.reason], [403, 'sandbox']);
+    const p = (await api(base, 'GET', '/api/events/' + ev, undefined, B)).body.players.find(x => x.id === 'pa1');
+    assert.strictEqual(p.note, 'そのまま', '改名のあとの本文は書かれていない');
+    // 状態遷移も同じ（大会単位の書き込み）
+    const s2 = slowJson(base, 'POST', '/api/events/' + ev + '/status', bearer(k.key), '{"to":');
+    await sleep(200);
+    s2.send('"round1_done"}');
+    assert.strictEqual((await s2.done).body.reason, 'sandbox');
+  });
+});
+
+test('壊れた大会ファイル（R5）: AI は消せない・書けない（403 sandbox）。無い大会はハンドラに任せる', async () => {
+  const dir = dataDir();
+  fs.mkdirSync(path.join(dir, 'events'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'events', 'evbroken1.json'), '{ "id": "evbroken1", "name": "テスト用 壊れ", "players": [');
+  fs.writeFileSync(path.join(dir, 'events', 'evbroken2.json'), '[]');
+  await withServer(AUTH_DEV, async base => {
+    const k = await issueKey(base, '壊れたファイル', WIDE);
+    for (const id of ['evbroken1', 'evbroken2']) {
+      const del = await api(base, 'DELETE', '/api/events/' + id, undefined, bearer(k.key));
+      assert.deepStrictEqual([del.status, del.body.reason], [403, 'sandbox'], id);
+      const patch = await api(base, 'PATCH', '/api/events/' + id, { name: 'テスト用 直した' }, bearer(k.key));
+      assert.deepStrictEqual([patch.status, patch.body.reason], [403, 'sandbox'], id);
+      assert.ok(fs.existsSync(path.join(dir, 'events', id + '.json')), id + ' が残っている');
+    }
+    // 無い大会は 403 にせずハンドラに任せる（DELETE は今どおり冪等で 200、PATCH は 404）
+    const missing = await api(base, 'DELETE', '/api/events/evmissing1', undefined, bearer(k.key));
+    assert.strictEqual(missing.status, 200);
+    const missingPatch = await api(base, 'PATCH', '/api/events/evmissing1', { name: 'テスト用 x' }, bearer(k.key));
+    assert.strictEqual(missingPatch.status, 404);
+  }, dir);
 });
 
 main(() => DIRS.forEach(removeDataDir));

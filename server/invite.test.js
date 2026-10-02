@@ -290,7 +290,8 @@ test('交換: 下見はセッションを作らない。登録で Cookie。違�
     assert.ok(/^tmg_s=[A-Za-z0-9_-]{12}\.[A-Za-z0-9_-]{43}; /.test(sc), sc);
     for (const attr of ['HttpOnly', 'SameSite=Lax', 'Path=/']) assert.ok(sc.includes(attr), attr);
     const maxAge = Number(/Max-Age=(\d+)/.exec(sc)[1]);
-    assert.ok(maxAge > 0 && maxAge <= 7 * 86400, sc);
+    // 期限 + 30 日（掃除までの保持期間。期限の判定はサーバー。結合試験 E1）
+    assert.ok(maxAge > 30 * 86400 && maxAge <= 37 * 86400, sc);
     assert.ok(!sc.includes('Secure'), '開発は Secure を付けない');
     const devs = (await api(base, 'GET', '/api/invites', undefined, B)).body[0].devices;
     assert.deepStrictEqual([devs.length, devs[0].summary, devs[0].status], [1, 'iPad・Safari', 'active']);
@@ -682,6 +683,139 @@ test('開発・認証なし: 従来どおり全員運営（採点・発行もそ
     assert.strictEqual((await get(base, '/admin.html')).status, 200);
     const inv = await api(base, 'POST', '/api/invites', { role: 'scorer', eventId: ev, court: 'A' });
     assert.strictEqual(inv.status, 201);
+  });
+});
+
+// ── レビュー・結合試験の指摘（2026-10-03） ──
+test('交換の速度制限（R2）: 照合が通らない失敗だけ数える。上限中も正しい鍵は通り、取り消し・期限切れは本来の理由', async () => {
+  await withServer(AUTH_DEV, async base => {
+    const ev = await makeEvent(base, '速度制限テスト');
+    const good = await invite(base, ev, { maxDevices: 5 });
+    const revoked = await invite(base, ev, { court: 'B', label: 'B' });
+    assert.strictEqual((await api(base, 'POST', '/api/invites/' + revoked.invite.id + '/revoke', {}, B)).status, 200);
+    // 正しい鍵の下見は 40 回でも止まらない（全体を数えない）
+    for (let i = 0; i < 40; i++) {
+      const r = await api(base, 'POST', '/api/join', { key: good.key, confirm: false });
+      assert.strictEqual(r.status, 200, 'preview ' + (i + 1));
+    }
+    // 照合の通る取り消し済みの鍵も数えない
+    for (let i = 0; i < 12; i++) {
+      const r = await api(base, 'POST', '/api/join', { key: revoked.key, confirm: false });
+      assert.deepStrictEqual([r.status, r.body.reason], [401, 'invite_revoked'], 'revoked ' + (i + 1));
+    }
+    // 鍵なし・違う鍵の連打で上限に達する
+    for (let i = 0; i < 10; i++) {
+      assert.strictEqual((await api(base, 'POST', '/api/join', { key: 'x' + i, confirm: false })).status, 401, 'bad ' + (i + 1));
+    }
+    const blocked = await api(base, 'POST', '/api/join', { key: 'x', confirm: true });
+    assert.deepStrictEqual([blocked.status, blocked.body.reason], [429, 'rate_limited']);
+    const t = cred.parseToken('invite', good.key);
+    const wrongSecret = await api(base, 'POST', '/api/join', { key: t.id + '.' + 'A'.repeat(43), confirm: false });
+    assert.strictEqual(wrongSecret.status, 429, '秘密が違う鍵は上限中は 429');
+    // 上限中でも正しい鍵の下見・登録は通る
+    assert.strictEqual((await api(base, 'POST', '/api/join', { key: good.key, confirm: false })).status, 200);
+    const cookie = await join(base, good.key);
+    assert.strictEqual((await api(base, 'GET', '/api/events', undefined, C(cookie))).status, 200);
+    // 上限中でも、取り消し済みは本来の理由
+    const rv = await api(base, 'POST', '/api/join', { key: revoked.key, confirm: true });
+    assert.deepStrictEqual([rv.status, rv.body.reason], [401, 'invite_revoked']);
+  });
+});
+
+test('交換の速度制限（R2）: 照合が通らない失敗は全体（全 IP の合計）でも 30 回/分。正しい鍵は止めない', async () => {
+  await withServer(Object.assign({ TRUST_PROXY: 'loopback' }, AUTH_DEV), async base => {
+    const ev = await makeEvent(base, '全体の上限テスト');
+    const good = await invite(base, ev);
+    const from = ip => ({ 'X-Forwarded-For': ip });
+    for (let n = 0; n < 3; n++) {
+      for (let i = 0; i < 10; i++) {
+        const r = await api(base, 'POST', '/api/join', { key: 'bad' + i }, from('203.0.113.' + (n + 1)));
+        assert.strictEqual(r.status, 401, 'ip ' + n + ' / ' + i);
+      }
+    }
+    const other = await api(base, 'POST', '/api/join', { key: 'bad' }, from('198.51.100.9'));
+    assert.deepStrictEqual([other.status, other.body.reason], [429, 'rate_limited'], '31 回目は別の IP でも 429');
+    const ok = await api(base, 'POST', '/api/join', { key: good.key, confirm: false }, from('198.51.100.9'));
+    assert.strictEqual(ok.status, 200, '正しい鍵は通る');
+  });
+});
+
+test('乗り換え（R3）: 別の招待の QR で登録すると、前の招待のセッションを取り消す（switch）。上限で断ったら前はそのまま', async () => {
+  const dir = dataDir();
+  let invA;
+  await withServer(AUTH_DEV, async base => {
+    const ev = await makeEvent(base, '乗り換えテスト');
+    invA = await invite(base, ev, { court: 'A', label: 'A', maxDevices: 1 });
+    const invB = await invite(base, ev, { court: 'B', label: 'B', maxDevices: 1 });
+    const cA = await join(base, invA.key);
+    const pre = await api(base, 'POST', '/api/join', { key: invB.key, confirm: false }, C(cA));
+    assert.deepStrictEqual([pre.status, pre.body.rejoin, pre.body.switching], [200, false, true]);
+    assert.strictEqual((await api(base, 'GET', '/api/events', undefined, C(cA))).status, 200, '下見では取り消さない');
+    const cB = await join(base, invB.key, C(cA));
+    assert.strictEqual((await api(base, 'GET', '/api/events', undefined, C(cA))).body.reason, 'session_revoked');
+    assert.strictEqual((await api(base, 'GET', '/api/session', undefined, C(cB))).body.scope.court, 'B');
+    // A の枠が空いた: 別の端末が A で登録できる
+    await join(base, invA.key);
+    const listed = (await api(base, 'GET', '/api/invites?eventId=' + ev, undefined, B)).body;
+    const byId = id => listed.find(x => x.id === id);
+    assert.deepStrictEqual([byId(invA.invite.id).activeDevices, byId(invB.invite.id).activeDevices], [1, 1]);
+    // 上限で断ったときは前の登録（B）はそのまま
+    const invC = await invite(base, ev, { court: 'A', label: 'C', maxDevices: 1 });
+    await join(base, invC.key);
+    const full = await api(base, 'POST', '/api/join', { key: invC.key, confirm: true }, C(cB));
+    assert.deepStrictEqual([full.status, full.body.reason], [409, 'device_limit']);
+    assert.strictEqual((await api(base, 'GET', '/api/events', undefined, C(cB))).status, 200);
+  }, dir);
+  const lines = fs.readFileSync(path.join(dir, 'auth', 'audit.jsonl'), 'utf-8').trim().split('\n').map(l => JSON.parse(l));
+  const sw = lines.filter(l => l.action === 'session.revoke' && l.reason === 'switch');
+  assert.strictEqual(sw.length, 1);
+  assert.strictEqual(sw[0].inviteId, invA.invite.id);
+});
+
+test('Cookie の期限（E1）: Max-Age は招待の期限 + 30 日。期限を過ぎた Cookie はサーバーが session_expired を返す', async () => {
+  await withServer(AUTH_DEV, async base => {
+    const ev = await makeEvent(base, 'Cookie の期限テスト');
+    const inv = await invite(base, ev);
+    const r = await api(base, 'POST', '/api/join', { key: inv.key, confirm: true });
+    const sc = r.headers.get('set-cookie');
+    const maxAge = Number(/Max-Age=(\d+)/.exec(sc)[1]);
+    const expected = (Date.parse(r.body.expiresAt) - Date.now()) / 1000 + 30 * 86400;
+    assert.ok(Math.abs(maxAge - expected) < 30, 'Max-Age ' + maxAge + ' / 期待 ' + Math.round(expected));
+    assert.ok(maxAge > (Date.parse(r.body.expiresAt) - Date.now()) / 1000 + 29 * 86400, '期限より十分長く残る');
+  });
+});
+
+test('Basic の 401 の本文（R6）: ダイアログを閉じると採点端末向けに /join への案内が見える', async () => {
+  await withServer(AUTH_DEV, async base => {
+    for (const p of ['/scoring.html', '/', '/admin.html']) {
+      const res = await get(base, p);
+      assert.strictEqual(res.status, 401, p);
+      assert.ok(res.headers.get('www-authenticate'), p + ' はダイアログを出す');
+      assert.ok(/text\/html/.test(res.headers.get('content-type')), p);
+      const html = await res.text();
+      assert.ok(html.includes('運営から受け取った QR をもう一度読み取ってください'), p);
+      assert.ok(html.includes('href="/join"'), p);
+      assert.ok(!/<script/i.test(html), 'スクリプトなし');
+    }
+  });
+});
+
+test('履歴の clientId（E2）: 同じ clientId の履歴は二度積まない。形の違う clientId は印にしない', async () => {
+  await withServer(AUTH_DEV, async base => {
+    const ev = await makeEvent(base, '履歴の送り直しテスト');
+    const cookie = await join(base, (await invite(base, ev)).key);
+    const post = (body, h) => api(base, 'POST', '/api/events/' + ev + '/history', body, h);
+    const first = await post({ action: 'confirm', playerName: '甲', detail: '確定', clientId: 'hTEST0001abc' }, C(cookie));
+    assert.deepStrictEqual([first.status, first.body.duplicate], [200, undefined]);
+    const again = await post({ action: 'confirm', playerName: '甲', detail: '確定', clientId: 'hTEST0001abc' }, C(cookie));
+    assert.deepStrictEqual([again.status, again.body.duplicate], [200, true]);
+    await post({ action: 'note', detail: '短い印', clientId: 'x' }, B);
+    await post({ action: 'note', detail: '短い印', clientId: 'x' }, B);
+    const entries = (await api(base, 'GET', '/api/events/' + ev + '/history', undefined, B)).body.entries;
+    assert.strictEqual(entries.filter(e => e.clientId === 'hTEST0001abc').length, 1);
+    assert.strictEqual(entries.find(e => e.clientId === 'hTEST0001abc').actor, '採点端末（A コート タブレット）');
+    assert.strictEqual(entries.filter(e => e.detail === '短い印').length, 2);
+    assert.ok(entries.every(e => e.clientId !== 'x'));
   });
 });
 
