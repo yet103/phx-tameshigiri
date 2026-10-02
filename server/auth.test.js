@@ -2,104 +2,21 @@
 // server/index.js を子プロセスで起動し、環境変数の組み合わせごとに HTTP で検証する。
 // 実行: npm test（外部依存なし。Node 18 以上）
 const assert = require('assert');
-const { spawn } = require('child_process');
-const net = require('net');
 const path = require('path');
+const { createRunner, makeDataDir, removeDataDir, startServer, withServer: withServerIn, basic, get } = require('./test-support');
 
-const INDEX = path.join(__dirname, 'index.js');
 const USER = 'staff';
 const PASS = 'pa:ss-w0rd';   // ':' を含めて、最初の ':' で分割していることを確かめる
 
-// ── ランナー ──
-const tests = [];
-function test(name, fn) { tests.push({ name, fn }); }
+const { test, main } = createRunner();
 
-async function main() {
-  let failed = 0;
-  for (const t of tests) {
-    try {
-      await t.fn();
-      console.log('✓ ' + t.name);
-    } catch (e) {
-      failed++;
-      console.log('✗ ' + t.name + '\n    ' + (e && e.stack || e).toString().split('\n').join('\n    '));
-    }
-  }
-  console.log('\nResult: ' + (tests.length - failed) + ' passed, ' + failed + ' failed');
-  // process.exit() で即時終了すると、子プロセス停止直後の fetch のハンドル解放と競合して
-  // Windows の libuv がクラッシュする（出力は正しいのに終了コードが非 0 になる）。
-  // exitCode を立ててイベントループが自然に終わるのを待つ。
-  process.exitCode = failed ? 1 : 0;
-}
-
-// ── サーバー起動ヘルパー ──
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const port = srv.address().port;
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-// env は AUTH_USER / AUTH_PASS / NODE_ENV を必ず明示する（親シェルの値を引き継がない）。
-// 戻り値: { base, ready, exit, output, stop }
-async function startServer(env) {
-  const port = await freePort();
-  const child = spawn(process.execPath, [INDEX], {
-    env: Object.assign({}, process.env, { PORT: String(port) }, env),
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  let out = '';
-  child.on('error', e => { out += String(e); });
-  const exit = new Promise(resolve => child.on('exit', code => resolve(code)));
-  const ready = new Promise((resolve, reject) => {
-    child.stdout.on('data', d => { out += d; if (out.includes('running at')) resolve(); });
-    child.stderr.on('data', d => { out += d; });
-    exit.then(code => reject(new Error('server exited with code ' + code + '\n' + out)));
-    setTimeout(() => reject(new Error('server did not start in 10s\n' + out)), 10000).unref();
-  });
-  // 起動拒否を検証するテストは ready を待たずに exit だけ見る。
-  // そのとき ready の拒否が未処理にならないよう、ここで握っておく（await ready は従来どおり拒否される）。
-  ready.catch(() => {});
-  return {
-    base: 'http://127.0.0.1:' + port,
-    ready,
-    exit,
-    output: () => out,
-    stop() { child.kill(); return exit; }
-  };
-}
-
-// 起動→テスト→停止 をまとめる。fn が投げても必ず止める。
-async function withServer(env, fn) {
-  const s = await startServer(env);
-  try {
-    await s.ready;
-    await fn(s.base);
-  } finally {
-    await s.stop();
-  }
-}
+// データは一時ディレクトリ（開発機の server/data に触らない）。終わったら消す。
+const DATA_DIR = makeDataDir();
+const withServer = (env, fn) => withServerIn(Object.assign({ TMG_DATA_DIR: DATA_DIR }, env), fn);
 
 const NO_AUTH_DEV = { NODE_ENV: 'development', AUTH_USER: '', AUTH_PASS: '' };
 const AUTH_DEV = { NODE_ENV: 'development', AUTH_USER: USER, AUTH_PASS: PASS };
 const AUTH_PROD = { NODE_ENV: 'production', AUTH_USER: USER, AUTH_PASS: PASS };
-
-function basic(user, pass) {
-  return { Authorization: 'Basic ' + Buffer.from(user + ':' + pass).toString('base64') };
-}
-
-// 応答が返らないとテスト全体が止まるので、1 リクエストごとに打ち切る
-async function get(base, p, headers) {
-  return fetch(base + p, {
-    headers: headers || {},
-    redirect: 'manual',
-    signal: AbortSignal.timeout(5000)
-  });
-}
 
 // ── 単体: 静的配信の許可リスト ──
 const { classify } = require('./static-policy');
@@ -253,7 +170,7 @@ test('保護 API は無認証で 401、WWW-Authenticate なし、JSON 本文', a
       });
       assert.strictEqual(res.status, 401, method + ' ' + p);
       assert.strictEqual(res.headers.get('www-authenticate'), null, method + ' ' + p);
-      assert.deepStrictEqual(await res.json(), { error: '認証が必要です' }, method + ' ' + p);
+      assert.deepStrictEqual(await res.json(), { error: '認証が必要です', reason: 'auth_required' }, method + ' ' + p);
     }
   });
 });
@@ -265,7 +182,7 @@ test('壊れた JSON でも無認証なら 401（body-parser の 400 を見せ�
       signal: AbortSignal.timeout(5000)
     });
     assert.strictEqual(res.status, 401);
-    assert.deepStrictEqual(await res.json(), { error: '認証が必要です' });
+    assert.deepStrictEqual(await res.json(), { error: '認証が必要です', reason: 'auth_required' });
   });
 });
 
@@ -336,7 +253,7 @@ test('本番・認証あり: test.html は認証付きでも 404', async () => {
 });
 
 test('本番・認証なし: 終了コード 1 で起動しない', async () => {
-  const s = await startServer({ NODE_ENV: 'production', AUTH_USER: '', AUTH_PASS: '' });
+  const s = await startServer({ NODE_ENV: 'production', AUTH_USER: '', AUTH_PASS: '', TMG_DATA_DIR: DATA_DIR });
   const code = await s.exit;
   assert.strictEqual(code, 1);
   assert.ok(s.output().includes('AUTH_USER'), '理由をログに出す: ' + s.output());
@@ -354,7 +271,7 @@ test('開発・認証なし: 許可リストは効く（deploy.sh は 404、shar
 
 // ── 結合: 履歴ファイルが壊れていても GET は 500 にしない（通し試験の所見 A） ──
 // ブラウザのテスト（test.html）からは履歴ファイルを壊せないので、ここでファイルを直接書く。
-// 作った大会は自分の id だけ消す（DELETE が履歴ファイルも消す）。
+// データは一時ディレクトリ（DATA_DIR）。作った大会は自分の id だけ消す（DELETE が履歴ファイルも消す）。
 test('履歴: 壊れた履歴ファイルでも GET は 200 の空の履歴（ファイルは消さずに残す）', async () => {
   const fs = require('fs');
   await withServer(NO_AUTH_DEV, async base => {
@@ -366,7 +283,7 @@ test('履歴: 壊れた履歴ファイルでも GET は 200 の空の履歴（�
     });
     const id = (await created.json()).id;
     assert.ok(id, '大会を作れる');
-    const historyPath = path.join(__dirname, 'data', 'history', id + '.json');
+    const historyPath = path.join(DATA_DIR, 'history', id + '.json');
     try {
       fs.writeFileSync(historyPath, '{ "eventId": "' + id + '", "entries": [ 壊れ');
       const res = await get(base, '/api/events/' + id + '/history');
@@ -385,4 +302,4 @@ test('履歴: 壊れた履歴ファイルでも GET は 200 の空の履歴（�
   });
 });
 
-main();
+main(() => removeDataDir(DATA_DIR));
