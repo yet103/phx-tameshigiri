@@ -368,6 +368,8 @@ main { padding: 8px 12px 16px; }
 /* 選手の編集シートの「二巡目の技」の欄 */
 .r2-actions { margin-top: 6px; }
 .r2-clear[hidden] { display: none; }
+/* 下書き（一巡目と同じ形をチップに入れただけ。送るのは空）は薄く見せて「申請あり」と区別する */
+.chips.r2-draft .chip { opacity: 0.5; }
 .round-chips { margin: 6px 0; min-height: 28px; }
 .round-copy {
   background: transparent; color: var(--accent); border: 1px solid var(--border);

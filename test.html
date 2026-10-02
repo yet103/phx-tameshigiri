@@ -3105,6 +3105,9 @@
       [r2bUnknown && r2bUnknown.error, r2bDup && r2bDup.error, r2bRental && r2bRental.error],
       ['2 行目: 二巡目の技「ナゾ」は技リストにありません', '1 行目: 二巡目の形: 同じ形は 1 回までです（真）',
        '1 行目: 二巡目の形: レンタルの選手は抜刀してからの形だけ選べます']);
+    var r2bOrder = await Api.createPlayersBulk(r2Ev, { rows: [{ name: '束 誤', court: 'B', rental: true, tech1: '立位袈裟', r2tech1: '真', r2tech2: 'ナゾ', r2tech3: 'ナゾ2' }] });
+    assert('R2 bulk rows: 表に無い技を全部先に（レンタルより先。貼り付けの techIssues と同じ順・文言）',
+      r2bOrder && r2bOrder.error, '1 行目: 二巡目の技「ナゾ」「ナゾ2」は技リストにありません');
 
     // ---- 12. PATCH（二巡目の行ができる前） ----
     var r2Pa = r2pSame.json.player.id;
@@ -3118,8 +3121,14 @@
     assert('R2 PATCH: 一巡目と同じ形の申請でキーが消える', r2Has(r2Pt4.json.player), false);
     assert('R2 PATCH: 51 字は 400', (await auPatch(r2Ev, r2Pa, { r2tech1: new Array(52).join('技') })).status, 400);
     var r2Pt5 = await auPatch(r2Ev, r2p1.json.player.id, { tech1: '右', tech2: '捨', tech3: '真' });
-    assert('R2 PATCH: 一巡目の形を申請と同じに直すと申請は空になる（正規化）',
-      [r2Pt5.status, r2Has(r2Pt5.json.player), r2Pt5.json.linked, r2Pt5.json.source], [200, false, undefined, undefined]);
+    assert('R2 PATCH: 技だけの PATCH では、一巡目の形を申請と同じにしても申請は残る（正規化しない）',
+      [r2Pt5.status, r2Req(r2Pt5.json.player), r2Pt5.json.linked, r2Pt5.json.source], [200, ['右', '捨', '真'], undefined, undefined]);
+    var r2Pt5b = await auPatch(r2Ev, r2p1.json.player.id, { tech1: '真', tech2: '連', tech3: '左' });
+    assert('R2 PATCH: 一巡目の形を戻しても申請はそのまま',
+      [r2Pt5b.status, r2Req(r2Pt5b.json.player)], [200, ['右', '捨', '真']]);
+    var r2Pt5c = await auPatch(r2Ev, r2p1.json.player.id, { tech1: '右', tech2: '捨', tech3: '真', r2tech1: '右' });
+    assert('R2 PATCH: 申請を送れば正規化される（一巡目と同じ形の申請は空になる）',
+      [r2Pt5c.status, r2Has(r2Pt5c.json.player), r2Has(auById(await auPlayers(r2Ev), r2p1.json.player.id))], [200, false, false]);
     var r2R2Row = await r2Post({ name: '申 二巡目', court: 'A', round: 2, tech1: '真' });
     var r2Pt6 = await auPatch(r2Ev, r2R2Row.json.player.id, { r2tech1: '右' });
     assert('R2 PATCH: 二巡目の行に送ると 400 not_round1', [r2Pt6.status, r2Pt6.json.reason], [400, 'not_round1']);
@@ -4946,6 +4955,31 @@
     assert('stageCountText: draft の「二巡目の形 申請 n」・round1_done の「一巡目から変更 n」',
       [Courts.stageCountText('draft', r2dP), Courts.stageCountText('round1_done', r2dP)],
       ['一巡目 3名　技 未入力 0　二巡目の形 申請 1', '二巡目 3名　技 未入力 0　一巡目から変更 1']);
+    // 通し試験の確認 1: 申請どおり 2 本の二巡目の行は「技 未入力」に数えない（一巡目の規則は変えない）
+    var r2twoP = [
+      r2P({ id: 't1', r2tech1: '右', r2tech2: '捨', r2tech3: '' }),
+      r2P({ id: 't2', order: 'A-男子-1-2', tech3: '' }),
+      r2P({ id: 't3', order: 'A-男子-1-3', r2tech1: '右', r2tech2: '捨', r2tech3: '' }),
+      { id: 'u1', order: 'A-男子-2-1', sourcePlayerId: 't1', tech1: '右', tech2: '捨', tech3: '' },
+      { id: 'u2', order: 'A-男子-2-2', sourcePlayerId: 't2', tech1: '真', tech2: '連', tech3: '' },
+      { id: 'u3', order: 'A-男子-2-3', sourcePlayerId: 't3', tech1: '右', tech2: '', tech3: '' },
+      { id: 'u4', order: 'A-男子-2-4', sourcePlayerId: 'nosuch', tech1: '右', tech2: '捨', tech3: '' }
+    ];
+    assert('isTechMissing: 申請どおりの 2 本 → 数えない / 申請なしの 2 本・申請と違う・元の行が無い → 数える / 一巡目の 2 本 → 数える',
+      ['u1', 'u2', 'u3', 'u4', 't2'].map(function(id) {
+        return Courts.isTechMissing(r2twoP.filter(function(p) { return p.id === id; })[0], r2twoP);
+      }), [false, true, true, true, true]);
+    assert('stageCountText round1_done: 申請どおりの 2 本は「技 未入力」に入れない',
+      Courts.stageCountText('round1_done', r2twoP), '二巡目 4名　技 未入力 3　一巡目から変更 2');
+    assert('statusConfirmMessage round1_done → round2: 申請どおりの 2 本だけなら ⚠ を出さない',
+      [Courts.statusConfirmMessage('round1_done', 'round2', [r2twoP[0], r2twoP[3]]).indexOf('⚠'),
+       Courts.statusConfirmMessage('round1_done', 'round2', r2twoP).split('\n')[0]],
+      [-1, '⚠ 二巡目の技が未入力の選手が 3名います。']);
+    var rpfLocal = { id: 'x', name: '旧', bib: 12, r2tech1: '右', note: '古い', rev: 1 };
+    var rpfKeep = rpfLocal;
+    Courts.replacePlayerFields(rpfLocal, { id: 'x', name: '新', rev: 2 });
+    assert('replacePlayerFields: 応答に無いキー（bib・申請・note）を消して写す（同じオブジェクト）',
+      [rpfKeep === rpfLocal, JSON.stringify(rpfLocal)], [true, JSON.stringify({ id: 'x', name: '新', rev: 2 })]);
     assert('round2Differs: 違う → true / 同じ（trim）→ false / 一巡目の行が無い → false / 一巡目の行 → false',
       [Courts.round2Differs(r2dP[3], r2dP), Courts.round2Differs(r2dP[4], r2dP),
        Courts.round2Differs(r2dP[5], r2dP), Courts.round2Differs(r2dP[0], r2dP)], [true, false, false, false]);
@@ -4990,6 +5024,9 @@
        [false, '二巡目の形: 同じ形は 1 回までです（真）'],
        [false, '二巡目の形: レンタルの選手は抜刀してからの形だけ選べます']]);
     assert('parsePasteRows: 表に無い二巡目の技は badR2Techs に', r2paste.rows[1].badR2Techs, ['ナゾ']);
+    var r2pasteOrder = Courts.parsePasteRows('己,A,男,,立位袈裟,座位袈裟,立位横一,,,レンタル,真,ナゾ,ナゾ2', TECHNIQUES).rows[0];
+    assert('parsePasteRows: 二巡目の技は表に無い技を全部先に（レンタルより先。サーバーの bulk と同じ順・文言）',
+      [r2pasteOrder.ok, r2pasteOrder.error], [false, '二巡目の技「ナゾ」「ナゾ2」は技リストにありません']);
     assert('parsePasteRows: 10 列以下の行は今までどおり（申請は空）',
       [r2paste.rows[4].ok, r2paste.rows[4].r2techs, r2paste.rows[4].techs], [true, ['', '', ''], ['真', '連', '左']]);
 

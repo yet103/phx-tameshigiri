@@ -177,7 +177,7 @@ var Courts = (function() {
       if (f.newFace && !p.isNewFace) return false;
       if (f.noTech && !hasNoTech(p)) return false;
       if (!r2Matches(f.r2, p)) return false;
-      if (q &&normalizeName(p.name).indexOf(q) === -1) return false;
+      if (q && normalizeName(p.name).indexOf(q) === -1) return false;
       return true;
     });
   }
@@ -370,6 +370,18 @@ var Courts = (function() {
     return !p || !p.tech1 || !p.tech2 || !p.tech3;
   }
 
+  // 件数の「技 未入力」に数えるか（isTechIncomplete に二巡目の申請の例外を足したもの）。
+  // 二巡目の行で、元の一巡目の行に申請（r2tech）があり、その行の技が申請どおり（round2TechsOf）なら
+  // 2 本だけでも数えない（申請どおりの 2 本は意図的。通し試験の確認 1）。一巡目の規則は変えない。
+  // players は元の一巡目の行を探すための全体（絞らずに渡す）。
+  function isTechMissing(p, players) {
+    if (!isTechIncomplete(p)) return false;
+    if (roundOf(p) !== 2) return true;
+    var src = round2SourceOf(p, players);
+    if (!src || !EventStatus.hasRound2Techs(src)) return true;
+    return !EventStatus.sameTechs([p.tech1, p.tech2, p.tech3], EventStatus.round2TechsOf(src));
+  }
+
   // 段階表示に添える件数。
   //   進行中（round1 / round2）→ その巡目の「採点済み n / N」
   //   draft                    → これから採点する一巡目の人数と技未入力の件数
@@ -402,7 +414,7 @@ var Courts = (function() {
     }
     if (status === 'round1_done') {
       var r2 = list.filter(function(p) { return roundOf(p) === 2; });
-      return '二巡目 ' + r2.length + '名　技 未入力 ' + r2.filter(isTechIncomplete).length +
+      return '二巡目 ' + r2.length + '名　技 未入力 ' + r2.filter(function(p) { return isTechMissing(p, list); }).length +
         '　一巡目から変更 ' + r2.filter(function(p) { return round2Differs(p, list); }).length;
     }
     return '';
@@ -465,6 +477,19 @@ var Courts = (function() {
       '二巡目の形を変えると得点が変わる可能性があります。' +
       '保存後に採点画面でこの選手の二巡目を開き、「計算し直して保存」を押してください。\n\n' +
       'このまま保存しますか？';
+  }
+
+  // 選手の控え local を、サーバーが返した行 row で置き換える（同じオブジェクトを書き換える）。
+  // サーバーは「無ければキーを持たない」形で返す（bib を消した・申請を空にした等）ので、row に無いキーは
+  // local からも消してから写す（Object.assign だけだと消えたキーの古い値が残る。レビュー指摘 2026-10-03）。
+  // PC 運営の desk-players.js（absorbRow）と desk-round2.js（absorbSource）で共用。
+  function replacePlayerFields(local, row) {
+    if (!local || !row) return local;
+    Object.keys(local).forEach(function(k) {
+      if (!Object.prototype.hasOwnProperty.call(row, k)) delete local[k];
+    });
+    Object.assign(local, row);
+    return local;
   }
 
   // 3 枠の技の誤りをまとめて返す（試合開始・二巡目の開始の検査、貼り付け、画面の赤枠で共用）。
@@ -562,7 +587,7 @@ var Courts = (function() {
       // 試合開始と同じ形（技が全員入っていれば短く、未入力がいるときだけ注意）。
       // 一巡目から形を変える選手の人数を情報として足す（設計書 5.3）。
       var r2rows = round(2);
-      var missing2 = r2rows.filter(isTechIncomplete).length;
+      var missing2 = r2rows.filter(function(p) { return isTechMissing(p, list); }).length;
       var changed = r2rows.filter(function(p) { return round2Differs(p, list); }).length;
       var chLine = '二巡目 ' + r2rows.length + '名のうち、一巡目から形を変える選手: ' + changed + '名';
       if (missing2 === 0) return chLine + '\n二巡目を開始しますか？';
@@ -1053,6 +1078,7 @@ var Courts = (function() {
     scoreMayChange: scoreMayChange,
     scoreChangeConfirmMessage: scoreChangeConfirmMessage,
     isTechIncomplete: isTechIncomplete,
+    isTechMissing: isTechMissing,
     stageCountText: stageCountText,
     statusConfirmMessage: statusConfirmMessage,
     startBlockers: startBlockers,
@@ -1061,6 +1087,7 @@ var Courts = (function() {
     round2Differs: round2Differs,
     round2LinkedScored: round2LinkedScored,
     round2ChangeConfirmMessage: round2ChangeConfirmMessage,
+    replacePlayerFields: replacePlayerFields,
     unknownTechs: unknownTechs,
     finalistDiffMessage: finalistDiffMessage,
     blockerMessage: blockerMessage,

@@ -129,15 +129,20 @@ a { color: var(--accent); }
 .desk-players-wrap { overflow-x: auto; padding-bottom: 46px; }
 /* table-layout: fixed は表そのものに幅が無いと列幅を「比率」としてしか使わず、
    窓を狭めても列が縮むだけでスクロールが起きない（確認で見つかった）。
-   列幅の合計（36+44+150+76+84+46+80+64+44+113*3+150+52+40 = 1205px。150 は「二巡目の形」の列。
-   設計書 2026-10-03 6.1。以前のコメントは col-bib を 76px にしたときの更新が漏れて 1039 のままだった）を表の width に
-   して初めて、狭いときに表の枠だけが横スクロールし、sticky の名前列が効くように
-   なる。border-collapse: collapse は既定の border-spacing（列の間の隙間）を
-   消して幅の計算を列幅の合計どおりにする。1280px の窓の内側（.desk-players-wrap）に
-   収まるようレビューで詰めた数値（列を足したら必ずこの合計も直すこと。合わないと
-   列がじわじわずれる）。 */
-.desk-players-table { table-layout: fixed; width: 1205px; border-collapse: collapse; }
+   列幅の合計（34+44+136+64+78+44+60+56+40+104*3+96+42+34 = 1040px。96 は「二巡目の形」の列。
+   設計書 2026-10-03 6.1）を表の width にして初めて、狭いときに表の枠だけが横スクロールし、
+   sticky の名前列が効くようになる。border-collapse: collapse は既定の border-spacing（列の間の隙間）を
+   消して幅の計算を列幅の合計どおりにする（外枠の 2px が足されて、実際の表は 1042px）。
+   1280px の窓の内側（.desk-players-wrap）は 1280 − 左の区画 180 − 縦スクロールバー 15 − .desk-main の
+   左右の余白 40 = 1045px なので、それに収まるよう詰めた数値（「二巡目の形」の列を 150px で足して 1205px に
+   なり横にはみ出していた。レビュー指摘 2026-10-03）。技の列は名前が欠けないようセルとセレクトの余白を
+   詰めて 104px（最長の「立位逆袈裟」が矢印と並んで入る幅）。ゼッケンは数値の上下ボタンを消して 4 桁が入る幅に、
+   級位段位は候補の矢印と「参段」が並んで入る幅にした。列を足したら必ずこの合計も直すこと
+   （合わないと列がじわじわずれる）。1100px の窓では表の枠だけが横スクロールする（名前の列は左に残る）。 */
+.desk-players-table { table-layout: fixed; width: 1040px; border-collapse: collapse; }
 .desk-players-table th, .desk-players-table td { padding: 2px 6px; vertical-align: middle; text-align: center; }
+/* 見出しは折り返さない（.desk-table th の nowrap）ので、左右の余白を詰めて狭い列でも文字を残す */
+.desk-players-table th { padding-left: 3px; padding-right: 3px; }
 /* 上の .desk-table td.num は右寄せ。選手表だけ中央に戻す（同じ詳細度なので後ろのこれが勝つ） */
 .desk-players-table td.num { text-align: center; }
 .desk-players-table tbody tr { height: 34px; }
@@ -145,21 +150,33 @@ a { color: var(--accent); }
 .desk-players-table th.col-name { background: var(--bg-header); }
 .desk-players-table td.col-name { background: var(--card-bg); }
 .desk-players-table tbody tr:hover td.col-name { background: var(--row-selected); }
-.desk-players-table .col-round { width: 36px; }
+.desk-players-table .col-round { width: 34px; }
 .desk-players-table .col-no { width: 44px; }
-.desk-players-table .col-name { width: 150px; }
+.desk-players-table .col-name { width: 136px; }
+/* 名前は読めることを優先して、セルの左右の余白を詰めて入力欄を広く取る（8 字ほどの名前まで欠けない） */
+.desk-players-table td.col-name { padding-left: 3px; padding-right: 3px; }
 /* 選手の追加項目（ゼッケン・級位段位・真剣レンタル）。名前のすぐ右にまとめる。 */
-.desk-players-table .col-bib { width: 76px; }   /* 3〜4 桁のゼッケンが欠けないように（明朝化で広がった） */
-.desk-players-table .col-rank { width: 84px; }
-.desk-players-table .col-rental { width: 46px; text-align: center; }
-.desk-players-table .col-court { width: 80px; }
-.desk-players-table .col-sex { width: 64px; }
-.desk-players-table .col-new { width: 44px; text-align: center; }
-.desk-players-table .col-tech { width: 113px; }
+.desk-players-table .col-bib { width: 64px; }   /* 3〜4 桁のゼッケンが欠けないように（明朝化で広がった） */
+/* ゼッケンの数値の上下ボタンは使わない（打ち込むだけ）ので消して、そのぶん 4 桁を入れる */
+.desk-players-table td.col-bib input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.desk-players-table td.col-bib input[type="number"]::-webkit-inner-spin-button,
+.desk-players-table td.col-bib input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.desk-players-table .col-rank { width: 78px; }
+.desk-players-table .col-rental { width: 44px; text-align: center; }
+.desk-players-table .col-court { width: 60px; }
+.desk-players-table .col-sex { width: 56px; }
+.desk-players-table .col-new { width: 40px; text-align: center; }
+.desk-players-table .col-tech { width: 104px; }
+/* 技のセルとセレクトは左右の余白を詰めて、104px でも技名を欠けさせない */
+.desk-players-table td.col-tech { padding-left: 2px; padding-right: 2px; }
+.desk-players-table td.col-tech .desk-cell-select { padding-left: 2px; padding-right: 2px; }
 /* 二巡目の形（申請）。1 列＋ポップオーバー（desk-players.js の r2Cell。設計書 2026-10-03 6.1・D8） */
-.desk-players-table .col-r2 { width: 150px; }
-.desk-players-table .col-score { width: 52px; color: var(--score-color); font-weight: bold; }
-.desk-players-table th.act, .desk-players-table td.act { width: 40px; }
+.desk-players-table .col-r2 { width: 96px; }
+/* ボタンの文字（「一巡目と同じ」・技名の要約）を広く取るため、セルの余白を詰める */
+.desk-players-table td.col-r2 { padding-left: 2px; padding-right: 2px; }
+.desk-players-table .col-score { width: 42px; color: var(--score-color); font-weight: bold; }
+.desk-players-table th.act, .desk-players-table td.act { width: 34px; }
+.desk-players-table td.act { padding-left: 2px; padding-right: 2px; }
 
 /* セルの入力。ふだんは枠を見せず、触ったときだけ枠を出す（表が線だらけにならない）。 */
 .desk-cell-input, .desk-cell-select {
@@ -465,8 +482,13 @@ a { color: var(--accent); }
 }
 
 /* 二巡目の形登録の区画（desk-round2.js）。「一巡目から」の列（同じ／変更）と、末尾の「▲ …へ」 */
-/* 「一巡目から」の列を足したぶん、1100px の窓（決戦の枠の中の表）でも横にはみ出さないよう技のセレクトを詰める */
-.desk-match-table.desk-round2-table select { min-width: 118px; }
+/* 「一巡目から」の列を足したぶん、1100px の窓（決戦の枠の中の表）でも横にはみ出さないよう技のセレクトを詰める。
+   1100px の窓の内側は 1100 − 180 − 15 − 40 = 865px。118px では表が 897px になりはみ出していた（レビュー指摘
+   2026-10-03）。セレクトの幅は既定では一番長い選択肢で決まる（min-width だけでは縮まない）ので width で決める
+   （下の .desk-match-table select の min-width: 130px もここで上書きする）。
+   100px は最長の「立位逆袈裟」が矢印と並んで入る幅 */
+.desk-match-table.desk-round2-table select { width: 100px; min-width: 100px; padding-left: 3px; padding-right: 3px; }
+.desk-match-table.desk-round2-table td.copy .desk-btn { padding: 0 6px; }
 .desk-round2-table td.differ.changed { color: var(--score-color); font-weight: bold; }
 .desk-round2-table td.differ.same, .desk-round2-table td.differ.none { color: var(--text-muted); }
 .desk-round2-tosteps { margin-top: 16px; }

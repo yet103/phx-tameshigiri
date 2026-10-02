@@ -625,6 +625,7 @@
         });
       });
       updateTechNote();
+      updateR2Note();   // 一巡目の技が変わると、二巡目の欄が下書き（一巡目と同じ）かどうかも変わる
     }
     renderTechChips();
 
@@ -676,6 +677,15 @@
       return TechPicker.toArray(r2State).every(function(t) { return !t; });
     }
 
+    // 下書き（チップは埋まっているが、上の一巡目の技と 3 つとも同じ）。送るのは空（r2Values）なので
+    // 「申請あり」に見せず、チップを薄くして「（下書き: 一巡目と同じ）」と添える（レビュー指摘 9）。
+    function r2IsDraft() {
+      return !r2IsEmpty() &&
+        EventStatus.sameTechs(TechPicker.toArray(r2State), TechPicker.toArray(techState));
+    }
+
+    // 一巡目の技（techState）を変えたときにも呼ばれる（下書きかどうかが変わるため）。
+    // 二巡目の欄を作る前（showR2 が未定義）の呼び出しは何もしない。
     function updateR2Note() {
       if (!showR2) return;
       if (!hasTechniques(ctx)) { r2Dup.textContent = ''; }
@@ -683,8 +693,12 @@
         var dup = Courts.duplicateForms(TechPicker.toArray(r2State), techCache, common.isFemale());
         r2Dup.textContent = dup.length > 0 ? '同じ形は 1 回までです（' + dup[0] + '）' : '';
       }
-      r2Note.textContent = r2IsEmpty() ? 'いまは一巡目と同じ形で二巡目を行います。' : '';
-      btnR2Clear.hidden = r2IsEmpty();
+      var draft = r2IsDraft();
+      r2Chips.classList.toggle('r2-draft', draft);
+      r2Note.textContent = r2IsEmpty() ? 'いまは一巡目と同じ形で二巡目を行います。'
+        : draft ? '（下書き: 一巡目と同じ）変えたい枠を押して選び直してください。このままなら一巡目と同じ形で二巡目を行います。'
+          : '';
+      btnR2Clear.hidden = r2IsEmpty() || draft;
     }
 
     function renderR2Chips() {

@@ -969,12 +969,15 @@
   // 手元の控え（ctx.players）に取り込み、表にその行があれば 1 行だけ作り直す（表全体は描き直さない。
   // 他の行で入力途中の文字やフォーカスを消さないため。saveCell の伝播と同じ方針）。
   // 控えは同じオブジェクトを書き換える（他の行のクロージャが掴んでいる参照もそのまま新しくなる）。
+  // サーバーは「無ければキーを持たない」形で返す（bib を消した・申請を空にした・note が無い等）ので、
+  // 応答に無いキーは控えからも消してから写し、adopt で表の前提の形（bib: null・rank: ''・申請 '' 等）に
+  // そろえる（Object.assign だけだと、一巡目のゼッケンを消しても二巡目の行に古いゼッケンが残った。レビュー指摘）。
   function absorbRow(ctx, row) {
     if (!row || typeof row.id !== 'string') return null;
     var local = (ctx.players || []).filter(function(q) { return q && q.id === row.id; })[0];
     if (!local) return null;
-    EventStatus.R2_TECH_KEYS.forEach(function(k) { delete local[k]; });   // 無いキー＝空
-    Object.assign(local, row);
+    Courts.replacePlayerFields(local, row);
+    adopt(local, row);
     rebuildRowOf(ctx, local);
     return local;
   }
@@ -1479,14 +1482,15 @@
     return techs.map(function(t) { return t || '—'; }).join('・');
   }
 
-  // セルのボタンの見え方。申請なし＝「（一巡目と同じ）」を薄く、申請あり＝技名の要約（幅を超えたら …）。
+  // セルのボタンの見え方。申請なし＝「一巡目と同じ」を薄く、申請あり＝技名の要約（幅を超えたら …）。
+  // 列は 96px（1280px の窓に表を収めるため。desk.css）なので、括弧を付けずに収まる文言にした。
   // 誤りがあれば赤枠（.desk-cell-bad）にして、理由を title に出す。
   function paintR2Button(ctx, b, p) {
     var has = EventStatus.hasRound2Techs(p);
     var techs = EventStatus.round2TechsOf(p);
     var issues = has ? r2IssueTexts(ctx, p, techs) : [];
     b.className = 'desk-r2-btn' + (has ? ' set' : ' same') + (issues.length > 0 ? ' desk-cell-bad' : '');
-    b.textContent = has ? r2Summary(techs) : '（一巡目と同じ）';
+    b.textContent = has ? r2Summary(techs) : '一巡目と同じ';
     b.title = (has ? '二巡目の形: ' + r2Summary(techs) : '二巡目も一巡目と同じ形です（押すと変えられます）') +
       (issues.length > 0 ? '\n' + issues.join('\n') : '');
   }
@@ -1669,9 +1673,12 @@
   async function saveR2(ctx, p, values, ui) {
     if (r2Busy) return;
     var patch = { r2tech1: values[0], r2tech2: values[1], r2tech3: values[2] };
-    var before = EventStatus.normalizedRound2Techs(p);
+    // 比べる元は保存されている申請そのもの（技だけの PATCH では正規化しないので、一巡目の形と同じ申請が
+    // 残っていることがある。それを「一巡目と同じにする」で消すときは送る）。
+    var before = EventStatus.hasRound2Techs(p) ? EventStatus.round2TechsOf(p) : null;
     var after = EventStatus.normalizedRound2Techs(Object.assign({}, p, patch));
-    if ((!before && !after) || (before && after && EventStatus.sameTechs(before, after))) {
+    var unchanged = before ? EventStatus.sameTechs(before, values) : !after;
+    if (unchanged) {
       closePopover(true);   // 変わっていない（下書きのまま保存した・同じ申請を選び直した）。送らない
       return;
     }

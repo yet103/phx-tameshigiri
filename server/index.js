@@ -1393,14 +1393,19 @@ function applyRound2Techs(p) {
 
 // 二巡目の形の検証（bulk rows。設計書 3.1）。戻り値はエラー文言（行番号は呼び出し側が付ける）か null。
 // 規則は一巡目の技と同じ: 表に無い技名・レンタルなら drawn だけ・repeatable でない形の 2 回以上
-// （接尾辞は同じ形として数える）。courts.js の parsePasteRow と同じ順・同じ文言。
+// （接尾辞は同じ形として数える）。courts.js の parsePasteRow（techIssues）と同じ順・同じ文言:
+// 表に無い技名を全部（「」でつなぐ）→ レンタル → 同じ形（レビュー指摘 2026-10-03 で順をそろえた）。
 function checkRound2Techs(techList, techs, isFemale, rental) {
+  const unknown = [];
+  for (const t of techs) {
+    if (t && !resolveTechnique(techList, t, isFemale) && unknown.indexOf(t) === -1) unknown.push(t);
+  }
+  if (unknown.length > 0) return `二巡目の技「${unknown.join('」「')}」は技リストにありません`;
   const formCounts = Object.create(null);
   let dupForm = '';
   for (const t of techs) {
     if (!t) continue;
     const resolved = resolveTechnique(techList, t, isFemale);
-    if (!resolved) return `二巡目の技「${t}」は技リストにありません`;
     if (rental && resolved.drawn !== true) return '二巡目の形: ' + RENTAL_DRAWN_ONLY;
     if (resolved.repeatable !== true) {
       const display = stripGenderSuffix(resolved.name);
@@ -2912,8 +2917,10 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     // player が一巡目行でなければ linkedRows は空なので何もしない。
     //   tech1〜3 … 二巡目の形（申請）を直した・申請の無い選手の一巡目の形を直した（設計書 2026-10-03
     //     3.3.1。EventStatus.round2SyncTarget。採点済みの行への書き写しは上の 409 scored を越えた force のときだけ）
-    // 申請の正規化（2.3）: 申請・技・巡目のどれかが来たら置き直す（一巡目以外へ移った行は申請を消す）。
-    if (r2Sent || Object.keys(newTechs).length > 0 || body.round !== undefined) applyRound2Techs(player);
+    // 申請の正規化（2.3）: 申請を送ったときだけ置き直す。技だけの PATCH では申請に触らない
+    // （一巡目の形を一時的に申請と同じにしただけで申請が黙って消え、戻しても復活しないため。レビュー指摘）。
+    // body.round で一巡目以外へ移った行は申請を消す。
+    if (r2Sent || (body.round !== undefined && EventStatus.roundOf(player) !== 1)) applyRound2Techs(player);
     const nameCopied = newName !== undefined && String(player.name || '') !== String(before.name || '');
     const linkedOut = [];
     linkedRows.forEach(p => {

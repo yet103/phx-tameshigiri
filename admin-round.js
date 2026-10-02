@@ -366,7 +366,8 @@ var AdminRound = (function() {
     if (statEl && statStatus && CTX) statEl.textContent = Courts.stageCountText(statStatus, CTX.players || []);
     if (!counterEl) return;
     var rows = visibleRows();
-    var n = rows.filter(Courts.isTechIncomplete).length;
+    // 申請どおりの 2 本の二巡目の行は未入力に数えない（Courts.isTechMissing。通し試験の確認 1）
+    var n = rows.filter(function(p) { return Courts.isTechMissing(p, (CTX && CTX.players) || []); }).length;
     var prefix = '';
     if (currentCourt) {
       // 未分類はそのままの表記。それ以外は「A コート」のように「コート」を付ける。

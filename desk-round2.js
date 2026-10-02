@@ -82,12 +82,11 @@
     // 先頭に工程表（「二巡目を開始 ▶」はこの中。試合進行と同じ部品・同じ確認）
     container.appendChild(DeskMatch.buildSteps(st, ctx, { where: 'round2' }));
 
+    // 案内は工程表の 1 行（DeskMatch の stepTodo の where: 'round2'）に寄せた。ここには書き戻しの注記だけ
     var guide = document.createElement('p');
     guide.className = 'desk-note';
     guide.id = 'round2Guide';
-    guide.textContent = '申請された二巡目の形（申請の無い人は一巡目の形）を入れています。' +
-      '当日の変更があればここで直してください。試技順は一巡目の得点が低い順です。' +
-      'ここで直した形は、その選手の二巡目の形の申請（選手登録の「二巡目の形」）にも書き戻されます。';
+    guide.textContent = 'ここで直すと選手登録の申請（「二巡目の形」）にも書き戻されます。';
     container.appendChild(guide);
 
     // 一巡目の行が終了後に確定・得点変更されたときの選考の差（網羅検証 S18。試合進行と同じ警告）
@@ -450,7 +449,7 @@
 
   // 帯の「二巡目 N名　技 未入力 n　一巡目から変更 m」。未入力が 0 なら緑、残っていれば赤。
   function fillCount(el, ctx) {
-    var n = roundTwo(ctx.players).filter(Courts.isTechIncomplete).length;
+    var n = roundTwo(ctx.players).filter(function(p) { return Courts.isTechMissing(p, ctx.players); }).length;
     el.textContent = Courts.stageCountText('round1_done', ctx.players || []);
     el.className = 'desk-match-count' + (n === 0 ? ' done' : '');
   }
@@ -478,13 +477,13 @@
 
   // 応答の source（書き戻した一巡目の行）を手元の控え（ctx.players）に取り込む。表には出さないが、
   // 「一巡目と同じ形に戻す」と「一巡目から」の列が一巡目の行を読むため。同じオブジェクトを書き換えるので、
-  // 行が掴んでいる参照（buildRow の src）もそのまま新しくなる。申請のキーは無い＝空なので先に消す。
+  // 行が掴んでいる参照（buildRow の src）もそのまま新しくなる。応答に無いキー（空にした申請・消した
+  // ゼッケン等）は控えからも消してから写す（Courts.replacePlayerFields。選手登録の absorbRow と同じ作り）。
   function absorbSource(ctx, row) {
     if (!row || typeof row.id !== 'string') return;
     var local = (ctx.players || []).filter(function(q) { return q && q.id === row.id; })[0];
     if (!local) return;
-    EventStatus.R2_TECH_KEYS.forEach(function(k) { delete local[k]; });
-    Object.assign(local, row);
+    Courts.replacePlayerFields(local, row);
   }
 
   function onTechChange(p, selects, ctx, tr) {

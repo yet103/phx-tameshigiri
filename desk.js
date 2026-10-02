@@ -442,7 +442,10 @@ var Desk = (function() {
     if (from === 'round1_done' && to === 'round2') {
       var r2Blockers = Courts.round2StartBlockers(ev, players);
       if (r2Blockers.length > 0) {
-        alert(Courts.blockerMessage(r2Blockers, '二巡目を開始できません。形登録で直してください。'));
+        // 文言は工程表の帯と同じ（形登録の区画から押したら「下の表で」。desk-match.js の where）
+        alert(Courts.blockerMessage(r2Blockers, currentTab === 'round2'
+          ? '二巡目を開始できません。下の表で直してください。'
+          : '二巡目を開始できません。形登録で直してください。'));
         return;
       }
     }
