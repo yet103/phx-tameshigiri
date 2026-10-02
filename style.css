@@ -698,6 +698,51 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .note-preset-head { background: var(--band-bg); color: var(--band-text); border-color: var(--gold); }
 .note-preset-close { background: var(--band-bg-2); color: var(--band-text); border: 1px solid var(--gold-deep); }
 
+/* ===== 採点専用モード（採点の鍵で登録した端末。設計書 2026-10-03 6.4） =====
+   運営への導線（admin-only）を隠し、大会バーの上に「採点専用 ・ A コート ・ 期限」の札と解除のボタンを出す。
+   大会・コートの選択は鍵の範囲に固定（select は disabled）。 */
+body.scorer-mode .admin-only { display: none !important; }
+.scorer-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 4px var(--page-gutter);
+  background: var(--band-bg);
+  color: var(--band-text);
+  border-bottom: 1px solid var(--gold);
+  font-size: 13px;
+}
+.scorer-bar[hidden], .scorer-hint[hidden] { display: none; }
+.scorer-badge { font-weight: bold; color: var(--gold-light); }
+.scorer-logout {
+  margin-left: auto;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: 13px;
+  background: var(--band-bg-2);
+  color: var(--band-text);
+  border: 1px solid var(--gold-deep);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.scorer-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  padding: 6px var(--page-gutter);
+  background: var(--bg-secondary);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.scorer-hint span { flex: 1 1 16em; }
+.scorer-hint button { min-height: 36px; padding: 0 12px; cursor: pointer; }
+/* 固定した選択欄は押せないことが分かる見た目に（文字は読めるまま） */
+body.scorer-mode .event-bar select:disabled { opacity: 1; cursor: default; }
+
 /* ===== スマホ幅の採点表 =====
    一般規則（.score-table-wrap / td.tech-name）より後ろに置かないと同じ詳細度で負けるため、末尾に置く。 */
 @media (max-width: 767px) {

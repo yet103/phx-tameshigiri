@@ -31,6 +31,10 @@ var App = (function() {
   var recalcRow = null;
   // 補正点（行・全体）の上限（網羅検証 S4。サーバーは範囲外を 400 で拒む）
   var ADJUST_LIMIT = 999;
+  // 採点の鍵で登録した端末なら GET /api/session の応答（採点専用モード。設計書 2026-10-03 6.4）。
+  // 運営（Basic・開発）と、セッションを読めなかったときは null（今までどおりの画面）。
+  var scorerSession = null;
+  var SCORER_HINT_KEY = 'tmg_scorer_hint_seen';   // ブックマークの案内を読んだ印
 
   // --- DOM参照 ---
   var courtLabel       = document.getElementById('courtLabel');
@@ -65,6 +69,10 @@ var App = (function() {
       onConflict: onSaveConflict,
       onSaved: onEntrySaved
     });
+    // 採点の鍵で登録した端末なら、大会・コートを鍵の範囲に固定する採点専用モードにする。
+    // 読めない（通信失敗・古いサーバー）ときは今までどおりの画面（守りの本体はサーバーの判定表）。
+    var session = await Api.getSession();
+    if (session && session.ok && Scope.isScorer(session)) enterScorerMode(session);
     // 技術データをAPIから取得してScoringに注入
     var techData = await Api.loadTechniques();
     if (techData && techData.techniques) {
@@ -87,12 +95,16 @@ var App = (function() {
 
     // 選択状態を復帰する（URLハッシュ → localStorage の順）
     var restored = Route.restore();
+    // 採点専用では、範囲外（別の大会・別のコート）の控えやブックマークを黙って開かない。
+    // 鍵の大会・コートに置き換える（onEventSelect が Route.set で URL と控えも書き直す）。
+    if (scorerSession) restored = Scope.clampRoute(restored, scorerSession, null);
     if (restored && restored.eventId) {
       document.getElementById('eventSelect').value = restored.eventId;
       await onEventSelect(restored.eventId, restored.court || '');
     }
     // ブラウザの戻る/進むに追従する
     Route.onChange(async function(sel) {
+      if (scorerSession) sel = Scope.clampRoute(sel, scorerSession, currentEvent);
       if (!sel) { await onEventSelect(''); return; }
       document.getElementById('eventSelect').value = sel.eventId;
       await onEventSelect(sel.eventId, sel.court || '');
@@ -116,7 +128,10 @@ var App = (function() {
   function onSaveStatus(st) {
     if (!saveStatusEl) return;
     // 401/403 は資格情報の失効。再送では直らず、ページを開き直して再認証する必要がある。
+    // 採点の鍵の端末の 401（session_expired / session_revoked / invite_revoked）は再読み込みでは直らない
+    // （401 の HTML になるだけ）ので、新しい QR で入り直す案内にする（Scope.authLostText）。
     var authLost = st.pending > 0 && (st.lastStatus === 401 || st.lastStatus === 403);
+    var lostText = authLost ? Scope.authLostText(st.lastReason, st.pending) : null;
     saveStatusEl.classList.remove('sending', 'retrying');
     if (st.state === 'idle') {
       saveStatusEl.textContent = '● 保存済み';
@@ -124,7 +139,7 @@ var App = (function() {
       saveStatusEl.textContent = '◌ 保存中…';
       saveStatusEl.classList.add('sending');
     } else if (authLost) {
-      saveStatusEl.textContent = '⚠ 認証が切れました・ページを再読み込みしてください';
+      saveStatusEl.textContent = lostText.status;
       saveStatusEl.classList.add('retrying');
     } else if (st.state === 'conflict') {
       // 送れるものは送り終え、別の端末の更新と衝突した採点だけが端末に残っている
@@ -140,8 +155,7 @@ var App = (function() {
     // 衝突を端末に残している間も出す（「今すぐ再試行」で送り直すと、まだ衝突なら確認がもう一度出る）。
     var stale = st.failingSince && (Date.now() - st.failingSince >= BANNER_AFTER_MS);
     if (authLost) {
-      saveBannerTextEl.textContent =
-        '⚠ 認証が切れています。ページを再読み込みしてください（未保存 ' + st.pending + ' 件は保持されます）';
+      saveBannerTextEl.textContent = lostText.banner;
       saveBannerEl.style.display = 'flex';
     } else if (st.pending > (st.conflicts || 0) && stale) {
       saveBannerTextEl.textContent =
@@ -239,7 +253,13 @@ var App = (function() {
     var title = document.createElement('h3');
     var msg = document.createElement('p');
     msg.className = 'conflict-message';
-    if (c.reason === 'stale') {
+    var outOfScope = c.reason === 'scope' || c.reason === 'field';   // 403（設計書 2026-10-03 6.6）
+    if (outOfScope) {
+      title.textContent = 'この端末の登録では保存できない選手です';
+      msg.textContent = name + (order ? '（' + order + '）' : '') + ' の採点を保存できませんでした。\n' +
+        'この端末の登録では保存できない選手です（別のコート・運営の項目）。\n' +
+        'サーバーの内容を読み込むか、あとで決めてください（この端末に残します）。';
+    } else if (c.reason === 'stale') {
       title.textContent = '別の端末で更新されています';
       msg.textContent = name + (order ? '（' + order + '）' : '') + ' の採点を、別の端末が先に更新しました。\n' +
         'サーバーの内容を読み込みますか／この端末の内容で上書きしますか';
@@ -259,7 +279,8 @@ var App = (function() {
     function scoreText(score, confirmed) {
       return (typeof score === 'number' ? score + '点' : '—') + (confirmed ? '（確定済み）' : '（未確定）');
     }
-    [['サーバー', server ? scoreText(server.score, server.confirmed === true) : '（読み込めませんでした）'],
+    [['サーバー', server ? scoreText(server.score, server.confirmed === true)
+                         : (outOfScope ? '（この端末の範囲外）' : '（読み込めませんでした）')],
      ['この端末', scoreText('score' in entry ? entry.score : (local ? local.score : undefined),
                            'confirmed' in entry ? entry.confirmed === true : !!(local && local.confirmed))]]
       .forEach(function(row) {
@@ -288,6 +309,9 @@ var App = (function() {
     addButton('サーバーの内容を読み込む', 'conflict-load', 'discard');
     if (c.reason === 'stale') {
       addButton('この端末の内容で上書き', 'conflict-overwrite', 'overwrite');
+      addButton('あとで決める（端末に残す）', 'conflict-keep', 'keep');
+    } else if (outOfScope) {
+      // 上書きは出さない（送り直しても同じ 403 になる）
       addButton('あとで決める（端末に残す）', 'conflict-keep', 'keep');
     } else {
       addButton('この端末に残す', 'conflict-keep', 'keep');
@@ -339,6 +363,50 @@ var App = (function() {
       updatePlayerList();
     }
     refreshFromServer();
+  }
+
+  // --- 採点専用モード（採点の鍵で登録した端末。設計書 2026-10-03 6.4） ---
+  // 運営への導線（.admin-only）を隠し、上部に「採点専用 ・ A コート ・ 期限」の札と解除のボタンを出す。
+  // 大会の選択欄は鍵の大会 1 件に固定（refreshEventList）、コートは鍵のコート（refreshCourtList）。
+  function enterScorerMode(session) {
+    scorerSession = session;
+    document.body.classList.add('scorer-mode');
+    var badge = document.getElementById('scorerBadge');
+    badge.textContent = Scope.badgeText(session);
+    if (session.label) badge.title = session.label;
+    document.getElementById('scorerBar').hidden = false;
+    document.getElementById('btnScorerLogout').addEventListener('click', onScorerLogout);
+    document.getElementById('eventSelect').disabled = true;
+    // 初回だけ「ブックマークしてください」（次からの入口になる。join の画面ではなくここで出す。6.1 の 4）
+    var seen = false;
+    try { seen = localStorage.getItem(SCORER_HINT_KEY) === '1'; } catch (e) {}
+    if (!seen) {
+      var hint = document.getElementById('scorerHint');
+      hint.hidden = false;
+      document.getElementById('btnScorerHintClose').addEventListener('click', function() {
+        try { localStorage.setItem(SCORER_HINT_KEY, '1'); } catch (e) {}
+        hint.hidden = true;
+      });
+    }
+  }
+
+  // この端末の登録を解除する（POST /api/session/logout）。未送信があれば止める
+  // （解除すると送れなくなる。端末に残ったまま、もう一度 QR を読むまで届かない）。
+  async function onScorerLogout() {
+    var pending = Outbox.pendingCount();
+    if (pending > 0) {
+      alert('未送信の採点が ' + pending + ' 件あります。送信が終わってから解除してください。\n' +
+            '（登録が切れている場合は、運営に新しい QR をもらって読み取ると送られます）');
+      return;
+    }
+    if (!confirm('この端末の採点の登録を解除します。\n' +
+                 '解除すると、もう一度 QR を読み取るまでこの端末では採点できません。よろしいですか？')) return;
+    var r = await Api.logout();
+    if (!r || !r.ok) {
+      alert('解除できませんでした。通信を確かめて、もう一度押してください。');
+      return;
+    }
+    location.replace('/join');
   }
 
   // --- テーマ ---
@@ -416,7 +484,8 @@ var App = (function() {
 
   // 現在の大会の選手からコート選択肢を作り直す
   function refreshCourtList() {
-    var list = Courts.listFrom(players);
+    // 採点専用では鍵の範囲のコートだけ（1 コートの鍵はそのコート、全コートの鍵は未分類を除く全部）
+    var list = scorerSession ? Scope.allowedCourts(currentEvent, scorerSession) : Courts.listFrom(players);
     // コートは必ず 1 つ選ぶ（「全コート」は無くした。ユーザー要望 2026-09-30: 一覧に他コートや他の部が混ざらないように）
     courtSelect.innerHTML = '';
     for (var i = 0; i < list.length; i++) {
@@ -426,19 +495,22 @@ var App = (function() {
       courtSelect.appendChild(opt);
     }
     // 名簿が入っている大会で、選択中のコートが無い（未選択・そこに無い）なら先頭のコートにする
-    if (players.length > 0 && list.length > 0 && list.indexOf(currentCourt) === -1) {
+    if ((players.length > 0 || scorerSession) && list.length > 0 && list.indexOf(currentCourt) === -1) {
       currentCourt = list[0];
     }
     // 名簿がまだ入っていない場合は、配布されたURLのコート指定を落とさない。
     // 「先に端末を配ってURLを開かせ、後から名簿を入れる」段取りがあるため、
     // 選択肢として残しておく。
-    if (currentCourt && list.indexOf(currentCourt) === -1) {
+    if (currentCourt && list.indexOf(currentCourt) === -1 &&
+        (!scorerSession || Scope.courtAllowed(currentCourt, currentEvent, scorerSession))) {
       var pending = document.createElement('option');
       pending.value = currentCourt;
       pending.textContent = courtOptionLabel(currentCourt);
       courtSelect.appendChild(pending);
     }
     courtSelect.value = currentCourt;
+    // 採点専用で選べるコートが 1 つなら選択欄を固定する（全コートの鍵は大会のコートの中で選べる）
+    courtSelect.disabled = !!scorerSession && courtSelect.options.length <= 1;
   }
 
   // 絞り込みを適用して画面を作り直す
@@ -603,6 +675,8 @@ var App = (function() {
       alert('大会一覧を取得できませんでした。通信を確認してください。');
       return;
     }
+    // 採点専用では鍵の大会だけ（サーバーも 1 件に絞って返す）
+    events = Scope.filterEvents(events, scorerSession);
     var usable = events.filter(function(e) { return EventStatus.of(e) !== 'archived'; });
     var open = usable.filter(function(e) { return EventStatus.isScoringOpen(EventStatus.of(e)); });
     var rest = usable.filter(function(e) { return !EventStatus.isScoringOpen(EventStatus.of(e)); });

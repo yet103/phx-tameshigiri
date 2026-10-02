@@ -1,0 +1,109 @@
+/* 採点端末の登録（join.html）。CSP で style 属性・<style> を使えないので、見た目はすべてここに置く。
+   配色は theme.css の変数（黒金の帯＋生成りの紙）。 */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  max-width: var(--page-max-width);
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+
+.join-band {
+  padding: 10px var(--page-gutter) 12px;
+  background: var(--band-bg);
+  color: var(--band-text);
+  border-bottom: 2px solid var(--gold);
+}
+.join-brand { font-size: 12px; color: var(--band-muted); letter-spacing: .08em; }
+.join-band h1 {
+  margin: 2px 0 0;
+  font-family: var(--mincho);
+  font-size: 22px;
+  color: var(--gold-light);
+  letter-spacing: .04em;
+}
+
+.join-main { padding: 12px var(--page-gutter) 32px; }
+
+.join-status { margin: 4px 0 12px; color: var(--text-muted); font-size: 14px; }
+.join-status:empty { display: none; }
+
+.join-card {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.join-lead { margin: 0 0 10px; font-size: 17px; overflow-wrap: anywhere; }
+.join-lead strong { font-family: var(--mincho); }
+
+.join-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.join-facts dt { color: var(--text-muted); }
+.join-facts dd { margin: 0; overflow-wrap: anywhere; }
+
+.join-note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-left: 4px solid var(--gold-deep);
+  font-size: 14px;
+}
+
+.join-primary, .join-secondary {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  font-size: 17px;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.join-primary {
+  background: var(--band-bg);
+  color: var(--gold-light);
+  border: 2px solid var(--gold);
+}
+.join-primary:disabled, .join-secondary:disabled { opacity: .5; cursor: default; }
+.join-secondary {
+  background: var(--band-bg-2);
+  color: var(--band-text);
+  border: 1px solid var(--gold-deep);
+}
+
+.join-error { border-color: var(--vermilion); border-left-width: 4px; }
+.join-error-text { margin: 0 0 10px; font-weight: bold; white-space: pre-line; overflow-wrap: anywhere; }
+.join-error-text:last-child { margin-bottom: 0; }
+
+.join-paste h2 { margin: 0 0 6px; font-size: 16px; }
+.join-paste p { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); }
+.join-paste-label { display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted); }
+.join-paste textarea {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 8px;
+  font-size: 16px;   /* iOS で拡大されない大きさ */
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+}
+.join-paste .join-paste-error { color: var(--vermilion); font-weight: bold; }
+
+.join-foot { margin: 8px 0 0; font-size: 13px; color: var(--text-muted); }
+.join-foot a { color: var(--accent); }

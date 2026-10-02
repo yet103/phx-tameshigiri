@@ -43,24 +43,36 @@
 <body data-theme="light">
 
   <!-- ページナビ -->
+  <!-- admin-only は採点の鍵で登録した端末（採点専用モード、body.scorer-mode）では隠す（設計書 2026-10-03 6.4） -->
   <div class="page-links">
-    <a href="index.html">トップ</a>
+    <a href="index.html" class="admin-only">トップ</a>
     <strong>採点</strong>
-    <a href="admin.html" id="linkAdmin">運営</a>
-    <a href="techniques.html" id="linkTechniques">技得点表</a>
-    <a href="ranking.html">順位表示</a>
+    <a href="admin.html" id="linkAdmin" class="admin-only">運営</a>
+    <a href="techniques.html" id="linkTechniques" class="admin-only">技得点表</a>
+    <a href="ranking.html" class="admin-only">順位表示</a>
     <a href="help.html">ヘルプ</a>
     <!-- テーマ切替はページリンクの並び（ヘルプの隣）に置き、リンクと同じ文字サイズにする（ユーザー要望） -->
     <button type="button" class="theme-btn" id="btnTheme">🌙 ダーク</button>
   </div>
 
+  <!-- 採点専用モードの札と登録の解除（role === 'scorer' のときだけ app.js が出す） -->
+  <div class="scorer-bar" id="scorerBar" hidden>
+    <span class="scorer-badge" id="scorerBadge"></span>
+    <button type="button" class="scorer-logout" id="btnScorerLogout">この端末の登録を解除</button>
+  </div>
+  <!-- 初回だけのブックマークの案内（既読は localStorage） -->
+  <div class="scorer-hint" id="scorerHint" hidden>
+    <span>この画面をブックマーク（ホーム画面に追加）してください。次からはそこから開けます。</span>
+    <button type="button" id="btnScorerHintClose">閉じる</button>
+  </div>
+
   <!-- 大会選択バー -->
   <div class="event-bar">
-    <select id="eventSelect">
+    <select id="eventSelect" aria-label="大会">
       <option value="">-- 大会を選択 --</option>
     </select>
     <select id="courtSelect" aria-label="コート"></select>
-    <a class="event-admin-link" id="linkEventAdmin" href="admin.html#events">大会の作成は運営画面で</a>
+    <a class="event-admin-link admin-only" id="linkEventAdmin" href="admin.html#events">大会の作成は運営画面で</a>
     <span class="save-status" id="saveStatus">● 保存済み</span>
   </div>
 
@@ -170,6 +182,7 @@
   <script src="data.js"></script>
   <script src="scoring.js"></script>
   <script src="courts.js"></script>
+  <script src="scope.js"></script>
   <script src="status.js"></script>
   <script src="route.js"></script>
   <script src="outbox.js"></script>

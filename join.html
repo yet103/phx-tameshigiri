@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 招待の鍵（#k=…）を読み取って開くページ（設計書 2026-10-03 6.1）。
+       サーバーが CSP（script-src 'self' / style-src 'self'）・Referrer-Policy: no-referrer・no-store を付ける。
+       インラインの <script> / <style> / style 属性は使わない（CSP で止まる）。外部の資源も読まない。 -->
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>採点端末の登録 - PHX試し斬り</title>
+  <meta name="application-name" content="PHX試し斬り">
+  <meta name="apple-mobile-web-app-title" content="PHX試し斬り">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="join.css">
+</head>
+<body data-theme="light">
+  <header class="join-band">
+    <span class="join-brand">PHX試し斬り</span>
+    <h1>採点端末の登録</h1>
+  </header>
+
+  <main class="join-main" id="joinApp">
+    <p class="join-status" id="joinStatus" role="status" aria-live="polite">確認しています…</p>
+
+    <!-- 下見の結果（POST /api/join confirm:false）。ボタンを押すまで登録しない -->
+    <section class="join-card" id="joinPreview" hidden>
+      <p class="join-lead"><strong id="joinEventName"></strong> の <strong id="joinCourt"></strong> の採点端末として登録します。</p>
+      <dl class="join-facts">
+        <dt>期限</dt><dd id="joinExpiry"></dd>
+        <dt>登録済みの端末</dt><dd id="joinDevices"></dd>
+        <dt>名前</dt><dd id="joinLabel"></dd>
+      </dl>
+      <p class="join-note" id="joinNote" hidden></p>
+      <button type="button" class="join-primary" id="btnJoinConfirm">この端末を登録する</button>
+    </section>
+
+    <!-- 登録できた -->
+    <section class="join-card join-done" id="joinDone" hidden>
+      <p class="join-lead">登録しました。この端末は <strong id="joinDoneScope"></strong> の採点端末です。</p>
+      <button type="button" class="join-primary" id="btnOpenScoring">採点画面を開く</button>
+    </section>
+
+    <!-- 失敗 -->
+    <section class="join-card join-error" id="joinError" hidden>
+      <p class="join-error-text" id="joinErrorText"></p>
+      <button type="button" class="join-secondary" id="btnJoinRetry" hidden>もう一度</button>
+    </section>
+
+    <!-- 鍵の貼り付け（QR を読めないとき・ホーム画面のアイコンから開いたとき。設計書 6.9） -->
+    <section class="join-card join-paste" id="joinPaste" hidden>
+      <h2>QR の URL を貼り付けて登録する</h2>
+      <p>運営が出した QR をカメラで読み取って、このページを開いてください。
+        読み取れないときや、ホーム画面のアイコンから開いたときは、運営からもらった URL（または鍵）をここに貼り付けてください。</p>
+      <form id="joinPasteForm" autocomplete="off">
+        <label class="join-paste-label" for="joinPasteInput">URL または鍵</label>
+        <textarea id="joinPasteInput" rows="3" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+        <p class="join-paste-error" id="joinPasteError" role="alert" hidden></p>
+        <button type="submit" class="join-secondary">確認する</button>
+      </form>
+    </section>
+
+    <p class="join-foot">この QR は採点ができる鍵です。写真に撮って送らないでください。 <a href="help.html">ヘルプ</a></p>
+  </main>
+
+  <script src="api.js"></script>
+  <script src="join.js"></script>
+</body>
+</html>

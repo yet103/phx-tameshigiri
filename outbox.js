@@ -39,6 +39,10 @@ var Outbox = (function() {
   var SCORE_KEYS = ['score', 'result', 'adjust', 'totalAdjust', 'confirmed'];
   // 衝突として残す 409 の理由。それ以外の 409（locked など）は従来どおり送れないものとして捨てる。
   var CONFLICT_REASONS = ['stale', 'not_scorable'];
+  // 衝突と同じく捨てずに残す 403 の理由（設計書 2026-10-03 6.6）。採点の鍵の端末で、別のコート・
+  // 未分類の行（scope）や運営の項目（field）を送ったとき。採点専用の画面は範囲外の選手を出さないので
+  // 通常は起きない（古いキューの残り・コートの付け替え・別の QR で入り直したとき）。
+  var SCOPE_REASONS = ['scope', 'field'];
 
   var queue = [];
   var sending = false;       // 送信処理が走っている最中か
@@ -53,6 +57,7 @@ var Outbox = (function() {
   var dropped = [];          // 恒久的に送れず捨てたエントリ
   var conflicted = [];       // 衝突になって、まだ呼び出し元へ知らせていないエントリ
   var lastStatus = null;     // 直近に失敗した HTTP ステータス（0=通信断）。成功か破棄で null に戻す
+  var lastReason = '';       // 直近に失敗した応答の reason（401 の session_expired など）。lastStatus と一緒に戻す
   var onlineBound = false;
   var aliveTimer = null;     // 生存時刻を書き、閉じたタブのエントリを引き取る見回りのタイマー
 
@@ -216,6 +221,8 @@ var Outbox = (function() {
   // 4xx はリクエスト自体が受け付けられていないので再送しても同じ。
   // ただし 408（タイムアウト）と 429（レート制限）は時間を置けば通る。
   // 401 / 403（資格情報の失効）も、ページを再読み込みして再認証すれば通るので捨てない。
+  // 採点の鍵の端末の 401（session_expired / session_revoked / invite_revoked）も捨てない。
+  // 新しい QR で入り直すと送られる（設計書 2026-10-03 D6: 取り消された端末の未送信は端末に残す）。
   // 捨てると未送信の採点が黙って失われる。
   // 409 stale / not_scorable は捨てずに衝突として残す（drain で先に分ける）。
   function isPermanentFailure(status) {
@@ -224,9 +231,12 @@ var Outbox = (function() {
     return status >= 400 && status < 500;
   }
 
-  // 409 の応答が「衝突」（捨てずに確認する）か
+  // 応答が「衝突」（捨てずに確認する）か。409 stale / not_scorable と、403 scope / field。
   function isConflict(res) {
-    return !!res && res.status === 409 && CONFLICT_REASONS.indexOf(res.reason) !== -1;
+    if (!res) return false;
+    if (res.status === 409) return CONFLICT_REASONS.indexOf(res.reason) !== -1;
+    if (res.status === 403) return SCOPE_REASONS.indexOf(res.reason) !== -1;
+    return false;
   }
 
   // まだ送れていない採点を、サーバーから読み直した選手データに上書きする。
@@ -273,7 +283,8 @@ var Outbox = (function() {
       pending: queue.length,
       conflicts: conflicts,
       failingSince: failingSince,
-      lastStatus: lastStatus
+      lastStatus: lastStatus,
+      lastReason: lastReason
     };
   }
 
@@ -442,12 +453,14 @@ var Outbox = (function() {
           backoffMs = BACKOFF_MIN;
           failingSince = null;
           lastStatus = null;
+          lastReason = '';
           if (savedHandler) {
             try { savedHandler(entry, savedPlayer); } catch (e) {}
           }
           notify();
         } else if (isConflict(res)) {
-          // 別の端末が先に更新した（stale）・今は採点できない巡目（not_scorable）。
+          // 別の端末が先に更新した（stale）・今は採点できない巡目（not_scorable）・
+          // この端末の登録の範囲外（403 scope / field）。
           // 捨てずに衝突の印を付けて残し、確認を呼び出し元に任せる。
           // 送信中に同じ選手が再採点されていれば、差し替わった新しいエントリに印を付ける。
           var held = findEntry(entry.eventId, entry.playerId);
@@ -461,6 +474,7 @@ var Outbox = (function() {
             delete held.maybeApplied;
             save();
             lastStatus = null;
+            lastReason = '';
             if (savedHandler) {
               try {
                 savedHandler({ eventId: held.eventId, playerId: held.playerId, baseRev: fromRev }, res.player);
@@ -471,6 +485,7 @@ var Outbox = (function() {
           }
           if (held) {
             held.conflict = {
+              status: res.status,
               reason: res.reason,
               error: res.error || '',
               player: res.player || null,
@@ -480,6 +495,7 @@ var Outbox = (function() {
           }
           save();
           lastStatus = null;
+          lastReason = '';
           notify();
         } else if (res && isPermanentFailure(res.status)) {
           // 送り先が存在しない、リクエストが受け付けられない等。
@@ -493,11 +509,13 @@ var Outbox = (function() {
           entry.dropError = res.error || '';
           dropped.push(entry);
           lastStatus = null;
+          lastReason = '';
           notify();
         } else {
           // 届いたかどうか分からない失敗なら、送った本文を控える（あとの 409 stale で自分の送信と見分ける）
           if (isAmbiguousFailure(res) && rememberMaybeApplied(entry, body)) save();
           lastStatus = res ? res.status : 0;
+          lastReason = (res && typeof res.reason === 'string') ? res.reason : '';
           if (!failingSince) failingSince = Date.now();
           sending = false;
           notify();
@@ -596,8 +614,9 @@ var Outbox = (function() {
   // 起動時に呼ぶ。localStorage の残件があれば自動送信する。
   // onDiscard は、送り先が存在せず恒久的に送れなかったエントリの配列を受け取る。
   // handlers（省略可）:
-  //   onConflict(entry) … 409 stale / not_scorable で衝突になったエントリ（entry.conflict に
-  //                       { reason, error, player, eventStatus }）。呼び出し元が確認して resolveConflict で答える。
+  //   onConflict(entry) … 409 stale / not_scorable・403 scope / field で衝突になったエントリ（entry.conflict に
+  //                       { status, reason, error, player, eventStatus }。403 の player は null）。
+  //                       呼び出し元が確認して resolveConflict で答える。
   //   onSaved(entry, player) … 送信が成功したエントリと、サーバーの保存後の選手（rev 入り。無ければ null）。
   //                       時間切れのあとに届いていたと分かった送信は、{ eventId, playerId, baseRev } だけの
   //                       写しと 409 の player（その送信で保存された行）で呼ぶ。
@@ -660,6 +679,8 @@ var Outbox = (function() {
     buildBody: buildBody,
     isPermanentFailure: isPermanentFailure,
     isConflict: isConflict,
+    CONFLICT_REASONS: CONFLICT_REASONS,
+    SCOPE_REASONS: SCOPE_REASONS,
     adoptOrphans: adoptOrphans,
     ALIVE_KEY: ALIVE_KEY,
     TAB_ID: TAB_ID

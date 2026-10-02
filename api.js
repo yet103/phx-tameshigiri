@@ -860,7 +860,134 @@ var Api = (function() {
     }
   }
 
+  // --- 招待リンク・採点の鍵のセッション・AI 用キー（設計書 2026-10-03 5.1） ---
+  // 戻り値の形（10 関数で共通）:
+  //   成功 … 本文がオブジェクトなら { ok: true, ...本文 }、配列（一覧）なら配列そのもの
+  //   失敗 … { ok: false, status: HTTPステータス, reason, error, ...本文 }
+  //          （reason は本文の reason か ''。error は本文の error か定型文。本文の他の項目
+  //           （devices・expiresAt・retryAfter・fields など）もそのまま載る）
+  //   通信そのものの失敗（15 秒の時間切れも） … { ok: false, status: 0, reason: 'network', error }
+  // 鍵（招待の key・AI キー）は本文で 1 回だけ返る。呼び出し元は表示し終えたら変数から捨てること。
+  // この層は鍵をどこにも控えない（console にも出さない）。
+  async function requestJson(method, url, body) {
+    var opts = { method: method, headers: {} };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    var t = timeoutSignal();
+    try {
+      if (t.signal) opts.signal = t.signal;
+      var res = await fetch(url, opts);
+      var json = await readJsonSafe(res);
+      if (!res.ok) {
+        var fail = Object.assign({}, (json && typeof json === 'object' && !Array.isArray(json)) ? json : {});
+        fail.ok = false;
+        fail.status = res.status;
+        fail.reason = (json && typeof json.reason === 'string') ? json.reason : '';
+        fail.error = (json && typeof json.error === 'string') ? json.error : defaultError(res.status);
+        return fail;
+      }
+      if (Array.isArray(json)) return json;
+      return Object.assign({}, (json && typeof json === 'object') ? json : {}, { ok: true });
+    } catch (e) {
+      return { ok: false, status: 0, reason: 'network', error: '通信できません' };
+    } finally {
+      t.clear();
+    }
+  }
+
+  async function getSession() {
+    // GET /api/session（誰でも）
+    // 戻り値: { ok: true, role: 'admin' | 'scorer' | 'ai' | 'none', via: 'basic' | 'dev' | 'session' | 'bearer' | null,
+    //           scope: { eventId, eventName, court（null は全コート） } | null, label, expiresAt, now,
+    //           reason（role 'none' のとき auth_required / session_expired / session_revoked / invite_revoked） }
+    //       | 失敗の形（古いサーバーは 404）
+    return requestJson('GET', '/api/session');
+  }
+
+  async function join(key, confirm) {
+    // POST /api/join { key, confirm }（無認証。鍵は本文だけで送る。URL に載せない）
+    //   confirm: false … 下見。セッションも Cookie も作らない（端末の枠を使わない）
+    //   confirm: true  … 登録。Set-Cookie（HttpOnly）でこの端末を採点端末にする
+    // 戻り値: { ok: true, role, eventId, eventName, court, label, expiresAt, now,
+    //           devices: { active, max }, rejoin }（下見）| { ok: true, …同じ, next }（登録。next は採点画面の URL）
+    //       | 失敗の形（401 key_invalid / invite_revoked / invite_expired（expiresAt 付き）、
+    //         409 device_limit（devices 付き）、429 rate_limited（retryAfter 付き）、400 bad_request）
+    return requestJson('POST', '/api/join', { key: typeof key === 'string' ? key : '', confirm: confirm === true });
+  }
+
+  async function logout() {
+    // POST /api/session/logout（この端末の登録を解除する。Cookie を消す）
+    // 戻り値: { ok: true, success: true } | 失敗の形
+    return requestJson('POST', '/api/session/logout');
+  }
+
+  async function listInvites(eventId) {
+    // GET /api/invites?eventId=…（運営）。eventId を省くと全大会
+    // 戻り値: [{ id, role, eventId, eventName, court, label, createdAt, expiresAt, maxDevices,
+    //            status: 'active' | 'expired' | 'revoked', revokedAt, revokedReason: 'manual' | 'event_deleted' | null,
+    //            lastJoinAt, activeDevices,
+    //            devices: [{ id, summary, ua, createdAt, lastSeenAt, revokedAt, status }] }]（新しい順）
+    //       | 失敗の形
+    return requestJson('GET', '/api/invites' + (eventId ? '?eventId=' + encodeURIComponent(eventId) : ''));
+  }
+
+  async function createInvite(opts) {
+    // POST /api/invites（運営）
+    // opts: { role: 'scorer'（省略時も scorer）, eventId, court: 'A' | null（全コート）, label?,
+    //         maxDevices?（1〜5、既定 2）, expiresAt?, expiresPreset?: 'event'（既定）| 'today' | 'tomorrow' }
+    // 戻り値: { ok: true, invite: <一覧の 1 行の形>, key, joinPath: '/join#k=<key>' }
+    //         key・joinPath を返すのはこの 1 回だけ（QR に出したら捨てる）
+    //       | 失敗の形（400 reason: bad_role / bad_event / unknown_court / bad_label / bad_max_devices /
+    //         bad_expiry、404 大会なし）
+    var body = Object.assign({ role: 'scorer' }, opts || {});
+    return requestJson('POST', '/api/invites', body);
+  }
+
+  async function revokeInvite(id) {
+    // POST /api/invites/:id/revoke（運営）。その招待で登録した端末もすべて次の通信から 401
+    // 戻り値: { ok: true, success: true, revokedSessions } | 失敗の形
+    return requestJson('POST', '/api/invites/' + encodeURIComponent(id) + '/revoke');
+  }
+
+  async function revokeSession(id) {
+    // POST /api/sessions/:id/revoke（運営）。その端末だけ外す
+    // 戻り値: { ok: true, success: true } | 失敗の形
+    return requestJson('POST', '/api/sessions/' + encodeURIComponent(id) + '/revoke');
+  }
+
+  async function listAiKeys() {
+    // GET /api/ai-keys（運営）
+    // 戻り値: [{ id, label, createdAt, expiresAt, revokedAt, status, limits, lastUsedAt, useCount }] | 失敗の形
+    return requestJson('GET', '/api/ai-keys');
+  }
+
+  async function createAiKey(opts) {
+    // POST /api/ai-keys（運営）
+    // opts: { label（1〜40 文字）, expiresInDays?（1〜90、既定 30）| expiresAt?, limits? }
+    // 戻り値: { ok: true, aiKey: <一覧の 1 行の形>, key }（key はこの 1 回だけ）
+    //       | 失敗の形（400 reason: bad_label / bad_expiry / bad_limits）
+    return requestJson('POST', '/api/ai-keys', opts || {});
+  }
+
+  async function revokeAiKey(id) {
+    // POST /api/ai-keys/:id/revoke（運営）
+    // 戻り値: { ok: true, success: true } | 失敗の形
+    return requestJson('POST', '/api/ai-keys/' + encodeURIComponent(id) + '/revoke');
+  }
+
   return {
+    getSession: getSession,
+    join: join,
+    logout: logout,
+    listInvites: listInvites,
+    createInvite: createInvite,
+    revokeInvite: revokeInvite,
+    revokeSession: revokeSession,
+    listAiKeys: listAiKeys,
+    createAiKey: createAiKey,
+    revokeAiKey: revokeAiKey,
     listEvents: listEvents,
     loadEvent: loadEvent,
     loadEventResult: loadEventResult,

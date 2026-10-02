@@ -18,6 +18,7 @@
 <script src="api.js"></script>
 <script src="storage.js"></script>
 <script src="courts.js"></script>
+<script src="scope.js"></script>
 <script src="status.js"></script>
 <script src="route.js"></script>
 <script src="outbox.js"></script>
@@ -28,6 +29,7 @@
 <script src="desk.js"></script>
 <script src="present.js"></script>
 <script src="board.js"></script>
+<script src="join.js"></script>
 <script>
   var results = document.getElementById('results');
   var passed = 0, failed = 0;
@@ -3067,6 +3069,285 @@
   }
 
   // ==== 網羅バグ検証の修正（設計書 2026-10-01 11 章「採点画面」）: api.js / outbox.js / storage.js / board.js ====
+  // ===== 招待リンク・採点専用モード（設計書 2026-10-03 8.2） =====
+  async function runInviteTests() {
+    var h2 = document.createElement('h2');
+    h2.textContent = '招待リンク・採点専用モード（scope.js / join.js / outbox.js / api.js）';
+    results.appendChild(h2);
+    function ivWait(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+    // ---- scope.js ----
+    var ivAdmin = { ok: true, role: 'admin', via: 'dev', scope: null };
+    var ivA = { ok: true, role: 'scorer', via: 'session', scope: { eventId: 'e1', eventName: '大会1', court: 'A' },
+                label: 'A コート タブレット', expiresAt: '2026-10-12T14:59:59.999Z' };
+    var ivAll = { ok: true, role: 'scorer', via: 'session', scope: { eventId: 'e1', eventName: '大会1', court: null },
+                  expiresAt: '2026-10-12T14:59:59.999Z' };
+    var ivEv = { id: 'e1', players: [
+      { id: 'p1', order: 'A-男子-1-1' }, { id: 'p2', order: 'B-男子-1-1' }, { id: 'p3', order: '' }
+    ] };
+    assert('Scope.isScorer: role scorer と scope.eventId があるときだけ真',
+      [Scope.isScorer(ivA), Scope.isScorer(ivAll), Scope.isScorer(ivAdmin), Scope.isScorer(null),
+       Scope.isScorer({ role: 'scorer', scope: null }), Scope.isScorer({ role: 'none', reason: 'auth_required' })],
+      [true, true, false, false, false, false]);
+    var ivEvents = [{ id: 'e1', name: '大会1' }, { id: 'e2', name: '大会2' }];
+    assert('Scope.filterEvents: 運営は全件（写しを返す）',
+      Scope.filterEvents(ivEvents, ivAdmin).map(function(e) { return e.id; }), ['e1', 'e2']);
+    assert('Scope.filterEvents: 採点は鍵の大会 1 件だけ',
+      Scope.filterEvents(ivEvents, ivA).map(function(e) { return e.id; }), ['e1']);
+    assert('Scope.filterEvents: セッションが読めない（null）ときは絞らない',
+      Scope.filterEvents(ivEvents, null).length, 2);
+    assert('Scope.filterEvents: 一覧が null でも落ちない', Scope.filterEvents(null, ivA), []);
+    assert('Scope.allowedCourts: 運営は選手のコート全部（未分類も）',
+      Scope.allowedCourts(ivEv, ivAdmin), ['A', 'B', '未分類']);
+    assert('Scope.allowedCourts: 1 コートの鍵はそのコートだけ', Scope.allowedCourts(ivEv, ivA), ['A']);
+    assert('Scope.allowedCourts: 1 コートの鍵は名簿が空でもそのコート',
+      Scope.allowedCourts({ id: 'e1', players: [] }, ivA), ['A']);
+    assert('Scope.allowedCourts: 全コートの鍵は未分類を除く全部', Scope.allowedCourts(ivEv, ivAll), ['A', 'B']);
+    assert('Scope.allowedCourts: 鍵の大会でない大会のコートは出さない',
+      Scope.allowedCourts({ id: 'e2', players: ivEv.players }, ivA), []);
+    assert('Scope.clampRoute: 運営は何も変えない',
+      [Scope.clampRoute({ eventId: 'e2', court: 'B' }, ivAdmin, null), Scope.clampRoute(null, ivAdmin, null)],
+      [{ eventId: 'e2', court: 'B' }, null]);
+    assert('Scope.clampRoute: 1 コートの鍵で別の大会・別のコートは鍵の範囲に置き換える',
+      [Scope.clampRoute({ eventId: 'e2', court: 'B' }, ivA, null), Scope.clampRoute({ eventId: 'e1', court: 'B' }, ivA, ivEv),
+       Scope.clampRoute(null, ivA, null)],
+      [{ eventId: 'e1', court: 'A' }, { eventId: 'e1', court: 'A' }, { eventId: 'e1', court: 'A' }]);
+    assert('Scope.clampRoute: 全コートの鍵は範囲内のコートを保ち、未分類・知らないコート・別の大会は空にする',
+      [Scope.clampRoute({ eventId: 'e1', court: 'B' }, ivAll, ivEv), Scope.clampRoute({ eventId: 'e1', court: '未分類' }, ivAll, ivEv),
+       Scope.clampRoute({ eventId: 'e1', court: 'Z' }, ivAll, ivEv), Scope.clampRoute({ eventId: 'e2', court: 'B' }, ivAll, ivEv)],
+      [{ eventId: 'e1', court: 'B' }, { eventId: 'e1', court: '' }, { eventId: 'e1', court: '' }, { eventId: 'e1', court: '' }]);
+    assert('Scope.clampRoute: 全コートの鍵で大会を読む前（名簿なし）は URL のコートを受ける',
+      Scope.clampRoute({ eventId: 'e1', court: 'C' }, ivAll, null), { eventId: 'e1', court: 'C' });
+    assert('Scope.routeChanged: 範囲外を置き換えたときだけ真',
+      [Scope.routeChanged({ eventId: 'e1', court: 'A' }, { eventId: 'e1', court: 'A' }),
+       Scope.routeChanged({ eventId: 'e2', court: 'A' }, { eventId: 'e1', court: 'A' }),
+       Scope.routeChanged(null, { eventId: 'e1', court: 'A' }), Scope.routeChanged(null, null)],
+      [false, true, true, false]);
+    assert('Scope.formatExpiry: 日本時間で出す（UTC の 14:59 は 23:59）',
+      [Scope.formatExpiry('2026-10-12T14:59:59.999Z'), Scope.formatExpiry('2026-10-12T14:59:59.999Z', true),
+       Scope.formatExpiry('2026-10-12T15:00:00.000Z'), Scope.formatExpiry('壊れた値'), Scope.formatExpiry(null)],
+      ['10/12 23:59', '10/12（月）23:59', '10/13 00:00', '', '']);
+    assert('Scope.badgeText: 「採点専用 ・ A コート ・ 期限 まで」',
+      [Scope.badgeText(ivA), Scope.badgeText(ivAll), Scope.badgeText(ivAdmin)],
+      ['採点専用 ・ A コート ・ 10/12 23:59 まで', '採点専用 ・ 全コート ・ 10/12 23:59 まで', '']);
+    var ivLost = ['session_expired', 'session_revoked', 'invite_revoked'].map(function(r) {
+      var t = Scope.authLostText(r, 3);
+      return [t.sessionLost, t.banner.indexOf('新しい QR') !== -1, t.banner.indexOf('再読み込み') === -1,
+              t.banner.indexOf('未送信 3 件') !== -1];
+    });
+    assert('Scope.authLostText: 採点の登録が切れた 3 つの理由は「新しい QR」を案内し、再読み込みは促さない',
+      ivLost, [[true, true, true, true], [true, true, true, true], [true, true, true, true]]);
+    var ivBasic = Scope.authLostText('auth_required', 2);
+    assert('Scope.authLostText: それ以外（運営の Basic 切れ・403 role など）は今までの文言',
+      [ivBasic.sessionLost, ivBasic.status, ivBasic.banner, Scope.authLostText('', 1).sessionLost],
+      [false, '⚠ 認証が切れました・ページを再読み込みしてください',
+       '⚠ 認証が切れています。ページを再読み込みしてください（未保存 2 件は保持されます）', false]);
+
+    // ---- join.js（純粋関数） ----
+    var ivKey = 'Q2x9aB3dE5fG.' + 'abcdefghijABCDEFGHIJ0123456789_-abcdefghijk';
+    assert('Join.isKeyShape: <ID>.<43 文字> だけ真',
+      [Join.isKeyShape(ivKey), Join.isKeyShape(ivKey + 'x'), Join.isKeyShape('Q2x9aB3dE5fG'),
+       Join.isKeyShape('a.b.c'), Join.isKeyShape('Q2x9!B3dE5fG.' + ivKey.split('.')[1]), Join.isKeyShape(null)],
+      [true, false, false, false, false, false]);
+    assert('Join.keyFromHash: #k= の値を取り出す（他の項目があっても）',
+      [Join.keyFromHash('#k=' + ivKey), Join.keyFromHash('#x=1&k=' + ivKey), Join.keyFromHash('k=abc'),
+       Join.keyFromHash('#event/e1/A'), Join.keyFromHash(''), Join.keyFromHash(null), Join.keyFromHash('#k=%E0%A4%A')],
+      [ivKey, ivKey, 'abc', '', '', '', '%E0%A4%A']);
+    assert('Join.extractKey: URL まるごと・#k=・k=・鍵だけを受ける',
+      [Join.extractKey('https://tameshigiri.phx-base.org/join#k=' + ivKey), Join.extractKey('#k=' + ivKey),
+       Join.extractKey('k=' + ivKey), Join.extractKey(ivKey)],
+      [ivKey, ivKey, ivKey, ivKey]);
+    assert('Join.extractKey: 前後の空白・途中の改行（メッセージの折り返し）は除く',
+      Join.extractKey('  https://tameshigiri.phx-base.org/join#k=' + ivKey.slice(0, 20) + '\n' + ivKey.slice(20) + '\n'), ivKey);
+    assert('Join.extractKey: 形が違えば空',
+      [Join.extractKey('https://tameshigiri.phx-base.org/join'), Join.extractKey('こんにちは'), Join.extractKey(''),
+       Join.extractKey(null), Join.extractKey('#k=' + ivKey.slice(0, -1))],
+      ['', '', '', '', '']);
+    assert('Join.safeNext: 採点画面の URL だけ受け、他は /scoring.html',
+      [Join.safeNext('/scoring.html#event/e1/A'), Join.safeNext('/scoring.html'), Join.safeNext('https://evil.example/'),
+       Join.safeNext('//evil.example/scoring.html'), Join.safeNext('/admin.html'), Join.safeNext(undefined)],
+      ['/scoring.html#event/e1/A', '/scoring.html', '/scoring.html', '/scoring.html', '/scoring.html', '/scoring.html']);
+    assert('Join.formatExpiry: 日本時間・曜日つき',
+      [Join.formatExpiry('2026-10-12T14:59:59.999Z'), Join.formatExpiry('x')], ['10/12（月）23:59', '']);
+    var ivInfo = { ok: true, role: 'scorer', eventId: 'e1', eventName: '秋季大会', court: 'A', label: 'A コート タブレット',
+                   expiresAt: '2026-10-12T14:59:59.999Z', devices: { active: 1, max: 2 }, rejoin: false };
+    assert('Join.previewText: 大会名・コート・期限・端末数',
+      Join.previewText(ivInfo),
+      { eventName: '秋季大会', court: 'A コート', expiry: '10/12（月）23:59', devices: '1 / 2 台', label: 'A コート タブレット' });
+    assert('Join.previewText: 全コートの鍵・名前なし',
+      [Join.previewText({ court: null, eventName: '' }).court, Join.previewText({ court: null, eventName: '' }).eventName],
+      ['全コート', '（名称未設定の大会）']);
+    assert('Join.previewFull: 端末数がいっぱいなら真（同じ端末の入り直しは除く）',
+      [Join.previewFull(ivInfo), Join.previewFull({ devices: { active: 2, max: 2 } }),
+       Join.previewFull({ devices: { active: 2, max: 2 }, rejoin: true }), Join.previewFull(null)],
+      [false, true, false, false]);
+    assert('Join.sessionNote: Basic の運営・別の採点の登録・入り直しで一言を添える',
+      [Join.sessionNote({ ok: true, role: 'admin', via: 'basic' }, ivInfo).indexOf('運営としてログイン') !== -1,
+       Join.sessionNote({ ok: true, role: 'admin', via: 'dev' }, ivInfo),
+       Join.sessionNote({ ok: true, role: 'scorer', scope: { eventName: '春', court: 'B' } }, ivInfo).indexOf('「春」の B コート') !== -1,
+       Join.sessionNote({ ok: true, role: 'none' }, { rejoin: true }).indexOf('登録済み') !== -1,
+       Join.sessionNote({ ok: false, status: 0 }, ivInfo)],
+      [true, '', true, true, '']);
+    function ivMsg(res) { var m = Join.messageFor(res); return [m.text, m.retry, m.paste]; }
+    assert('Join.messageFor: key_invalid', ivMsg({ ok: false, status: 401, reason: 'key_invalid' }),
+      ['この QR は読み取れませんでした。運営にもう一度出してもらってください。', false, true]);
+    assert('Join.messageFor: invite_expired は期限を添える',
+      ivMsg({ ok: false, status: 401, reason: 'invite_expired', expiresAt: '2026-10-12T14:59:59.999Z' }),
+      ['この QR は期限切れです（期限 10/12（月）23:59）。運営に新しい QR をもらってください。', false, true]);
+    assert('Join.messageFor: invite_revoked', ivMsg({ ok: false, status: 401, reason: 'invite_revoked' }),
+      ['この QR は取り消されています。運営に新しい QR をもらってください。', false, true]);
+    assert('Join.messageFor: device_limit は上限の台数を出し、もう一度を出す',
+      ivMsg({ ok: false, status: 409, reason: 'device_limit', devices: { active: 2, max: 2 } }),
+      ['この QR で登録できる端末の数（2 台）に達しています。運営に端末の一覧から古い端末を外してもらうか、新しい QR をもらってください。', true, true]);
+    assert('Join.messageFor: 429 は待ってから', ivMsg({ ok: false, status: 429, reason: 'rate_limited', retryAfter: 30 }),
+      ['しばらく待ってからもう一度読み取ってください。', true, false]);
+    assert('Join.messageFor: 通信失敗は [もう一度]（鍵はメモリにある）', ivMsg({ ok: false, status: 0, reason: 'network' }),
+      ['通信できません。電波を確かめて [もう一度] を押してください。', true, false]);
+    assert('Join.messageFor: その他はサーバーの文言を添える', ivMsg({ ok: false, status: 400, reason: 'bad_request', error: '本文が不正です' }),
+      ['登録できませんでした（本文が不正です）。', true, false]);
+
+    // ---- outbox.js: 403 scope / field は衝突として残す・401 は再送のまま（設計書 6.6・D6） ----
+    var ivSavedQueue = localStorage.getItem('tmg_outbox');
+    var ivOrigUpdate = Api.updatePlayer;
+    localStorage.removeItem('tmg_outbox');
+    assert('isConflict: 403 scope / field は衝突、403 role・origin と 401 は衝突でない',
+      [Outbox.isConflict({ status: 403, reason: 'scope' }), Outbox.isConflict({ status: 403, reason: 'field' }),
+       Outbox.isConflict({ status: 403, reason: 'role' }), Outbox.isConflict({ status: 403, reason: 'origin' }),
+       Outbox.isConflict({ status: 401, reason: 'session_expired' }), Outbox.isConflict({ status: 409, reason: 'scope' })],
+      [true, true, false, false, false, false]);
+    assert('isPermanentFailure: 401 / 403 は捨てない（D6: 取り消された端末の未送信は端末に残す）',
+      [Outbox.isPermanentFailure(401), Outbox.isPermanentFailure(403), Outbox.isPermanentFailure(400)], [false, false, true]);
+    var ivConflicts = [];
+    var ivDropped = [];
+    var ivBodies = [];
+    Api.updatePlayer = async function(eventId, playerId, body) {
+      ivBodies.push(body);
+      return { ok: false, status: 403, reason: 'scope', error: 'この端末の登録では扱えない大会・コートです' };
+    };
+    Outbox.init(function() {}, function(list) { ivDropped = ivDropped.concat(list); },
+      { onConflict: function(e) { ivConflicts.push(e); } });
+    Outbox.enqueue({ eventId: 'evI', playerId: 'pI', score: 11, result: 'A', adjust: [0, 0, 0], totalAdjust: 0,
+                     note: '', confirmed: true, baseRev: 2 });
+    await ivWait(300);
+    assert('403 scope: 捨てずに衝突として残り、onConflict に status 403・reason scope が渡る',
+      [Outbox.pendingCount(), Outbox.conflictCount(), ivDropped.length, ivConflicts.length,
+       ivConflicts[0] && ivConflicts[0].conflict.status, ivConflicts[0] && ivConflicts[0].conflict.reason,
+       ivConflicts[0] && ivConflicts[0].conflict.player],
+      [1, 1, 0, 1, 403, 'scope', null]);
+    assert('採点の PATCH の本文は採点の 7 項目だけで、baseRev が必ず付く（採点の鍵では baseRev なしは 400）',
+      Object.keys(ivBodies[0]).sort(), ['adjust', 'baseRev', 'confirmed', 'note', 'result', 'score', 'totalAdjust']);
+    Outbox.resolveConflict('evI', 'pI', 'discard');
+    Api.updatePlayer = async function() {
+      return { ok: false, status: 403, reason: 'field', error: 'この端末の登録では変えられない項目です', fields: ['tech1'] };
+    };
+    ivConflicts = [];
+    Outbox.enqueue({ eventId: 'evI', playerId: 'pJ', score: 3, result: 'B', baseRev: 0 });
+    await ivWait(300);
+    assert('403 field: 同じく衝突として残る', [Outbox.conflictCount(), ivConflicts[0] && ivConflicts[0].conflict.reason, ivDropped.length],
+      [1, 'field', 0]);
+    Outbox.resolveConflict('evI', 'pJ', 'discard');
+
+    var ivMode = 'lost';
+    var ivSends = 0;
+    Api.updatePlayer = async function(eventId, playerId) {
+      ivSends++;
+      if (ivMode === 'lost') return { ok: false, status: 401, reason: 'session_revoked', error: 'この端末の登録は取り消されています' };
+      return { ok: true, player: { id: playerId, rev: 5 } };
+    };
+    var ivStatuses = [];
+    Outbox.init(function(st) { ivStatuses.push(st); }, function(list) { ivDropped = ivDropped.concat(list); });
+    Outbox.enqueue({ eventId: 'evI', playerId: 'pK', score: 7, result: 'C', baseRev: 4 });
+    await ivWait(300);
+    var ivSt = Outbox.status();
+    assert('401 session_revoked: 捨てずに再送対象のまま（状態に lastStatus 401 と lastReason）',
+      [Outbox.pendingCount(), Outbox.conflictCount(), ivDropped.length, ivSt.state, ivSt.lastStatus, ivSt.lastReason],
+      [1, 0, 0, 'retrying', 401, 'session_revoked']);
+    assert('401 session_revoked: localStorage にも残る（再読み込み・入り直しのあとに送る）',
+      JSON.parse(localStorage.getItem('tmg_outbox') || '[]').map(function(e) { return e.playerId; }), ['pK']);
+    ivMode = 'ok';   // 新しい QR で入り直した
+    Outbox.flushNow();
+    await ivWait(300);
+    var ivSt2 = Outbox.status();
+    assert('入り直したあとの再送で送られ、lastStatus / lastReason は戻る',
+      [Outbox.pendingCount(), ivSt2.lastStatus, ivSt2.lastReason, ivSends >= 2], [0, null, '', true]);
+
+    Api.updatePlayer = ivOrigUpdate;
+    if (ivSavedQueue === null) localStorage.removeItem('tmg_outbox');
+    else localStorage.setItem('tmg_outbox', ivSavedQueue);
+    Outbox.init(function() {}, function() {});
+
+    // ---- api.js: 新しい 10 関数の形（認証なしの開発サーバー＝運営） ----
+    var ivSess = await Api.getSession();
+    assert('Api.getSession: 開発の認証なしは { ok: true, role: admin, via: dev, scope: null }',
+      [ivSess.ok, ivSess.role, ivSess.via, ivSess.scope, typeof ivSess.now], [true, 'admin', 'dev', null, 'string']);
+    var ivBad = await Api.join('Q2x9aB3dE5fG.' + 'x'.repeat(43), false);
+    assert('Api.join: 知らない鍵は { ok: false, status: 401, reason: key_invalid, error }',
+      [ivBad.ok, ivBad.status, ivBad.reason, typeof ivBad.error], [false, 401, 'key_invalid', 'string']);
+
+    var ivEvId = (await Api.saveEvent({ name: '招待テスト（test.html）', date: '', venue: '', players: [] })).id;
+    await Api.createPlayersBulk(ivEvId, { rows: [
+      { name: '招待 一郎', court: 'A', isFemale: false }, { name: '招待 二郎', court: 'B', isFemale: false }
+    ] });
+    var ivNoCourt = await Api.createInvite({ eventId: ivEvId, court: 'Z' });
+    assert('Api.createInvite: 大会に無いコートは { ok: false, status: 400, reason: unknown_court }',
+      [ivNoCourt.ok, ivNoCourt.status, ivNoCourt.reason], [false, 400, 'unknown_court']);
+    var ivInv = await Api.createInvite({ eventId: ivEvId, court: 'A', label: 'A コート タブレット', maxDevices: 2 });
+    assert('Api.createInvite: { ok: true, invite, key, joinPath: /join#k=<key> }（role は既定で scorer）',
+      [ivInv.ok, ivInv.invite && ivInv.invite.role, ivInv.invite && ivInv.invite.court, ivInv.invite && ivInv.invite.status,
+       Join.isKeyShape(ivInv.key), ivInv.joinPath === '/join#k=' + ivInv.key],
+      [true, 'scorer', 'A', 'active', true, true]);
+    var ivList = await Api.listInvites(ivEvId);
+    assert('Api.listInvites: 配列で返り、鍵も secretHash も載らない',
+      [Array.isArray(ivList), ivList.length, ivList[0] && ivList[0].id === ivInv.invite.id,
+       ivList[0] && ('key' in ivList[0]), ivList[0] && ('secretHash' in ivList[0]), ivList[0] && ivList[0].eventName],
+      [true, 1, true, false, false, '招待テスト（test.html）']);
+    var ivPre = await Api.join(ivInv.key, false);
+    assert('Api.join（下見）: 大会名・コート・端末数を返し、端末は増えない',
+      [ivPre.ok, ivPre.eventName, ivPre.court, ivPre.devices && ivPre.devices.active, ivPre.devices && ivPre.devices.max,
+       ivPre.rejoin, 'next' in ivPre],
+      [true, '招待テスト（test.html）', 'A', 0, 2, false, false]);
+    assert('Api.join（下見）のあとも一覧の端末は 0 台',
+      ((await Api.listInvites(ivEvId))[0] || {}).activeDevices, 0);
+    // 登録（confirm:true）するとこのブラウザが採点端末になる。すぐに解除して運営（開発）に戻す
+    var ivJoined = await Api.join(ivInv.key, true);
+    var ivAsScorer = await Api.getSession();
+    var ivOut = await Api.logout();
+    var ivBack = await Api.getSession();
+    assert('Api.join（登録）: { ok: true, next: 採点画面 }、getSession が scorer になり、logout で戻る',
+      [ivJoined.ok, ivJoined.next, ivAsScorer.role, ivAsScorer.scope && ivAsScorer.scope.court, ivOut.ok, ivOut.success,
+       ivBack.role],
+      [true, '/scoring.html#event/' + ivEvId + '/A', 'scorer', 'A', true, true, 'admin']);
+    var ivDev = ((await Api.listInvites(ivEvId))[0] || {}).devices || [];
+    assert('Api.listInvites: 解除した端末は revoked で残る', [ivDev.length, ivDev[0] && ivDev[0].status], [1, 'revoked']);
+    var ivRevS = await Api.revokeSession(ivDev[0] ? ivDev[0].id : 'nothing');
+    var ivRevS404 = await Api.revokeSession('nosuchsession');
+    assert('Api.revokeSession: { ok: true, success } / 知らない端末は { ok: false, status: 404 }',
+      [ivRevS.ok, ivRevS.success, ivRevS404.ok, ivRevS404.status], [true, true, false, 404]);
+    var ivRevI = await Api.revokeInvite(ivInv.invite.id);
+    assert('Api.revokeInvite: { ok: true, success, revokedSessions }',
+      [ivRevI.ok, ivRevI.success, typeof ivRevI.revokedSessions], [true, true, 'number']);
+    var ivAfter = await Api.join(ivInv.key, false);
+    assert('Api.join: 取り消した招待は { ok: false, status: 401, reason: invite_revoked }',
+      [ivAfter.ok, ivAfter.status, ivAfter.reason], [false, 401, 'invite_revoked']);
+    await Api.deleteEvent(ivEvId);
+
+    var ivKeys = await Api.listAiKeys();
+    assert('Api.listAiKeys: 配列', Array.isArray(ivKeys), true);
+    var ivBadKey = await Api.createAiKey({ label: '' });
+    assert('Api.createAiKey: ラベルが空なら { ok: false, status: 400, reason: bad_label }',
+      [ivBadKey.ok, ivBadKey.status, ivBadKey.reason], [false, 400, 'bad_label']);
+    var ivAi = await Api.createAiKey({ label: 'test.html の確認', expiresInDays: 1 });
+    assert('Api.createAiKey: { ok: true, aiKey, key: phxai.… }',
+      [ivAi.ok, ivAi.aiKey && ivAi.aiKey.label, typeof ivAi.key === 'string' && ivAi.key.indexOf('phxai.') === 0,
+       ivAi.aiKey && ('secretHash' in ivAi.aiKey)],
+      [true, 'test.html の確認', true, false]);
+    var ivRevA = await Api.revokeAiKey(ivAi.aiKey ? ivAi.aiKey.id : 'nothing');
+    var ivKeys2 = await Api.listAiKeys();
+    var ivMine = ivKeys2.filter(function(k) { return ivAi.aiKey && k.id === ivAi.aiKey.id; })[0];
+    assert('Api.revokeAiKey: { ok: true, success } で一覧の状態が revoked',
+      [ivRevA.ok, ivRevA.success, ivMine && ivMine.status], [true, true, 'revoked']);
+  }
+
   async function runScoringAuditTests() {
     var h2sa = document.createElement('h2');
     h2sa.textContent = '網羅検証の修正（採点画面）';
@@ -5835,6 +6116,7 @@
 
     await runApiTests();
     await runScoringAuditTests();
+    await runInviteTests();
 
     // 結果サマリ
     var summary = document.createElement('p');
