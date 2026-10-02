@@ -40,6 +40,12 @@
     var body = document.createElement('div');
     container.appendChild(body);
 
+    // AI 用キー（大会に属さないので大会一覧の下に置く。設計書 2026-10-03 6.7。desk-invites.js）。
+    // 大会一覧の読み込みとは別に、区画の側で読み込む（一覧の取得に失敗しても出る）
+    var aiHost = document.createElement('div');
+    container.appendChild(aiHost);
+    if (window.DeskInvites) DeskInvites.mountAiKeys(aiHost, ctx);
+
     var loading = document.createElement('p');
     loading.className = 'desk-empty';
     loading.textContent = '読み込み中…';
@@ -159,6 +165,14 @@
       testBadge.className = 'desk-badge';
       testBadge.textContent = 'テスト';
       tdStatus.appendChild(testBadge);
+    }
+    // 名前が「テスト用」で始まる大会は、AI 用キーで AI が書き込める（本番の大会は読むだけ）。目印を出す
+    if (window.DeskInvites && DeskInvites.isSandboxName(ev.name)) {
+      var aiBadge = document.createElement('span');
+      aiBadge.className = 'desk-badge';
+      aiBadge.textContent = 'AI 書込可';
+      aiBadge.title = '名前が「テスト用」で始まる大会は、AI 用キーを持つ AI が書き込めます';
+      tdStatus.appendChild(aiBadge);
     }
 
     tr.appendChild(tdStatus);

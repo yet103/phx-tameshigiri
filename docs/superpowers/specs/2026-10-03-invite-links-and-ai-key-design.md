@@ -879,3 +879,26 @@ Write-Host "保存しました（資格情報マネージャー > Web 資格情�
 | (e) | 現場のタブレットの機種・OS・ブラウザの版。iOS のホーム画面アプリで Cookie が Safari と共有されるか | 実機で 6.9 の手順 | ホーム画面に追加するのを `/join` にするか、採点画面にするか。`Sec-Fetch-Site` の対応（iOS 16.4 以降の Safari は送る想定だが実機で確かめる） |
 | (f) | HSTS と証明書が今も有効か | `curl -sI https://tameshigiri.phx-base.org/share.html` の `Strict-Transport-Security` | `Secure` Cookie の前提。**2026-10-03 確認: `Strict-Transport-Security: max-age=31536000`、`Server: nginx/1.29.8`、証明書の期限 2026-12-03** |
 | (g) | 本番の大会に、名前が「テスト用」で始まるのに消してはいけない大会があるか | 運営画面の大会一覧（テストも表示） | D11 の判断、AI に触らせる範囲 |
+
+---
+
+## 14. 実装メモ（PC 運営の画面・QR ライブラリ。2026-10-03）
+
+### 14.1 同梱した QR ライブラリ（6.3 案 A・D14）
+
+| 項目 | 値 |
+|---|---|
+| ファイル | `vendor/qrcode.js`（グローバル変数 `qrcode` を定義する 1 ファイル） |
+| ライブラリ | qrcode-generator **2.0.4**（Kazuhiko Arase、MIT） |
+| 取得元 | `https://registry.npmjs.org/qrcode-generator/-/qrcode-generator-2.0.4.tgz`（`npm pack qrcode-generator@2.0.4`） |
+| tgz の SHA-512（base64） | `mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==`（`npm view` の `dist.integrity` と一致） |
+| 中身の SHA-256 | `79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c`（tgz の `package/dist/qrcode.js`。リポジトリのファイルは、冒頭に出所の注釈 13 行を足しただけで、それより下は無改変。注釈を除いた SHA-256 がこの値と一致することを確かめた） |
+| 中身の確認 | 本体の著作権表示・MIT の表記は元のまま残っている。`eval` / `Function(` / `fetch` / `XMLHttpRequest` / 外部読み込みは含まない（純粋な計算だけ。`grep` で確かめた） |
+| 更新するとき | 同じ手順で取り直し、`vendor/qrcode.js` 冒頭の注釈と本節を書き換える |
+
+### 14.2 PC 運営の画面（desk-invites.js ほか）
+
+- 発行ダイアログの期限は「大会の日の終わり／今日の終わり／明日の終わり」。サーバーは期限を今から 7 日後までに絞る（4.7）ので、大会の日が 7 日より先のときは「大会の日の終わり」を選べなくして（既定は今日の終わり）理由を書く。判定の元はサーバーで、画面の判定は目印だけ。
+- 鍵つき URL・AI 用キーは、発行の応答をクロージャの変数に持ち、ダイアログを閉じるときに捨てる。localStorage・sessionStorage・URL・コンソールには書かない。URL とキーは既定で伏せ、「表示」で出す。
+- 大会名を「テスト用」で始まる名前に変えて保存するときの確認は基本情報（desk-setup.js）に置いた。大会一覧（PC）とスマホ運営の大会一覧に「AI 書込可」の目印を出す。
+- **スマホ運営の大会名の編集（`admin.js` の基本情報の保存）には、まだ同じ確認を入れていない**（担当外のため）。T14 のために、`admin.js` の保存の直前で `DeskInvites` と同じ判定（`trim()` のあと「テスト用」の前方一致）の確認を足す必要がある。

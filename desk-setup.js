@@ -130,6 +130,12 @@
       if (!name) { alert('大会名を入力してください。'); return; }
       var courtErr = Courts.validateCourtList(extra);
       if (courtErr) { alert(courtErr); return; }
+      // 名前が「テスト用」で始まるようになると、AI 用キーを持つ AI が書き込める大会になる（設計書 2026-10-03 T14）。
+      // 外す向き・変えないときは確認しない。判定は desk-invites.js（サーバーの isSandboxName と同じ）
+      if (window.DeskInvites) {
+        var sandboxMsg = DeskInvites.sandboxRenameMessage(ctx.event.name, name);
+        if (sandboxMsg && !confirm(sandboxMsg)) return;
+      }
       btn.disabled = true;
       // settings はサーバーが requireBib / requireRank / courts だけを拾う（キーごとの部分更新）。
       // 変わったキーだけ送る。courts は送ると置き換えになる（和集合にはしない）。

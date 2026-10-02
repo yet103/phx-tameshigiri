@@ -98,7 +98,10 @@
     sub.className = 'row-sub';
     sub.textContent = (ev.date || '日付なし') + ' ・ ' + (ev.playerCount || 0) + '名 ・ ' +
       EventStatus.LABELS[EventStatus.of(ev)] +
-      (ev.test === true ? ' ・ テスト' : '');
+      (ev.test === true ? ' ・ テスト' : '') +
+      // 名前が「テスト用」で始まる大会は AI 用キーの AI が書き込める（サーバーの isSandboxName と同じ判定。
+      // 設計書 2026-10-03 T14。キーの発行と名前変更の確認は PC 運営の側）
+      (String(ev.name || '').trim().indexOf('テスト用') === 0 ? ' ・ AI 書込可' : '');
     body.appendChild(main);
     body.appendChild(sub);
     body.addEventListener('click', function() {

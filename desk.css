@@ -639,3 +639,34 @@ input[type="text"]:focus, input[type="date"]:focus, input[type="number"]:focus, 
 .desk-cell-input:focus, .desk-cell-select:focus {
   box-shadow: 0 0 0 2px var(--gold) inset;
 }
+
+/* ===== 採点端末の招待（QR）と AI 用キー（desk-invites.js。設計書 2026-10-03 6.2・6.7） =====
+   「書き込める鍵」は、見るだけの配信用 URL と見分けがつくよう、警告色（--cell-fail-text。ダークでも読める）で囲む。 */
+.desk-btn.invite { border-color: var(--cell-fail-text); color: var(--cell-fail-text); }
+.desk-btn.invite:hover:not(:disabled) { background: var(--cell-fail); }
+.desk-btn-sub.danger { color: var(--cell-fail-text); }
+.desk-match-cap { margin-top: 8px; font-size: 11px; color: var(--text-muted); }
+.desk-match-cap.danger { color: var(--cell-fail-text); font-weight: bold; }
+
+.desk-invites, .desk-aikeys { margin-top: 28px; }
+.desk-invites-table td.act, .desk-aikeys-table td.act { white-space: nowrap; text-align: right; }
+.desk-invites-table tbody tr.inactive td, .desk-aikeys-table tbody tr.inactive td,
+.desk-devices-table tbody tr.inactive td { color: var(--text-muted); }
+.desk-invites-devices > td { background: var(--bg-secondary); padding: 8px 10px 10px 32px; }
+.desk-devices-table { background: var(--card-bg); }
+
+/* 発行直後の表示（QR・鍵つき URL・AI 用キー） */
+.desk-invite-target { font-size: 13px; margin-bottom: 8px; }
+.desk-qr-box { display: flex; justify-content: center; margin: 4px 0 12px; }
+.desk-qr-box svg { display: block; border: 1px solid var(--border); border-radius: 4px; max-width: 100%; height: auto; }
+.desk-secret-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.desk-secret {
+  flex: 1; min-width: 0; padding: 6px 8px; font-family: Consolas, "Courier New", monospace; font-size: 12px;
+  background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px;
+  overflow-wrap: anywhere; user-select: all;
+}
+.desk-secret-row .desk-btn { min-height: 32px; padding: 0 10px; font-size: 13px; white-space: nowrap; }
+.desk-command { display: block; margin: 4px 0; flex: none; }
+.desk-steps-list { margin: 0 0 12px 22px; font-size: 13px; }
+.desk-steps-list li { margin-bottom: 6px; }
+.desk-dialog-body .desk-form + .desk-note { margin-top: 12px; margin-bottom: 0; }

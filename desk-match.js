@@ -60,6 +60,8 @@
     // 決戦 進行中のときだけ、決戦のカード（buildCourts）の直後に暫定順位を出す
     // （非同期。あとから差し込む。レビュー指摘E）。二巡目の形登録の表は desk-round2.js に移した。
     if (st === 'round2_final') renderFinaleTable(container, ctx);
+    // 招待した採点端末の一覧（設計書 2026-10-03 6.2。desk-invites.js）。試合進行の末尾に置く
+    if (window.DeskInvites) container.appendChild(DeskInvites.buildInvitesSection(ctx));
   }
 
   function buildHead(ctx) {
@@ -420,6 +422,27 @@
     actions.appendChild(btnBoard);
 
     card.appendChild(actions);
+
+    // 採点端末の招待（QR）。上の「採点画面を開く」「📺 配信用ボード」は自分の画面・見るだけの URL、
+    // こちらは採点が書き込める鍵なので、段と色を分けて並べない（設計書 T10）。決戦のカードには出さない
+    // （同じコートの通常のカードから発行する）。
+    if (window.DeskInvites && row.finale !== true) {
+      var inviteCap = document.createElement('div');
+      inviteCap.className = 'desk-match-cap danger';
+      inviteCap.textContent = '採点端末（書き込める鍵）';
+      card.appendChild(inviteCap);
+      var inviteRow = document.createElement('div');
+      inviteRow.className = 'desk-match-actions';
+      var btnInvite = document.createElement('button');
+      btnInvite.type = 'button';
+      btnInvite.className = 'desk-btn invite';
+      btnInvite.textContent = '📱 この端末を招待（QR）';
+      btnInvite.addEventListener('click', function() {
+        DeskInvites.openInviteDialog(ctx, row.court);
+      });
+      inviteRow.appendChild(btnInvite);
+      card.appendChild(inviteRow);
+    }
     return card;
   }
 
