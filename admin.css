@@ -356,6 +356,18 @@ main { padding: 8px 12px 16px; }
 .round-row { background: var(--bg-secondary); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
 .round-row-top { display: flex; justify-content: space-between; gap: 8px; font-weight: bold; }
 .round-prev { color: var(--text-muted); font-weight: normal; font-size: 12px; white-space: nowrap; }
+/* 二巡目の形が一巡目から変わったかの札（Courts.round2Differs）。名前と一巡目の得点のあいだに置く */
+.round-row-top .round-name { flex: 1 1 auto; min-width: 0; }
+.round-diff { flex: 0 0 auto; font-weight: normal; font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 3px; align-self: flex-start; }
+.round-diff:empty { display: none; }
+.round-diff.same { color: var(--text-muted); border: 1px solid var(--border); }
+.round-diff.changed { color: var(--gold-deep); border: 1px solid var(--gold-deep); font-weight: bold; }
+/* 一覧の末尾の「▲ 確かめ終えたら…」。幅いっぱいの控えめなボタン */
+.round-to-stage { display: block; width: 100%; margin: 0 0 16px; padding: 8px 10px; font-size: 13px; line-height: 1.4; text-wrap: balance; }
+.round-stage { scroll-margin-top: 60px; }   /* 固定のトップバー（52px）の下に出す */
+/* 選手の編集シートの「二巡目の技」の欄 */
+.r2-actions { margin-top: 6px; }
+.r2-clear[hidden] { display: none; }
 .round-chips { margin: 6px 0; min-height: 28px; }
 .round-copy {
   background: transparent; color: var(--accent); border: 1px solid var(--border);

@@ -18,6 +18,8 @@ var AdminRound = (function() {
   // ずれることがあった。判定に使う条件をそのままフラグにする。
   var openingPicker = false;  // TechPicker.open を呼ぶまでの間の多重タップを防ぐ（await ensureTechniques 中の連打対策）
   var counterEl = null;
+  var statEl = null;       // 見出しの件数（stageCountText）。形を保存したら数え直す（「一巡目から変更 n」）
+  var statStatus = '';     // statEl を描いたときの状態
   var listEl = null;
   var outsideClickBound = false;  // '⋯' メニューの外側タップ検知は document に1回だけ付ける
 
@@ -110,6 +112,15 @@ var AdminRound = (function() {
       var blockers = Courts.startBlockers(ev, players);
       if (blockers.length > 0) { alert(Courts.blockerMessage(blockers)); return; }
     }
+    // 二巡目の開始の前に、二巡目の行の形（表に無い技・同じ形・レンタルで選べない形）を見る
+    // （設計書 2026-10-03 5.3。試合開始と同じ規則。直す場所はこの画面の形登録）。
+    if (from === 'round1_done' && to === 'round2') {
+      var r2Blockers = Courts.round2StartBlockers(ev, players);
+      if (r2Blockers.length > 0) {
+        alert(Courts.blockerMessage(r2Blockers, '二巡目を開始できません。形登録で直してください。'));
+        return;
+      }
+    }
     if (!confirm(Courts.statusConfirmMessage(from, to, players))) return;
     // 網羅検証 S19: 画面が見ていた状態（from）を送る。違えばサーバーが 409 stale で断る
     var res = await Api.changeStatus(ctx.eventId, to, { from: from });
@@ -146,7 +157,8 @@ var AdminRound = (function() {
     }
     var toastMsg = EventStatus.LABELS[to] + ' にしました';
     if (res.round2 && res.round2.created > 0) {
-      toastMsg += '（二巡目 ' + res.round2.created + ' 名／決戦 ' + res.round2.finalistCount + ' 名）';
+      toastMsg += '（二巡目 ' + res.round2.created + ' 名／決戦 ' + res.round2.finalistCount + ' 名' +
+        (res.round2.fromRequest > 0 ? '／申請の形 ' + res.round2.fromRequest + ' 名' : '') + '）';
     }
     if (res.round2 && res.round2.untrackedCount > 0) {
       toastMsg += '（追跡できない二巡目の行が' + res.round2.untrackedCount + '件あります）';
@@ -248,6 +260,8 @@ var AdminRound = (function() {
     stat.className = 'round-stat';
     stat.id = 'roundScoredStat';
     stat.textContent = Courts.stageCountText(st, players);
+    statEl = stat;
+    statStatus = st;
     head.appendChild(stat);
     // 採点画面へ（絞り込み中のコートを引き継ぐ。採点画面の Route と同じ形 #event/<大会ID>/<コート>）
     var openBtn = document.createElement('a');
@@ -278,8 +292,11 @@ var AdminRound = (function() {
     var guide = document.createElement('p');
     guide.className = 'round-note';
     if (editable) {
-      guide.textContent = '二巡目の形登録。一巡目の形を初期値にしています。' +
-        '自己申告があれば直してください。試技順は一巡目の得点が低い順です。';
+      // 二巡目の行は、申請された二巡目の形（申請の無い人は一巡目の形）で作ってある
+      // （設計書 2026-10-03 7.2）。直した形は申請にも書き戻される（サーバー）。
+      guide.textContent = '二巡目の形登録。申請された二巡目の形（申請の無い人は一巡目の形）が入っています。' +
+        '当日の変更があればここで直してください（直すと申請にも書き戻されます）。' +
+        '確かめ終えたら、上の「二巡目を開始 ▶」を押します。試技順は一巡目の得点が低い順です。';
     } else {
       guide.textContent = '形を直せるのは「' + EventStatus.LABELS.round1_done + '」のときだけです（いまは「' +
         EventStatus.LABELS[st] + '」）。直すときは「⋯」の「戻す」で戻してください。';
@@ -295,6 +312,23 @@ var AdminRound = (function() {
     listEl.className = 'round-list';
     listEl.id = 'roundList';
     container.appendChild(listEl);
+
+    // 一覧の末尾から、上の「二巡目を開始 ▶」（段階表示）へ戻る近道（長い一覧の末尾で、
+    // 遷移ボタンが画面の上にあることに気づくため）。遷移ボタンそのものは段階表示の 1 つだけ。
+    if (editable) {
+      var toStage = document.createElement('button');
+      toStage.type = 'button';
+      toStage.className = 'btn-sub round-to-stage';
+      toStage.id = 'btnRoundToStage';
+      toStage.textContent = '▲ 確かめ終えたら、上の「二巡目を開始 ▶」へ';
+      toStage.addEventListener('click', function() {
+        var stageEl = container.querySelector('.round-stage');
+        if (stageEl) stageEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        var nextBtn = document.getElementById('btnRoundNext');
+        if (nextBtn) nextBtn.focus({ preventScroll: true });
+      });
+      container.appendChild(toStage);
+    }
 
     renderList();
   }
@@ -329,6 +363,7 @@ var AdminRound = (function() {
   }
 
   function updateCounter() {
+    if (statEl && statStatus && CTX) statEl.textContent = Courts.stageCountText(statStatus, CTX.players || []);
     if (!counterEl) return;
     var rows = visibleRows();
     var n = rows.filter(Courts.isTechIncomplete).length;
@@ -357,9 +392,14 @@ var AdminRound = (function() {
     // 一巡目の得点は確定済みだけ出す（採点途中の値は順位にも入らない。網羅検証 S10）
     prev.textContent = '一巡目 ' + ((src && src.confirmed === true) ? String(src.score || 0) : '—');
     if (src && src.confirmed !== true) prev.title = '一巡目が未確定です';
+    // 二巡目の行を作ったときから形が変わったか（一巡目の行と比べる）。「一巡目と同じ／変更」の札
+    var diff = document.createElement('span');
+    diff.className = 'round-diff';
     top.appendChild(name);
+    top.appendChild(diff);
     top.appendChild(prev);
     row.appendChild(top);
+    updateDiffBadge(p, diff);
 
     // chips-required: 空きのチップを赤くする（admin.css）
     var chips = document.createElement('div');
@@ -409,7 +449,18 @@ var AdminRound = (function() {
     return row;
   }
 
+  // 「一巡目と同じ／変更」の札（Courts.round2Differs）。一巡目の行が無ければ出さない
+  function updateDiffBadge(p, badge) {
+    if (!badge) return;
+    if (!sourceOf(p)) { badge.textContent = ''; badge.className = 'round-diff'; return; }
+    var differs = Courts.round2Differs(p, CTX ? CTX.players : []);
+    badge.textContent = differs ? '変更' : '一巡目と同じ';
+    badge.className = 'round-diff ' + (differs ? 'changed' : 'same');
+    badge.title = differs ? '一巡目と違う形です' : '一巡目と同じ形です';
+  }
+
   function drawChips(p, row) {
+    updateDiffBadge(p, row.querySelector('.round-diff'));
     var chipsEl = row.querySelector('.round-chips');
     // 技を入れられるのは「一巡目終了」のときだけ。それ以外は onTap を渡さず
     // （TechPicker.renderChips は techpicker.js 側の共有部品でこの計画では触らないので、

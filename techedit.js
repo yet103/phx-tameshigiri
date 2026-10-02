@@ -487,7 +487,7 @@ var TechEdit = (function() {
       var usages = Array.isArray(r.usages) ? r.usages : [];
       var parts = usages.map(function(u) { return '「' + u.name + '」' + u.count + '名'; });
       if (parts.length === 0) parts = (r.names || []).map(function(n) { return '「' + n + '」'; });
-      return '\n選手が使っている技: ' + parts.join('、') +
+      return '\n選手が使っている技（二巡目の形の申請も含む）: ' + parts.join('、') +
         (typeof r.count === 'number' ? '（計 ' + r.count + ' 名）' : '');
     }
 

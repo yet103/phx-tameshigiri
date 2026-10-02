@@ -222,6 +222,8 @@
     { label: '技①' },
     { label: '技②' },
     { label: '技③' },
+    // 二巡目の形の申請（一巡目の行だけ。設計書 2026-10-03 7.1）。あれば「申請」、無ければ「—」
+    { label: '二巡目' },
     { label: '新' },
     { key: 'score', label: '得点', cls: 'col-score' }
   ];
@@ -327,6 +329,18 @@
     techCell(noTech ? '未入力' : p.tech1, noTech ? 'muted' : '');
     techCell(p.tech2);
     techCell(p.tech3);
+    // 二巡目の列: 一巡目の行で申請があれば「申請」（title に形）、無ければ薄く「—」。二巡目の行は空
+    if (Courts.roundOf(p) === 1) {
+      if (EventStatus.hasRound2Techs(p)) {
+        var r2td = cell('申請');
+        r2td.title = '二巡目の形: ' + EventStatus.round2TechsOf(p).map(function(t) { return t || '—'; }).join('・');
+      } else {
+        var r2none = cell('—', 'muted');
+        r2none.title = '二巡目は一巡目と同じ形で行います';
+      }
+    } else {
+      cell('');
+    }
     cell(p.isNewFace ? '●' : '');
     cell(p.confirmed === true ? String(p.score || 0) : '', 'col-score');   // 得点は確定済みだけ（他の一覧と同じ）
 
@@ -541,7 +555,7 @@
     fRank.appendChild(rankList);
     el.appendChild(fRank);
 
-    var common = buildCommonFields(ctx, player, function() { updateTechNote(); }, linked);
+    var common = buildCommonFields(ctx, player, function() { updateTechNote(); updateR2Note(); }, linked);
     el.appendChild(common.el);
 
     // 真剣レンタル。新人と同じトグル（.toggle）で、コート・性別・新人のすぐ下に置く。
@@ -614,6 +628,106 @@
     }
     renderTechChips();
 
+    // 二巡目の技（二巡目の形の申請。一巡目の行と追加シートだけ。設計書 2026-10-03 7.1）。
+    // 3 つとも空 = 一巡目と同じ形。申請が空のまま最初にチップを押したときは、一巡目の技
+    // （この欄の上の今の値）を下書きとして入れてから開く（1 本だけ選び直せば済むように）。
+    // 二巡目の行の編集シートには出さない（その行の「技」が二巡目の形）。
+    var showR2 = !isRound2;
+    var r2State = (player && showR2)
+      ? TechPicker.fromArray([player.r2tech1, player.r2tech2, player.r2tech3])
+      : [];
+    var r2Chips = document.createElement('div');
+    r2Chips.className = 'chips';
+    var r2Note = document.createElement('p');
+    r2Note.className = 'field-note';
+    var r2Dup = document.createElement('p');
+    r2Dup.className = 'field-note tech-dup-note';
+    var btnR2Clear = document.createElement('button');
+    btnR2Clear.type = 'button';
+    btnR2Clear.className = 'btn-sub r2-clear';
+    btnR2Clear.textContent = '一巡目と同じにする';
+    if (showR2) {
+      var fR2 = document.createElement('div');
+      fR2.className = 'field';
+      var lR2 = document.createElement('label');
+      lR2.textContent = '二巡目の技（空なら一巡目と同じ形）';
+      fR2.appendChild(lR2);
+      fR2.appendChild(r2Chips);
+      fR2.appendChild(r2Dup);
+      fR2.appendChild(r2Note);
+      var r2Actions = document.createElement('div');
+      r2Actions.className = 'r2-actions';
+      r2Actions.appendChild(btnR2Clear);
+      fR2.appendChild(r2Actions);
+      // 二巡目の行ができているときは、ここで変えると二巡目の行の技も変わることを添える
+      var hasLinkedRow = !!player && (ctx.players || []).some(function(q) {
+        return q && q.sourcePlayerId === player.id;
+      });
+      if (hasLinkedRow) {
+        var r2Linked = document.createElement('p');
+        r2Linked.className = 'field-note';
+        r2Linked.textContent = '二巡目の行ができています。ここで変えると二巡目の行の技も変わります。';
+        fR2.appendChild(r2Linked);
+      }
+      el.appendChild(fR2);
+    }
+
+    function r2IsEmpty() {
+      return TechPicker.toArray(r2State).every(function(t) { return !t; });
+    }
+
+    function updateR2Note() {
+      if (!showR2) return;
+      if (!hasTechniques(ctx)) { r2Dup.textContent = ''; }
+      else {
+        var dup = Courts.duplicateForms(TechPicker.toArray(r2State), techCache, common.isFemale());
+        r2Dup.textContent = dup.length > 0 ? '同じ形は 1 回までです（' + dup[0] + '）' : '';
+      }
+      r2Note.textContent = r2IsEmpty() ? 'いまは一巡目と同じ形で二巡目を行います。' : '';
+      btnR2Clear.hidden = r2IsEmpty();
+    }
+
+    function renderR2Chips() {
+      TechPicker.renderChips(r2Chips, r2State, function(index) {
+        if (!hasTechniques(ctx)) {
+          alert('技術リストを取得できませんでした。大会を開き直してください。技以外は保存できます。');
+          return;
+        }
+        // 申請が空なら一巡目の技を下書きに（開いたあと選び直した枠だけ変わる）
+        if (r2IsEmpty()) { r2State = TechPicker.toArray(techState); renderR2Chips(); }
+        TechPicker.open({
+          techniques: withCurrentTechniques(
+            Courts.techniqueOptions(techCache, common.isFemale(), chkRental.checked),
+            techCache, TechPicker.toArray(r2State), common.isFemale()),
+          initial: r2State,
+          slot: index,
+          onChange: function(next) { r2State = next; renderR2Chips(); },
+          onClose: function(next) { r2State = next; renderR2Chips(); }
+        });
+      });
+      updateR2Note();
+    }
+    if (showR2) {
+      btnR2Clear.addEventListener('click', function() { r2State = []; renderR2Chips(); });
+      renderR2Chips();
+    }
+
+    // 二巡目の技の今の値。一巡目の技と 3 つとも同じなら「一巡目と同じ」（空）として扱う
+    // （サーバーも同じ規則で空にする。空と同じ形を別の値として送らないため）。
+    function r2Values() {
+      if (!showR2) return null;
+      var r = TechPicker.toArray(r2State);
+      var t = TechPicker.toArray(techState);
+      if (EventStatus.sameTechs(r, t)) return ['', '', ''];
+      return r;
+    }
+
+    // フォームの値に足す二巡目の技（二巡目の行では出さないので何も足さない）
+    function r2Fields() {
+      var v = r2Values();
+      return v ? { r2tech1: v[0], r2tech2: v[1], r2tech3: v[2] } : {};
+    }
+
     function read() {
       var name = inName.value.trim();
       if (!name) { alert('名前を入力してください。'); return null; }
@@ -634,7 +748,7 @@
       var rank = inRank.value.trim();
       if (rank.length > 20) { alert('級位・段位は 20 文字までです。'); return null; }
       var t = TechPicker.toArray(techState);
-      return {
+      return Object.assign({
         name: name,
         court: court,
         isFemale: common.isFemale(),
@@ -645,14 +759,14 @@
         tech1: t[0],
         tech2: t[1],
         tech3: t[2]
-      };
+      }, r2Fields());
     }
 
     // 値をそのまま集める（検証も alert もしない）。開いた時点の値の控え（initial）に使う。
     function collect() {
       var bibText = inBib.value.trim();
       var t = TechPicker.toArray(techState);
-      return {
+      return Object.assign({
         name: inName.value.trim(),
         court: common.court(),
         isFemale: common.isFemale(),
@@ -663,7 +777,7 @@
         tech1: t[0],
         tech2: t[1],
         tech3: t[2]
-      };
+      }, r2Fields());
     }
     var initial = collect();
 
@@ -675,6 +789,9 @@
       inRank.value = '';
       techState = [];
       renderTechChips();
+      // 二巡目の申請も人ごとに違うので空に戻す
+      r2State = [];
+      if (showR2) renderR2Chips();
       inName.focus();
     }
 
@@ -706,6 +823,10 @@
       var data = form.read();
       if (!data) return false;
       data.round = 1;
+      // 二巡目の技は 1 つでも入っていれば 3 つとも送る。空（一巡目と同じ）なら送らない
+      if (!data.r2tech1 && !data.r2tech2 && !data.r2tech3) {
+        delete data.r2tech1; delete data.r2tech2; delete data.r2tech3;
+      }
       btnSaveClose.disabled = true;
       btnSaveNext.disabled = true;
       sheet.lock(true);
@@ -866,6 +987,13 @@
       Object.keys(all).forEach(function(k) {
         if (all[k] !== baseline[k]) data[k] = all[k];
       });
+      // 二巡目の技は 3 つの組で決まるので、どれかが変わっていれば 3 つとも送る
+      // （残りの枠が他の端末の変更で動いていても、画面の 3 つの組をそのまま置き換える）
+      if (data.r2tech1 !== undefined || data.r2tech2 !== undefined || data.r2tech3 !== undefined) {
+        data.r2tech1 = all.r2tech1;
+        data.r2tech2 = all.r2tech2;
+        data.r2tech3 = all.r2tech3;
+      }
       if (Object.keys(data).length === 0) {
         sheet.close();
         Admin.toast('変更はありません');
@@ -881,6 +1009,13 @@
         if (!confirm(Courts.scoreChangeConfirmMessage(player))) return;
         forced = true;
       }
+      // 二巡目の形（申請）を変えて、書き写す先の二巡目の行が採点済みのときは、得点が変わる
+      // 可能性を確認してから force で送る（サーバーの 409 scored（linked 付き）と同じ判定。設計書 5.4）。
+      var linkedScored = Courts.round2LinkedScored(player, data, ctx.players);
+      if (linkedScored) {
+        if (!confirm(Courts.round2ChangeConfirmMessage(linkedScored))) return;
+        forced = true;
+      }
 
       btnSave.disabled = true;
       btnDelete.disabled = true;
@@ -889,8 +1024,13 @@
       var res = await Api.updatePlayerInfo(ctx.eventId, player.id, forced ? Object.assign({ force: true }, data) : data);
       var declined = false;
       if (res && !res.ok && res.reason === 'scored' && !forced) {
-        // 画面の控えが古く、その間に採点されていた。同じ確認を出し、承諾されたら force で送り直す
-        if (confirm(Courts.scoreChangeConfirmMessage(res.player || player))) {
+        // 画面の控えが古く、その間に採点されていた。同じ確認を出し、承諾されたら force で送り直す。
+        // 409 に linked が付いているときは「二巡目の行の採点」が理由（二巡目の行の得点で聞く）
+        var scoredRow = Array.isArray(res.linked) ? res.linked[0] : res.linked;
+        var scoredMsg = scoredRow
+          ? Courts.round2ChangeConfirmMessage(scoredRow)
+          : Courts.scoreChangeConfirmMessage(res.player || player);
+        if (confirm(scoredMsg)) {
           res = await Api.updatePlayerInfo(ctx.eventId, player.id, Object.assign({ force: true }, data));
         } else {
           declined = true;
@@ -1062,10 +1202,10 @@
     if (result && result.reason === 'format') {
       return 'CSV の 1 行目（見出し）が、読み込める形式と合っていません。\n' +
         '結果確認の「CSV エクスポート」で書き出した形、または簡易形式' +
-        '（名前,コート,性別,技①,技②,技③,新人 …）の見出しで作ってください。';
+        '（名前,コート,性別,技①,技②,技③,新人 … 二巡目技①,二巡目技②,二巡目技③）の見出しで作ってください。';
     }
     if (result && result.reason === 'round2_format') {
-      return '二巡目がある大会には、結果確認の CSV エクスポート（20 列）で書き出した形のファイルだけ取り込めます（置き換え・追記とも）。\n' +
+      return '二巡目がある大会には、結果確認の CSV エクスポートで書き出した形のファイル（23 列。以前の 20 列も可）だけ取り込めます（置き換え・追記とも）。\n' +
         '（決戦の印と一巡目とのつながりを保ち、つながりの無い二巡目の行を増やさないため）';
     }
     return 'インポートに失敗しました。' + (result && result.error ? '\n' + result.error : '');
@@ -1094,7 +1234,7 @@
       lines.push('追記する: 既存の ' + count + ' 名は残し、CSV の選手を足します（同じ順番の選手がいると重複します）。');
       lines.push('置き換える: 既存の ' + count + ' 名を全部消して、CSV の内容だけにします（採点結果も消えます）。');
       if (nowPlayers.some(function(p) { return Courts.roundOf(p) === 2; })) {
-        lines.push('二巡目の行があるため、置き換え・追記とも結果確認の CSV エクスポート（20 列）の形のファイルだけ受け付けます。');
+        lines.push('二巡目の行があるため、置き換え・追記とも結果確認の CSV エクスポートの形（23 列。以前の 20 列も可）のファイルだけ受け付けます。');
       }
       var pick = await choose('CSV の取り込み', lines, [
         { label: '置き換える（既存 ' + count + ' 名を消す）', value: 'replace', cls: 'danger' },
