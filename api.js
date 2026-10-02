@@ -750,6 +750,24 @@ var Api = (function() {
     }
   }
 
+  // 履歴を積む（採点画面の HistoryOutbox が使う。送れなかったら控えて送り直すので、失敗の形を返す）。
+  // entry.clientId（控えの印）を付けると、サーバーは同じ印の履歴を二度積まない。
+  // 戻り値: { ok: true, status, duplicate } | { ok: false, status（通信失敗は 0）, reason }
+  async function postHistory(eventId, entry) {
+    try {
+      var res = await fetchTimed('/api/events/' + eventId + '/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry)
+      });
+      var body = await readJsonSafe(res);
+      if (res.ok) return { ok: true, status: res.status, duplicate: !!(body && body.duplicate) };
+      return { ok: false, status: res.status, reason: (body && typeof body.reason === 'string') ? body.reason : '' };
+    } catch (e) {
+      return { ok: false, status: 0, reason: 'network' };
+    }
+  }
+
   // --- Live（配信用ボード） ---
   async function putLive(eventId, court, data) {
     // PUT /api/events/:eventId/live/:court
@@ -1016,6 +1034,7 @@ var Api = (function() {
     resetEventTechniques: resetEventTechniques,
     loadHistory: loadHistory,
     addHistory: addHistory,
+    postHistory: postHistory,
     putLive: putLive,
     loadLive: loadLive,
     loadRanking: loadRanking,

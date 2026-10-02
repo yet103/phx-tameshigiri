@@ -3329,6 +3329,86 @@
     var ivAfter = await Api.join(ivInv.key, false);
     assert('Api.join: 取り消した招待は { ok: false, status: 401, reason: invite_revoked }',
       [ivAfter.ok, ivAfter.status, ivAfter.reason], [false, 401, 'invite_revoked']);
+    // ---- レビュー・結合試験の指摘（2026-10-03） ----
+    // E1: 採点専用モードでは auth_required（Cookie が消えた）も「登録が切れました・新しい QR」
+    var ivE1 = Scope.authLostText('auth_required', 2, true);
+    var ivE1b = Scope.authLostText('', 1, true);
+    assert('Scope.authLostText: 採点専用モード（第 3 引数が真）では auth_required・理由なしも「新しい QR」、再読み込みを促さない',
+      [ivE1.sessionLost, ivE1.banner.indexOf('新しい QR') !== -1, ivE1.status.indexOf('再読み込み') === -1,
+       ivE1.banner.indexOf('再読み込み') === -1, ivE1.banner.indexOf('未送信 2 件') !== -1, ivE1b.sessionLost],
+      [true, true, true, true, true, true]);
+    assert('Scope.authLostText: 運営（第 3 引数が偽・省略）の auth_required は今までどおり再読み込み',
+      [Scope.authLostText('auth_required', 2, false).sessionLost, Scope.authLostText('auth_required', 2).sessionLost],
+      [false, false]);
+
+    // R9: 下見・登録の最中に届いた鍵は預かり、終わってから使う
+    var ivGate = Join.createKeyGate();
+    var ivG = [];
+    ivG.push(ivGate.offer('k1'));   // 空いている → 今すぐ使ってよい
+    ivG.push(ivGate.begin());
+    ivG.push(ivGate.begin());       // 最中はもう始められない
+    ivG.push(ivGate.offer('k2'));   // 最中 → 預かる
+    ivG.push(ivGate.offer('k3'));   // 後から来たものが勝つ
+    ivG.push(ivGate.isBusy());
+    ivG.push(ivGate.end());         // 預かった鍵
+    ivG.push(ivGate.isBusy());
+    ivG.push(ivGate.begin());
+    ivG.push(ivGate.end());         // 預かりなし
+    assert('Join.createKeyGate: 最中は差し替えず預かり（後勝ち）、終わったら預かった鍵を返す',
+      ivG, [true, true, false, false, false, true, 'k3', false, true, '']);
+
+    // E2: 採点の履歴の送り直し（HistoryOutbox）
+    var ivHSaved = localStorage.getItem(HistoryOutbox.STORAGE_KEY);
+    HistoryOutbox._reset();
+    var ivSent = [];
+    var ivMode = { status: 401, reason: 'session_revoked' };
+    HistoryOutbox._setPoster(async function(eventId, body) {
+      ivSent.push([eventId, body.action, body.clientId]);
+      if (ivMode.status === 200) return { ok: true, status: 200 };
+      return { ok: false, status: ivMode.status, reason: ivMode.reason || '' };
+    });
+    var ivH1 = await HistoryOutbox.add('e1', { action: 'confirm', detail: '一' });
+    var ivH2 = await HistoryOutbox.add('e1', { action: 'unconfirm', detail: '二' });
+    var ivStored = JSON.parse(localStorage.getItem(HistoryOutbox.STORAGE_KEY) || '[]');
+    assert('HistoryOutbox: 401（登録切れ）なら端末に控える。2 件目は控えの後ろに積む。控えごとに印（clientId）',
+      [ivH1, ivH2, HistoryOutbox.pendingCount(), ivStored.map(function(x) { return x.entry.action; }),
+       ivStored.every(function(x) { return /^h[0-9a-z]{8,}$/.test(x.id) && x.eventId === 'e1'; }),
+       ivSent.every(function(s) { return typeof s[2] === 'string' && s[2].length >= 8; })],
+      [false, false, 2, ['confirm', 'unconfirm'], true, true]);
+    ivMode = { status: 200 };
+    ivSent = [];
+    await HistoryOutbox.flush();
+    assert('HistoryOutbox.flush: 送れるようになったら古い順に送り、控えの印をそのまま clientId に付ける。送れたら控えから外す',
+      [ivSent.map(function(s) { return s[1]; }), ivSent.map(function(s) { return s[2]; }),
+       HistoryOutbox.pendingCount(), localStorage.getItem(HistoryOutbox.STORAGE_KEY)],
+      [['confirm', 'unconfirm'], ivStored.map(function(x) { return x.id; }), 0, null]);
+    ivMode = { status: 403, reason: 'scope' };
+    var ivH3 = await HistoryOutbox.add('e2', { action: 'confirm' });
+    ivMode = { status: 404 };
+    var ivH4 = await HistoryOutbox.add('e3', { action: 'confirm' });
+    assert('HistoryOutbox: 送り直しても直らない失敗（403 scope・404）は控えない',
+      [ivH3, ivH4, HistoryOutbox.pendingCount()], [false, false, 0]);
+    assert('HistoryOutbox.isPermanent: 0・401・408・429・5xx・403 origin は送り直す。400・404・409・413・403 role / scope / field は捨てる',
+      [{ status: 0 }, { status: 401 }, { status: 408 }, { status: 429 }, { status: 503 }, { status: 403, reason: 'origin' },
+       { status: 400 }, { status: 404 }, { status: 409 }, { status: 413 }, { status: 403, reason: 'role' },
+       { status: 403, reason: 'scope' }, { status: 403, reason: 'field' }, { ok: true, status: 200 }].map(function(r) {
+        return HistoryOutbox.isPermanent(Object.assign({ ok: false }, r));
+      }),
+      [false, false, false, false, false, false, true, true, true, true, true, true, true, false]);
+    // サーバー: 同じ clientId の履歴は二度積まない（Api.postHistory）
+    HistoryOutbox._setPoster(null);
+    var ivCid = 'hTESTHTML' + Date.now().toString(36);
+    var ivP1 = await Api.postHistory(ivEvId, { action: 'note', detail: '送り直しの確認', clientId: ivCid });
+    var ivP2 = await Api.postHistory(ivEvId, { action: 'note', detail: '送り直しの確認', clientId: ivCid });
+    var ivP404 = await Api.postHistory('nosuchevent', { action: 'note', clientId: ivCid });
+    var ivHist = (await Api.loadHistory(ivEvId)).entries || [];
+    assert('Api.postHistory: 同じ clientId の 2 回目は { ok: true, duplicate: true } で、履歴は 1 件。無い大会は { ok: false, status: 404 }',
+      [ivP1.ok, ivP1.duplicate, ivP2.ok, ivP2.duplicate, ivP404.ok, ivP404.status,
+       ivHist.filter(function(e) { return e.clientId === ivCid; }).length],
+      [true, false, true, true, false, 404, 1]);
+    HistoryOutbox._reset();
+    if (ivHSaved !== null) localStorage.setItem(HistoryOutbox.STORAGE_KEY, ivHSaved);
+
     await Api.deleteEvent(ivEvId);
 
     var ivKeys = await Api.listAiKeys();

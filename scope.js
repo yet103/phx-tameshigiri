@@ -119,11 +119,13 @@ var Scope = (function() {
   // 送信が 401 / 403 で止まっているときの表示（保存状態の小さな表示と、昇格したバナー）。
   //   採点の登録が切れた（session_expired / session_revoked / invite_revoked）… 再読み込みを促さない
   //     （再読み込みしても 401 の HTML になるだけ）。新しい QR で入り直すと送られる。
+  //   scorerMode（採点専用モード）が真なら、理由が何でも（auth_required＝Cookie が消えた、も）同じ案内。
+  //     採点の端末に運営のパスワードは無く、再読み込みすると運営のパスワード欄が出るだけ（結合試験 E1）。
   //   それ以外（運営の Basic 切れなど）… 今までの文言
   // 戻り値: { sessionLost, status, banner }
-  function authLostText(reason, pending) {
+  function authLostText(reason, pending, scorerMode) {
     var n = (typeof pending === 'number' && pending >= 0) ? pending : 0;
-    if (isSessionLost(reason)) {
+    if (isSessionLost(reason) || scorerMode === true) {
       return {
         sessionLost: true,
         status: '⚠ 採点の登録が切れました（未送信 ' + n + ' 件）',

@@ -686,3 +686,160 @@ var Outbox = (function() {
     TAB_ID: TAB_ID
   };
 })();
+
+// 採点画面の履歴（POST /api/events/:id/history）の送り直し（結合試験 E2）。
+// 確定・確定の取り消し・計算し直しなどの履歴は、採点の送信キュー（Outbox）とは別に送っている。
+// 送れなかったら（通信断・401 の登録切れ・5xx など）端末（localStorage）に控え、送れるようになったら
+// （起動時・online・採点の送信が通ったとき・定期）古い順に送る。
+// 重複: 控えごとに clientId を付けて送る。サーバーは同じ clientId の履歴を二度積まない
+// （時間切れで実は届いていた・別タブと同時に送った、を二重にしない）。
+// 送り直しても直らない失敗（400・404 大会が無い・413・409・403 の role / scope / field＝この端末では
+// 送れない大会）は捨てる（先頭に張り付いて後ろが送れなくならないように）。
+var HistoryOutbox = (function() {
+  var STORAGE_KEY = 'tmg_history_outbox';
+  var MAX_ITEMS = 300;                    // 控えの上限（古いものから捨てる）
+  var MAX_AGE_MS = 7 * 24 * 3600 * 1000;  // 7 日より古い控えは捨てる
+  var RETRY_MS = 30000;                   // 控えがあるときの見回りの間隔
+  var KEEP_403 = ['origin'];              // 403 でも捨てない理由（別の経路からなら送れる）
+  var memory = [];                        // localStorage が使えないときの控え
+  var flushing = false;
+  var timer = null;
+  var onlineBound = false;
+  var poster = null;                      // 送る関数（テストで差し替える）。既定は Api.postHistory
+
+  function read() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter(function(x) { return x && typeof x === 'object' && x.id && x.eventId; }) : [];
+    } catch (e) {
+      return memory.slice();
+    }
+  }
+
+  function write(list) {
+    memory = list.slice();
+    try {
+      if (list.length === 0) localStorage.removeItem(STORAGE_KEY);
+      else localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    } catch (e) { /* memory に残す */ }
+  }
+
+  // 古すぎる・多すぎる控えを捨てる
+  function trim(list, now) {
+    var t = typeof now === 'number' ? now : Date.now();
+    var out = list.filter(function(x) { return typeof x.queuedAt !== 'number' || t - x.queuedAt <= MAX_AGE_MS; });
+    return out.length > MAX_ITEMS ? out.slice(out.length - MAX_ITEMS) : out;
+  }
+
+  function newId() {
+    return 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  }
+
+  // 送り直しても直らない失敗か（捨てる）。res: { ok, status, reason }
+  function isPermanent(res) {
+    if (!res || res.ok) return false;
+    var st = res.status;
+    if (!st || st === 401 || st === 408 || st === 429 || st >= 500) return false;
+    if (st === 403) return KEEP_403.indexOf(res.reason) === -1;
+    return st >= 400 && st < 500;
+  }
+
+  function postFn() {
+    if (poster) return poster;
+    if (typeof Api !== 'undefined' && typeof Api.postHistory === 'function') return Api.postHistory;
+    return null;
+  }
+
+  async function send(item) {
+    var fn = postFn();
+    if (!fn) return { ok: false, status: 0, reason: 'network' };
+    try {
+      var res = await fn(item.eventId, Object.assign({}, item.entry, { clientId: item.id }));
+      return res || { ok: false, status: 0, reason: 'network' };
+    } catch (e) {
+      return { ok: false, status: 0, reason: 'network' };
+    }
+  }
+
+  function schedule() {
+    if (timer || typeof setTimeout !== 'function') return;
+    timer = setTimeout(function() { timer = null; flush(); }, RETRY_MS);
+  }
+
+  function enqueue(item) {
+    var list = read();
+    list.push(item);
+    write(trim(list));
+  }
+
+  // 履歴を 1 件積む。控えが無ければすぐ送り、送れなければ控える。控えがあれば順番を守って後ろに積み、まとめて送る。
+  // 戻り値（Promise）: 今送れたら true
+  async function add(eventId, entry) {
+    if (!eventId || !entry || typeof entry !== 'object') return false;
+    var item = { id: newId(), eventId: eventId, entry: Object.assign({}, entry), queuedAt: Date.now() };
+    if (read().length > 0) {
+      enqueue(item);
+      await flush();
+      return read().every(function(x) { return x.id !== item.id; });
+    }
+    var res = await send(item);
+    if (res.ok) return true;
+    if (isPermanent(res)) return false;
+    enqueue(item);
+    schedule();
+    return false;
+  }
+
+  // 控えを古い順に送る（同時に 1 つだけ）。送れないもの（一時的な失敗）に当たったら止めて、あとで送り直す。
+  async function flush() {
+    if (flushing) return;
+    flushing = true;
+    var tried = {};
+    try {
+      for (;;) {
+        var list = trim(read());
+        if (list.length === 0) break;
+        var item = list[0];
+        if (tried[item.id]) break;   // 書き込めず外せなかった（同じものを送り続けない）
+        tried[item.id] = true;
+        var res = await send(item);
+        if (!res.ok && !isPermanent(res)) { schedule(); break; }
+        // 送れた（か、送っても直らない）ものだけを外す。他のタブが外していれば何もしない
+        write(read().filter(function(x) { return x.id !== item.id; }));
+      }
+    } finally {
+      flushing = false;
+    }
+  }
+
+  function pendingCount() {
+    return read().length;
+  }
+
+  // 採点画面の起動時に呼ぶ。online に戻ったら送る。控えがあればすぐ送る。
+  function init() {
+    if (!onlineBound && typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('online', function() { flush(); });
+      onlineBound = true;
+    }
+    if (read().length > 0) flush();
+  }
+
+  return {
+    STORAGE_KEY: STORAGE_KEY,
+    init: init,
+    add: add,
+    flush: flush,
+    pendingCount: pendingCount,
+    isPermanent: isPermanent,
+    // テスト用: 送る関数を差し替える（null で既定に戻す）
+    _setPoster: function(fn) { poster = fn || null; },
+    _reset: function() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      memory = [];
+      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    }
+  };
+})();

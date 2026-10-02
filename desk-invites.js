@@ -197,6 +197,14 @@ var DeskInvites = (function() {
     return box;
   }
 
+  // ダイアログを閉じるとき、秘密を表示していた枠（.desk-secret）を空にし、中身（QR を含む）を外す。
+  // 閉じたあとも枠の要素はボタンの処理から参照されて残るので、文字そのものを消しておく。
+  function wipeSecrets(wrap) {
+    if (!wrap) return;
+    Array.prototype.forEach.call(wrap.querySelectorAll('.desk-secret'), function(b) { b.textContent = ''; });
+    wrap.textContent = '';
+  }
+
   // 秘密の文字列を伏せて持つ行: [枠] [表示/伏せる] [コピー]。秘密は get() で毎回取り出す（捨てたあとは空）
   function secretRow(boxId, get, copyLabel, copyOk) {
     var row = el('div', 'desk-secret-row');
@@ -315,6 +323,7 @@ var DeskInvites = (function() {
 
     var dialog = Desk.openDialog('採点端末を招待（QR）', wrap, [btnCreate, btnDone], function() {
       secret.url = null;   // 鍵を捨てる
+      wipeSecrets(wrap);   // 外した DOM にも鍵（URL の表示・QR）を残さない
       if (issued && typeof onChanged === 'function') onChanged();
     });
     btnDone.addEventListener('click', function() { dialog.close(); });
@@ -657,6 +666,7 @@ var DeskInvites = (function() {
     btnDone.hidden = true;
     var dialog = Desk.openDialog('AI 用キーを発行', wrap, [btnCreate, btnDone], function() {
       secret.key = null;   // キーを捨てる
+      wipeSecrets(wrap);   // 外した DOM にもキーの表示を残さない
       if (issued && typeof onChanged === 'function') onChanged();
     });
     btnDone.addEventListener('click', function() { dialog.close(); });

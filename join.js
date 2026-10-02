@@ -145,6 +145,22 @@ var Join = (function() {
     }
   }
 
+  // 下見・登録の最中に届いた鍵の預かり（R9）。最中は鍵を差し替えない（画面は前の招待のまま、
+  // 新しい鍵で登録してしまうのを防ぐ）。終わったら預かった鍵で下見し直す。
+  //   begin() … 始めてよければ真（最中なら偽）
+  //   offer(k) … 今すぐ使ってよければ真。最中なら預かって偽（後から来たものが勝つ）
+  //   end() … 終わり。預かった鍵を返す（無ければ ''）
+  function createKeyGate() {
+    var busy = false;
+    var pending = '';
+    return {
+      isBusy: function() { return busy; },
+      begin: function() { if (busy) return false; busy = true; return true; },
+      offer: function(k) { if (busy) { pending = k || ''; return false; } return true; },
+      end: function() { busy = false; var k = pending; pending = ''; return k; }
+    };
+  }
+
   // --- 画面（join.html だけ） ---
   function init() {
     var app = document.getElementById('joinApp');
@@ -158,7 +174,7 @@ var Join = (function() {
     }
     var lastAction = null;   // [もう一度] でやり直す処理
     var nextUrl = '/scoring.html';
-    var busy = false;
+    var gate = createKeyGate();
 
     function show(id) {
       ['joinPreview', 'joinDone', 'joinError'].forEach(function(x) { $(x).hidden = (x !== id); });
@@ -175,15 +191,37 @@ var Join = (function() {
       showPaste(m.paste || !key);
     }
 
+    // 新しい鍵（別の QR・貼り付け）。下見・登録の最中なら預かり、終わってから下見し直す
+    function useKey(k) {
+      if (!gate.offer(k)) {
+        setStatus('別の QR を受け取りました。確認が終わったら、そちらを確認し直します…');
+        return;
+      }
+      key = k;
+      if (!isKeyShape(key)) {
+        key = '';
+        showError({ ok: false, status: 401, reason: 'key_invalid' });
+        return;
+      }
+      preview();
+    }
+
+    // 最中に預かった鍵があれば、それで下見し直す。戻り値: し直したら真（呼び出し側は結果を出さない）
+    function finish() {
+      var k = gate.end();
+      if (!k) return false;
+      useKey(k);
+      return true;
+    }
+
     async function preview() {
-      if (busy) return;
-      busy = true;
+      if (!gate.begin()) return;
       lastAction = preview;
       setStatus('確認しています…');
       show(null);
       showPaste(false);
       var results = await Promise.all([Api.join(key, false), Api.getSession()]);
-      busy = false;
+      if (finish()) return;   // 最中に別の鍵が来た: この結果は出さない
       var info = results[0];
       var session = results[1];
       if (!info || !info.ok) { showError(info); return; }
@@ -207,13 +245,13 @@ var Join = (function() {
     }
 
     async function confirmJoin() {
-      if (busy || !key) return;
-      busy = true;
+      if (!key || !gate.begin()) return;
       lastAction = confirmJoin;
       $('btnJoinConfirm').disabled = true;
       setStatus('登録しています…');
       var r = await Api.join(key, true);
-      busy = false;
+      // 最中に別の鍵が来た: 今の登録の結果はそのままに、新しい鍵の下見に移る（成功していれば前の鍵は捨てる）
+      if (finish()) return;
       if (!r || !r.ok) {
         $('btnJoinConfirm').disabled = false;
         showError(r);
@@ -245,8 +283,7 @@ var Join = (function() {
         return;
       }
       err.hidden = true;
-      key = k;
-      preview();
+      useKey(k);
     });
 
     // このページを開いたまま別の QR を読んだ（同じページへのハッシュだけの移動で、読み込み直しにならない）
@@ -255,14 +292,8 @@ var Join = (function() {
       if (!location.hash) return;
       try { history.replaceState(null, '', '/join'); } catch (e) { /* 消せなくても続ける */ }
       if (!k) return;
-      key = k;
       $('joinPasteError').hidden = true;
-      if (!isKeyShape(key)) {
-        key = '';
-        showError({ ok: false, status: 401, reason: 'key_invalid' });
-        return;
-      }
-      preview();
+      useKey(k);
     });
 
     if (!key) {
@@ -294,6 +325,7 @@ var Join = (function() {
     previewText: previewText,
     previewFull: previewFull,
     sessionNote: sessionNote,
-    messageFor: messageFor
+    messageFor: messageFor,
+    createKeyGate: createKeyGate
   };
 })();

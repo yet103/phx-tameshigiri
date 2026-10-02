@@ -73,6 +73,9 @@ var App = (function() {
     // 読めない（通信失敗・古いサーバー）ときは今までどおりの画面（守りの本体はサーバーの判定表）。
     var session = await Api.getSession();
     if (session && session.ok && Scope.isScorer(session)) enterScorerMode(session);
+    // 送れなかった採点の履歴（確定・取り消しなど）を、送れるようになったら送る（起動時・online・定期）。
+    // 採点の送信が通ったときにも送る（onEntrySaved）。
+    HistoryOutbox.init();
     // 技術データをAPIから取得してScoringに注入
     var techData = await Api.loadTechniques();
     if (techData && techData.techniques) {
@@ -130,8 +133,10 @@ var App = (function() {
     // 401/403 は資格情報の失効。再送では直らず、ページを開き直して再認証する必要がある。
     // 採点の鍵の端末の 401（session_expired / session_revoked / invite_revoked）は再読み込みでは直らない
     // （401 の HTML になるだけ）ので、新しい QR で入り直す案内にする（Scope.authLostText）。
+    // 採点専用モードでは auth_required（Cookie が消えた）も同じ案内にする（再読み込みすると運営の
+    // パスワード欄が出るだけ。結合試験 E1）。
     var authLost = st.pending > 0 && (st.lastStatus === 401 || st.lastStatus === 403);
-    var lostText = authLost ? Scope.authLostText(st.lastReason, st.pending) : null;
+    var lostText = authLost ? Scope.authLostText(st.lastReason, st.pending, !!scorerSession) : null;
     saveStatusEl.classList.remove('sending', 'retrying');
     if (st.state === 'idle') {
       saveStatusEl.textContent = '● 保存済み';
@@ -203,6 +208,7 @@ var App = (function() {
   // 送信が成功した。画面の控えの版（p.rev）を、サーバーの保存後の版に進める。
   // 控えがいま送ったエントリの baseRev のままのときだけ進める（読み直しなどで別の版を控えていれば触らない）。
   function onEntrySaved(entry, saved) {
+    HistoryOutbox.flush();   // 採点が送れた＝履歴も送れるはず（登録し直した直後など）
     if (!saved || typeof saved.rev !== 'number') return;
     if (typeof entry.baseRev !== 'number') return;
     if (!currentEvent || currentEvent.id !== entry.eventId) return;
@@ -377,14 +383,15 @@ var App = (function() {
     document.getElementById('scorerBar').hidden = false;
     document.getElementById('btnScorerLogout').addEventListener('click', onScorerLogout);
     document.getElementById('eventSelect').disabled = true;
-    // 初回だけ「ブックマークしてください」（次からの入口になる。join の画面ではなくここで出す。6.1 の 4）
+    // 初回だけ「ブックマークしてください」（次からの入口になる。join の画面ではなくここで出す。6.1 の 4）。
+    // 一度出したら既読にする（閉じずに再読み込みしても、もう出さない。結合試験 E3）
     var seen = false;
     try { seen = localStorage.getItem(SCORER_HINT_KEY) === '1'; } catch (e) {}
     if (!seen) {
       var hint = document.getElementById('scorerHint');
       hint.hidden = false;
+      try { localStorage.setItem(SCORER_HINT_KEY, '1'); } catch (e) {}
       document.getElementById('btnScorerHintClose').addEventListener('click', function() {
-        try { localStorage.setItem(SCORER_HINT_KEY, '1'); } catch (e) {}
         hint.hidden = true;
       });
     }
@@ -1200,7 +1207,7 @@ var App = (function() {
     gridEdited = true;
     updateTotal();          // p.score を再計算の値にし、知らせの行を外す
     saveCurrentState();
-    Api.addHistory(currentEvent.id, {
+    HistoryOutbox.add(currentEvent.id, {
       action: 'score_update',
       playerName: p.name || '',
       detail: '技得点表の変更で計算し直し（' + before + '点 → ' + after + '点' + (p.confirmed ? '。確定し直し' : '') + '）'
@@ -1579,7 +1586,7 @@ var App = (function() {
         confirmed: false,
         baseRev: EventStatus.revOf(p)
       });
-      Api.addHistory(currentEvent.id, {
+      HistoryOutbox.add(currentEvent.id, {
         action: 'unconfirm',
         playerName: p.name || '',
         detail: '確定を取り消し（' + (p.score || 0) + '点）'
@@ -1634,7 +1641,7 @@ var App = (function() {
     applyConfirmedStyle(true);
     applyScoringLock();   // 確定済みは点数を触れない
     saveCurrentState();
-    Api.addHistory(currentEvent.id, {
+    HistoryOutbox.add(currentEvent.id, {
       action: 'confirm',
       playerName: p.name || '',
       detail: '確定（' + (p.score || 0) + '点）'
@@ -1665,7 +1672,7 @@ var App = (function() {
     unconfirmIfNeeded();
     updateTotal();
     saveCurrentState();
-    Api.addHistory(currentEvent.id, {
+    HistoryOutbox.add(currentEvent.id, {
       action: 'score_update',
       playerName: p ? p.name : '',
       detail: '全体補正点 → ' + n
@@ -1770,7 +1777,7 @@ var App = (function() {
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
-    Api.addHistory(currentEvent.id, {
+    HistoryOutbox.add(currentEvent.id, {
       action: 'score_update',
       playerName: p ? p.name : '',
       techName: tr.dataset.tech,
@@ -1851,7 +1858,7 @@ var App = (function() {
     }
     if (voided) detail += '（以降の太刀は無効）';
     if (laterCleared) detail += '（以降の太刀も未に）';
-    Api.addHistory(currentEvent.id, {
+    HistoryOutbox.add(currentEvent.id, {
       action: 'score_update',
       playerName: p ? p.name : '',
       techName: tr.dataset.tech,
@@ -1973,7 +1980,7 @@ var App = (function() {
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
-    Api.addHistory(currentEvent.id, {
+    HistoryOutbox.add(currentEvent.id, {
       action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
       techRow: parseInt(tr.dataset.row, 10), strike: 'all', value: '○', detail: '形成功'
     });
@@ -2013,7 +2020,7 @@ var App = (function() {
       applyVoiding(tr);
       applySequence(tr);
       updateRowScore(tr, p ? p.isFemale : false);
-      Api.addHistory(currentEvent.id, {
+      HistoryOutbox.add(currentEvent.id, {
         action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
         techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×',
         detail: '確定時に未を失敗に（以降の太刀は無効）'
@@ -2047,7 +2054,7 @@ var App = (function() {
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
-    Api.addHistory(currentEvent.id, {
+    HistoryOutbox.add(currentEvent.id, {
       action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
       techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×',
       detail: '未を失敗に' + (voided ? '（以降の太刀は無効）' : '')
