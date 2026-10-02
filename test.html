@@ -3217,6 +3217,24 @@
     var r2fR2Stat = await auPatch(r2fEv, r2fR2(1).id, { r2tech1: '真' });
     assert('R2 PATCH: 二巡目の行に申請を送ると 400 not_round1', r2fR2Stat.json.reason, 'not_round1');
 
+    // Api.updatePlayerInfo の linked / source（PC の選手登録・形登録が手元の他の行を差し替えるのに使う。トラック B）
+    var r2fApiCopy = await Api.updatePlayerInfo(r2fEv, r2f[1], { r2tech1: '右', r2tech2: '連', r2tech3: '左' });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 Api.updatePlayerInfo: 申請の書き写しは linked（配列）に二巡目の行、source は null',
+      [r2fApiCopy.ok, r2fApiCopy.linked.map(function(p) { return [p.id, p.tech1, p.rev]; }), r2fApiCopy.source],
+      [true, [[r2fR2(1).id, '右', EventStatus.revOf(r2fR2(1))]], null]);
+    var r2fApiBack = await Api.updatePlayerInfo(r2fEv, r2fR2(1).id, { tech3: '真' });
+    assert('R2 Api.updatePlayerInfo: 二巡目の行の技を直すと source に書き戻した一巡目の行、linked は []',
+      [r2fApiBack.ok, r2fApiBack.source && r2fApiBack.source.id, r2fApiBack.source && r2Req(r2fApiBack.source), r2fApiBack.linked],
+      [true, r2f[1], ['右', '連', '真'], []]);
+    var r2fApiScored = await Api.updatePlayerInfo(r2fEv, r2f[5], { r2tech1: '捨', r2tech2: '右', r2tech3: '真' });
+    assert('R2 Api.updatePlayerInfo: 書き写し先が採点済みなら ok:false・reason scored・linked に二巡目の行（1 つ）',
+      [r2fApiScored.ok, r2fApiScored.reason, r2fApiScored.linked && r2fApiScored.linked.id,
+       typeof (r2fApiScored.linked && r2fApiScored.linked.score)],
+      [false, 'scored', r2fR2(5).id, 'number']);
+    assert('R2 Api.updatePlayerInfo: 申請以外の 409 では linked は null',
+      (await Api.updatePlayerInfo(r2fEv, r2fR2(1).id, { name: '別名' })).linked, null);
+
     // ---- 19. CSV（23 列の書き出し・往復・20 列・簡易形式 13 列） ----
     var r2fCsv = await Api.exportCsv(r2fEv);
     var r2fLines = r2fCsv.replace(/^﻿/, '').split('\r\n');
@@ -6113,6 +6131,19 @@
       ['round2_final', 'round2_done', 'archived', 'final', 'draft'].map(function(s) { return Desk.stageOf(s).note; }),
       ['決戦 進行中', '二巡目終了', 'アーカイブ', '', '']);
     assert('stageOf: 知らない状態は -1', Desk.stageOf('zzz').index, -1);
+
+    // 状態を変えたあとのトースト（二巡目の形の申請。設計書 2026-10-03 3.4・6.5）
+    assert('statusToastText: 生成の結果が無ければ「〜にしました」だけ',
+      Desk.statusToastText('round2', null), EventStatus.LABELS.round2 + ' にしました');
+    assert('statusToastText: 申請の形の数と決戦の人数を添える',
+      Desk.statusToastText('round1_done', { created: 20, fromRequest: 3, finalistCount: 4 }),
+      EventStatus.LABELS.round1_done + ' にしました（二巡目 20 名分作りました・申請の形 3 名・決戦 4 名）');
+    assert('statusToastText: 申請 0 名・決戦 0 名は書かない',
+      Desk.statusToastText('round1_done', { created: 5, fromRequest: 0, finalistCount: 0 }),
+      EventStatus.LABELS.round1_done + ' にしました（二巡目 5 名分作りました）');
+    assert('statusToastText: 0 名分なら「作りました」を出さない・追跡できない行は添える',
+      Desk.statusToastText('round1_done', { created: 0, fromRequest: 2, untrackedCount: 1 }),
+      EventStatus.LABELS.round1_done + ' にしました（追跡できない二巡目の行が1件あります）');
 
     var h2home = document.createElement('h2');
     h2home.textContent = 'home.js';

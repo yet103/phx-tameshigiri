@@ -129,13 +129,14 @@ a { color: var(--accent); }
 .desk-players-wrap { overflow-x: auto; padding-bottom: 46px; }
 /* table-layout: fixed は表そのものに幅が無いと列幅を「比率」としてしか使わず、
    窓を狭めても列が縮むだけでスクロールが起きない（確認で見つかった）。
-   列幅の合計（36+44+150+60+84+46+80+64+44+113*3+52+40 = 1039px）を表の width に
+   列幅の合計（36+44+150+76+84+46+80+64+44+113*3+150+52+40 = 1205px。150 は「二巡目の形」の列。
+   設計書 2026-10-03 6.1。以前のコメントは col-bib を 76px にしたときの更新が漏れて 1039 のままだった）を表の width に
    して初めて、狭いときに表の枠だけが横スクロールし、sticky の名前列が効くように
    なる。border-collapse: collapse は既定の border-spacing（列の間の隙間）を
    消して幅の計算を列幅の合計どおりにする。1280px の窓の内側（.desk-players-wrap）に
    収まるようレビューで詰めた数値（列を足したら必ずこの合計も直すこと。合わないと
    列がじわじわずれる）。 */
-.desk-players-table { table-layout: fixed; width: 1039px; border-collapse: collapse; }
+.desk-players-table { table-layout: fixed; width: 1205px; border-collapse: collapse; }
 .desk-players-table th, .desk-players-table td { padding: 2px 6px; vertical-align: middle; text-align: center; }
 /* 上の .desk-table td.num は右寄せ。選手表だけ中央に戻す（同じ詳細度なので後ろのこれが勝つ） */
 .desk-players-table td.num { text-align: center; }
@@ -155,6 +156,8 @@ a { color: var(--accent); }
 .desk-players-table .col-sex { width: 64px; }
 .desk-players-table .col-new { width: 44px; text-align: center; }
 .desk-players-table .col-tech { width: 113px; }
+/* 二巡目の形（申請）。1 列＋ポップオーバー（desk-players.js の r2Cell。設計書 2026-10-03 6.1・D8） */
+.desk-players-table .col-r2 { width: 150px; }
 .desk-players-table .col-score { width: 52px; color: var(--score-color); font-weight: bold; }
 .desk-players-table th.act, .desk-players-table td.act { width: 40px; }
 
@@ -185,6 +188,41 @@ a { color: var(--accent); }
 .desk-cell-input.desk-cell-bad, .desk-cell-select.desk-cell-bad {
   border-color: var(--cell-fail-text); color: var(--cell-fail-text); font-weight: bold;
 }
+
+/* 二巡目の形（申請）のセルのボタン（desk-players.js の r2Cell）。技のセレクトと同じく、ふだんは枠を
+   見せず触ったときだけ出す。幅を超える技名の要約は … で切り、全部は title に出す。
+   申請なし（「（一巡目と同じ）」）は薄い文字。誤り（表に無い技・同じ形・レンタル）は赤枠。 */
+.desk-r2-btn {
+  display: block; width: 100%; min-height: 28px; padding: 2px 4px; border-radius: 3px;
+  background: transparent; color: inherit; border: 1px solid transparent;
+  font-family: inherit; font-size: 13px; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.desk-r2-btn.same { color: var(--text-muted); }
+.desk-r2-btn.set { font-weight: bold; }
+.desk-r2-btn:hover:not(:disabled) { border-color: var(--border); }
+.desk-r2-btn:focus { border-color: var(--accent); outline: none; }
+.desk-r2-btn[aria-expanded="true"] { border-color: var(--accent); }
+.desk-r2-btn:disabled { opacity: .55; cursor: not-allowed; }
+.desk-r2-btn.desk-cell-bad { border-color: var(--cell-fail-text); color: var(--cell-fail-text); font-weight: bold; }
+.desk-players-table td.desk-r2-none { color: var(--text-muted); font-size: 12px; }
+/* ポップオーバー（絞り込みの .desk-filter-pop と同じ置き方。中身だけ広く） */
+.desk-filter-pop.desk-r2-pop { min-width: 330px; max-width: 360px; padding: 8px 10px; }
+.desk-r2-pop.saving { opacity: .7; }
+.desk-r2-pop-title { font-weight: bold; font-size: 14px; margin-bottom: 2px; }
+.desk-r2-pop-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.desk-r2-pop-note { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.desk-r2-pop-note.warn { color: var(--warn); font-weight: bold; }
+.desk-r2-pop-grid { display: flex; flex-direction: column; gap: 4px; }
+.desk-r2-pop-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.desk-r2-pop-row span { flex: 0 0 auto; width: 2.6em; }
+.desk-r2-select {
+  flex: 1 1 auto; min-width: 0; min-height: 30px; padding: 2px 4px; border-radius: 3px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+}
+.desk-r2-select.desk-cell-bad { border-color: var(--cell-fail-text); color: var(--cell-fail-text); font-weight: bold; }
+.desk-r2-pop-issue { margin-top: 6px; font-size: 12px; color: var(--cell-fail-text); font-weight: bold; white-space: pre-line; }
+.desk-r2-pop-actions { flex-wrap: wrap; }
 
 /* 「＋ 行を追加」の下書き行（まだサーバーに無い行） */
 .desk-draft-row td { background: var(--bg-header); }
@@ -419,6 +457,20 @@ a { color: var(--accent); }
 .desk-steps-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .desk-steps .desk-btn-sub { color: var(--band-muted); border: 1px solid var(--gold-deep); }
 .desk-steps .desk-btn-sub:hover:not(:disabled) { color: var(--gold-light); border-color: var(--gold); }
+/* 二巡目を開始できない理由（Courts.round2StartBlockers。設計書 2026-10-03 5.3）。帯の上で読める朱の地 */
+.desk-steps-blockers {
+  margin-top: 8px; padding: 6px 10px; border-radius: 4px; white-space: pre-line;
+  font-size: 13px; font-weight: bold; color: var(--band-text);
+  background: color-mix(in srgb, var(--vermilion) 35%, var(--band-bg)); border-left: 3px solid var(--vermilion);
+}
+
+/* 二巡目の形登録の区画（desk-round2.js）。「一巡目から」の列（同じ／変更）と、末尾の「▲ …へ」 */
+/* 「一巡目から」の列を足したぶん、1100px の窓（決戦の枠の中の表）でも横にはみ出さないよう技のセレクトを詰める */
+.desk-match-table.desk-round2-table select { min-width: 118px; }
+.desk-round2-table td.differ.changed { color: var(--score-color); font-weight: bold; }
+.desk-round2-table td.differ.same, .desk-round2-table td.differ.none { color: var(--text-muted); }
+.desk-round2-tosteps { margin-top: 16px; }
+.desk-round2-tosteps .desk-btn-sub { min-height: 34px; padding: 0 14px; font-size: 13px; border: 1px solid var(--gold-deep); }
 
 /* 二巡目の帯（形登録の区画の全員にコピー・件数。desk-round2.js） */
 .desk-match-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -555,7 +607,8 @@ a { color: var(--accent); }
 /* 選手表の配色を技得点表と同じ作法にする（ユーザー要望 2026-09-30）。本文は端末の明朝（通常の太さ）、
    名前だけ web フォント（太字）。列を組に分けて地色を付け、組の境目に金の太線を引く。
    組: 1 巡・No.・名前（金の薄い地）｜2 ゼッケン・級位段位・レンタル（灰みの地）｜3 コート・性別・新人（白）
-   ｜4 技1〜3（白。列番号 10〜12）｜5 得点（金の薄い地）｜⋯。列を足したら nth-child の番号も直すこと。 */
+   ｜4 技1〜3（白。列番号 10〜12）｜二巡目の形（白。col-r2）｜5 得点（金の薄い地）｜⋯。
+   列を足したら nth-child の番号も直すこと。 */
 .desk-players-table { font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; border: 2px solid var(--gold); }
 .desk-players-table td { background: var(--card-bg); }
 .desk-players-table td.col-round, .desk-players-table td.col-no, .desk-players-table td.col-name, .desk-players-table td.col-score {
@@ -568,6 +621,7 @@ a { color: var(--accent); }
 .desk-players-table th.col-bib, .desk-players-table td.col-bib,
 .desk-players-table th.col-court, .desk-players-table td.col-court,
 .desk-players-table th:nth-child(10), .desk-players-table td:nth-child(10),
+.desk-players-table th.col-r2, .desk-players-table td.col-r2,
 .desk-players-table th.col-score, .desk-players-table td.col-score { border-left: 2px solid var(--gold); }
 /* 追加中の下書き行と、ホバーした名前列（sticky）は従来の色を保つ（上の組の地色より後ろに置いて勝たせる） */
 .desk-players-table .desk-draft-row td { background: var(--bg-header); }

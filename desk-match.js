@@ -1,5 +1,7 @@
 // 試合の区画（#match/<id>）。工程表（段階の遷移ボタン）・コート別の進み具合・採点画面を開く入口。
 // 二巡目の形登録（技の入力）は別の区画（desk-round2.js）に分けた（ユーザー要望 2026-09-30）。
+// 工程表は部品（DeskMatch.buildSteps）にして、形登録の区画の先頭にも出す（設計書
+// 2026-10-03-round2-forms-prereg-design.md 6.2。遷移ボタンは工程表の中にだけ置く）。
 //
 // ポーリングはしない。「確定 n / N」といま採点中の選手は、大会を読んだ時点の値で、
 // 「↻ 最新に更新」（Desk.reloadEvent）を押したときだけ変わる。自動で更新するのは
@@ -89,7 +91,10 @@
   // 試合進行の先頭に「① 一巡目 → ② 二巡目の形登録 → ③ 二巡目（決戦を含む）」の 3 段を置き、
   // 現在の段を金で塗って、その段階でやることを 1 行で示す。下に、その段階に関係する遷移ボタン
   // （進める・戻す。二巡目準備なら「二巡目を行わず最終結果へ」も）を置く。段階の遷移ボタンは
-  // ここだけ（上部の状態バーは表示だけ）。押したときの確認と通信は Desk.applyStatus（desk.js）。
+  // 工程表の中だけ（上部の状態バーは表示だけ）。押したときの確認と通信は Desk.applyStatus（desk.js）。
+  // 工程表は試合進行と、二巡目の形登録の区画（desk-round2.js）の先頭に出す（2026-10-03。
+  // DeskMatch.buildSteps(st, ctx, { where: 'round2' })）。区画は同時に 1 つしか描かないので、
+  // 遷移ボタンの id（btnDeskNext など）は重ならない。
   var MATCH_STEPS = [
     { label: '① 一巡目',               states: ['round1'] },
     { label: '② 二巡目の形登録',       states: ['round1_done'] },
@@ -106,15 +111,20 @@
   }
 
   // その段階でやること（1 行）。ボタンの文言は EventStatus.nextLabel と同じものを引く。
-  function stepTodo(st, players) {
+  // where は工程表を置く区画（'match' 試合進行 | 'round2' 二巡目の形登録）。違うのは形登録の段の 1 行だけ。
+  function stepTodo(st, players, where) {
     var nx = EventStatus.nextLabel(st, players);
     switch (st) {
       case 'draft':
-        return '準備中です。選手と技をそろえたら「' + nx + '」を押します（採点画面が別のウィンドウで開きます）。';
+        return '準備中です。選手と技（二巡目で形を変える選手は「二巡目の形」も）をそろえたら「' + nx +
+          '」を押します（採点画面が別のウィンドウで開きます）。';
       case 'round1':
         return '各コートで一巡目を採点しています。全コートの確定がそろったら「' + nx + '」を押します。';
       case 'round1_done':
-        return '二巡目の行ができました。自己申告があった選手の形を形登録で直してから「' + nx + '」を押します。';
+        return where === 'round2'
+          ? '申請された二巡目の形（申請の無い人は一巡目の形）が入っています。当日の変更があれば下の表で直し、' +
+            '確かめ終えたら「' + nx + '」を押します。'
+          : '二巡目の行ができました。形登録で形を確かめてから「' + nx + '」を押します。';
       case 'round2':
         return EventStatus.hasFinalists(players)
           ? '各コートで二巡目を採点しています。決戦以外が斬り終わったら「' + nx + '」を押します。'
@@ -148,11 +158,27 @@
     return box;
   }
 
-  function buildSteps(st, ctx) {
+  // 二巡目を開始する前の検査（Courts.round2StartBlockers。設計書 2026-10-03 5.3）に引っかかる行が
+  // あるときの帯の文言。無ければ ''。工程表は「二巡目を開始 ▶」を押せなくして、この帯で理由を示す
+  // （押したときの最終の検査は Desk.applyStatus が読み直した大会でもう一度行う）。
+  function round2BlockerText(st, ctx, where) {
+    if (st !== 'round1_done') return '';
+    var blockers = Courts.round2StartBlockers(ctx.event, ctx.players || []);
+    if (blockers.length === 0) return '';
+    return Courts.blockerMessage(blockers, where === 'round2'
+      ? '二巡目を開始できません。下の表で直してください。'
+      : '二巡目を開始できません。形登録で直してください。');
+  }
+
+  // 工程表。opts.where: 'match'（既定。試合進行）| 'round2'（二巡目の形登録の区画の先頭）。
+  // 違いは形登録の段の 1 行（stepTodo）と近道のボタンだけ（設計書 2026-10-03 6.2）。
+  // 形登録の区画は技を直すたびにこれを作り直して差し替える（帯と「二巡目を開始」の可否を合わせるため）。
+  function buildSteps(st, ctx, opts) {
+    var where = (opts && opts.where === 'round2') ? 'round2' : 'match';
     var players = ctx.players || [];
     var box = document.createElement('div');
     box.className = 'desk-steps';
-    box.id = 'matchSteps';
+    box.id = where === 'round2' ? 'round2Steps' : 'matchSteps';
 
     var row = document.createElement('div');
     row.className = 'desk-steps-row';
@@ -173,15 +199,27 @@
 
     var todo = document.createElement('p');
     todo.className = 'desk-steps-todo';
-    todo.id = 'matchStepsTodo';
-    todo.appendChild(document.createTextNode(stepTodo(st, players)));
-    // 形登録（②）と結果確認への近道
+    todo.id = where === 'round2' ? 'round2StepsTodo' : 'matchStepsTodo';
+    todo.appendChild(document.createTextNode(stepTodo(st, players, where)));
+    // 形登録（②）と結果確認への近道。形登録の区画では、逆向きに試合進行への近道
+    // （コート別の進み具合を見たいとき）を置く。
     if (st === 'round1_done') {
-      todo.appendChild(jumpButton('btnMatchGoRound2', '形登録へ →', 'round2', ctx));
+      todo.appendChild(where === 'round2'
+        ? jumpButton('btnRound2GoMatch', '試合進行へ →', 'match', ctx)
+        : jumpButton('btnMatchGoRound2', '形登録へ →', 'round2', ctx));
     } else if (st === 'round2_done' || st === 'final' || st === 'archived') {
       todo.appendChild(jumpButton('btnMatchGoResults', '結果確認へ →', 'results', ctx));
     }
     box.appendChild(todo);
+
+    var blockText = round2BlockerText(st, ctx, where);
+    if (blockText) {
+      var band = document.createElement('p');
+      band.className = 'desk-steps-blockers';
+      band.id = where === 'round2' ? 'round2StepsBlockers' : 'matchStepsBlockers';
+      band.textContent = blockText;
+      box.appendChild(band);
+    }
 
     var actions = document.createElement('div');
     actions.className = 'desk-steps-actions';
@@ -190,9 +228,17 @@
     // 決戦へ、無ければ二巡目終了へ）。ラベルも同じ判定で決める。
     var nx = EventStatus.nextStep(st, players);
     if (nx) {
-      actions.appendChild(stepButton('btnDeskNext', 'desk-btn primary',
+      var next = stepButton('btnDeskNext', 'desk-btn primary',
         EventStatus.nextLabel(st, players) + ' ▶', st, nx,
-        function(pl) { return EventStatus.nextStep(st, pl); }));
+        function(pl) { return EventStatus.nextStep(st, pl); });
+      if (blockText) {
+        // 二巡目の行に誤りがある間は押せない。data-blocked は Desk.setStageButtonsDisabled が
+        // 通信の後に有効へ戻さないための印（他の遷移ボタンの通信で解けないように）
+        next.disabled = true;
+        next.setAttribute('data-blocked', '1');
+        next.title = '二巡目の行の技の誤りを直すと押せます';
+      }
+      actions.appendChild(next);
     }
     var back = EventStatus.prev(st, players);
     if (back) {
@@ -586,4 +632,7 @@
   }
 
   Desk.registerTab('match', { render: render });
+
+  // 形登録の区画（desk-round2.js）が工程表を使う。desk-invites.js の DeskInvites と同じ作り。
+  window.DeskMatch = { buildSteps: buildSteps };
 })();

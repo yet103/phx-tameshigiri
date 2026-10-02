@@ -53,6 +53,9 @@
     { label: '技1', cls: 'col-tech', filter: 'noTech' },
     { label: '技2', cls: 'col-tech', filter: 'noTech' },
     { label: '技3', cls: 'col-tech', filter: 'noTech' },
+    // 二巡目の形の申請（一巡目の行の r2tech1〜3）。3 列のセレクトにすると表が 1280px に収まらないので、
+    // 1 列に要約を出し、押すとポップオーバーで技 3 つを選ぶ（設計書 2026-10-03 6.1・D8）。
+    { label: '二巡目の形', cls: 'col-r2', filter: 'r2' },
     { key: 'score', label: '得点', cls: 'col-score' },
     { label: '', cls: 'act' }
   ];
@@ -212,9 +215,10 @@
 
   // ---- 絞り込みの状態 ----
 
-  var FILTER_KINDS = ['round', 'name', 'court', 'sex', 'newFace', 'noTech'];
+  var FILTER_KINDS = ['round', 'name', 'court', 'sex', 'newFace', 'noTech', 'r2'];
 
   function isFilterActive(kind) {
+    if (kind === 'r2') return !!filter.r2;
     if (kind === 'court') return (filter.court || []).length > 0;
     if (kind === 'round') return !!filter.round;
     if (kind === 'sex') return !!filter.sex;
@@ -316,10 +320,14 @@
   }
 
   // ▼ の実座標から位置を決める。画面の右端からはみ出すときは寄せ戻す。
+  // 下にはみ出すとき（表の下の方の行の「二巡目の形」など）は、ボタンの上に出す。
   function placePopover() {
     if (!popover) return;
     var r = popover.btn.getBoundingClientRect();
-    popover.el.style.top = (r.bottom + 4) + 'px';
+    var h = popover.el.offsetHeight;
+    var top = r.bottom + 4;
+    if (top + h > window.innerHeight - 8 && r.top - 4 - h >= 8) top = r.top - 4 - h;
+    popover.el.style.top = top + 'px';
     var left = r.left;
     var w = popover.el.offsetWidth;
     if (left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - w);
@@ -371,6 +379,12 @@
     }
     if (col.filter === 'newFace') {
       return flagPop('新人だけ', filter.newFace, function(v) { filter.newFace = v; });
+    }
+    if (col.filter === 'r2') {
+      // 二巡目の形の申請（Courts.applyFilter の r2）。どちらか片方だけにすると二巡目の行は出ない
+      // （二巡目の行は申請を持たない）。申請の入力漏れを確かめるのに使う（設計書 2026-10-03 6.1）。
+      return triPop([{ value: 'yes', label: '申請あり' }, { value: 'no', label: '一巡目と同じ' }],
+        filter.r2 || '', '', function(v) { filter.r2 = v; });
     }
     return flagPop('技が未入力の行だけ', filter.noTech, function(v) { filter.noTech = v; });
   }
@@ -481,7 +495,12 @@
   // repeat（同じ形の回数制限。設計書 2026-09-20-rules-alignment-design.md）は
   // Courts.BLOCKER_LABELS の文言（「同じ形を2回以上選んでいる」）だと帯が長くなるので、
   // ここだけ短い「同じ形 2 回」にする（あとに renderCount が人数を続ける）。
-  var BLOCKER_LABELS = { bib: 'ゼッケン未入力', rank: '級位段位未入力', rental: 'レンタル不可の形', repeat: '同じ形 2 回' };
+  // r2〜 は二巡目の形の申請の誤り（設計書 2026-10-03 6.1。直す場所は「二巡目の形」の列の赤枠）。
+  var BLOCKER_LABELS = {
+    bib: 'ゼッケン未入力', rank: '級位段位未入力', rental: 'レンタル不可の形', repeat: '同じ形 2 回',
+    unknownTech: '表に無い技',
+    r2unknownTech: '二巡目: 表に無い技', r2repeat: '二巡目: 同じ形 2 回', r2rental: '二巡目: レンタル不可の形'
+  };
 
   // 表の上の「表示 n / N 名」「ゼッケン未入力 n …」「絞り込みを解除」。
   // 件数は Courts.startBlockers をそのまま数えるので、「試合開始」で止まる条件と
@@ -887,7 +906,7 @@
   function buildRow(ctx, p, locked, band) {
     var key = Courts.orderKey(p);
     // この行の入力を控えておく（レンタルの切り替えで技を作り直す・赤枠を塗り直す）
-    var refs = { techSelects: [], bibInput: null, rankInput: null };
+    var refs = { techSelects: [], bibInput: null, rankInput: null, r2Button: null };
     var tr = document.createElement('tr');
     // 一巡目の bib/rank/rental 保存が二巡目の行に伝播したとき、表全体を描き直さずこの行
     // だけを探して差し替えるための目印（saveCell 参照）。
@@ -912,6 +931,7 @@
     tr.appendChild(techCell(ctx, p, locked, 1, refs));
     tr.appendChild(techCell(ctx, p, locked, 2, refs));
     tr.appendChild(techCell(ctx, p, locked, 3, refs));
+    tr.appendChild(r2Cell(ctx, p, locked, refs));
     // 得点は確定済みだけ出す（採点途中の値は表に出さない。ユーザー要望 2026-09-30）
     tr.appendChild(cell(p.confirmed === true ? String(p.score || 0) : '', 'num col-score'));
     var tdAct = document.createElement('td');
@@ -938,6 +958,35 @@
     dst.bib = (typeof src.bib === 'number') ? src.bib : null;
     dst.rank = (typeof src.rank === 'string') ? src.rank : '';
     dst.rental = src.rental === true;
+    // 二巡目の形の申請。キーが無い＝申請なし（一巡目と同じ）なので '' にそろえる（設計書 2026-10-03 6.1）
+    EventStatus.R2_TECH_KEYS.forEach(function(k) {
+      dst[k] = (typeof src[k] === 'string') ? src[k] : '';
+    });
+    if (typeof src.rev === 'number') dst.rev = src.rev;
+  }
+
+  // サーバーが書き換えた相手の行（PATCH の応答の linked / source。設計書 2026-10-03 3.3.3）を
+  // 手元の控え（ctx.players）に取り込み、表にその行があれば 1 行だけ作り直す（表全体は描き直さない。
+  // 他の行で入力途中の文字やフォーカスを消さないため。saveCell の伝播と同じ方針）。
+  // 控えは同じオブジェクトを書き換える（他の行のクロージャが掴んでいる参照もそのまま新しくなる）。
+  function absorbRow(ctx, row) {
+    if (!row || typeof row.id !== 'string') return null;
+    var local = (ctx.players || []).filter(function(q) { return q && q.id === row.id; })[0];
+    if (!local) return null;
+    EventStatus.R2_TECH_KEYS.forEach(function(k) { delete local[k]; });   // 無いキー＝空
+    Object.assign(local, row);
+    rebuildRowOf(ctx, local);
+    return local;
+  }
+
+  // 表の中の、その選手の行だけを作り直す。絞り込みで隠れている等で見当たらなければ何もしない
+  // （ctx.players 側は更新済みなので、次に描き直されたときには反映される）。
+  function rebuildRowOf(ctx, player) {
+    if (!view || view.ctx !== ctx || !view.tbody) return;
+    var oldTr = Array.prototype.find.call(view.tbody.children, function(tr) {
+      return tr.dataset && tr.dataset.playerId === player.id;
+    });
+    if (oldTr) oldTr.replaceWith(buildRow(ctx, player, view.locked, oldTr.deskBand));
   }
 
   // 一巡目に元がある二巡目の行か（sourcePlayerId が今ある行を指している）。
@@ -970,8 +1019,11 @@
     if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた。DOM にも alert にも触らない
     var declined = false;
     if (res && !res.ok && res.reason === 'scored' && !forced) {
-      // 画面の控えが古く、その間に採点されていた。同じ確認を出し、承諾されたら force で送り直す
-      if (confirm(Courts.scoreChangeConfirmMessage(res.player || p))) {
+      // 画面の控えが古く、その間に採点されていた。同じ確認を出し、承諾されたら force で送り直す。
+      // linked が付いていれば理由は二巡目の行の採点（申請の書き写し先。設計書 2026-10-03 5.4）
+      var again = res.linked ? Courts.round2ChangeConfirmMessage(res.linked)
+        : Courts.scoreChangeConfirmMessage(res.player || p);
+      if (confirm(again)) {
         res = await Api.updatePlayerInfo(ctx.eventId, p.id, Object.assign({ force: true }, patch));
         if (ctx.isStale()) return;
       } else {
@@ -997,6 +1049,14 @@
       return;
     }
     if (res.player) adopt(p, res.player);
+    // サーバーが書き換えた相手の行（設計書 2026-10-03 3.3.3）。一巡目の行の技を直して申請の無い選手の
+    // 二巡目の行が付いていった（linked）、二巡目の行の技を直して一巡目の行の申請へ書き戻した（source）。
+    // 氏名などの写しも linked に入るので、下の手元での写しはそれ以外の行（念のため）だけに掛ける。
+    var absorbed = Object.create(null);
+    (res.linked || []).forEach(function(row) {
+      if (absorbRow(ctx, row)) absorbed[row.id] = true;
+    });
+    if (res.source && absorbRow(ctx, res.source)) absorbed[res.source.id] = true;
     // 一巡目の bib/rank/rental/name/isNewFace を保存したら、サーバーが sourcePlayerId で紐づく二巡目の
     // 行にも同じ値を写している（server/index.js の PATCH …/players/:playerId。氏名・新人の写しは
     // 網羅検証 M1 で足された）。表のローカルな控え（ctx.players）はサーバーの応答（この行だけ）では
@@ -1007,7 +1067,7 @@
     if (patch.bib !== undefined || patch.rank !== undefined || patch.rental !== undefined ||
         patch.name !== undefined || patch.isNewFace !== undefined || patch.isFemale !== undefined) {
       (ctx.players || []).forEach(function(other) {
-        if (other && other.sourcePlayerId === p.id) {
+        if (other && other.sourcePlayerId === p.id && !absorbed[other.id]) {
           if (patch.bib !== undefined) {
             other.bib = (typeof p.bib === 'number') ? p.bib : null;
           }
@@ -1018,12 +1078,7 @@
           if (patch.isFemale !== undefined) other.isFemale = p.isFemale === true;
           // 絞り込みで隠れている・並べ替えでこの表に無い等、行が見当たらなければ何もしない
           // （ctx.players 側は更新済みなので、次に描き直されたときには反映される）。
-          if (view && view.ctx === ctx && view.tbody) {
-            var oldTr = Array.prototype.find.call(view.tbody.children, function(tr) {
-              return tr.dataset && tr.dataset.playerId === other.id;
-            });
-            if (oldTr) oldTr.replaceWith(buildRow(ctx, other, view.locked, oldTr.deskBand));
-          }
+          rebuildRowOf(ctx, other);
         }
       });
     }
@@ -1110,6 +1165,8 @@
       setMark(t.sel, 'desk-cell-bad', rentalBad || repeatBad);
       t.sel.title = repeatBad ? '同じ形は 1 回までです' : rentalBad ? 'レンタルの選手は抜刀してからの形だけ選べます' : '';
     });
+    // 二巡目の形の申請（一巡目の行だけ）。レンタルや一巡目の形を変えると見え方・赤枠も変わるので塗り直す
+    if (refs.r2Button) paintR2Button(ctx, refs.r2Button, p);
   }
 
   function setMark(el, cls, on) {
@@ -1400,6 +1457,273 @@
     return td;
   }
 
+  // --- 二巡目の形（申請）の列（設計書 2026-10-03-round2-forms-prereg-design.md 6.1） ---
+  // 一巡目の行の r2tech1〜3。3 つとも空なら「一巡目と同じ形」。セルはボタン 1 つで、押すと
+  // ポップオーバーで技 3 つを選ぶ。3 つを 1 回の PATCH で送る（同じ形の回数制限が 3 つの組で
+  // 決まるため。セル 1 つずつ保存する他の列とは違う）。二巡目の行は「—」（その行の技1〜3 が二巡目の形）。
+
+  // 申請の 3 つの誤り（Courts.techIssues）を文言の配列にする。無ければ []。
+  // 表に無い技は、技得点表が取れているときだけ見る（Courts.startBlockers の r2unknownTech と同じ）。
+  function r2IssueTexts(ctx, p, techs) {
+    var iss = Courts.techIssues(techs, ctx.techniques || [], !!p.isFemale, p.rental === true);
+    var out = [];
+    if (Array.isArray(ctx.techniques) && iss.unknown.length > 0) {
+      out.push('技「' + iss.unknown.join('」「') + '」は技得点表にありません');
+    }
+    if (iss.repeat.length > 0) out.push('同じ形は 1 回までです（' + iss.repeat.join('・') + '）');
+    if (iss.rentalBad) out.push('レンタルの選手は抜刀してからの形だけ選べます');
+    return out;
+  }
+
+  function r2Summary(techs) {
+    return techs.map(function(t) { return t || '—'; }).join('・');
+  }
+
+  // セルのボタンの見え方。申請なし＝「（一巡目と同じ）」を薄く、申請あり＝技名の要約（幅を超えたら …）。
+  // 誤りがあれば赤枠（.desk-cell-bad）にして、理由を title に出す。
+  function paintR2Button(ctx, b, p) {
+    var has = EventStatus.hasRound2Techs(p);
+    var techs = EventStatus.round2TechsOf(p);
+    var issues = has ? r2IssueTexts(ctx, p, techs) : [];
+    b.className = 'desk-r2-btn' + (has ? ' set' : ' same') + (issues.length > 0 ? ' desk-cell-bad' : '');
+    b.textContent = has ? r2Summary(techs) : '（一巡目と同じ）';
+    b.title = (has ? '二巡目の形: ' + r2Summary(techs) : '二巡目も一巡目と同じ形です（押すと変えられます）') +
+      (issues.length > 0 ? '\n' + issues.join('\n') : '');
+  }
+
+  function r2Cell(ctx, p, locked, refs) {
+    var td = document.createElement('td');
+    td.className = 'col-r2';
+    if (Courts.roundOf(p) !== 1) {
+      td.textContent = '—';
+      td.classList.add('desk-r2-none');
+      td.title = '二巡目の行は 技1〜3 が二巡目の形です';
+      return td;
+    }
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', '二巡目の形');
+    b.setAttribute('aria-haspopup', 'dialog');
+    b.setAttribute('aria-expanded', 'false');
+    paintR2Button(ctx, b, p);
+    b.disabled = locked;
+    b.addEventListener('click', function(e) {
+      // 外側クリックの判定（document の click）に流さない。もう一度押したら閉じる
+      e.stopPropagation();
+      if (popover && popover.btn === b) { closePopover(true); return; }
+      openR2Popover(ctx, p, b);
+    });
+    td.appendChild(b);
+    refs.r2Button = b;
+    return td;
+  }
+
+  // 技 1 つのセレクト。候補は一巡目の技セルと同じ（性別とレンタルで絞る）。
+  // いまの値が候補に無ければ、黙って空にしないよう選択肢に足す（techCell の fill と同じ）。
+  function r2Select(ctx, p, slot, value) {
+    var sel = document.createElement('select');
+    sel.className = 'desk-r2-select';
+    sel.setAttribute('aria-label', '二巡目の技' + slot);
+    addOption(sel, '', '—');
+    var found = false;
+    Courts.techniqueOptions(ctx.techniques, !!p.isFemale, p.rental === true).forEach(function(t) {
+      var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
+      if (!n) return;
+      addOption(sel, n, n);
+      if (n === value) found = true;
+    });
+    if (value && !found) {
+      addOption(sel, value, value +
+        (Courts.resolveTechnique(ctx.techniques, value, !!p.isFemale) ? '（選べない技）' : '（リストに無い技）'));
+    }
+    sel.value = value || '';
+    return sel;
+  }
+
+  // ポップオーバー（絞り込みの ▼ と同じ仕組み・同じ置き場所。document.body に fixed、同時に 1 つだけ、
+  // 外側クリック・Esc・スクロールで閉じる）。申請なしで開いたら一巡目の形を下書きとして入れる
+  // （1 本だけ変える人も 3 つ書く必要があるのを補う。設計書 2.2）。
+  function openR2Popover(ctx, p, btn) {
+    closePopover();
+    bindPopoverCloseOnce();
+    var has = EventStatus.hasRound2Techs(p);
+    var start = has ? EventStatus.round2TechsOf(p) : [p.tech1 || '', p.tech2 || '', p.tech3 || ''];
+    var hasRow2 = (ctx.players || []).some(function(q) { return q && q !== p && q.sourcePlayerId === p.id; });
+
+    var box = document.createElement('div');
+    box.className = 'desk-filter-pop desk-r2-pop';
+    box.id = 'deskR2Pop';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', (p.name || '') + ' の二巡目の形');
+    box.addEventListener('click', function(e) { e.stopPropagation(); });
+
+    var title = document.createElement('div');
+    title.className = 'desk-r2-pop-title';
+    title.textContent = '二巡目の形（空 = 一巡目と同じ）';
+    box.appendChild(title);
+    var sub = document.createElement('div');
+    sub.className = 'desk-r2-pop-sub';
+    sub.textContent = (p.name || '') + '　一巡目: ' + r2Summary([p.tech1 || '', p.tech2 || '', p.tech3 || '']);
+    box.appendChild(sub);
+    if (hasRow2) {
+      var linkedNote = document.createElement('div');
+      linkedNote.className = 'desk-r2-pop-note warn';
+      linkedNote.textContent = '二巡目の行ができています。ここで変えると二巡目の行の技も変わります。';
+      box.appendChild(linkedNote);
+    }
+    if (!has) {
+      var draftNote = document.createElement('div');
+      draftNote.className = 'desk-r2-pop-note';
+      draftNote.textContent = '一巡目の形を下書きとして入れています。変える技だけ選び直して保存してください。';
+      box.appendChild(draftNote);
+    }
+
+    var grid = document.createElement('div');
+    grid.className = 'desk-r2-pop-grid';
+    var selects = [1, 2, 3].map(function(slot) {
+      var lab = document.createElement('label');
+      lab.className = 'desk-r2-pop-row';
+      var span = document.createElement('span');
+      span.textContent = '技' + slot;
+      lab.appendChild(span);
+      var sel = r2Select(ctx, p, slot, start[slot - 1]);
+      lab.appendChild(sel);
+      grid.appendChild(lab);
+      return sel;
+    });
+    box.appendChild(grid);
+
+    var issueEl = document.createElement('div');
+    issueEl.className = 'desk-r2-pop-issue';
+    issueEl.id = 'deskR2PopIssue';
+    box.appendChild(issueEl);
+
+    function values() { return selects.map(function(s) { return s.value; }); }
+    // 選んだ時点で誤りを示す（同じ形の回数制限・表に無い技・レンタル）。保存は止めない
+    // （サーバーも止めない。試合開始の検査が止める。選手登録の帯にも件数が出る）。
+    function paintIssues() {
+      var v = values();
+      var texts = r2IssueTexts(ctx, p, v);
+      issueEl.textContent = texts.join('\n');
+      issueEl.hidden = texts.length === 0;
+      var iss = Courts.techIssues(v, ctx.techniques || [], !!p.isFemale, p.rental === true);
+      selects.forEach(function(s) {
+        var n = s.value;
+        var bad = false;
+        if (n) {
+          var resolved = Courts.resolveTechnique(ctx.techniques, n, !!p.isFemale);
+          var display = resolved ? Courts.stripGenderSuffix(resolved.name) : '';
+          bad = (Array.isArray(ctx.techniques) && !resolved) ||
+            (!!display && iss.repeat.indexOf(display) !== -1) ||
+            (p.rental === true && !Courts.isDrawnTechnique(ctx.techniques, n, !!p.isFemale));
+        }
+        s.classList.toggle('desk-cell-bad', bad);
+      });
+    }
+    selects.forEach(function(s) { s.addEventListener('change', paintIssues); });
+    paintIssues();
+
+    var actions = document.createElement('div');
+    actions.className = 'desk-filter-actions desk-r2-pop-actions';
+    var btnSave = document.createElement('button');
+    btnSave.type = 'button';
+    btnSave.className = 'desk-btn primary';
+    btnSave.id = 'btnR2PopSave';
+    btnSave.textContent = '保存';
+    var btnSame = document.createElement('button');
+    btnSame.type = 'button';
+    btnSame.className = 'desk-btn';
+    btnSame.id = 'btnR2PopSame';
+    btnSame.textContent = '一巡目と同じにする';
+    var btnCancel = document.createElement('button');
+    btnCancel.type = 'button';
+    btnCancel.className = 'desk-btn';
+    btnCancel.textContent = 'やめる';
+    actions.appendChild(btnSave);
+    actions.appendChild(btnSame);
+    actions.appendChild(btnCancel);
+    box.appendChild(actions);
+
+    var ui = {
+      setBusy: function(flag) {
+        selects.concat([btnSave, btnSame, btnCancel]).forEach(function(el) { el.disabled = flag; });
+        box.classList.toggle('saving', flag);
+      }
+    };
+    btnSave.addEventListener('click', function() { saveR2(ctx, p, values(), ui); });
+    btnSame.addEventListener('click', function() { saveR2(ctx, p, ['', '', ''], ui); });
+    btnCancel.addEventListener('click', function() { closePopover(true); });
+
+    document.body.appendChild(box);
+    popover = { el: box, btn: btn, col: null };
+    placePopover();
+    btn.setAttribute('aria-expanded', 'true');
+    selects[0].focus();
+  }
+
+  // 申請の保存。values は 3 つ（'' は空の枠。3 つとも空なら「一巡目と同じ」）。
+  // 送る前に、書き写し先の二巡目の行が採点済みなら Courts.round2ChangeConfirmMessage で聞き、承諾で force。
+  // サーバーの 409 scored に linked が付いて返ったとき（画面の控えが古かった）も同じ確認で送り直す。
+  // 成功したら行の控えに申請を取り込み、応答の linked（書き写した二巡目の行）も表の中で差し替える。
+  var r2Busy = false;
+  async function saveR2(ctx, p, values, ui) {
+    if (r2Busy) return;
+    var patch = { r2tech1: values[0], r2tech2: values[1], r2tech3: values[2] };
+    var before = EventStatus.normalizedRound2Techs(p);
+    var after = EventStatus.normalizedRound2Techs(Object.assign({}, p, patch));
+    if ((!before && !after) || (before && after && EventStatus.sameTechs(before, after))) {
+      closePopover(true);   // 変わっていない（下書きのまま保存した・同じ申請を選び直した）。送らない
+      return;
+    }
+    var forced = false;
+    var scoredRow = Courts.round2LinkedScored(p, patch, ctx.players);
+    if (scoredRow) {
+      if (!confirm(Courts.round2ChangeConfirmMessage(scoredRow))) return;
+      forced = true;
+    }
+    r2Busy = true;
+    ui.setBusy(true);
+    try {
+      var res = await Api.updatePlayerInfo(ctx.eventId, p.id, forced ? Object.assign({ force: true }, patch) : patch);
+      if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた。DOM にも alert にも触らない
+      if (res && !res.ok && res.reason === 'scored' && !forced) {
+        var again = res.linked ? Courts.round2ChangeConfirmMessage(res.linked)
+          : Courts.scoreChangeConfirmMessage(res.player || p);
+        if (!confirm(again)) { ui.setBusy(false); return; }
+        res = await Api.updatePlayerInfo(ctx.eventId, p.id, Object.assign({ force: true }, patch));
+        if (ctx.isStale()) return;
+      }
+      ui.setBusy(false);
+      if (!res || !res.ok) {
+        // ポップオーバーは閉じない（選んだ値を残して、直してもう一度保存できるように）
+        if (res && res.reason === 'locked') {
+          alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else if (res && res.status === 400 && res.error) {
+          alert(res.error);
+        } else {
+          alert('二巡目の形を保存できませんでした。\n通信を確認してもう一度お試しください。');
+        }
+        return;
+      }
+      if (res.player) adopt(p, res.player);
+      (res.linked || []).forEach(function(row) { absorbRow(ctx, row); });
+      closePopover();
+      rebuildRowOf(ctx, p);
+      // 作り直した行のボタンにフォーカスを戻す（キーボードで続けて操作できるように）
+      if (view && view.tbody) {
+        var tr = Array.prototype.find.call(view.tbody.children, function(x) {
+          return x.dataset && x.dataset.playerId === p.id;
+        });
+        var nb = tr && tr.querySelector('.desk-r2-btn');
+        if (nb) nb.focus();
+      }
+      if (view && view.ctx === ctx) renderCount(lastShown, (ctx.players || []).length);
+      Desk.toast(after ? '二巡目の形を保存しました' : '二巡目は一巡目と同じ形にしました');
+    } finally {
+      r2Busy = false;
+    }
+  }
+
   // --- 「＋ 行を追加」の下書き行 ---
 
   // 直前の行（いま表に出ている最後の行）からコート・性別・新人を引き継ぐ。
@@ -1591,6 +1915,10 @@
       techSelects.push(sel);
     });
 
+    // 二巡目の形は下書きでは入れない（行を作ってからセルで入れる。設計書 2026-10-03 6.1）
+    var tdR2 = cell('（追加後に設定）', 'col-r2 desk-r2-none');
+    tdR2.title = '選手を追加したあと、この列で二巡目の形を入れられます';
+    tr.appendChild(tdR2);
     tr.appendChild(cell('—', 'num col-score'));
     tr.appendChild(cell('', 'act'));
 
@@ -1732,6 +2060,19 @@
       ex.textContent = '　' + extras.join('　');
       div.appendChild(ex);
     }
+    // 二巡目の形の申請（11〜13 列目）。書いた行だけ出す。表に無い技名は赤
+    var r2 = row.r2techs || ['', '', ''];
+    if (r2.some(function(t) { return !!t; })) {
+      var r2Head = document.createElement('span');
+      r2Head.textContent = '　二巡目: ';
+      div.appendChild(r2Head);
+      r2.forEach(function(t, i) {
+        var span = document.createElement('span');
+        span.textContent = (i > 0 ? '・' : '') + (t || '—');
+        if (t && (row.badR2Techs || []).indexOf(t) !== -1) span.className = 'desk-paste-bad';
+        div.appendChild(span);
+      });
+    }
     if (!row.ok) {
       var why = document.createElement('span');
       why.textContent = '　← ' + row.error;
@@ -1746,8 +2087,10 @@
     var note = document.createElement('p');
     note.className = 'desk-note';
     note.textContent = 'Excel の範囲をそのまま貼り付けられます。列は ' +
-      '名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 / ゼッケン / 級位段位 / レンタル の順' +
+      '名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 / ゼッケン / 級位段位 / レンタル / ' +
+      '二巡目技1 / 二巡目技2 / 二巡目技3 の順' +
       '（タブ区切りかカンマ区切り）。1 行目が「名前」で始まるときは見出しとして読み飛ばします。' +
+      '二巡目の技は、二巡目で形を変える選手だけ書きます（空なら一巡目と同じ形）。' +
       '性別は「女子」「女」「F」が女子、それ以外は男子。新人とレンタルは「○」「1」「true」など' +
       '（レンタルは「レンタル」「あり」も可）。ゼッケンは 1〜9999 の整数で、同じ大会の中で重複できません。' +
       '技はこの大会の技得点表にある名前だけです。' +
@@ -1849,6 +2192,8 @@
           rank: r.rank || '',
           rental: r.rental === true,
           tech1: r.techs[0], tech2: r.techs[1], tech3: r.techs[2],
+          // 二巡目の形の申請（3 つとも空なら一巡目と同じ。サーバーが正規化する）
+          r2tech1: r.r2techs[0], r2tech2: r.r2techs[1], r2tech3: r.r2techs[2],
           // プレビューでの元の行番号。サーバーが 400 の文言に使う（貼り付けは ok:false の行を
           // 除いて送るため、送信順の何行目かとプレビューの行番号がずれてしまうため）。
           line: r.line
@@ -2023,11 +2368,12 @@
     }
     if (result && result.reason === 'format') {
       return 'CSV の 1 行目（見出し）が、読み込める形式と合っていません。\n' +
-        '結果確認の「CSV エクスポート」で書き出した形、または簡易形式' +
-        '（名前,コート,性別,技①,技②,技③,新人 …）の見出しで作ってください。';
+        '結果確認の「CSV エクスポート」で書き出した形（23 列。以前の 20 列も可）、または簡易形式' +
+        '（名前,コート,性別,技①,技②,技③,新人,ゼッケン,級位段位,レンタル,二巡目技①,二巡目技②,二巡目技③。' +
+        '先頭から 2 列以上）の見出しで作ってください。';
     }
     if (result && result.reason === 'round2_format') {
-      return '二巡目がある大会には、結果確認の CSV エクスポート（20 列）で書き出した形のファイルだけ取り込めます（置き換え・追記とも）。\n' +
+      return '二巡目がある大会には、結果確認の CSV エクスポートで書き出した形のファイル（23 列。以前の 20 列も可）だけ取り込めます（置き換え・追記とも）。\n' +
         '（決戦の印と一巡目とのつながりを保ち、つながりの無い二巡目の行を増やさないため）';
     }
     return 'インポートに失敗しました。' + (result && result.error ? '\n' + result.error : '');
@@ -2058,7 +2404,7 @@
       lines.push('追記する: 既存の ' + count + ' 名は残し、CSV の選手を足します（同じ順番の選手がいると重複します）。');
       lines.push('置き換える: 既存の ' + count + ' 名を全部消して、CSV の内容だけにします（採点結果も消えます）。');
       if (nowPlayers.some(function(p) { return Courts.roundOf(p) === 2; })) {
-        lines.push('二巡目の行があるため、置き換え・追記とも結果確認の CSV エクスポート（20 列）の形のファイルだけ受け付けます。');
+        lines.push('二巡目の行があるため、置き換え・追記とも結果確認の CSV エクスポートの形のファイル（23 列。以前の 20 列も可）だけ受け付けます。');
       }
       var pick = await choose('CSV の取り込み', lines, [
         { label: '置き換える（既存 ' + count + ' 名を消す）', value: 'replace', cls: 'danger' },

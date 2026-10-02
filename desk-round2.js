@@ -2,7 +2,11 @@
 // 左メニューに出す（desk.js の NAV の when）。以前は試合進行（desk-match.js）の下に出していた
 // 二巡目の表（一巡目の得点・一巡目と同じ形に戻す・決戦の枠・技のセレクト）をそのまま移した
 // （ユーザー要望 2026-09-30「試合進行は進み具合を見る画面に限定し、形登録は独立した区画にする」）。
-// 段階の遷移ボタン（二巡目を開始 など）は試合進行の工程表の下にだけ置く。
+// 段階の遷移ボタン（二巡目を開始 など）は工程表（DeskMatch.buildSteps）の中にだけ置く。工程表は
+// 試合進行と、この区画の先頭に出す（2026-10-03。設計書 2026-10-03-round2-forms-prereg-design.md 6.3・6.4）。
+// 形を直し終えたら、同じ画面の上の「二巡目を開始 ▶」を押せば二巡目に入り、試合進行へ移る（desk.js）。
+// 二巡目の行の形の初期値は、一巡目の行の二巡目の形の申請（r2tech1〜3。申請が無ければ一巡目の形）。
+// ここで技を直すとサーバーが一巡目の行の申請へ書き戻す（応答の source を手元の控えに取り込む）。
 (function() {
 
   // 技を入れられるのは「二巡目準備（形の登録）」のときだけ。それ以外の状態では表を出さない
@@ -30,9 +34,10 @@
       return none;
     }
     var table = document.createElement('table');
-    table.className = 'desk-table desk-match-table';
+    table.className = 'desk-table desk-match-table desk-round2-table';
+    // 「一巡目から」は形を一巡目から変えるか（同じ／変更）。最終確認で誰が形を変えるかを一目で見る
     table.innerHTML =
-      '<thead><tr><th>巡</th><th>No.</th><th>名前</th><th>一巡目</th>' +
+      '<thead><tr><th>巡</th><th>No.</th><th>名前</th><th>一巡目</th><th>一巡目から</th>' +
       '<th>技1</th><th>技2</th><th>技3</th>' + (editable ? '<th></th>' : '') + '</tr></thead>';
     var tbody = document.createElement('tbody');
     rows.forEach(function(p) { tbody.appendChild(buildRow(p, ctx, editable, techniques)); });
@@ -74,13 +79,15 @@
       return;
     }
 
+    // 先頭に工程表（「二巡目を開始 ▶」はこの中。試合進行と同じ部品・同じ確認）
+    container.appendChild(DeskMatch.buildSteps(st, ctx, { where: 'round2' }));
+
     var guide = document.createElement('p');
     guide.className = 'desk-note';
     guide.id = 'round2Guide';
-    guide.appendChild(document.createTextNode('一巡目の形を初期値にしています。自己申告があれば直してください。' +
-      '試技順は一巡目の得点が低い順です。直し終えたら、試合進行の「' +
-      EventStatus.NEXT_LABELS.round1_done + ' ▶」で二巡目に入ります。'));
-    guide.appendChild(goMatchButton(ctx));
+    guide.textContent = '申請された二巡目の形（申請の無い人は一巡目の形）を入れています。' +
+      '当日の変更があればここで直してください。試技順は一巡目の得点が低い順です。' +
+      'ここで直した形は、その選手の二巡目の形の申請（選手登録の「二巡目の形」）にも書き戻されます。';
     container.appendChild(guide);
 
     // 一巡目の行が終了後に確定・得点変更されたときの選考の差（網羅検証 S18。試合進行と同じ警告）
@@ -95,6 +102,35 @@
     }
 
     container.appendChild(buildRound2(ctx));
+  }
+
+  // 工程表を作り直して差し替える（技を直したあと、二巡目の開始の検査の帯と「二巡目を開始」の可否を
+  // 合わせるため）。表は描き直さない（他の行の入力途中を壊さない）。
+  function refreshSteps(ctx) {
+    var old = document.getElementById('round2Steps');
+    if (!old || ctx.isStale()) return;
+    old.replaceWith(DeskMatch.buildSteps(EventStatus.of(ctx.event), ctx, { where: 'round2' }));
+  }
+
+  // 末尾の「▲ 確かめ終えたら、上の「二巡目を開始 ▶」へ」。工程表までスクロールし、
+  // 「二巡目を開始 ▶」にフォーカスを移す（遷移ボタンそのものはここに置かない。設計書 6.3）。
+  function toStepsButton() {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'desk-btn-sub';
+    b.id = 'btnRound2ToSteps';
+    b.textContent = '▲ 確かめ終えたら、上の「' + EventStatus.NEXT_LABELS.round1_done + ' ▶」へ';
+    b.addEventListener('click', function() {
+      var steps = document.getElementById('round2Steps');
+      if (!steps) return;
+      steps.scrollIntoView({ block: 'start' });
+      var next = document.getElementById('btnDeskNext');
+      if (next && !next.disabled) next.focus({ preventScroll: true });
+    });
+    var wrap = document.createElement('div');
+    wrap.className = 'desk-round2-tosteps';
+    wrap.appendChild(b);
+    return wrap;
   }
 
   function goMatchButton(ctx) {
@@ -116,16 +152,15 @@
 
     // 二巡目の行が0件のときは「二巡目 0名　技 未入力 0」を出さない
     // （このあとの空メッセージと二重になるため）。
+    // 文言は上部の状態バーと同じ Courts.stageCountText（「二巡目 20名　技 未入力 0　一巡目から変更 3」）。
     if (rows.length > 0) {
       var bar = document.createElement('div');
       bar.className = 'desk-match-bar';
-      var incomplete = rows.filter(Courts.isTechIncomplete).length;
       var count = document.createElement('span');
-      count.className = 'desk-match-count' + (incomplete === 0 ? ' done' : '');
       count.id = 'round2Count';
-      count.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + incomplete;
       bar.appendChild(count);
       wrap.appendChild(bar);
+      fillCount(count, ctx);
     }
 
     if (rows.length === 0) {
@@ -195,6 +230,7 @@
       wrap.appendChild(finWrap);
     }
 
+    wrap.appendChild(toStepsButton());
     return wrap;
   }
 
@@ -216,6 +252,11 @@
     var r1Cell = cell((src && src.confirmed === true) ? String(src.score || 0) : '—', 'num');
     if (src && src.confirmed !== true) r1Cell.title = '一巡目が未確定です';
     tr.appendChild(r1Cell);
+    // 一巡目から 同じ／変更（Courts.round2Differs）。技を保存したら paintDiffer で塗り直す
+    var diffCell = document.createElement('td');
+    diffCell.className = 'differ';
+    paintDiffer(diffCell, p, ctx);
+    tr.appendChild(diffCell);
 
     if (!editable) {
       tr.appendChild(cell(p.tech1 || ''));
@@ -397,20 +438,53 @@
     p.tech1 = arr[0];
     p.tech2 = arr[1];
     p.tech3 = arr[2];
+    if (res.player && typeof res.player.rev === 'number') p.rev = res.player.rev;
+    absorbSource(ctx, res.source);   // 一巡目の行の申請へ書き戻した（設計書 2026-10-03 2.4）
     setValues(selects, arr, ctx.techniques, !!p.isFemale);
+    var diffCell = tr.querySelector('td.differ');
+    if (diffCell) paintDiffer(diffCell, p, ctx);
     updateCount(ctx);
+    refreshSteps(ctx);
     return true;
   }
 
-  // 帯の「二巡目 N名　技 未入力 n」の件数を数え直す（表全体を描き直さずに済ませる）。
+  // 帯の「二巡目 N名　技 未入力 n　一巡目から変更 m」。未入力が 0 なら緑、残っていれば赤。
+  function fillCount(el, ctx) {
+    var n = roundTwo(ctx.players).filter(Courts.isTechIncomplete).length;
+    el.textContent = Courts.stageCountText('round1_done', ctx.players || []);
+    el.className = 'desk-match-count' + (n === 0 ? ' done' : '');
+  }
+
+  // 件数を数え直す（表全体を描き直さずに済ませる）。
   function updateCount(ctx) {
     var el = document.getElementById('round2Count');
-    if (el) {
-      var rows = roundTwo(ctx.players);
-      var n = rows.filter(Courts.isTechIncomplete).length;
-      el.textContent = '二巡目 ' + rows.length + '名　技 未入力 ' + n;
-      el.className = 'desk-match-count' + (n === 0 ? ' done' : '');
+    if (el) fillCount(el, ctx);
+  }
+
+  // 「一巡目から」のセル。一巡目の行が無ければ「—」、形が違えば「変更」（金）、同じなら「同じ」（薄い）。
+  function paintDiffer(td, p, ctx) {
+    var src = sourceOf(p, ctx.players);
+    if (!src || Courts.roundOf(src) !== 1) {
+      td.textContent = '—';
+      td.className = 'differ none';
+      td.title = '一巡目の行がありません';
+      return;
     }
+    var changed = Courts.round2Differs(p, ctx.players);
+    td.textContent = changed ? '変更' : '同じ';
+    td.className = 'differ' + (changed ? ' changed' : ' same');
+    td.title = '一巡目: ' + [src.tech1, src.tech2, src.tech3].map(function(t) { return t || '—'; }).join('・');
+  }
+
+  // 応答の source（書き戻した一巡目の行）を手元の控え（ctx.players）に取り込む。表には出さないが、
+  // 「一巡目と同じ形に戻す」と「一巡目から」の列が一巡目の行を読むため。同じオブジェクトを書き換えるので、
+  // 行が掴んでいる参照（buildRow の src）もそのまま新しくなる。申請のキーは無い＝空なので先に消す。
+  function absorbSource(ctx, row) {
+    if (!row || typeof row.id !== 'string') return;
+    var local = (ctx.players || []).filter(function(q) { return q && q.id === row.id; })[0];
+    if (!local) return;
+    EventStatus.R2_TECH_KEYS.forEach(function(k) { delete local[k]; });
+    Object.assign(local, row);
   }
 
   function onTechChange(p, selects, ctx, tr) {

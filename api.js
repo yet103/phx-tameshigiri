@@ -202,7 +202,9 @@ var Api = (function() {
     //   ok:false に理由を載せるのはこのため）。
     // round2 は round1 → round1_done のときだけ入る
     //   { created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount,
-    //     reordered, finalistDiff }。サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
+    //     fromRequest, reordered, finalistDiff }。サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
+    //   fromRequest は二巡目の形の申請（一巡目の行の r2tech1〜3）の形で作った行の数
+    //   （設計書 2026-10-03 3.4。画面のトーストに出す）。
     //   finalistDiff は EventStatus.finalistDiff の戻り値（選考の差。網羅検証 S18）。
     //   reordered: true は、誰も採点していなかったため暫定ベスト4と番号を現在の
     //   一巡目の得点から付け直したことを表す（レビュー指摘J）。
@@ -278,7 +280,10 @@ var Api = (function() {
 
   async function createPlayer(eventId, data) {
     // POST /api/events/:eventId/players
-    // Body: { name, court, isFemale, isNewFace, tech1, tech2, tech3, round, bib, rank, rental }
+    // Body: { name, court, isFemale, isNewFace, tech1, tech2, tech3, round, bib, rank, rental,
+    //         r2tech1, r2tech2, r2tech3 }
+    //   r2tech1〜3 は二巡目の形の申請（一巡目の行だけ。3 つとも空なら一巡目と同じ。設計書 2026-10-03）。
+    //   round が 1 以外で申請があれば 400 reason: 'not_round1'、表に無い技は 400 reason: 'unknown_tech'。
     // 戻り値: 追加された player オブジェクト（成功）
     //       | { player: null, reason, error }（409。確定済みガード（reason: 'locked'）と
     //         ゼッケン番号の重複（reason: 'bib'）の2種類）
@@ -328,8 +333,10 @@ var Api = (function() {
   async function createPlayersBulk(eventId, data) {
     // POST /api/events/:eventId/players/bulk
     // Body: { court, isFemale, isNewFace, names: ['名前', ...] }（同じコート・性別でまとめて）
-    //     | { rows: [{ name, court, isFemale, isNewFace, tech1, tech2, tech3, bib, rank, rental }, ...] }
-    //       （行ごとに違う。bib / rank / rental は設計書「選手の追加項目」）
+    //     | { rows: [{ name, court, isFemale, isNewFace, tech1, tech2, tech3, bib, rank, rental,
+    //                  r2tech1, r2tech2, r2tech3, line }, ...] }
+    //       （行ごとに違う。bib / rank / rental は設計書「選手の追加項目」。r2tech1〜3 は二巡目の形の
+    //        申請で、400 は「N 行目: 二巡目の技「X」は技リストにありません」など。設計書 2026-10-03 3.2）
     // 戻り値: { created, players } | { error } (400/404/409: 失敗理由を画面に出すため) | null（通信失敗）
     // 1回の書き込みで コート×性別×一巡目 の続き番号を順に付ける。
     // rows 形式は全行を検証してから書くので、失敗したときは 1 人も登録されていない。
@@ -356,15 +363,25 @@ var Api = (function() {
   async function updatePlayerInfo(eventId, playerId, data) {
     // PATCH /api/events/:eventId/players/:playerId（運営画面の編集専用）
     // Body: { name, tech1, tech2, tech3, isNewFace, isFemale, score, result, court, round,
-    //         bib, rank, rental, force } のうち送りたいものだけ。id と order は送っても無視される。
+    //         bib, rank, rental, r2tech1, r2tech2, r2tech3, force } のうち送りたいものだけ。
+    //         id と order は送っても無視される。
+    //   r2tech1〜3 は二巡目の形の申請。一巡目の行だけ（それ以外は 400 not_round1）。3 つ揃えて
+    //   1 回で送る（同じ形の回数制限が 3 つの組で決まるため。設計書 2026-10-03 3.3）。
     //   data はそのまま本文にする（force: true もそのまま入る。採点済みの技・性別の変更（409 scored）や
     //   終わった巡目の採点（409 not_scorable）を承知で通すとき。網羅検証 S7）。
     // bib は null で未設定に戻せる（設計書「選手の追加項目」）。
-    // 戻り値: { ok: true, player }
-    //       | { ok: false, status: <HTTPステータス>, reason, error, player }
+    // 戻り値: { ok: true, player, linked, source }
+    //         linked: 書き換えた二巡目の行（rev 入り）の配列。一巡目の行の PATCH で紐づく二巡目の行が
+    //                 変わったとき（申請の書き写し・一巡目の形への追従・氏名などの写し）。無ければ []
+    //         source: 二巡目の行の技を直して一巡目の行の申請へ書き戻したとき、その一巡目の行（rev 入り）。
+    //                 無ければ null。画面はこの 2 つで手元の他の行も差し替える（設計書 2026-10-03 3.3.3）
+    //       | { ok: false, status: <HTTPステータス>, reason, error, player, linked }
     //         （409 / 400 などの本文を読む。409 の reason は 'locked'（確定済み）/ 'bib'（ゼッケンの重複）/
     //          'linked'（二巡目の行の氏名・性別・新人）/ 'scored'（採点済みの技・性別）/ 'stale' /
-    //          'not_scorable'。player は本文にあればサーバーの今の行（rev 入り）、無ければ null）
+    //          'not_scorable'。player は本文にあればサーバーの今の行（rev 入り）、無ければ null。
+    //          linked は 409 scored のうち、申請の書き写し先の二巡目の行が採点済みで断ったときの
+    //          その行（rev 入り、1 つ）。それ以外は null。画面は Courts.round2ChangeConfirmMessage で
+    //          聞き直し、承諾されたら force: true で送り直す）
     // 通信自体に失敗した場合は status: 0（15 秒の時間切れも含む）。
     // 採点経路（Outbox → updatePlayer）と混ぜないため、同じPATCHでも別関数にしている。
     var t = timeoutSignal();
@@ -382,10 +399,17 @@ var Api = (function() {
           status: res.status,
           reason: (json && json.reason) || '',
           error: (json && json.error) || defaultError(res.status),
-          player: (json && json.player) || null
+          player: (json && json.player) || null,
+          linked: (json && json.linked && typeof json.linked === 'object' && !Array.isArray(json.linked))
+            ? json.linked : null
         };
       }
-      return { ok: true, player: (json && json.player) || null };
+      return {
+        ok: true,
+        player: (json && json.player) || null,
+        linked: (json && Array.isArray(json.linked)) ? json.linked : [],
+        source: (json && json.source && typeof json.source === 'object') ? json.source : null
+      };
     } catch (e) {
       return { ok: false, status: 0 };
     } finally {

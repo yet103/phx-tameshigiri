@@ -300,7 +300,8 @@ var Desk = (function() {
   }
 
   // 上部の状態バー。現在の段階を金で塗り、通過した段階を塗る（表示だけ。進める・戻すのボタンは
-  // 試合進行の工程表の下にだけ置く。ユーザー要望 2026-09-30「段階の遷移ボタンは 1 か所に」）。
+  // 工程表（desk-match.js の DeskMatch.buildSteps）の中にだけ置く。ユーザー要望 2026-09-30「段階の
+  // 遷移ボタンは 1 か所に」。工程表は試合進行と二巡目の形登録の先頭に出す。2026-10-03）。
   // 決戦・二巡目終了・アーカイブは、現在の段の補足文（stageOf の note）で示す。
   function buildStage(st, players) {
     var wrap = document.createElement('div');
@@ -354,15 +355,36 @@ var Desk = (function() {
     return { index: -1, label: '', note: '' };
   }
 
-  // 段階の遷移ボタン（次へ進む・戻す・二巡目を行わず最終結果へ。試合進行の工程表の下にある。
-  // desk-match.js の buildSteps）。通信中は連打・二重送信を防ぐため無効にする。成功時は
-  // reloadEvent が区画を描き直す（ボタンごと作り直されるので戻し忘れにならない）。
-  // 失敗時・通信断のときだけここで明示的に戻す。
+  // 段階の遷移ボタン（次へ進む・戻す・二巡目を行わず最終結果へ。工程表の中にある。
+  // desk-match.js の DeskMatch.buildSteps。試合進行と形登録の区画のどちらに出ていても同じ id）。
+  // 通信中は連打・二重送信を防ぐため無効にする。成功時は reloadEvent が区画を描き直す
+  // （ボタンごと作り直されるので戻し忘れにならない）。失敗時・通信断のときだけここで明示的に戻す。
+  // data-blocked の付いたボタン（二巡目の行に誤りがある間の「二巡目を開始」）は有効に戻さない。
   function setStageButtonsDisabled(flag) {
     ['btnDeskNext', 'btnDeskBack', 'btnDeskSkipRound2'].forEach(function(id) {
       var el = document.getElementById(id);
-      if (el) el.disabled = flag;
+      if (!el) return;
+      if (!flag && el.hasAttribute('data-blocked')) return;
+      el.disabled = flag;
     });
+  }
+
+  // 状態を変えたあとのトーストの文言（純粋関数。test.html で固定する）。
+  // round2 は一巡目終了の応答の生成結果（無ければ null）。二巡目 0 名分のときは何も作っていないので
+  // 「作りました」を出さない（レビュー指摘I）。申請の形で作った行（fromRequest。設計書 2026-10-03 3.4）と
+  // 決戦の人数は 0 なら書かない。
+  function statusToastText(to, round2) {
+    var msg = (EventStatus.LABELS[to] || to) + ' にしました';
+    if (round2 && round2.created > 0) {
+      var notes = [];
+      if (round2.fromRequest > 0) notes.push('申請の形 ' + round2.fromRequest + ' 名');
+      if (round2.finalistCount > 0) notes.push('決戦 ' + round2.finalistCount + ' 名');
+      msg += '（二巡目 ' + round2.created + ' 名分作りました' + (notes.length ? '・' + notes.join('・') : '') + '）';
+    }
+    if (round2 && round2.untrackedCount > 0) {
+      msg += '（追跡できない二巡目の行が' + round2.untrackedCount + '件あります）';
+    }
+    return msg;
   }
 
   // 状態を変える。確認文言は courts.js（スマホ運営と共通）。
@@ -415,6 +437,15 @@ var Desk = (function() {
       var blockers = Courts.startBlockers(ev, players);
       if (blockers.length > 0) { alert(Courts.blockerMessage(blockers)); return; }
     }
+    // 二巡目の開始の前に、二巡目の行の技（表に無い技・同じ形 2 回・レンタルで選べない形）を見る
+    // （設計書 2026-10-03 5.3・D7。試合開始と同じく「確認して進む」にはしない）。
+    if (from === 'round1_done' && to === 'round2') {
+      var r2Blockers = Courts.round2StartBlockers(ev, players);
+      if (r2Blockers.length > 0) {
+        alert(Courts.blockerMessage(r2Blockers, '二巡目を開始できません。形登録で直してください。'));
+        return;
+      }
+    }
     if (!confirm(Courts.statusConfirmMessage(from, to, players))) return;
     setStageButtonsDisabled(true);
     // 網羅検証 S19: 画面が見ていた状態（from）を送る。違えばサーバーが 409 stale で断る
@@ -456,16 +487,7 @@ var Desk = (function() {
       }
       return;
     }
-    // 二巡目 0 名分のときは何も作っていないので「作りました」を出さない（レビュー指摘I）。
-    var toastMsg = EventStatus.LABELS[to] + ' にしました';
-    if (res.round2 && res.round2.created > 0) {
-      toastMsg += '（二巡目 ' + res.round2.created + ' 名分作りました' +
-        (res.round2.finalistCount > 0 ? '・決戦 ' + res.round2.finalistCount + ' 名）' : '）');
-    }
-    if (res.round2 && res.round2.untrackedCount > 0) {
-      toastMsg += '（追跡できない二巡目の行が' + res.round2.untrackedCount + '件あります）';
-    }
-    toast(toastMsg);
+    toast(statusToastText(to, res.round2 || null));
     // 網羅検証 S13: コートが決まっていない一巡目の選手は二巡目に入らない。黙って外れないよう知らせる
     if (res.round2 && res.round2.unassignedCount > 0) {
       alert('⚠ コートが決まっていない（未分類の）選手が ' + res.round2.unassignedCount +
@@ -482,6 +504,12 @@ var Desk = (function() {
     // 2026-09-30 に形登録を試合進行から独立した区画に分けた）
     if (from === 'round1' && to === 'round1_done') {
       navigate('round2', eventId);
+      return;
+    }
+    // 形登録の区画の工程表から進めた・戻した（二巡目を開始・一巡目に戻す・二巡目を行わず最終結果へ）
+    // ときは試合進行へ移る。形登録の区画は「二巡目準備」以外では表を出さないため（設計書 2026-10-03 6.5）
+    if (currentTab === 'round2' && to !== 'round1_done') {
+      navigate('match', eventId);
       return;
     }
     await reloadEvent();
@@ -680,6 +708,7 @@ var Desk = (function() {
     navigate: navigate,
     reloadEvent: reloadEvent,
     applyStatus: applyStatus,
+    statusToastText: statusToastText,
     stageOf: stageOf,
     currentEventId: currentEventId,
     toast: toast,
