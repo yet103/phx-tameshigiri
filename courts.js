@@ -142,8 +142,16 @@ var Courts = (function() {
   }
 
   // 絞り込み条件の既定値。court '' は全コート、sex '' は男女、round 0 は全巡。
+  // r2 は二巡目の形の申請（'' すべて / 'yes' 申請あり / 'no' 一巡目と同じ。設計書 2026-10-03 6.1）。
   function defaultFilter() {
-    return { court: '', sex: '', round: 0, newFace: false, noTech: false, query: '' };
+    return { court: '', sex: '', round: 0, newFace: false, noTech: false, query: '', r2: '' };
+  }
+
+  // 二巡目の形の申請の絞り込み。二巡目以降の行は「申請あり」「一巡目と同じ」のどちらにも入れない。
+  function r2Matches(want, p) {
+    if (want !== 'yes' && want !== 'no') return true;
+    if (roundOf(p) !== 1) return false;
+    return EventStatus.hasRound2Techs(p) === (want === 'yes');
   }
 
   // コートの一致。filter.court は文字列（1 コート）でも配列（複数コート）でも受ける。
@@ -168,7 +176,8 @@ var Courts = (function() {
       if (f.round && roundOf(p) !== f.round) return false;
       if (f.newFace && !p.isNewFace) return false;
       if (f.noTech && !hasNoTech(p)) return false;
-      if (q && normalizeName(p.name).indexOf(q) === -1) return false;
+      if (!r2Matches(f.r2, p)) return false;
+      if (q &&normalizeName(p.name).indexOf(q) === -1) return false;
       return true;
     });
   }
@@ -388,13 +397,117 @@ var Courts = (function() {
     }
     if (status === 'draft') {
       var r1 = list.filter(function(p) { return roundOf(p) === 1; });
-      return '一巡目 ' + r1.length + '名　技 未入力 ' + r1.filter(isTechIncomplete).length;
+      return '一巡目 ' + r1.length + '名　技 未入力 ' + r1.filter(isTechIncomplete).length +
+        '　二巡目の形 申請 ' + r1.filter(EventStatus.hasRound2Techs).length;
     }
     if (status === 'round1_done') {
       var r2 = list.filter(function(p) { return roundOf(p) === 2; });
-      return '二巡目 ' + r2.length + '名　技 未入力 ' + r2.filter(isTechIncomplete).length;
+      return '二巡目 ' + r2.length + '名　技 未入力 ' + r2.filter(isTechIncomplete).length +
+        '　一巡目から変更 ' + r2.filter(function(p) { return round2Differs(p, list); }).length;
     }
     return '';
+  }
+
+  // ---- 二巡目の形の申請（設計書 2026-10-03-round2-forms-prereg-design.md） ----
+
+  // 二巡目の行 row の元の一巡目の行（sourcePlayerId が指す、今ある一巡目の行）。無ければ null。
+  function round2SourceOf(row, players) {
+    if (!row || typeof row.sourcePlayerId !== 'string' || !row.sourcePlayerId) return null;
+    var list = players || [];
+    for (var i = 0; i < list.length; i++) {
+      var q = list[i];
+      if (q && q !== row && q.id === row.sourcePlayerId && roundOf(q) === 1) return q;
+    }
+    return null;
+  }
+
+  // 二巡目の行の形が一巡目の行の形と違うか（形登録の「一巡目から」の列と件数）。
+  // 一巡目の行が無ければ false。比べるのは trim 後の文字列（EventStatus.sameTechs）。
+  function round2Differs(row, players) {
+    if (!row || roundOf(row) !== 2) return false;
+    var src = round2SourceOf(row, players);
+    if (!src) return false;
+    return !EventStatus.sameTechs([row.tech1, row.tech2, row.tech3], [src.tech1, src.tech2, src.tech3]);
+  }
+
+  // 一巡目の行 player に data（これから送る項目。tech1〜3・r2tech1〜3 のうち文字列のものを見る）を
+  // 当てたとき、サーバが書き写す先（EventStatus.round2SyncTarget）のうち採点済みの二巡目の行を返す。
+  // 無ければ null。画面が送る前に確認を出すのに使う（サーバの 409 scored の linked と同じ判定。
+  // サーバは申請を送ったとき＝r2Sent のときだけ採点済みの行で断る）。
+  function round2LinkedScored(player, data, players) {
+    if (!player || roundOf(player) !== 1) return null;
+    var d = data || {};
+    var after = Object.assign({}, player);
+    var r2Sent = false;
+    ['tech1', 'tech2', 'tech3'].forEach(function(k) {
+      if (typeof d[k] === 'string') after[k] = d[k].trim();
+    });
+    EventStatus.R2_TECH_KEYS.forEach(function(k) {
+      if (typeof d[k] === 'string') { after[k] = d[k].trim(); r2Sent = true; }
+    });
+    if (!r2Sent) return null;
+    var norm = EventStatus.normalizedRound2Techs(after);
+    EventStatus.R2_TECH_KEYS.forEach(function(k, i) {
+      if (norm) after[k] = norm[i]; else delete after[k];
+    });
+    var list = players || [];
+    for (var i = 0; i < list.length; i++) {
+      var row = list[i];
+      if (!row || row === player || row.sourcePlayerId !== player.id) continue;
+      if (EventStatus.round2SyncTarget(player, after, true, row) && isScored(row)) return row;
+    }
+    return null;
+  }
+
+  // round2LinkedScored が行を返したとき（とサーバの 409 scored に linked があるとき）の確認文言。
+  function round2ChangeConfirmMessage(row) {
+    return '二巡目の行は採点済みです（' + ((row && row.score) || 0) + '点）。' +
+      '二巡目の形を変えると得点が変わる可能性があります。' +
+      '保存後に採点画面でこの選手の二巡目を開き、「計算し直して保存」を押してください。\n\n' +
+      'このまま保存しますか？';
+  }
+
+  // 3 枠の技の誤りをまとめて返す（試合開始・二巡目の開始の検査、貼り付け、画面の赤枠で共用）。
+  //   unknown   … 技得点表で解決できない技名（trim 後。重複は 1 つ。枠の順）
+  //   repeat    … repeatable でない同じ形を 2 回以上（表示名。duplicateForms）
+  //   rentalBad … rental なのに drawn でない技がある（解決できない技名も drawn でないとみなす。
+  //               startBlockers の rental と同じ規則）
+  function techIssues(techs, techniques, isFemale, rental) {
+    var unknown = [];
+    var rentalBad = false;
+    (techs || []).forEach(function(name) {
+      var n = String(name == null ? '' : name).trim();
+      if (!n) return;
+      if (!resolveTechnique(techniques, n, isFemale) && unknown.indexOf(n) === -1) unknown.push(n);
+      if (rental && !isDrawnTechnique(techniques, n, isFemale)) rentalBad = true;
+    });
+    return {
+      unknown: unknown,
+      repeat: duplicateForms(techs, techniques, isFemale),
+      rentalBad: rentalBad
+    };
+  }
+
+  // 二巡目を開始する前（round1_done → round2）の検査（設計書 5.3）。二巡目の行の tech1〜3 に
+  // techIssues を掛け、unknownTech / repeat / rental の種類で返す（startBlockers と同じ形）。
+  // unknownTech は startBlockers と同じく event.techniques が配列のときだけ。
+  // players は絞らずに渡してよい（ここで二巡目の行に絞る）。
+  function round2StartBlockers(event, players) {
+    var techniques = (event && event.techniques) || [];
+    var checkUnknown = Array.isArray(event && event.techniques);
+    var unknownBad = [], repeatBad = [], rentalBad = [];
+    (players || []).forEach(function(p) {
+      if (!p || roundOf(p) !== 2) return;
+      var iss = techIssues([p.tech1, p.tech2, p.tech3], techniques, sexOf(p) === '女子', !!p.rental);
+      if (checkUnknown && iss.unknown.length > 0) unknownBad.push(p);
+      if (iss.repeat.length > 0) repeatBad.push(p);
+      if (iss.rentalBad) rentalBad.push(p);
+    });
+    var blockers = [];
+    if (unknownBad.length > 0) blockers.push({ kind: 'unknownTech', players: unknownBad });
+    if (repeatBad.length > 0) blockers.push({ kind: 'repeat', players: repeatBad });
+    if (rentalBad.length > 0) blockers.push({ kind: 'rental', players: rentalBad });
+    return blockers;
   }
 
   // 状態を変える前の確認文言（設計書「確認と拒否」の表）。承諾したときだけ遷移する。
@@ -423,20 +536,37 @@ var Courts = (function() {
     var list = players || [];
     function round(n) { return list.filter(function(p) { return roundOf(p) === n; }); }
     if (from === 'draft' && to === 'round1') {
-      // 技が全員入っていれば短く聞くだけ。未入力がいるときだけ注意を出す（ユーザー要望 2026-09-30）
-      var missing = round(1).filter(isTechIncomplete).length;
-      if (missing === 0) return '試合を開始しますか？';
-      return '⚠ 技が未入力の選手が ' + missing + '名います。\nこのまま試合を開始しますか？';
+      // 技が全員入っていれば短く聞くだけ。未入力がいるときだけ注意を出す（ユーザー要望 2026-09-30）。
+      // 二巡目の形の申請の人数は情報として常に出す（記号は付けない。設計書 2026-10-03 5.1・D5）。
+      // 「空 = 一巡目と同じ」は正当な運用なので「未入力」とは言わない。
+      var r1rows = round(1);
+      var missing = r1rows.filter(isTechIncomplete).length;
+      var applied = r1rows.filter(EventStatus.hasRound2Techs).length;
+      var others = r1rows.length - applied;
+      var reqLine = applied === 0
+        ? '二巡目の形の申請はありません（全員、一巡目と同じ形で二巡目を行います）'
+        : others === 0
+          ? '二巡目の形の申請: ' + applied + '名（全員）'
+          : '二巡目の形の申請: ' + applied + '名（ほかの ' + others + '名は一巡目と同じ形で二巡目を行います）';
+      if (missing === 0) return reqLine + '\n試合を開始しますか？';
+      return '⚠ 技が未入力の選手が ' + missing + '名います。\n' + reqLine + '\nこのまま試合を開始しますか？';
     }
     if (from === 'round1' && to === 'round1_done') {
+      // 申請が 1 名以上なら、二巡目の行の形の決め方を 1 行足す（設計書 5.2）
+      var anyReq = round(1).some(EventStatus.hasRound2Techs);
       return countPhrase('一巡目の未確定', round(1).filter(function(p) { return !isConfirmed(p); }).length) +
+        (anyReq ? '\n二巡目の行は、申請された二巡目の形（申請の無い人は一巡目の形）で作ります。' : '') +
         '\n一巡目を終了しますか？';
     }
     if (from === 'round1_done' && to === 'round2') {
-      // 試合開始と同じ形（技が全員入っていれば短く、未入力がいるときだけ注意）
-      var missing2 = round(2).filter(isTechIncomplete).length;
-      if (missing2 === 0) return '二巡目を開始しますか？';
-      return '⚠ 二巡目の技が未入力の選手が ' + missing2 + '名います。\nこのまま二巡目を開始しますか？';
+      // 試合開始と同じ形（技が全員入っていれば短く、未入力がいるときだけ注意）。
+      // 一巡目から形を変える選手の人数を情報として足す（設計書 5.3）。
+      var r2rows = round(2);
+      var missing2 = r2rows.filter(isTechIncomplete).length;
+      var changed = r2rows.filter(function(p) { return round2Differs(p, list); }).length;
+      var chLine = '二巡目 ' + r2rows.length + '名のうち、一巡目から形を変える選手: ' + changed + '名';
+      if (missing2 === 0) return chLine + '\n二巡目を開始しますか？';
+      return '⚠ 二巡目の技が未入力の選手が ' + missing2 + '名います。\n' + chLine + '\nこのまま二巡目を開始しますか？';
     }
     if (from === 'round1_done' && to === 'final') {
       return unconfirmedWarning(list, [1]) + '二巡目を行わずに最終結果にします。\nよろしいですか？';
@@ -520,6 +650,22 @@ var Courts = (function() {
       });
       if (unknownBad.length > 0) blockers.push({ kind: 'unknownTech', players: unknownBad });
     }
+    // 二巡目の形の申請（設計書 2026-10-03 5.1・D6）。申請がある一巡目の行の r2tech1〜3 だけ見る
+    // （申請の無い行は二巡目も一巡目の形なので、上の検査で足りる）。申請された形の誤りが
+    // 二巡目の行に流れ込む前（一巡目の終了の前）に、選手登録で直させる。
+    var r2Unknown = [], r2Repeat = [], r2Rental = [];
+    list.forEach(function(p) {
+      if (!p || roundOf(p) !== 1 || !EventStatus.hasRound2Techs(p)) return;
+      var iss = techIssues(EventStatus.round2TechsOf(p), techniques, sexOf(p) === '女子', !!p.rental);
+      if (iss.unknown.length > 0) r2Unknown.push(p);
+      if (iss.repeat.length > 0) r2Repeat.push(p);
+      if (iss.rentalBad) r2Rental.push(p);
+    });
+    if (Array.isArray(event && event.techniques) && r2Unknown.length > 0) {
+      blockers.push({ kind: 'r2unknownTech', players: r2Unknown });
+    }
+    if (r2Repeat.length > 0) blockers.push({ kind: 'r2repeat', players: r2Repeat });
+    if (r2Rental.length > 0) blockers.push({ kind: 'r2rental', players: r2Rental });
     return blockers;
   }
 
@@ -563,13 +709,18 @@ var Courts = (function() {
     rank: '級位・段位が未入力',
     rental: 'レンタルなのに抜刀してからの形以外の技を選んでいる',
     repeat: '同じ形を 2 回以上選んでいる',
-    unknownTech: '技得点表に無い技を選んでいる'
+    unknownTech: '技得点表に無い技を選んでいる',
+    r2unknownTech: '二巡目の形が技得点表に無い技',
+    r2repeat: '二巡目の形で同じ形を 2 回以上選んでいる',
+    r2rental: '二巡目の形がレンタルなのに抜刀してからの形以外'
   };
   // alert に全員の名前を並べると長くなりすぎるので、先頭 BLOCKER_NAME_LIMIT 名までにして
   // 残りは件数だけ添える（レビュー修正）。
+  // title（省略可）は先頭の行に出す（二巡目の開始の「二巡目を開始できません。形登録で直してください。」など）。
+  // blockers が空なら title があっても空文字。
   var BLOCKER_NAME_LIMIT = 10;
-  function blockerMessage(blockers) {
-    return (blockers || []).map(function(b) {
+  function blockerMessage(blockers, title) {
+    var lines = (blockers || []).map(function(b) {
       var all = b.players || [];
       var shown = all.slice(0, BLOCKER_NAME_LIMIT);
       var names = shown.map(function(p) { return (p && p.name) || ''; }).join('、');
@@ -577,7 +728,9 @@ var Courts = (function() {
         names += '…ほか ' + (all.length - BLOCKER_NAME_LIMIT) + ' 名';
       }
       return (BLOCKER_LABELS[b.kind] || b.kind) + ': ' + all.length + ' 名（' + names + '）';
-    }).join('\n');
+    });
+    if (lines.length > 0 && title) lines.unshift(String(title));
+    return lines.join('\n');
   }
 
   // CSV 取り込み・バンドル取り込みの応答 bibDropped: { duplicate, outOfRange } から
@@ -715,8 +868,9 @@ var Courts = (function() {
   }
 
   // 貼り付けたテキストを 1 行 1 人に解析する。DOM には触らない（test.html で固定する）。
-  // 列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 / ゼッケン / 級位段位 / レンタル の固定順
-  // （後ろの3列は無くてもよい。7列だけの行は従来どおり）。
+  // 列は 名前 / コート / 性別 / 新人 / 技1 / 技2 / 技3 / ゼッケン / 級位段位 / レンタル /
+  // 二巡目技1 / 二巡目技2 / 二巡目技3 の固定順（後ろの列は無くてもよい。7列・10列の行は従来どおり。
+  // 二巡目の 3 列は二巡目で形を変える選手だけ書く。空なら一巡目と同じ形。設計書 2026-10-03 6.1）。
   // タブが1つでもある行はタブ区切り（Excel からの貼り付け。区切り文字そのままで、
   // 引用符は特別扱いしない＝名前の一部）、無ければ splitDelimited でカンマ区切りとして切る。
   // techniques はその大会の有効な技リスト（[{ name, strikes, drawn }]）。
@@ -729,6 +883,8 @@ var Courts = (function() {
   //   bib,       ゼッケン番号（整数）。列が空か無ければ null。数字以外なら ok:false
   //   rank,      級位・段位（列が無ければ ''）
   //   rental,    真剣レンタル（列が無ければ false。新人と同じ語＋「レンタル」「あり」で真）
+  //   r2techs,   ['二巡目技1', '二巡目技2', '二巡目技3']（列が無い・空の枠は ''。3 つとも空なら申請なし）
+  //   badR2Techs, 二巡目の技のうち技リストに無い技名（画面で赤く示す）
   //   ok,        サーバーに送ってよい行か
   //   error      送れない理由（ok が true なら ''）
   // } ] }
@@ -810,6 +966,8 @@ var Courts = (function() {
       }
     }
     var rental = RENTAL_WORDS.indexOf(String(cols[9] || '').toLowerCase()) !== -1;
+    var r2techs = [cols[10] || '', cols[11] || '', cols[12] || ''];
+    var r2Issues = techIssues(r2techs, techniques, isFemale, rental);
     var row = {
       line: line,
       name: cols[0] || '',
@@ -822,6 +980,8 @@ var Courts = (function() {
       bib: bib,
       rank: cols[8] || '',
       rental: rental,
+      r2techs: r2techs,
+      badR2Techs: r2Issues.unknown,
       ok: true,
       error: ''
     };
@@ -845,6 +1005,14 @@ var Courts = (function() {
       // レンタルの選手には抜刀後の形（drawn）しか選べない。空の技枠は対象外。
       var nonDrawn = techs.some(function(t) { return t && !isDrawnTechnique(techniques, t, isFemale); });
       if (nonDrawn) return badRow(row, 'レンタルの選手は抜刀してからの形だけ選べます');
+    }
+    // 二巡目の形の申請（サーバの bulk rows の checkRound2Techs と同じ順・同じ文言）
+    if (r2Issues.unknown.length > 0) {
+      return badRow(row, '二巡目の技「' + r2Issues.unknown.join('」「') + '」は技リストにありません');
+    }
+    if (r2Issues.rentalBad) return badRow(row, '二巡目の形: レンタルの選手は抜刀してからの形だけ選べます');
+    if (r2Issues.repeat.length > 0) {
+      return badRow(row, '二巡目の形: 同じ形は 1 回までです（' + r2Issues.repeat[0] + '）');
     }
     return row;
   }
@@ -888,6 +1056,11 @@ var Courts = (function() {
     stageCountText: stageCountText,
     statusConfirmMessage: statusConfirmMessage,
     startBlockers: startBlockers,
+    round2StartBlockers: round2StartBlockers,
+    techIssues: techIssues,
+    round2Differs: round2Differs,
+    round2LinkedScored: round2LinkedScored,
+    round2ChangeConfirmMessage: round2ChangeConfirmMessage,
     unknownTechs: unknownTechs,
     finalistDiffMessage: finalistDiffMessage,
     blockerMessage: blockerMessage,

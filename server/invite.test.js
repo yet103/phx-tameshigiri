@@ -442,7 +442,8 @@ test('採点の API: 自分の大会・コート・採点の項目だけ', async
     const noRev = await api(base, 'PATCH', '/api/events/' + ev + '/players/pa2', { score: 1 }, cookie);
     assert.deepStrictEqual([noRev.status, noRev.body.reason], [400, 'base_rev_required']);
     assert.strictEqual((await api(base, 'PATCH', '/api/events/' + ev + '/players/pa2', { note: 'だけ' }, cookie)).status, 200);
-    for (const extra of [{ tech1: '真' }, { name: '甲' }, { isFemale: false }, { force: true }, { foo: 1 }, { court: 'A' }]) {
+    // r2tech（二巡目の形の申請）も運営の項目（設計書 2026-10-03 2.1・9.3）
+    for (const extra of [{ tech1: '真' }, { r2tech1: '真' }, { name: '甲' }, { isFemale: false }, { force: true }, { foo: 1 }, { court: 'A' }]) {
       const r = await api(base, 'PATCH', '/api/events/' + ev + '/players/pa2',
         Object.assign({ score: 1, baseRev: 0 }, extra), cookie);
       assert.deepStrictEqual([r.status, r.body.reason, r.body.fields], [403, 'field', Object.keys(extra)], JSON.stringify(extra));

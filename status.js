@@ -342,6 +342,73 @@
     return 'draft';
   }
 
+  // ---- 二巡目の形の申請（設計書 2026-10-03-round2-forms-prereg-design.md 2 章） ----
+  // 一巡目の行に r2tech1〜3 を持たせ、二巡目の行を作るときの形にする。
+  // 3 つとも空（キーが無い・空白だけを含む）なら「一巡目と同じ形」。1 つでも入っていれば
+  // その行の指定どおり（空の枠は空のまま）。二巡目以降の行は持たない。
+  var R2_TECH_KEYS = ['r2tech1', 'r2tech2', 'r2tech3'];
+  var TECH_KEYS = ['tech1', 'tech2', 'tech3'];
+
+  function trimmedOf(p, key) {
+    var v = p ? p[key] : undefined;
+    return typeof v === 'string' ? v.trim() : '';
+  }
+
+  // 申請があるか（3 つのうち 1 つでも空白以外が入っているか）
+  function hasRound2Techs(p) {
+    return R2_TECH_KEYS.some(function(k) { return trimmedOf(p, k) !== ''; });
+  }
+
+  // 二巡目の行に入れる形。申請が無ければ一巡目の tech1〜3（文字列でなければ ''。従来の複製と同じく
+  // 値はそのまま）、あれば r2tech1〜3 を trim したもの（空の枠は ''）。
+  function round2TechsOf(p) {
+    if (!hasRound2Techs(p)) {
+      return TECH_KEYS.map(function(k) { var v = p ? p[k] : undefined; return typeof v === 'string' ? v : ''; });
+    }
+    return R2_TECH_KEYS.map(function(k) { return trimmedOf(p, k); });
+  }
+
+  // 3 枠の技の並びが同じか（trim 後の文字列で比べる。性別の接尾辞の有無も区別する）。
+  function sameTechs(a, b) {
+    for (var i = 0; i < 3; i++) {
+      var x = (a && typeof a[i] === 'string') ? a[i].trim() : '';
+      var y = (b && typeof b[i] === 'string') ? b[i].trim() : '';
+      if (x !== y) return false;
+    }
+    return true;
+  }
+
+  function techsOf(p) {
+    return TECH_KEYS.map(function(k) { return trimmedOf(p, k); });
+  }
+
+  // 保存する申請（2.3 の正規化）。申請が無い、またはその行の tech1〜3 と 3 つとも同じなら null
+  // （キーごと持たない）、それ以外は trim した 3 つ（空の枠は ''）。
+  function normalizedRound2Techs(p) {
+    if (!hasRound2Techs(p)) return null;
+    var r2 = R2_TECH_KEYS.map(function(k) { return trimmedOf(p, k); });
+    if (sameTechs(r2, techsOf(p))) return null;
+    return r2;
+  }
+
+  // 一巡目の行を before → after に直したとき、紐づく二巡目の行 row の技を何にするか（2.4・2.5・3.3.1）。
+  // 書き写すなら新しい形（3 つの配列）、触らないなら null。サーバの PATCH と画面の確認
+  // （Courts.round2LinkedScored）が同じ判定を使う。
+  //   r2Sent … この変更で申請（r2tech1〜3 のどれか）を送ったか
+  //   ・二巡目の形（round2TechsOf）が変わっていない、または row がもう同じ形 → null
+  //   ・申請を直した → 書き写す（row が採点済みかどうかは呼び出し側が見る。409 scored / force）
+  //   ・申請は変えず一巡目の形だけ直した → row が未採点で、直す前の二巡目の形と 3 つとも同じなら付いていく
+  function round2SyncTarget(before, after, r2Sent, row) {
+    var oldT = round2TechsOf(before);
+    var newT = round2TechsOf(after);
+    if (sameTechs(oldT, newT)) return null;
+    var cur = techsOf(row);
+    if (sameTechs(cur, newT)) return null;
+    if (r2Sent) return newT;
+    if (!isScored(row) && sameTechs(cur, oldT)) return newT;
+    return null;
+  }
+
   // 大会の状態。ファイルの status が有効ならそれ、無ければ推定値。
   function of(event) {
     if (event && STATES.indexOf(event.status) !== -1) return event.status;
@@ -376,6 +443,12 @@
     isLocked: isLocked,
     derive: derive,
     of: of,
+    R2_TECH_KEYS: R2_TECH_KEYS,
+    hasRound2Techs: hasRound2Techs,
+    round2TechsOf: round2TechsOf,
+    sameTechs: sameTechs,
+    normalizedRound2Techs: normalizedRound2Techs,
+    round2SyncTarget: round2SyncTarget,
     // server/index.js が自前実装の代わりに使う。courts.js との一致は
     // test.html の「derive の巡目判定が Courts.roundOf と一致する」で固定する。
     roundOf: roundOf,

@@ -826,12 +826,13 @@
     assert('PATCH 真偽値でない confirmed は無視', badRes2.player.confirmed, true);
     var csvOut = await Api.exportCsv(padEvent.id);
     var csvHead = csvOut.replace(/^\uFEFF/, '').split('\r\n')[0];
-    assert('export は20列（決戦・一巡目の行を含む。M5）', csvHead.split(',').length, 20);
+    assert('export は23列（決戦・一巡目の行・二巡目 技 1〜3 を含む。M5・2026-10-03）', csvHead.split(',').length, 23);
     assert('export のヘッダー末尾', csvHead.split(',').slice(9),
-      ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定', 'ゼッケン', '級位段位', 'レンタル', '決戦', '一巡目の行']);
+      ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定', 'ゼッケン', '級位段位', 'レンタル', '決戦', '一巡目の行',
+       '二巡目 技 1', '二巡目 技 2', '二巡目 技 3']);
     var csvRow = csvOut.replace(/^\uFEFF/, '').split('\r\n').filter(function(l) { return l.indexOf('補正 太郎') === 0; })[0];
     assert('export に補正点・確定・追加項目（未設定）が出る', csvRow.split(',').slice(9),
-      ['1', '-2', '0', '-3', '審判メモ', '○', '', '', '', '', '']);
+      ['1', '-2', '0', '-3', '審判メモ', '○', '', '', '', '', '', '', '', '']);
     var longNote = new Array(202).join('あ');   // 201文字
     var longRes = await Api.updatePlayerInfo(padEvent.id, padP.id, { note: longNote });
     assert('PATCH note は200文字で切る', longRes.player.note.length, 200);
@@ -2951,7 +2952,8 @@
     var m5Before = await auPlayers(m5Ev);
     var m5Csv = await Api.exportCsv(m5Ev);
     var m5Head = m5Csv.replace(/^﻿/, '').split('\r\n')[0].split(',');
-    assert('M5: 書き出しは 20 列で末尾に 決戦・一巡目の行', [m5Head.length, m5Head.slice(18)], [20, ['決戦', '一巡目の行']]);
+    assert('M5: 書き出しは 23 列で 19・20 列目に 決戦・一巡目の行（末尾は二巡目 技 1〜3。2026-10-03）',
+      [m5Head.length, m5Head.slice(18)], [23, ['決戦', '一巡目の行', '二巡目 技 1', '二巡目 技 2', '二巡目 技 3']]);
     var m5Fmt15 = await au('/api/events/' + m5Ev + '/import', 'POST', { csvText: m5Hdr9 + '\n誰か,A-男子-1-1,,,,0,,,', mode: 'replace', force: true });
     assert('M5: 二巡目がある大会を往復できない形式で置換すると 409 round2_format',
       [m5Fmt15.status, m5Fmt15.json.reason], [409, 'round2_format']);
@@ -3066,6 +3068,272 @@
     assert('S18: 二巡目の差分追加の応答にも finalistDiff が入る',
       s18Gen.json.finalistDiff && s18Gen.json.finalistDiff.changed, true);
     await Api.deleteEvent(s18Ev);
+
+    // ==== 二巡目の形の事前登録（設計書 2026-10-03-round2-forms-prereg-design.md 9.2） ====
+    function r2Techs(p) { return p ? [p.tech1, p.tech2, p.tech3] : null; }
+    function r2Req(p) { return p ? [p.r2tech1, p.r2tech2, p.r2tech3] : null; }
+    function r2Has(p) { return !!p && ('r2tech1' in p || 'r2tech2' in p || 'r2tech3' in p); }
+
+    // ---- 10. POST …/players ----
+    var r2Ev = (await Api.saveEvent({ name: '二巡目の形の申請テスト', date: '2026-10-03', venue: '', players: [] })).id;
+    function r2Post(body) { return au('/api/events/' + r2Ev + '/players', 'POST', body); }
+    var r2p1 = await r2Post({ name: '申 一郎', court: 'A', tech1: '真', tech2: '連', tech3: '左', r2tech1: ' 右 ', r2tech2: '捨', r2tech3: '真' });
+    assert('R2 POST: 申請は trim して保存される', [r2p1.status, r2Req(r2p1.json.player)], [201, ['右', '捨', '真']]);
+    var r2pSame = await r2Post({ name: '申 二郎', court: 'A', tech1: '真', tech2: '連', tech3: '左', r2tech1: '真', r2tech2: '連', r2tech3: '左' });
+    assert('R2 POST: 一巡目と同じ形の申請は保存しない（キーが無い）', [r2pSame.status, r2Has(r2pSame.json.player)], [201, false]);
+    var r2pOne = await r2Post({ name: '申 三郎', court: 'A', tech1: '真', tech2: '連', tech3: '左', r2tech2: '右' });
+    assert('R2 POST: 1 つだけの申請は空の枠を空のまま', r2Req(r2pOne.json.player), ['', '右', '']);
+    var r2pUnknown = await r2Post({ name: '申 誤', court: 'A', r2tech1: 'ナゾの技' });
+    assert('R2 POST: 表に無い技は 400 unknown_tech',
+      [r2pUnknown.status, r2pUnknown.json.reason, r2pUnknown.json.error], [400, 'unknown_tech', '二巡目の技「ナゾの技」は技リストにありません']);
+    var r2pRound2 = await r2Post({ name: '申 誤', court: 'A', round: 2, r2tech1: '真' });
+    assert('R2 POST: round 2 の行に申請は 400 not_round1', [r2pRound2.status, r2pRound2.json.reason], [400, 'not_round1']);
+    assert('R2 POST: 51 字は 400', (await r2Post({ name: '申 誤', court: 'A', r2tech2: new Array(52).join('技') })).status, 400);
+    assert('R2 POST: 断った要求では選手を作らない', (await auPlayers(r2Ev)).length, 3);
+
+    // ---- 11. POST …/players/bulk の rows ----
+    var r2b = await Api.createPlayersBulk(r2Ev, { rows: [
+      { name: '束 一郎', court: 'B', tech1: '真', tech2: '連', tech3: '左', r2tech1: '右', r2tech2: '捨', r2tech3: '左' },
+      { name: '束 二郎', court: 'B', tech1: '真', tech2: '連', tech3: '左', r2tech1: '真', r2tech2: '連', r2tech3: '左' }
+    ] });
+    assert('R2 bulk rows: 申請を保存（一巡目と同じ形は保存しない）',
+      [r2Req(r2b.players[0]), r2Has(r2b.players[1])], [['右', '捨', '左'], false]);
+    var r2bUnknown = await Api.createPlayersBulk(r2Ev, { rows: [{ name: '束 誤', court: 'B' }, { name: '束 誤2', court: 'B', r2tech1: 'ナゾ' }] });
+    var r2bDup = await Api.createPlayersBulk(r2Ev, { rows: [{ name: '束 誤', court: 'B', r2tech1: '真', r2tech2: '真' }] });
+    var r2bRental = await Api.createPlayersBulk(r2Ev, { rows: [{ name: '束 誤', court: 'B', rental: true, tech1: '立位袈裟', r2tech1: '真' }] });
+    assert('R2 bulk rows: 表に無い技・同じ形・レンタルは行番号つきの 400',
+      [r2bUnknown && r2bUnknown.error, r2bDup && r2bDup.error, r2bRental && r2bRental.error],
+      ['2 行目: 二巡目の技「ナゾ」は技リストにありません', '1 行目: 二巡目の形: 同じ形は 1 回までです（真）',
+       '1 行目: 二巡目の形: レンタルの選手は抜刀してからの形だけ選べます']);
+
+    // ---- 12. PATCH（二巡目の行ができる前） ----
+    var r2Pa = r2pSame.json.player.id;
+    var r2Pt1 = await auPatch(r2Ev, r2Pa, { r2tech1: '右', r2tech2: '捨', r2tech3: '' });
+    assert('R2 PATCH: 申請を保存し、一巡目の行の rev は上がらない', [r2Pt1.status, r2Req(r2Pt1.json.player), r2Pt1.json.player.rev], [200, ['右', '捨', ''], 0]);
+    var r2Pt2 = await auPatch(r2Ev, r2Pa, { r2tech3: '真' });
+    assert('R2 PATCH: 送られていない枠は今の値のまま', r2Req(r2Pt2.json.player), ['右', '捨', '真']);
+    var r2Pt3 = await auPatch(r2Ev, r2Pa, { r2tech1: '', r2tech2: ' ', r2tech3: '' });
+    assert('R2 PATCH: 3 つとも空でキーが消える', [r2Pt3.status, r2Has(r2Pt3.json.player), r2Has(auById(await auPlayers(r2Ev), r2Pa))], [200, false, false]);
+    var r2Pt4 = await auPatch(r2Ev, r2Pa, { r2tech1: '真', r2tech2: '連', r2tech3: '左' });
+    assert('R2 PATCH: 一巡目と同じ形の申請でキーが消える', r2Has(r2Pt4.json.player), false);
+    assert('R2 PATCH: 51 字は 400', (await auPatch(r2Ev, r2Pa, { r2tech1: new Array(52).join('技') })).status, 400);
+    var r2Pt5 = await auPatch(r2Ev, r2p1.json.player.id, { tech1: '右', tech2: '捨', tech3: '真' });
+    assert('R2 PATCH: 一巡目の形を申請と同じに直すと申請は空になる（正規化）',
+      [r2Pt5.status, r2Has(r2Pt5.json.player), r2Pt5.json.linked, r2Pt5.json.source], [200, false, undefined, undefined]);
+    var r2R2Row = await r2Post({ name: '申 二巡目', court: 'A', round: 2, tech1: '真' });
+    var r2Pt6 = await auPatch(r2Ev, r2R2Row.json.player.id, { r2tech1: '右' });
+    assert('R2 PATCH: 二巡目の行に送ると 400 not_round1', [r2Pt6.status, r2Pt6.json.reason], [400, 'not_round1']);
+    var r2Pt7 = await auPatch(r2Ev, r2R2Row.json.player.id, { tech2: '連' });
+    assert('R2 PATCH: 元の一巡目の行が無い二巡目の行の技を直しても書き戻さない', [r2Pt7.status, r2Pt7.json.source], [200, undefined]);
+
+    // ---- 21. POST /api/events（丸ごと保存） ----
+    var r2Whole = await Api.saveEvent({ name: '二巡目の形の申請テスト 丸ごと', date: '2026-10-03', venue: '', players: [
+      { id: 'r2whole1', name: '丸 一郎', order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', r2tech1: ' 右', r2tech2: '捨', r2tech3: '' },
+      { id: 'r2whole2', name: '丸 一郎', order: 'A-男子-2-1', tech1: '右', tech2: '捨', tech3: '', r2tech1: '真', sourcePlayerId: 'r2whole1' },
+      { id: 'r2whole3', name: '丸 二郎', order: 'A-男子-1-2', tech1: '真', tech2: '連', tech3: '左', r2tech1: '真', r2tech2: '連', r2tech3: '左' }
+    ] });
+    var r2WholePs = await auPlayers(r2Whole.id);
+    assert('R2 丸ごと保存: 一巡目の行の申請は残り、二巡目の行と一巡目と同じ申請は落ちる',
+      [r2Req(auById(r2WholePs, 'r2whole1')), r2Has(auById(r2WholePs, 'r2whole2')), r2Has(auById(r2WholePs, 'r2whole3'))],
+      [['右', '捨', ''], false, false]);
+    await Api.deleteEvent(r2Whole.id);
+    await Api.deleteEvent(r2Ev);
+
+    // ---- 13〜16. 一巡目の終了・書き写し・書き戻し・付いていく ----
+    var r2fEv = (await Api.saveEvent({ name: '二巡目の形の申請テスト 流れ', date: '2026-10-03', venue: '', players: [] })).id;
+    var r2fRows = [
+      { name: '流 一郎', court: 'A', tech1: '真', tech2: '連', tech3: '左', r2tech1: '右', r2tech2: '捨', r2tech3: '真' },
+      { name: '流 二郎', court: 'A', tech1: '真', tech2: '連', tech3: '左' },
+      { name: '流 三郎', court: 'A', tech1: '真', tech2: '連', tech3: '左', r2tech1: '右' },
+      { name: '流 四郎', court: 'A', tech1: '真', tech2: '連', tech3: '左' },
+      { name: '流 五郎', court: 'A', tech1: '真', tech2: '連', tech3: '左' },
+      { name: '流 六郎', court: 'A', tech1: '真', tech2: '連', tech3: '左' },
+      { name: '流 七郎', court: 'A', tech1: '真', tech2: '連', tech3: '左' }
+    ];
+    var r2f = (await Api.createPlayersBulk(r2fEv, { rows: r2fRows })).players.map(function(p) { return p.id; });
+    await Api.changeStatus(r2fEv, 'round1');
+    await auPatch(r2fEv, r2f[0], { score: 30, result: '1    ', confirmed: true, baseRev: 0 });   // 一郎だけ確定 → 決戦
+    var r2fTr = await Api.changeStatus(r2fEv, 'round1_done');
+    var r2fPs = await auPlayers(r2fEv);
+    function r2fR2(i) { return auR2Of(r2fPs, r2f[i]); }
+    assert('R2 一巡目の終了: 申請ありは申請の形・申請なしは一巡目の形・1 つだけの申請はそのまま',
+      [r2Techs(r2fR2(0)), r2Techs(r2fR2(1)), r2Techs(r2fR2(2))], [['右', '捨', '真'], ['真', '連', '左'], ['右', '', '']]);
+    assert('R2 一巡目の終了: 決戦の行も申請の形', [r2fR2(0).finalist, r2Techs(r2fR2(0))], [true, ['右', '捨', '真']]);
+    assert('R2 一巡目の終了: round2.fromRequest は申請の形で作った行の数', r2fTr.round2 && r2fTr.round2.fromRequest, 2);
+    assert('R2 一巡目の終了: 一巡目の行は書き換えない（申請はそのまま）', r2Req(auById(r2fPs, r2f[2])), ['右', '', '']);
+    assert('R2 二巡目の開始の検査: 申請の形で作った行は誤りなし',
+      Courts.round2StartBlockers(await Api.loadEvent(r2fEv), r2fPs), []);
+
+    // 14. 書き写し
+    var r2fCopy = await auPatch(r2fEv, r2f[1], { r2tech1: '捨', r2tech2: '右', r2tech3: '真' });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 書き写し: 申請を変えると二巡目の行の技が変わり rev +1、応答に linked',
+      [r2fCopy.status, r2Techs(r2fR2(1)), EventStatus.revOf(r2fR2(1)),
+       (r2fCopy.json.linked || []).map(function(p) { return [p.id, p.tech1, p.rev]; })],
+      [200, ['捨', '右', '真'], 1, [[r2fR2(1).id, '捨', 1]]]);
+    assert('R2 書き写し: 一巡目の行の rev は上がらない', r2fCopy.json.player.rev, 0);
+    await auPatch(r2fEv, r2fR2(5).id, { score: 8, result: '1    ', baseRev: 0, force: true });   // 六郎の二巡目を採点済みに
+    var r2fScored = await auPatch(r2fEv, r2f[5], { r2tech1: '右', r2tech2: '捨', r2tech3: '真' });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 書き写し: 二巡目の行が採点済みなら 409 scored（linked 付き）で何も書かない',
+      [r2fScored.status, r2fScored.json.reason, r2fScored.json.linked && r2fScored.json.linked.id,
+       r2fScored.json.linked && r2fScored.json.linked.rev, r2Has(auById(r2fPs, r2f[5])), r2Techs(r2fR2(5))],
+      [409, 'scored', r2fR2(5).id, 1, false, ['真', '連', '左']]);
+    var r2fForce = await auPatch(r2fEv, r2f[5], { r2tech1: '右', r2tech2: '捨', r2tech3: '真', force: true });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 書き写し: force なら採点済みの二巡目の行にも書き写す',
+      [r2fForce.status, r2Req(auById(r2fPs, r2f[5])), r2Techs(r2fR2(5)), EventStatus.revOf(r2fR2(5))],
+      [200, ['右', '捨', '真'], ['右', '捨', '真'], 2]);
+
+    // 15. 書き戻し
+    var r2fBack = await auPatch(r2fEv, r2fR2(2).id, { tech2: '捨' });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 書き戻し: 二巡目の行の技を変えると一巡目の行の申請が変わる（応答に source）',
+      [r2fBack.status, r2Req(auById(r2fPs, r2f[2])), r2fBack.json.source && r2fBack.json.source.id,
+       r2fBack.json.source && r2Req(r2fBack.json.source), EventStatus.revOf(auById(r2fPs, r2f[2]))],
+      [200, ['右', '捨', ''], r2f[2], ['右', '捨', ''], 0]);
+    var r2fBack2 = await auPatch(r2fEv, r2fR2(2).id, { tech1: '真', tech2: '連', tech3: '左' });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 書き戻し: 一巡目と同じ形に戻すと申請は消える',
+      [r2fBack2.status, r2Has(auById(r2fPs, r2f[2])), r2Has(r2fBack2.json.source)], [200, false, false]);
+
+    // 16. 付いていく（申請の無い選手の一巡目の形を直す）
+    var r2fFollow = await auPatch(r2fEv, r2f[3], { tech3: '右' });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 付いていく: 未採点で同じ形の二巡目の行は一巡目の新しい形に合わせる（rev +1・linked）',
+      [r2fFollow.status, r2Techs(r2fR2(3)), EventStatus.revOf(r2fR2(3)), (r2fFollow.json.linked || []).length, r2Has(auById(r2fPs, r2f[3]))],
+      [200, ['真', '連', '右'], 1, 1, false]);
+    await auPatch(r2fEv, r2fR2(4).id, { tech1: '捨' });   // 五郎は形登録で別の形に直した（申請に書き戻る）
+    var r2fNoFollow = await auPatch(r2fEv, r2f[4], { tech3: '右' });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 付いていく: 形登録で別の形に直した行は付いていかない',
+      [r2fNoFollow.status, r2Techs(r2fR2(4)), r2fNoFollow.json.linked, r2Req(auById(r2fPs, r2f[4]))],
+      [200, ['捨', '連', '左'], undefined, ['捨', '連', '左']]);
+    await auPatch(r2fEv, r2fR2(6).id, { score: 6, result: '1    ', baseRev: 0, force: true });   // 七郎の二巡目を採点済みに
+    var r2fScoredNoFollow = await auPatch(r2fEv, r2f[6], { tech3: '右' });
+    r2fPs = await auPlayers(r2fEv);
+    assert('R2 付いていく: 採点済みの行は付いていかない（409 も出ない）',
+      [r2fScoredNoFollow.status, r2Techs(r2fR2(6))], [200, ['真', '連', '左']]);
+    var r2fR2Stat = await auPatch(r2fEv, r2fR2(1).id, { r2tech1: '真' });
+    assert('R2 PATCH: 二巡目の行に申請を送ると 400 not_round1', r2fR2Stat.json.reason, 'not_round1');
+
+    // ---- 19. CSV（23 列の書き出し・往復・20 列・簡易形式 13 列） ----
+    var r2fCsv = await Api.exportCsv(r2fEv);
+    var r2fLines = r2fCsv.replace(/^﻿/, '').split('\r\n');
+    var r2fHead = r2fLines[0].split(',');
+    function r2CsvRow(order) { return r2fLines.filter(function(l) { return l.split(',')[1] === order; })[0].split(','); }
+    var r2fP0 = auById(r2fPs, r2f[0]);
+    assert('R2 CSV: 書き出しは 23 列で末尾が 二巡目 技 1〜3', [r2fHead.length, r2fHead.slice(20)], [23, ['二巡目 技 1', '二巡目 技 2', '二巡目 技 3']]);
+    assert('R2 CSV: 値は一巡目の行だけ（申請が無ければ空・二巡目の行は常に空）',
+      [r2CsvRow(r2fP0.order).slice(20), r2CsvRow(auById(r2fPs, r2f[3]).order).slice(20), r2CsvRow(r2fR2(0).order).slice(20)],
+      [['右', '捨', '真'], ['', '', ''], ['', '', '']]);
+    function r2Shape(list) {
+      var byId = {};
+      list.forEach(function(p) { byId[p.id] = p; });
+      return list.map(function(p) {
+        var src = p.sourcePlayerId ? byId[p.sourcePlayerId] : null;
+        return [p.name, p.order, p.tech1, p.tech2, p.tech3, r2Req(p).join('/'), p.finalist === true, src ? src.order : ''];
+      }).sort();
+    }
+    var r2fBefore = await auPlayers(r2fEv);
+    var r2fRt = await au('/api/events/' + r2fEv + '/import', 'POST', { csvText: r2fCsv, mode: 'replace', force: true, expectedCount: r2fBefore.length });
+    assert('R2 CSV: 23 列の置換で申請と二巡目の行の形が往復する', [r2fRt.status, r2Shape(await auPlayers(r2fEv))], [200, r2Shape(r2fBefore)]);
+    var r2fCsv20 = r2fLines.map(function(l) { return l.split(',').slice(0, 20).join(','); }).join('\r\n');
+    var r2fRt20 = await au('/api/events/' + r2fEv + '/import', 'POST', { csvText: r2fCsv20, mode: 'replace', force: true });
+    var r2fAfter20 = await auPlayers(r2fEv);
+    assert('R2 CSV: 20 列（以前の書き出し）も読める（round2_format にならない。申請は空、二巡目の行の形は往復）',
+      [r2fRt20.status, r2fAfter20.filter(r2Has).length, r2Techs(auR2Of(r2fAfter20, r2fAfter20.filter(function(p) { return p.order === r2fP0.order; })[0].id))],
+      [200, 0, ['右', '捨', '真']]);
+    var r2fFmt = await au('/api/events/' + r2fEv + '/import', 'POST', { csvText: '選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果\n誰か,A-男子-1-9,,,,0,,,', mode: 'append' });
+    assert('R2 CSV: round2_format の文言（23 列。以前の 20 列も可）',
+      [r2fFmt.status, r2fFmt.json.reason, r2fFmt.json.error],
+      [409, 'round2_format', '二巡目がある大会には、CSV エクスポートで書き出した形のファイル（23 列。以前の 20 列も可）だけ取り込めます（置換・追記とも）']);
+    var r2fStd = await au('/api/events/' + r2fEv + '/import', 'POST', { csvText: r2fLines[0].replace(/二巡目 技 (\d)/g, '二巡目技$1') + '\r\n' +
+      '見出し 太郎,B-男子-1-1,真,連,左,0,,,,0,0,0,0,,,,,,,,右,,\r\n', mode: 'append' });
+    assert('R2 CSV: 23 列の見出しは「二巡目技1」の表記も読む',
+      [r2fStd.status, r2Req((await auPlayers(r2fEv)).filter(function(p) { return p.name === '見出し 太郎'; })[0])], [200, ['右', '', '']]);
+    await Api.deleteEvent(r2fEv);
+
+    var r2sEv = (await Api.saveEvent({ name: '二巡目の形の申請テスト 簡易CSV', date: '2026-10-03', venue: '', players: [] })).id;
+    var r2sImp = await au('/api/events/' + r2sEv + '/import', 'POST', { csvText:
+      '名前,コート,性別,技①,技②,技③,新人,ゼッケン,級位段位,レンタル,二巡目技①,二巡目技②,二巡目技③\n' +
+      '簡 一郎,A,男,真,連,左,,,,, 右 ,捨,真\n簡 二郎,A,男,真,連,左,,,,,真,連,左\n簡 三郎,A,男,真,連,左', mode: 'replace', force: true });
+    var r2sPs = await auPlayers(r2sEv);
+    assert('R2 CSV: 簡易形式 13 列で申請を読む（一巡目と同じ形・列の無い行は申請なし）',
+      [r2sImp.status, r2sPs.map(function(p) { return r2Has(p) ? r2Req(p).join('/') : '-'; })], [200, ['右/捨/真', '-', '-']]);
+    var r2sImp2 = await au('/api/events/' + r2sEv + '/import', 'POST', { csvText:
+      '名前,コート,性別,技1,技2,技3,新人,ゼッケン,級位段位,レンタル,二巡目技1\n簡 四郎,A,男,真,連,左,,,,,捨', mode: 'append' });
+    assert('R2 CSV: 簡易形式は「二巡目技1」の見出しも、先頭から 11 列だけでも読む',
+      [r2sImp2.status, r2Req((await auPlayers(r2sEv)).filter(function(p) { return p.name === '簡 四郎'; })[0])], [200, ['捨', '', '']]);
+
+    // ---- 20. バンドル・22. 大会のコピー ----
+    var r2sBundle = JSON.parse(await Api.exportBundle(r2sEv));
+    assert('R2 バンドル: 申請があるときだけ r2tech を出す',
+      r2sBundle.event.players.map(function(p) { return r2Has(p) ? r2Req(p).join('/') : '-'; }), ['右/捨/真', '-', '-', '捨//']);
+    var r2sImported = await Api.importBundle(r2sBundle);
+    assert('R2 バンドル: 書き出し → 取り込みで申請が残る',
+      (await auPlayers(r2sImported.id)).map(function(p) { return r2Has(p) ? r2Req(p).join('/') : '-'; }), ['右/捨/真', '-', '-', '捨//']);
+    await Api.deleteEvent(r2sImported.id);
+    var r2Bad = await Api.importBundle({ format: 'phx-tameshigiri-event', version: 1, event: { name: '二巡目の形の申請テスト バンドル', players: [
+      { id: 'r2bd1', name: '束 一郎', order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', r2tech1: '右' },
+      { id: 'r2bd2', name: '束 一郎', order: 'A-男子-2-1', tech1: '右', tech2: '', tech3: '', r2tech1: '真', sourcePlayerId: 'r2bd1' }
+    ] } });
+    var r2BadPs = await auPlayers(r2Bad.id);
+    assert('R2 バンドル: 二巡目の行に書いた r2tech は落とす',
+      [r2Req(auById(r2BadPs, 'r2bd1')), r2Has(auById(r2BadPs, 'r2bd2'))], [['右', '', ''], false]);
+    await Api.deleteEvent(r2Bad.id);
+    var r2Copy = await Api.copyEvent(r2sEv, { name: '二巡目の形の申請テスト コピー', date: '2026-10-03', venue: '', withPlayers: true });
+    assert('R2 コピー（選手も）: 申請も写る',
+      (await auPlayers(r2Copy.id)).map(function(p) { return r2Has(p) ? r2Req(p).join('/') : '-'; }), ['右/捨/真', '-', '-', '捨//']);
+    await Api.deleteEvent(r2Copy.id);
+    await Api.deleteEvent(r2sEv);
+
+    // ---- 17. 一巡目に戻して終了し直す（reorderRound2） ----
+    var r2oEv = (await Api.saveEvent({ name: '二巡目の形の申請テスト 作り直し', date: '2026-10-03', venue: '', players: [] })).id;
+    var r2o = (await Api.createPlayersBulk(r2oEv, { rows: [
+      { name: '直 一郎', court: 'A', tech1: '真', tech2: '連', tech3: '左' },
+      { name: '直 二郎', court: 'A', tech1: '真', tech2: '連', tech3: '左' }
+    ] })).players.map(function(p) { return p.id; });
+    await Api.changeStatus(r2oEv, 'round1');
+    await Api.changeStatus(r2oEv, 'round1_done');
+    await auPatch(r2oEv, auR2Of(await auPlayers(r2oEv), r2o[0]).id, { tech1: '捨' });   // 形登録で直す
+    await Api.changeStatus(r2oEv, 'round1');
+    var r2oCopy = await auPatch(r2oEv, r2o[1], { r2tech1: '右', r2tech2: '捨', r2tech3: '真' });   // 戻している間に申請を変える
+    var r2oTr = await Api.changeStatus(r2oEv, 'round1_done');
+    var r2oPs = await auPlayers(r2oEv);
+    assert('R2 作り直し: 形登録で直した形は残り、戻している間に変えた申請は二巡目の行にも入る',
+      [(r2oCopy.json.linked || []).length, r2oTr.round2 && r2oTr.round2.reordered, r2oTr.round2 && r2oTr.round2.fromRequest,
+       r2Techs(auR2Of(r2oPs, r2o[0])), r2Techs(auR2Of(r2oPs, r2o[1]))],
+      [1, true, 2, ['捨', '連', '左'], ['右', '捨', '真']]);
+    var r2oGen = await au('/api/events/' + r2oEv + '/rounds/2/generate', 'POST', { force: true });
+    assert('R2 差分追加の応答にも fromRequest', [r2oGen.status, r2oGen.json.fromRequest], [200, 0]);
+    await Api.deleteEvent(r2oEv);
+
+    // ---- 18. 技得点表の改名 ----
+    var r2tEv = (await Api.saveEvent({ name: '二巡目の形の申請テスト 改名', date: '2026-10-03', venue: '', players: [] })).id;
+    function r2T(name, first) { return { name: name, strikes: [first, null, null, null] }; }
+    await au('/api/events/' + r2tEv + '/techniques', 'PUT', { techniques: [r2T('甲', 5), r2T('乙', 6), r2T('丙(男)', 7), r2T('丙(女)', 8)] });
+    var r2t = (await Api.createPlayersBulk(r2tEv, { rows: [
+      { name: '名 一郎', court: 'A', tech1: '甲', tech2: '乙', r2tech1: '丙', r2tech2: '乙' },
+      { name: '名 二郎', court: 'A', tech1: '乙', r2tech1: '甲' }
+    ] })).players.map(function(p) { return p.id; });
+    var r2tGone = await au('/api/events/' + r2tEv + '/techniques', 'PUT', { techniques: [r2T('甲', 5), r2T('丙(男)', 7), r2T('丙(女)', 8)] });
+    assert('R2 改名: 申請で使っている技も数える（同じ行の tech と r2tech は 1 行）',
+      [r2tGone.status, r2tGone.json.reason, r2tGone.json.count, r2tGone.json.usages], [409, 'tech_in_use', 2, [{ name: '乙', count: 2 }]]);
+    var r2tGone2 = await au('/api/events/' + r2tEv + '/techniques', 'PUT', { techniques: [r2T('甲改', 5), r2T('乙', 6), r2T('丙(男)', 7), r2T('丙(女)', 8)] });
+    assert('R2 改名: 申請だけで使っている技が消えても 409 tech_in_use',
+      [r2tGone2.status, r2tGone2.json.names, r2tGone2.json.count], [409, ['甲'], 2]);
+    var r2tRen = await au('/api/events/' + r2tEv + '/techniques', 'PUT', {
+      techniques: [r2T('甲改', 5), r2T('乙', 6), r2T('丁(男)', 7), r2T('丙(女)', 8)],
+      renames: [{ from: '甲', to: '甲改' }, { from: '丙(男)', to: '丁(男)' }]
+    });
+    var r2tPs = await auPlayers(r2tEv);
+    assert('R2 改名: 申請の技も付け替わる（接尾辞なしの表示名は接尾辞なしで）',
+      [r2tRen.status, r2tRen.json.renamed, r2Techs(auById(r2tPs, r2t[0])), r2Req(auById(r2tPs, r2t[0])), r2Req(auById(r2tPs, r2t[1]))],
+      [200, 2, ['甲改', '乙', ''], ['丁', '乙', ''], ['甲改', '', '']]);
+    assert('R2 改名: tech が変わった行だけ rev +1（申請だけ付け替えた行は上げない）',
+      [EventStatus.revOf(auById(r2tPs, r2t[0])), EventStatus.revOf(auById(r2tPs, r2t[1]))], [1, 0]);
+    await Api.deleteEvent(r2tEv);
   }
 
   // ==== 網羅バグ検証の修正（設計書 2026-10-01 11 章「採点画面」）: api.js / outbox.js / storage.js / board.js ====
@@ -4283,7 +4551,7 @@
     function ordersOf(rows) { return rows.map(function(p) { return p.order; }); }
     function withFilter(patch) { return Object.assign(Courts.defaultFilter(), patch); }
 
-    assert('defaultFilter: 既定値', Courts.defaultFilter(), { court: '', sex: '', round: 0, newFace: false, noTech: false, query: '' });
+    assert('defaultFilter: 既定値', Courts.defaultFilter(), { court: '', sex: '', round: 0, newFace: false, noTech: false, query: '', r2: '' });
     assert('applyFilter: 既定は全件', Courts.applyFilter(fPlayers, Courts.defaultFilter()).length, 5);
     assert('applyFilter: コート', ordersOf(Courts.applyFilter(fPlayers, withFilter({ court: 'B' }))), ['B-男子-1-1']);
     assert('applyFilter: 性別', ordersOf(Courts.applyFilter(fPlayers, withFilter({ sex: '女子' }))), ['A-女子-1-1']);
@@ -4443,12 +4711,12 @@
     assert('isTechIncomplete: 全部空なら true', Courts.isTechIncomplete(tcP[2]), true);
     assert('isTechIncomplete: null でも落ちない', Courts.isTechIncomplete(null), true);
 
-    assert('stageCountText: draft は一巡目の人数と技未入力',
-      Courts.stageCountText('draft', tcP), '一巡目 2名　技 未入力 1');
+    assert('stageCountText: draft は一巡目の人数と技未入力と二巡目の形の申請（申請 0 も出す）',
+      Courts.stageCountText('draft', tcP), '一巡目 2名　技 未入力 1　二巡目の形 申請 0');
     assert('stageCountText: round1 は一巡目の確定の件数',
       Courts.stageCountText('round1', tcP), '確定 1 / 2');
-    assert('stageCountText: round1_done は二巡目の人数と技未入力',
-      Courts.stageCountText('round1_done', tcP), '二巡目 1名　技 未入力 1');
+    assert('stageCountText: round1_done は二巡目の人数と技未入力と一巡目から変更',
+      Courts.stageCountText('round1_done', tcP), '二巡目 1名　技 未入力 1　一巡目から変更 0');
     assert('stageCountText: round2 は二巡目の確定の件数',
       Courts.stageCountText('round2', tcP), '確定 0 / 1');
     assert('stageCountText: round2_done 以降は出さない',
@@ -4459,13 +4727,13 @@
 
     assert('statusConfirmMessage: draft → round1',
       Courts.statusConfirmMessage('draft', 'round1', tcP),
-      '⚠ 技が未入力の選手が 1名います。\nこのまま試合を開始しますか？');
+      '⚠ 技が未入力の選手が 1名います。\n二巡目の形の申請はありません（全員、一巡目と同じ形で二巡目を行います）\nこのまま試合を開始しますか？');
     // 0 名のときは「0名います」ではなく「いません」（ユーザー要望）
     assert('statusConfirmMessage: 未入力が 0 名なら「いません」',
       Courts.statusConfirmMessage('draft', 'round1', [
         { order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 0 }
       ]),
-      '試合を開始しますか？');
+      '二巡目の形の申請はありません（全員、一巡目と同じ形で二巡目を行います）\n試合を開始しますか？');
     assert('statusConfirmMessage: 未採点が 0 名なら「いません」',
       Courts.statusConfirmMessage('round1', 'round1_done', [
         { order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 10, result: '1    ', confirmed: true }
@@ -4476,7 +4744,7 @@
       '一巡目の未確定が 1名います。\n一巡目を終了しますか？');
     assert('statusConfirmMessage: round1_done → round2',
       Courts.statusConfirmMessage('round1_done', 'round2', tcP),
-      '⚠ 二巡目の技が未入力の選手が 1名います。\nこのまま二巡目を開始しますか？');
+      '⚠ 二巡目の技が未入力の選手が 1名います。\n二巡目 1名のうち、一巡目から形を変える選手: 0名\nこのまま二巡目を開始しますか？');
     // 網羅検証 S2（2026-10-01）: 最終結果の前に未確定の件数を出す（round1_done → final は一巡目だけ）
     assert('statusConfirmMessage: round1_done → final（二巡目なしで終了）は一巡目の未確定を出す',
       Courts.statusConfirmMessage('round1_done', 'final', tcP),
@@ -4562,6 +4830,150 @@
     // ---- 試合開始を止める条件は決戦で変わらない ----
     assert('startBlockers: round2_final の状態でも判定は選手データだけで決まる',
       Courts.startBlockers({ settings: {} }, cfP), []);
+
+    // ---- 二巡目の形の申請（設計書 2026-10-03-round2-forms-prereg-design.md 9.1） ----
+    var r2Base = { id: 's1', order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左' };
+    function r2P(extra) { return Object.assign({}, r2Base, extra); }
+    var r2Cases = [
+      r2Base,
+      r2P({ r2tech1: '右', r2tech2: '捨', r2tech3: '真' }),
+      r2P({ r2tech1: '右', r2tech2: '', r2tech3: '' }),
+      r2P({ r2tech1: '  ', r2tech2: '', r2tech3: ' ' }),
+      r2P({ r2tech1: ' 右 ' })
+    ];
+    assert('round2TechsOf: 申請なし → 一巡目 / 3 つとも → そのまま / 1 つだけ → 空欄は空 / 空白だけ → 一巡目 / trim',
+      r2Cases.map(EventStatus.round2TechsOf),
+      [['真', '連', '左'], ['右', '捨', '真'], ['右', '', ''], ['真', '連', '左'], ['右', '', '']]);
+    assert('hasRound2Techs: 同じ表で',
+      r2Cases.map(EventStatus.hasRound2Techs), [false, true, true, false, true]);
+    assert('round2TechsOf / hasRound2Techs: null でも落ちない',
+      [EventStatus.round2TechsOf(null), EventStatus.hasRound2Techs(null)], [['', '', ''], false]);
+    assert('normalizedRound2Techs: 一巡目と同じ申請・申請なしは null、違えば trim した 3 つ',
+      [EventStatus.normalizedRound2Techs(r2P({ r2tech1: '真', r2tech2: ' 連', r2tech3: '左' })),
+       EventStatus.normalizedRound2Techs(r2Base),
+       EventStatus.normalizedRound2Techs(r2P({ r2tech2: '捨 ' }))],
+      [null, null, ['', '捨', '']]);
+    assert('R2_TECH_KEYS', EventStatus.R2_TECH_KEYS, ['r2tech1', 'r2tech2', 'r2tech3']);
+
+    assert('techIssues: 表に無い技（重複は 1 つ）',
+      Courts.techIssues(['真', 'ナゾ', ' ナゾ '], TECHNIQUES, false, false), { unknown: ['ナゾ'], repeat: [], rentalBad: false });
+    assert('techIssues: 同じ形（接尾辞違いも同じ形）',
+      Courts.techIssues(['水月', '水月(男)', ''], TECHNIQUES, false, false).repeat, ['水月']);
+    assert('techIssues: repeatable は何度でも',
+      Courts.techIssues(['立位袈裟', '立位袈裟', '立位袈裟'], TECHNIQUES, false, false).repeat, []);
+    assert('techIssues: レンタルの drawn 以外（レンタルでなければ見ない）',
+      [Courts.techIssues(['立位袈裟', '真', ''], TECHNIQUES, false, true).rentalBad,
+       Courts.techIssues(['立位袈裟', '座位袈裟', ''], TECHNIQUES, false, true).rentalBad,
+       Courts.techIssues(['立位袈裟', '真', ''], TECHNIQUES, false, false).rentalBad], [true, false, false]);
+
+    var r2sbP = [
+      r2P({ id: 'a', name: '甲', r2tech1: 'ナゾ' }),
+      r2P({ id: 'b', name: '乙', order: 'A-男子-1-2', r2tech1: '真', r2tech2: '真', r2tech3: '連' }),
+      { id: 'c', name: '丙', order: 'A-男子-1-3', rental: true, tech1: '立位袈裟', tech2: '座位袈裟', tech3: '立位横一',
+        r2tech1: '真', r2tech2: '', r2tech3: '' },
+      r2P({ id: 'd', name: '丁', order: 'A-男子-1-4' }),
+      { id: 'e', name: '戊', order: 'A-男子-2-1', tech1: '真', tech2: '連', tech3: '左', r2tech1: 'ナゾ', r2tech2: '真', r2tech3: '真' }
+    ];
+    var r2sb = Courts.startBlockers({ settings: {}, techniques: TECHNIQUES }, r2sbP);
+    assert('startBlockers: 申請の誤りで r2unknownTech / r2repeat / r2rental（申請の無い行・二巡目の行は数えない）',
+      r2sb.map(function(b) { return [b.kind, b.players.map(function(p) { return p.name; })]; }),
+      [['r2unknownTech', ['甲']], ['r2repeat', ['乙']], ['r2rental', ['丙']]]);
+    assert('startBlockers: event.techniques が配列でなければ r2unknownTech を出さない',
+      Courts.startBlockers({ settings: {} }, r2sbP).map(function(b) { return b.kind; }).indexOf('r2unknownTech'), -1);
+    assert('blockerMessage: 二巡目の見出し',
+      Courts.blockerMessage([r2sb[1]]), '二巡目の形で同じ形を 2 回以上選んでいる: 1 名（乙）');
+
+    var r2stP = [
+      { id: 'r1', name: '一巡目', order: 'A-男子-1-1', tech1: 'ナゾ', tech2: '真', tech3: '真' },
+      { id: 'x', name: '表に無い', order: 'A-男子-2-1', tech1: 'ナゾ', tech2: '真', tech3: '連' },
+      { id: 'y', name: '同じ形', order: 'A-男子-2-2', tech1: '真', tech2: '真', tech3: '' },
+      { id: 'z', name: '貸し刀', order: 'A-男子-2-3', rental: true, tech1: '真', tech2: '', tech3: '' },
+      { id: 'w', name: '正しい', order: 'A-男子-2-4', tech1: '真', tech2: '連', tech3: '左' }
+    ];
+    var r2st = Courts.round2StartBlockers({ settings: {}, techniques: TECHNIQUES }, r2stP);
+    assert('round2StartBlockers: 二巡目の行だけを見る（一巡目の行の誤りでは出ない）',
+      r2st.map(function(b) { return [b.kind, b.players.map(function(p) { return p.name; })]; }),
+      [['unknownTech', ['表に無い']], ['repeat', ['同じ形']], ['rental', ['貸し刀']]]);
+    assert('round2StartBlockers: 誤りが無ければ空',
+      Courts.round2StartBlockers({ techniques: TECHNIQUES }, [r2stP[0], r2stP[4]]), []);
+    assert('blockerMessage: 第 2 引数を先頭の行に出す（空なら空文字）',
+      [Courts.blockerMessage(r2st, '二巡目を開始できません。形登録で直してください。').split('\n')[0],
+       Courts.blockerMessage([], '見出し')],
+      ['二巡目を開始できません。形登録で直してください。', '']);
+
+    var r2cmP = [
+      r2P({ id: 'p1', r2tech1: '右', r2tech2: '捨', r2tech3: '真' }),
+      r2P({ id: 'p2', order: 'A-男子-1-2' }),
+      r2P({ id: 'p3', order: 'A-男子-1-3' })
+    ];
+    assert('statusConfirmMessage: draft → round1 は申請の人数を情報として出す',
+      Courts.statusConfirmMessage('draft', 'round1', r2cmP),
+      '二巡目の形の申請: 1名（ほかの 2名は一巡目と同じ形で二巡目を行います）\n試合を開始しますか？');
+    assert('statusConfirmMessage: draft → round1 で技の未入力がいれば ⚠ を先頭に',
+      Courts.statusConfirmMessage('draft', 'round1', r2cmP.concat([{ order: 'A-男子-1-4', tech1: '真', tech2: '', tech3: '' }])),
+      '⚠ 技が未入力の選手が 1名います。\n二巡目の形の申請: 1名（ほかの 3名は一巡目と同じ形で二巡目を行います）\nこのまま試合を開始しますか？');
+    assert('statusConfirmMessage: draft → round1 で全員が申請',
+      Courts.statusConfirmMessage('draft', 'round1', [r2cmP[0]]), '二巡目の形の申請: 1名（全員）\n試合を開始しますか？');
+    assert('statusConfirmMessage: round1 → round1_done は申請があれば 1 行足す',
+      Courts.statusConfirmMessage('round1', 'round1_done', r2cmP),
+      '一巡目の未確定が 3名います。\n二巡目の行は、申請された二巡目の形（申請の無い人は一巡目の形）で作ります。\n一巡目を終了しますか？');
+    var r2dP = r2cmP.concat([
+      { id: 'q1', order: 'A-男子-2-1', sourcePlayerId: 'p1', tech1: '右', tech2: '捨', tech3: '真' },
+      { id: 'q2', order: 'A-男子-2-2', sourcePlayerId: 'p2', tech1: '真', tech2: ' 連', tech3: '左' },
+      { id: 'q3', order: 'A-男子-2-3', sourcePlayerId: 'nosuch', tech1: '捨', tech2: '連', tech3: '左' }
+    ]);
+    assert('statusConfirmMessage: round1_done → round2 は一巡目から形を変える選手の人数',
+      Courts.statusConfirmMessage('round1_done', 'round2', r2dP),
+      '二巡目 3名のうち、一巡目から形を変える選手: 1名\n二巡目を開始しますか？');
+    assert('stageCountText: draft の「二巡目の形 申請 n」・round1_done の「一巡目から変更 n」',
+      [Courts.stageCountText('draft', r2dP), Courts.stageCountText('round1_done', r2dP)],
+      ['一巡目 3名　技 未入力 0　二巡目の形 申請 1', '二巡目 3名　技 未入力 0　一巡目から変更 1']);
+    assert('round2Differs: 違う → true / 同じ（trim）→ false / 一巡目の行が無い → false / 一巡目の行 → false',
+      [Courts.round2Differs(r2dP[3], r2dP), Courts.round2Differs(r2dP[4], r2dP),
+       Courts.round2Differs(r2dP[5], r2dP), Courts.round2Differs(r2dP[0], r2dP)], [true, false, false, false]);
+    assert('applyFilter r2: 申請あり / 一巡目と同じ（二巡目の行はどちらにも入れない）/ すべて',
+      [Courts.applyFilter(r2dP, Object.assign(Courts.defaultFilter(), { r2: 'yes' })).map(function(p) { return p.id; }),
+       Courts.applyFilter(r2dP, Object.assign(Courts.defaultFilter(), { r2: 'no' })).map(function(p) { return p.id; }),
+       Courts.applyFilter(r2dP, Courts.defaultFilter()).length],
+      [['p1'], ['p2', 'p3'], 6]);
+
+    var r2lsSrc = { id: 's1', order: 'A-男子-1-1', tech1: '真', tech2: '連', tech3: '左', score: 10, result: '1', confirmed: true };
+    var r2lsScored = { id: 'l1', order: 'A-男子-2-1', sourcePlayerId: 's1', tech1: '真', tech2: '連', tech3: '左', score: 5, result: '1    ' };
+    var r2lsUnscored = { id: 'l2', order: 'A-男子-2-1', sourcePlayerId: 's1', tech1: '真', tech2: '連', tech3: '左', score: 0, result: '' };
+    var r2lsCustom = { id: 'l3', order: 'A-男子-2-1', sourcePlayerId: 's1', tech1: '捨', tech2: '連', tech3: '左', score: 5, result: '1    ' };
+    var r2New = { r2tech1: '右', r2tech2: '捨', r2tech3: '真' };
+    var r2lsReq = Object.assign({}, r2lsSrc, { r2tech1: '捨', r2tech2: '連', r2tech3: '左' });
+    assert('round2LinkedScored: 申請を変えて採点済みの二巡目の行がある → その行',
+      (Courts.round2LinkedScored(r2lsSrc, r2New, [r2lsSrc, r2lsScored]) || {}).id, 'l1');
+    assert('round2LinkedScored: 二巡目の行が未採点 → null',
+      Courts.round2LinkedScored(r2lsSrc, r2New, [r2lsSrc, r2lsUnscored]), null);
+    assert('round2LinkedScored: 申請は変えず一巡目の形だけ変え、二巡目の行が別の形に直してある → null',
+      Courts.round2LinkedScored(r2lsSrc, { tech3: '右' }, [r2lsSrc, r2lsCustom]), null);
+    assert('round2LinkedScored: 二巡目の行がもう同じ形 → null / 一巡目と同じ形の申請（空に戻す）で採点済みの行が別の形 → その行',
+      [Courts.round2LinkedScored(r2lsSrc, { r2tech1: '捨', r2tech2: '連', r2tech3: '左' }, [r2lsSrc, r2lsCustom]),
+       (Courts.round2LinkedScored(r2lsReq, { r2tech1: '', r2tech2: '', r2tech3: '' }, [r2lsReq, r2lsCustom]) || {}).id],
+      [null, 'l3']);
+    assert('round2ChangeConfirmMessage: 二巡目の行の得点を出す',
+      Courts.round2ChangeConfirmMessage(r2lsScored).split('\n')[0],
+      '二巡目の行は採点済みです（5点）。二巡目の形を変えると得点が変わる可能性があります。保存後に採点画面でこの選手の二巡目を開き、「計算し直して保存」を押してください。');
+
+    var r2paste = Courts.parsePasteRows([
+      '甲,A,男,,真,連,左,,,,右,捨,真',
+      '乙,A,男,,真,連,左,,,,ナゾ,,',
+      '丙,A,男,,真,連,左,,,,真,真,',
+      '丁,A,男,,立位袈裟,座位袈裟,立位横一,,,レンタル,真,,',
+      '戊,A,男,,真,連,左'
+    ].join('\n'), TECHNIQUES);
+    assert('parsePasteRows: 13 列（二巡目の 3 列）を r2techs に読む',
+      [r2paste.rows[0].ok, r2paste.rows[0].r2techs, r2paste.rows[0].badR2Techs], [true, ['右', '捨', '真'], []]);
+    assert('parsePasteRows: 二巡目の表に無い技・同じ形・レンタルで断る',
+      r2paste.rows.slice(1, 4).map(function(r) { return [r.ok, r.error]; }),
+      [[false, '二巡目の技「ナゾ」は技リストにありません'],
+       [false, '二巡目の形: 同じ形は 1 回までです（真）'],
+       [false, '二巡目の形: レンタルの選手は抜刀してからの形だけ選べます']]);
+    assert('parsePasteRows: 表に無い二巡目の技は badR2Techs に', r2paste.rows[1].badR2Techs, ['ナゾ']);
+    assert('parsePasteRows: 10 列以下の行は今までどおり（申請は空）',
+      [r2paste.rows[4].ok, r2paste.rows[4].r2techs, r2paste.rows[4].techs], [true, ['', '', ''], ['真', '連', '左']]);
 
     // ---- 技の性別による絞り込み・解決（設計書「技の選択肢を性別で絞る」テスト 1〜2） ----
     // data.js の既定リストで 胸尽くし/水月/破図味 が (男)/(女) の組。

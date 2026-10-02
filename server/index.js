@@ -1370,7 +1370,51 @@ function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
   if (p.finalist === true && EventStatus.roundOf(p) === 2) out.finalist = true;
   if (bib !== null && bib !== undefined) out.bib = bib;
   if (sourcePlayerId) out.sourcePlayerId = sourcePlayerId;
+  // 二巡目の形の申請（設計書 2026-10-03 3.1）。技と同じ規則（trim・50 字）で洗い、一巡目の行で
+  // 正規化の後に 1 つでも空でないときだけ残す（二巡目の行・一巡目と同じ形の申請はキーごと落とす）。
+  R2_TECH_KEYS.forEach(k => { out[k] = typeof p[k] === 'string' ? p[k].trim().slice(0, 50) : ''; });
+  applyRound2Techs(out);
   return out;
+}
+
+// ── 二巡目の形の申請（設計書 2026-10-03-round2-forms-prereg-design.md） ──
+// 一巡目の行の r2tech1〜3。3 つとも空ならキーごと持たない（= 一巡目と同じ形）。版（rev）の項目ではない。
+const R2_TECH_KEYS = EventStatus.R2_TECH_KEYS;
+
+// 行の r2tech1〜3 を正規化して置き直す（2.3）。一巡目の行でない・申請が無い・tech1〜3 と 3 つとも
+// 同じならキーを消す。それ以外は trim した 3 つ（空の枠は ''）を書く。p をその場で書き換える。
+function applyRound2Techs(p) {
+  const norm = EventStatus.roundOf(p) === 1 ? EventStatus.normalizedRound2Techs(p) : null;
+  R2_TECH_KEYS.forEach((k, i) => {
+    if (norm) p[k] = norm[i];
+    else delete p[k];
+  });
+}
+
+// 二巡目の形の検証（bulk rows。設計書 3.1）。戻り値はエラー文言（行番号は呼び出し側が付ける）か null。
+// 規則は一巡目の技と同じ: 表に無い技名・レンタルなら drawn だけ・repeatable でない形の 2 回以上
+// （接尾辞は同じ形として数える）。courts.js の parsePasteRow と同じ順・同じ文言。
+function checkRound2Techs(techList, techs, isFemale, rental) {
+  const formCounts = Object.create(null);
+  let dupForm = '';
+  for (const t of techs) {
+    if (!t) continue;
+    const resolved = resolveTechnique(techList, t, isFemale);
+    if (!resolved) return `二巡目の技「${t}」は技リストにありません`;
+    if (rental && resolved.drawn !== true) return '二巡目の形: ' + RENTAL_DRAWN_ONLY;
+    if (resolved.repeatable !== true) {
+      const display = stripGenderSuffix(resolved.name);
+      formCounts[display] = (formCounts[display] || 0) + 1;
+      if (formCounts[display] >= 2 && !dupForm) dupForm = display;
+    }
+  }
+  if (dupForm) return `二巡目の形: 同じ形は 1 回までです（${dupForm}）`;
+  return null;
+}
+
+// 本文の r2tech1〜3 を読む（POST の 1 名追加・bulk rows）。文字列でなければ ''。trim する。
+function readRound2Techs(body) {
+  return R2_TECH_KEYS.map(k => (typeof (body && body[k]) === 'string' ? body[k].trim() : ''));
 }
 
 // POST /api/events の body の players を保存用に洗う。
@@ -1688,6 +1732,9 @@ app.post('/api/events/:id/copy', (req, res) => {
             rental: p.rental === true
           };
           if (Number.isInteger(p.bib)) newPlayer.bib = p.bib;
+          // 二巡目の形の申請も一巡目の技と同じく写す（設計書 2026-10-03 3.8・D10）
+          R2_TECH_KEYS.forEach(k => { if (typeof p[k] === 'string') newPlayer[k] = p[k]; });
+          applyRound2Techs(newPlayer);
           return newPlayer;
         });
     }
@@ -1949,6 +1996,7 @@ app.post('/api/events/:id/status', (req, res) => {
         created: gen.created, skipped: gen.skipped, existingCount: gen.existingCount,
         untrackedCount: gen.untrackedCount, unassignedCount: gen.unassignedCount,
         finalistCount: gen.finalistCount, reordered: !!gen.reordered,
+        fromRequest: gen.fromRequest,
         // 二巡目に採点済みがあって差分追加になったとき、決戦の印は選び直されない。
         // 今の一巡目の確定得点との差を返し、画面が警告する（網羅検証 S18）。
         finalistDiff: EventStatus.finalistDiff(gen.players)
@@ -2029,6 +2077,15 @@ app.post('/api/events/:id/players', (req, res) => {
     if (!Number.isInteger(round) || round < 1 || round > 9) {
       return res.status(400).json({ error: '不正な巡目です' });
     }
+    // 二巡目の形の申請（設計書 2026-10-03 3.2）。一巡目の行にだけ。同じ形・レンタルはこの経路では
+    // 見ない（一巡目の技と同じ方針。画面が候補を絞り、試合開始の検査が見る）。
+    const r2techs = readRound2Techs(body);
+    if (r2techs.some(t => t.length > TECH_NAME_MAX)) {
+      return res.status(400).json({ error: TECH_TOO_LONG });
+    }
+    if (round !== 1 && r2techs.some(t => t)) {
+      return res.status(400).json({ error: '二巡目の形は一巡目の行にだけ登録できます', reason: 'not_round1' });
+    }
 
     // ゼッケン番号・級位段位・真剣レンタル（設計書「選手の追加項目」）。
     // 型が合わないものは他の項目と違い黙って無視せず 400 で断る（ゼッケンの重複判定に
@@ -2063,6 +2120,11 @@ app.post('/api/events/:id/players', (req, res) => {
         return res.status(400).json({ error: `技「${t}」は技リストにありません`, reason: 'unknown_tech' });
       }
     }
+    for (const t of r2techs) {
+      if (t && !resolveTechnique(createTechList, t, createIsFemale)) {
+        return res.status(400).json({ error: `二巡目の技「${t}」は技リストにありません`, reason: 'unknown_tech' });
+      }
+    }
 
     if (bibParsed.value !== null) {
       const conflict = findBibConflict(event.players, bibParsed.value, null);
@@ -2094,6 +2156,8 @@ app.post('/api/events/:id/players', (req, res) => {
       rental: rentalParsed.value
     };
     if (bibParsed.value !== null) player.bib = bibParsed.value;
+    R2_TECH_KEYS.forEach((k, i) => { player[k] = r2techs[i]; });
+    applyRound2Techs(player);
 
     event.players.push(player);
     event.updatedAt = new Date().toISOString();
@@ -2348,7 +2412,15 @@ function bulkFromRows(req, res, rows) {
     if (dupForm) {
       return res.status(400).json({ error: `${at}同じ形は 1 回までです（${dupForm}）` });
     }
+    // 二巡目の形の申請（設計書 2026-10-03 3.2）。空なら一巡目と同じ形（検査しない）。
+    const r2techs = readRound2Techs(row);
+    if (r2techs.some(t => t.length > TECH_NAME_MAX)) {
+      return res.status(400).json({ error: at + TECH_TOO_LONG });
+    }
+    const r2Err = checkRound2Techs(techList, r2techs, isFemale, rentalParsed.value);
+    if (r2Err) return res.status(400).json({ error: at + r2Err });
     checked.push({
+      r2techs: r2techs,
       name: name,
       court: court,
       isFemale: isFemale,
@@ -2384,6 +2456,8 @@ function bulkFromRows(req, res, rows) {
       rental: row.rental
     };
     if (row.bib !== null) player.bib = row.bib;
+    R2_TECH_KEYS.forEach((k, i) => { player[k] = row.r2techs[i]; });
+    applyRound2Techs(player);
     return player;
   });
 
@@ -2402,7 +2476,8 @@ function bulkOrderKey(court, gender) {
 // POST /api/events/:id/players/bulk : 選手をまとめて追加（一巡目）
 // 2 つの形を受ける。どちらか一方だけ。
 //   { court, isFemale, isNewFace, names: [...] } … 同じコート・性別・新人区分で名前だけ（スマホ運営）
-//   { rows: [{ name, court, isFemale, isNewFace, tech1, tech2, tech3 }, ...] } … 行ごとに違う（PC 運営の貼り付け）
+//   { rows: [{ name, court, isFemale, isNewFace, tech1, tech2, tech3, bib, rank, rental,
+//              r2tech1, r2tech2, r2tech3, line }, ...] } … 行ごとに違う（PC 運営の貼り付け）
 // names 形式: 名前は1件ずつ trim して空を除く。コート・性別・巡目は全員共通なので nextOrderNumber は
 // 最初に1回だけ求め、あとは連番で増やす（毎回 concat して数え直すと件数の二乗のコストになる）。
 app.post('/api/events/:id/players/bulk', (req, res) => {
@@ -2565,6 +2640,11 @@ app.post('/api/events/:id/players/reorder', (req, res) => {
 //   5. bib（409）… ゼッケンの重複
 // 成功したら、一巡目の行の変更を sourcePlayerId でつながる二巡目の行に写し（M1）、
 // 採点に関わる値が変わった行の rev を +1 する。応答の player には必ず rev が入る。
+// 二巡目の形の申請 r2tech1〜3（設計書 2026-10-03 3.3）: 一巡目の行にだけ送れる（それ以外は 400 not_round1）。
+// 申請を直すと二巡目の行の技に書き写し（写す先が採点済みなら 409 scored に linked＝その行、force で越える）、
+// 二巡目の行の技を直すと一巡目の行の申請に書き戻す。応答に書き換えた相手の行を足す:
+//   linked: [二巡目の行（rev 入り）…]（一巡目の行の PATCH で二巡目の行が変わったとき）
+//   source: 一巡目の行（rev 入り）（二巡目の行の PATCH で申請を書き戻したとき）
 app.patch('/api/events/:id/players/:playerId', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -2641,6 +2721,19 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       if (t.length > TECH_NAME_MAX) return res.status(400).json({ error: TECH_TOO_LONG });
       newTechs[key] = t;
     }
+    // 二巡目の形の申請（設計書 2026-10-03 3.3）。文字列のときだけ見る（技と同じ）。一巡目の行にだけ
+    // 送れる（PATCH 後ではなく今の巡目で見る）。表に無い技名は見ない（画面が候補を絞り、試合開始の検査が見る）。
+    const newR2 = {};
+    for (const key of R2_TECH_KEYS) {
+      if (typeof body[key] !== 'string') continue;
+      const t = body[key].trim();
+      if (t.length > TECH_NAME_MAX) return res.status(400).json({ error: TECH_TOO_LONG });
+      newR2[key] = t;
+    }
+    const r2Sent = Object.keys(newR2).length > 0;
+    if (r2Sent && EventStatus.roundOf(player) !== 1) {
+      return res.status(400).json({ error: '二巡目の形は一巡目の行にだけ登録できます', reason: 'not_round1' });
+    }
     if (body.baseRev !== undefined && !(Number.isInteger(body.baseRev) && body.baseRev >= 0)) {
       return res.status(400).json({ error: 'baseRev が不正です' });
     }
@@ -2716,6 +2809,27 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
         player: playerWithRev(player)
       });
     }
+    // 一巡目の行の二巡目の形（申請）を直すと、紐づく二巡目の行の技にも書き写す（設計書 2026-10-03 3.3.1）。
+    // 書き写す先が採点済みなら force が要る（409 scored に linked＝その二巡目の行を付ける）。
+    // 申請は変えず一巡目の形だけを直して二巡目の行が付いていく（2.5）のは未採点の行だけなので断らない。
+    // 判定は EventStatus.round2SyncTarget（画面の Courts.round2LinkedScored と同じ）。
+    // body.round で一巡目以外へ移す行は申請ごと消えるので、書き写さない。
+    const syncRound2 = EventStatus.roundOf(player) === 1 && linkedRows.length > 0 &&
+      (body.round === undefined || body.round === 1);
+    if (syncRound2 && r2Sent && !force) {
+      const r2After = Object.assign({}, player, newTechs, newR2);
+      applyRound2Techs(r2After);
+      const scoredLinked = linkedRows.find(L =>
+        EventStatus.isScored(L) && EventStatus.round2SyncTarget(player, r2After, true, L));
+      if (scoredLinked) {
+        return res.status(409).json({
+          error: '二巡目の行は採点済みです。二巡目の形を変えると得点が変わります',
+          reason: 'scored',
+          player: playerWithRev(player),
+          linked: playerWithRev(scoredLinked)
+        });
+      }
+    }
 
     // ── 5. ゼッケンの重複（409 bib） ──
     if (body.bib !== undefined && body.bib !== null) {
@@ -2730,6 +2844,8 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
 
     // ── ここから書き換え（検査はすべて通った） ──
     Object.keys(newTechs).forEach(k => { player[k] = newTechs[k]; });
+    // 申請は送られた枠だけ置き換える（送られていない枠は今の値）。正規化は order を組み直した後。
+    Object.keys(newR2).forEach(k => { player[k] = newR2[k]; });
     if (newName !== undefined) player.name = newName;
     if (body.result !== undefined) player.result = body.result;
     ['isNewFace', 'isFemale'].forEach(key => {
@@ -2794,9 +2910,21 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     //     性別を写すとき、決戦の印の無い行は order の性別も組み直す（番号はその組の最大+1）。
     //     決戦の行は order を変えない（候補は先頭コートの男子の末尾に置く約束のため）。
     // player が一巡目行でなければ linkedRows は空なので何もしない。
+    //   tech1〜3 … 二巡目の形（申請）を直した・申請の無い選手の一巡目の形を直した（設計書 2026-10-03
+    //     3.3.1。EventStatus.round2SyncTarget。採点済みの行への書き写しは上の 409 scored を越えた force のときだけ）
+    // 申請の正規化（2.3）: 申請・技・巡目のどれかが来たら置き直す（一巡目以外へ移った行は申請を消す）。
+    if (r2Sent || Object.keys(newTechs).length > 0 || body.round !== undefined) applyRound2Techs(player);
     const nameCopied = newName !== undefined && String(player.name || '') !== String(before.name || '');
+    const linkedOut = [];
     linkedRows.forEach(p => {
       const rowBefore = Object.assign({}, p);
+      const target = (syncRound2 && EventStatus.roundOf(player) === 1)
+        ? EventStatus.round2SyncTarget(before, player, r2Sent, p) : null;
+      if (target) {
+        p.tech1 = target[0];
+        p.tech2 = target[1];
+        p.tech3 = target[2];
+      }
       if (body.bib !== undefined) {
         if (Number.isInteger(player.bib)) p.bib = player.bib; else delete p.bib;
       }
@@ -2817,14 +2945,36 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
         }
       }
       bumpRevIfChanged(rowBefore, p);
+      if (JSON.stringify(rowBefore) !== JSON.stringify(p)) linkedOut.push(p);
     });
+
+    // 二巡目の行の技を直したら、元の一巡目の行の申請に書き戻す（設計書 2026-10-03 2.4・3.3.2）。
+    // 新しい形が一巡目の行の tech1〜3 と 3 つとも同じなら申請を空に、違えばその 3 つを入れる。
+    // 一巡目の行の rev は上げない（申請は版の項目ではない）。
+    let sourceOut = null;
+    if (EventStatus.roundOf(before) === 2 && isValidId(player.sourcePlayerId) &&
+        !EventStatus.sameTechs([before.tech1, before.tech2, before.tech3], [player.tech1, player.tech2, player.tech3])) {
+      const src = event.players.find(p => p && p !== player && p.id === player.sourcePlayerId);
+      if (src && EventStatus.roundOf(src) === 1) {
+        R2_TECH_KEYS.forEach((k, i) => {
+          const v = player['tech' + (i + 1)];
+          src[k] = typeof v === 'string' ? v : '';
+        });
+        applyRound2Techs(src);
+        sourceOut = src;
+      }
+    }
 
     bumpRevIfChanged(before, player);
     event.players[playerIndex] = player;
     event.updatedAt = new Date().toISOString();
 
     writeJsonAtomic(eventPath, event);
-    res.json({ success: true, player: playerWithRev(player) });
+    const out = { success: true, player: playerWithRev(player) };
+    // 書き換えた相手の行（画面がその行だけ差し替える。設計書 3.3.3）
+    if (linkedOut.length > 0) out.linked = linkedOut.map(playerWithRev);
+    if (sourceOut) out.source = playerWithRev(sourceOut);
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2882,20 +3032,27 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
 // 技の列は「技1」「技①」を同じものとして扱う（「技 1」は空白を落として「技1」）。
 //   簡易形式 … CSV_SIMPLE_COLS の先頭から 2 列以上（1 列目は「選手名」も可）。順番はサーバが採番
 //   従来形式 … 9 列 / 12 列（9＋ゼッケン等）/ 15 列（9＋補正点等）/ 18 列 / 20 列（18＋決戦・一巡目の行）
-const CSV_SIMPLE_COLS = ['名前', 'コート', '性別', '技①', '技②', '技③', '新人', 'ゼッケン', '級位段位', 'レンタル'];
+//             / 23 列（20＋二巡目 技 1〜3。設計書 2026-10-03 3.6）
+// 簡易形式の 11〜13 列目は二巡目の形の申請（二巡目技①②③）。
+const CSV_SIMPLE_COLS = ['名前', 'コート', '性別', '技①', '技②', '技③', '新人', 'ゼッケン', '級位段位', 'レンタル',
+  '二巡目技①', '二巡目技②', '二巡目技③'];
 const CSV_STD_BASE = ['選手名', '順番', '技 1', '技 2', '技 3', '得点', '新人', '女子', '結果'];
 const CSV_STD_ADJ = ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定'];
 const CSV_EXTRA = ['ゼッケン', '級位段位', 'レンタル'];
 // 決戦の印と、二巡目の行が指す一巡目の行（その行の order）。書き出し→置換で往復させる。
 const CSV_ROUNDTRIP = ['決戦', '一巡目の行'];
-// 書き出す見出し（20 列の拡張形式。これだけが二巡目のある大会の置換に使える）
-const CSV_EXPORT_HEADER = CSV_STD_BASE.concat(CSV_STD_ADJ, CSV_EXTRA, CSV_ROUNDTRIP);
+// 二巡目の形の申請（一巡目の行の r2tech1〜3。二巡目の行は常に空）。既存の列の位置を変えないよう末尾に足す。
+const CSV_R2TECH = ['二巡目 技 1', '二巡目 技 2', '二巡目 技 3'];
+// 往復できる 20 列（以前の書き出し。読み込みだけ）
+const CSV_ROUNDTRIP_HEADER_20 = CSV_STD_BASE.concat(CSV_STD_ADJ, CSV_EXTRA, CSV_ROUNDTRIP);
+// 書き出す見出し（23 列の拡張形式。これと 20 列だけが二巡目のある大会の置換・追記に使える）
+const CSV_EXPORT_HEADER = CSV_ROUNDTRIP_HEADER_20.concat(CSV_R2TECH);
 
 function normalizeCsvHeaderCell(cell, index) {
   let s = String(cell == null ? '' : cell);
   if (index === 0) s = s.replace(/^﻿/, '');
   s = s.replace(/[\s　]+/g, '');
-  return s.replace(/^技([①②③])$/, (m, d) => '技' + ('①②③'.indexOf(d) + 1));
+  return s.replace(/^(二巡目)?技([①②③])$/, (m, r2, d) => (r2 || '') + '技' + ('①②③'.indexOf(d) + 1));
 }
 
 function sameCsvHeader(actual, expected) {
@@ -2905,7 +3062,8 @@ function sameCsvHeader(actual, expected) {
 }
 
 // 見出し行から形式を決める。既知の形式でなければ null。
-// 戻り値: { kind: 'simple', columns } | { kind: 'std', adj, extraBase, roundtrip }
+// 戻り値: { kind: 'simple', columns } | { kind: 'std', adj, extraBase, roundtrip, r2 }
+//   roundtrip … 往復できる形式（20 列か 23 列）。r2 … 二巡目 技 1〜3 の列がある（23 列）
 //   extraBase … ゼッケン列の位置（無ければ -1）
 function detectCsvFormat(headerRow) {
   const cells = (headerRow || []).map(normalizeCsvHeaderCell);
@@ -2924,11 +3082,12 @@ function detectCsvFormat(headerRow) {
     { cols: CSV_STD_BASE.concat(CSV_EXTRA), adj: false, extraBase: 9, roundtrip: false },
     { cols: CSV_STD_BASE.concat(CSV_STD_ADJ), adj: true, extraBase: -1, roundtrip: false },
     { cols: CSV_STD_BASE.concat(CSV_STD_ADJ, CSV_EXTRA), adj: true, extraBase: 15, roundtrip: false },
-    { cols: CSV_EXPORT_HEADER, adj: true, extraBase: 15, roundtrip: true }
+    { cols: CSV_ROUNDTRIP_HEADER_20, adj: true, extraBase: 15, roundtrip: true, r2: false },
+    { cols: CSV_EXPORT_HEADER, adj: true, extraBase: 15, roundtrip: true, r2: true }
   ];
   for (const c of candidates) {
     if (sameCsvHeader(cells, c.cols)) {
-      return { kind: 'std', adj: c.adj, extraBase: c.extraBase, roundtrip: c.roundtrip };
+      return { kind: 'std', adj: c.adj, extraBase: c.extraBase, roundtrip: c.roundtrip, r2: c.r2 === true };
     }
   }
   return null;
@@ -3006,11 +3165,12 @@ app.post('/api/events/:id/import', (req, res) => {
 
     // 二巡目の行がある大会を、決戦の印と一巡目とのつながりを持たない形式で置き換えると、
     // 決戦が消えて二巡目の行が追跡できなくなる。追記でも、9 列などの形式では二巡目の行が
-    // 一巡目とのつながり無しに増えうる（通し試験の所見 C）。置換・追記とも、往復できる 20 列の
-    // 形式だけ許す（force でも越えない）。
+    // 一巡目とのつながり無しに増えうる（通し試験の所見 C）。置換・追記とも、往復できる 23 列
+    // （以前の 20 列も可）の形式だけ許す（force でも越えない）。20 列で置き換えると二巡目の形の申請は
+    // 空になるが、二巡目の行の形（実際の形）は 3〜5 列目で往復する（設計書 2026-10-03 3.6.2）。
     if (current.some(p => EventStatus.roundOf(p) === 2) && !(fmt.kind === 'std' && fmt.roundtrip)) {
       return res.status(409).json({
-        error: '二巡目がある大会には、CSV エクスポート（20 列）で書き出した形のファイルだけ取り込めます（置換・追記とも）',
+        error: '二巡目がある大会には、CSV エクスポートで書き出した形のファイル（23 列。以前の 20 列も可）だけ取り込めます（置換・追記とも）',
         reason: 'round2_format'
       });
     }
@@ -3040,7 +3200,7 @@ app.post('/api/events/:id/import', (req, res) => {
     let importedPlayers;
     let bibDropped = { duplicate: 0, outOfRange: 0 };
     if (fmt.kind === 'simple') {
-      // 簡易形式（名前,コート,性別,技①,技②,技③,新人[,ゼッケン,級位段位,レンタル] の先頭から）。
+      // 簡易形式（名前,コート,性別,技①,技②,技③,新人[,ゼッケン,級位段位,レンタル,二巡目技①,二巡目技②,二巡目技③] の先頭から）。
       // 見出しに無い列は読まない。順番はサーバーが採番する（採番の土台: replace なら空、append なら既存）。
       const has = i => fmt.columns > i;
       const base = mode === 'replace' ? [] : current;
@@ -3070,7 +3230,11 @@ app.post('/api/events/:id/import', (req, res) => {
           isFemale: isFemale,
           result: '',
           rank: has(8) ? String(row[8] || '').trim().slice(0, 20) : '',
-          rental: has(9) && truthy(row[9])
+          rental: has(9) && truthy(row[9]),
+          // 二巡目の形の申請（11〜13 列目。技名の検証はしない＝試合開始の検査で止まる）
+          r2tech1: has(10) ? String(row[10] || '') : '',
+          r2tech2: has(11) ? String(row[11] || '') : '',
+          r2tech3: has(12) ? String(row[12] || '') : ''
         }, generateId(), null, null));
         rawBibs.push(has(7) ? row[7] : undefined);
       }
@@ -3080,7 +3244,7 @@ app.post('/api/events/:id/import', (req, res) => {
     } else {
       // 従来形式。列の意味は見出しで決まる（行ごとに列数を見ない。崩れた CSV で挙動を揺らさない）。
       // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定]
-      //   [,ゼッケン,級位段位,レンタル][,決戦,一巡目の行]
+      //   [,ゼッケン,級位段位,レンタル][,決戦,一巡目の行][,二巡目 技 1,二巡目 技 2,二巡目 技 3]
       const rows = [];
       dataLines.forEach(row => {
         const raw = {
@@ -3107,6 +3271,12 @@ app.post('/api/events/:id/import', (req, res) => {
           raw.rental = truthy(row[fmt.extraBase + 2]);
         }
         if (fmt.roundtrip) raw.finalist = mark(row[18]);
+        // 23 列: 21〜23 列目は二巡目の形の申請（二巡目の行の値は sanitizePlayerForSave が捨てる）
+        if (fmt.r2) {
+          raw.r2tech1 = String(row[20] || '');
+          raw.r2tech2 = String(row[21] || '');
+          raw.r2tech3 = String(row[22] || '');
+        }
         const p = sanitizePlayerForSave(raw, generateId(), null, null);
         if (!p.name) return;   // 空行等を除外（氏名は trim して見る）
         rows.push({
@@ -3133,7 +3303,7 @@ app.post('/api/events/:id/import', (req, res) => {
         return r.player;
       });
       bibDropped = { duplicate: bibResult.duplicate, outOfRange: bibResult.outOfRange };
-      // 20 列の形式: 二巡目の行の「一巡目の行」（一巡目の order）を、取り込んだ一巡目の行の id に
+      // 20 列・23 列の形式: 二巡目の行の「一巡目の行」（一巡目の order）を、取り込んだ一巡目の行の id に
       // つなぎ直す（sourcePlayerId の往復）。order がちょうど 1 行に一致するときだけ。
       if (fmt.roundtrip) {
         const byOrder = Object.create(null);
@@ -3165,8 +3335,9 @@ app.post('/api/events/:id/import', (req, res) => {
 });
 
 // GET /api/events/:id/export : 大会の選手データをCSVエクスポート
-// 20 列の拡張形式（CSV_EXPORT_HEADER）。決戦の印と「一巡目の行」（sourcePlayerId が指す行の order）を
+// 23 列の拡張形式（CSV_EXPORT_HEADER）。決戦の印と「一巡目の行」（sourcePlayerId が指す行の order）を
 // 出すので、書き出し→置換取り込みで決戦と一巡目とのつながりが往復する（網羅検証 M5）。
+// 末尾の 3 列は一巡目の行の二巡目の形の申請（申請が無ければ空。二巡目の行は常に空。設計書 2026-10-03 3.6.1）。
 app.get('/api/events/:id/export', (req, res) => {
   try {
     if (!requireValidId(req, res)) return;
@@ -3186,6 +3357,7 @@ app.get('/api/events/:id/export', (req, res) => {
       const adj = Array.isArray(p.adjust) ? p.adjust : [0, 0, 0];
       const src = (typeof p.sourcePlayerId === 'string' && Object.prototype.hasOwnProperty.call(byId, p.sourcePlayerId))
         ? byId[p.sourcePlayerId] : null;
+      const r2 = EventStatus.roundOf(p) === 1 ? EventStatus.normalizedRound2Techs(p) : null;
       rows.push([
         p.name || '',
         p.order || '',
@@ -3206,7 +3378,10 @@ app.get('/api/events/:id/export', (req, res) => {
         p.rank || '',
         p.rental === true ? '○' : '',
         (p.finalist === true && EventStatus.roundOf(p) === 2) ? '○' : '',
-        src ? (src.order || '') : ''
+        src ? (src.order || '') : '',
+        r2 ? r2[0] : '',
+        r2 ? r2[1] : '',
+        r2 ? r2[2] : ''
       ]);
     }
 
@@ -3309,7 +3484,9 @@ function planTechniqueChange(players, oldList, newList, renames) {
     const isFemale = p.isFemale === true;
     let affected = false;
     const seenHere = Object.create(null);
-    ['tech1', 'tech2', 'tech3'].forEach(key => {
+    // 二巡目の形の申請（r2tech1〜3）も「使っている技」に含めて同じ規則で付け替える（設計書 2026-10-03 3.5）。
+    // 同じ行の tech と r2tech に同じ技があっても、消える技の数え方は 1 行（seenHere）。
+    ['tech1', 'tech2', 'tech3', 'r2tech1', 'r2tech2', 'r2tech3'].forEach(key => {
       const v = String(p[key] == null ? '' : p[key]).trim();
       if (!v) return;
       const oldRes = resolveTechnique(oldList, v, isFemale);
@@ -3381,6 +3558,9 @@ function applyTechniqueChange(res, event, newList, renames, out) {
   touched.forEach(p => {
     const before = Object.assign({}, p);
     plan.changes.filter(c => c.player === p).forEach(c => { p[c.key] = c.value; });
+    // 申請は付け替えのあとで正規化し直す（一巡目の形と同じになれば空）。rev は tech が変わった行だけ
+    // +1（申請は版の項目ではない。bumpRevIfChanged が REV_FIELDS だけを見る）。
+    if (EventStatus.hasRound2Techs(p)) applyRound2Techs(p);
     bumpRevIfChanged(before, p);
   });
   out.renamed = touched.length;
@@ -3491,6 +3671,10 @@ function pickBundlePlayer(p) {
   if (src.finalist === true && EventStatus.roundOf(src) === 2) out.finalist = true;
   if (isValidId(src.sourcePlayerId)) out.sourcePlayerId = src.sourcePlayerId;
   if (Number.isInteger(src.bib)) out.bib = src.bib;
+  // 二巡目の形の申請（一巡目の行で申請があるときだけ。note と同じく「あるときだけ」。設計書 2026-10-03 3.7）。
+  // BUNDLE_VERSION は 1 のまま（知らないキーを落とす古いサーバーでは申請が空になるだけ）。
+  const r2 = EventStatus.roundOf(src) === 1 ? EventStatus.normalizedRound2Techs(src) : null;
+  if (r2) R2_TECH_KEYS.forEach((k, i) => { out[k] = r2[i]; });
   return out;
 }
 
@@ -3769,18 +3953,19 @@ function compareByScoreAsc(a, b) {
 
 // 一巡目の行から二巡目の行を1つ作る。
 // ゼッケン・級位段位・真剣レンタルは同じ選手を指すので複製する（設計書「選手の追加項目」）。
-// 技も複製する（自己申告があった選手だけ運営画面で直す。設計書 2026-09-22 の決定）。
-// 得点・結果は複製しない。
+// 技は二巡目の形の申請（r2tech1〜3）があればそれ、無ければ一巡目の複製（EventStatus.round2TechsOf。
+// 設計書 2026-10-03 3.4。当日の変更は形登録で直す）。得点・結果は複製しない。
 function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
   const gender = isFemale ? '女子' : '男子';
   const n = nextOrderNumber(players.concat(newRows), court, gender, 2);
+  const techs = EventStatus.round2TechsOf(p);
   const row = {
     id: generateId(),
     name: p.name || '',
     order: buildOrder(court, isFemale, 2, n),
-    tech1: typeof p.tech1 === 'string' ? p.tech1 : '',
-    tech2: typeof p.tech2 === 'string' ? p.tech2 : '',
-    tech3: typeof p.tech3 === 'string' ? p.tech3 : '',
+    tech1: techs[0],
+    tech2: techs[1],
+    tech3: techs[2],
     score: 0,
     isNewFace: p.isNewFace === true,
     isFemale: isFemale,
@@ -3815,7 +4000,7 @@ function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
 // round1 → round1_done の遷移（サーバーが自動で呼ぶ）だけ true で呼ぶ。
 // 戻り値:
 //   { ok: true, players, created, skipped, existingCount, untrackedCount, unassignedCount,
-//     finalistCount, reordered }
+//     finalistCount, fromRequest, reordered }
 //   { ok: false, code: 400 | 409, body: { error, reason?, … } }
 function generateRound2(event, force, allowReorder) {
   const players = Array.isArray(event.players) ? event.players : [];
@@ -3893,6 +4078,8 @@ function generateRound2(event, force, allowReorder) {
     untrackedCount: untrackedCount,
     unassignedCount: unassignedCount,
     finalistCount: finals.length,
+    // 申請の形（r2tech1〜3）で作った行の数（設計書 2026-10-03 3.4。トーストに出す）
+    fromRequest: targets.filter(EventStatus.hasRound2Techs).length,
     reordered: false
   };
 }
@@ -3959,6 +4146,8 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
     untrackedCount: 0,
     unassignedCount: unassignedCount,
     finalistCount: finals.length,
+    // 作り直しでは既存の行の技を保つが、申請の同期（2.4）で申請と一致しているので src の申請で数える
+    fromRequest: src.filter(EventStatus.hasRound2Techs).length,
     reordered: true
   };
 }
@@ -3997,6 +4186,7 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
       untrackedCount: result.untrackedCount,
       unassignedCount: result.unassignedCount,
       finalistCount: result.finalistCount,
+      fromRequest: result.fromRequest,
       reordered: !!result.reordered,
       // 差分追加では決戦の印を選び直さないので、今の一巡目の確定得点との差を返す（網羅検証 S18）
       finalistDiff: EventStatus.finalistDiff(result.players)
