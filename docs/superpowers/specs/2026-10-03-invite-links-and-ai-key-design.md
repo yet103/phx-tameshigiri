@@ -166,7 +166,7 @@ Basic と Cookie の両方があれば Basic が勝つ（運営は採点の上�
 | `Secure` | 本番（`NODE_ENV=production`）は常に付ける。開発は `COOKIE_SECURE=1` のときだけ | `req.secure` は `trust proxy` なしでは偽なので見ない（1.8） |
 | `SameSite` | `Lax` | `Strict` だと、QR リーダーや他のアプリから開いたとき（サイトをまたぐ遷移）に保護ページの読み込みで Cookie が送られず 401 になる端末がある。書き込みは fetch なので `Lax` でも別サイトからは送られない。同じサイトの兄弟サブドメインは 3.4 で止める |
 | `Path` | `/` | — |
-| `Max-Age` | `expiresAt − 今`（秒、切り上げ） | 鍵の期限より長く残さない。ブラウザを閉じても残る（タブレットの再起動で消えない） |
+| `Max-Age` | `expiresAt − 今 + 30 日`（秒、切り上げ。30 日は 4.8 の掃除までの保持期間） | 期限の判定はサーバーがする。期限ちょうどにするとブラウザが期限の瞬間に Cookie を消し、サーバーが `session_expired` を返せずに「認証が必要です」（運営のパスワード欄）になる（結合試験 E1）ので、掃除でセッションを消すまでは残す。ブラウザを閉じても残る（タブレットの再起動で消えない） |
 
 Cookie の読み書きは自前（依存を増やさない）。`req.headers.cookie` を `; ` で分け、最初の `=` で名前と値に分ける。同名が複数あれば **すべて試して最初に有効なもの**（`__Host-` で差し込みは防げるが、念のため）。
 
@@ -199,10 +199,13 @@ API は今と同じく JSON、`WWW-Authenticate` は付けない。`reason` を�
 
 | 対象 | 単位 | 上限（推奨。11 章） |
 |---|---|---|
-| `POST /api/join` の失敗 | `req.ip` | 10 回/分 → 以後 1 分 429 |
-| `POST /api/join` 全体 | `req.ip` | 30 回/分 |
+| `POST /api/join` の失敗（鍵の照合が通らない） | `req.ip` | 10 回/分 → 以後 1 分 429 |
+| `POST /api/join` の失敗（鍵の照合が通らない） | 全体（全 IP の合計） | 30 回/分 |
 | Bearer の失敗 | `req.ip` | 10 回/分 |
 | AI キーごと | キー ID | 60 回/分、書き込み（GET 以外）30 回/分、2,000 回/日（日は日本時間で区切る） |
+
+- `POST /api/join` は **鍵の照合が通らない失敗（`key_invalid`）だけを数え、上限中もそれだけを 429 にする**。正しい鍵（下見・登録）は上限中でも止めない（鍵なしの連打で全員の登録が止まらないように。レビュー R2）。照合は通ったが使えない鍵（`invite_revoked` / `invite_expired`）も、上限中でも本来の理由を返す（数えない。監査ログへの記録は IP ごと 10 回/分まで）。上限中に正しい鍵だけ通すと「通るか」を試せることになるが、秘密は 256 ビットなので総当たりの助けにならない。本文の誤り（400 / 413）は数えない。
+- AI キーの回数は、**429 で拒んだ要求は数えない**。それ以外（認可の 403 `sandbox` / `role` などで拒んだ要求も）は数える（数えるのは本文を読む前の段で、認可より先。レビュー R7）。
 
 - 固定窓のカウンタを `Map` に持つ（再起動で消えてよい）。古い窓は 1 分ごとに掃除。
 - `req.ip` は `trust proxy` が無い今は nginx のアドレスになり、**実質は全体の上限** になる。秘密は 256 ビットなので総当たり対策としては全体の上限でも足り、正しい鍵の利用者を巻き込みにくいよう上限は緩めにしている。nginx が `X-Forwarded-For` を渡していると確認できたら、環境変数 `TRUST_PROXY`（例 `loopback, uniquelocal`）で `app.set('trust proxy', …)` を有効にする（**要確認**、13 章）。ポート 3457 が外に開いている間は `TRUST_PROXY` を設定しない（`X-Forwarded-For` を偽装できるため）。
@@ -283,6 +286,7 @@ API は今と同じく JSON、`WWW-Authenticate` は付けない。`reason` を�
 - `lastSeenAt` は書き込みが多くなるので **5 分に 1 回まで** 更新（メモリ上は毎回、ファイルは間引く）。
 - 端末数: その招待の **有効なセッションの数** が `maxDevices` 以上なら新しい交換は 409 `device_limit`。取り消した端末・期限切れの端末は数えない。
 - 同じ端末が同じ招待で入り直したとき（Cookie に同じ招待の有効なセッションがある）は、古いセッションを取り消してから新しいセッションを作る（数を増やさない。T6 の「必ず新しい ID」も守る）。
+- **別の招待の QR で入り直したとき**（Cookie に別の招待の有効なセッションがある）も、`confirm: true` で登録できたら前の招待のセッションを取り消す（前の招待の枠を使い続けない。監査は `reason: 'switch'`。レビュー R3）。下見の応答に `switching: true` を付ける。端末数の上限で断ったときは前の登録はそのまま。
 - `device.ua` は `User-Agent` の先頭 200 文字。`summary` はサーバーで簡単に作る（`iPad` / `iPhone` / `Android` / `Windows` / `Mac` と `Safari` / `Chrome` / `Edge` / `Firefox`、分からなければ「不明な端末」）。IP は保存しない（監査ログだけに書く。4.6）。
 
 ### 4.5 AI キー（`server/data/auth/ai-keys.json`）
@@ -398,7 +402,7 @@ API は今と同じく JSON、`WWW-Authenticate` は付けない。`reason` を�
 | 12 | `PATCH /api/events/:id/players/:playerId`（1887） | ✓ | **自**（その行がそのコート・採点の項目だけ。5.3） | **砂**（全項目、`force` 可） | ✗ |
 | 13 | `DELETE /api/events/:id/players/:playerId`（2150） | ✓ | ✗ | **砂** | ✗ |
 | 14 | `POST /api/events/:id/import`（2269、CSV） | ✓ | ✗ | **砂** | ✗ |
-| 15 | `GET /api/events/:id/export`（2482、CSV） | ✓ | ✗ | **砂**（本番の名簿を丸ごと持ち出させない） | ✗ |
+| 15 | `GET /api/events/:id/export`（2482、CSV） | ✓ | ✗ | **砂**（割り切り。本番の名簿は `GET /api/events/:id` で読めるので持ち出しの防止にはならない。大量の書き出しを AI の既定の操作にしない程度の意味） | ✗ |
 | 16 | `GET /api/events/:id/techniques`（2592） | ✓ | **自** | ✓ | ✗ |
 | 17 | `PUT /api/events/:id/techniques`（2707） | ✓ | ✗ | **砂** | ✗ |
 | 18 | `DELETE /api/events/:id/techniques`（2736） | ✓ | ✗ | **砂** | ✗ |
@@ -447,7 +451,8 @@ isSandboxName(name) = typeof name === 'string' && name.trim().startsWith('テス
 isSandboxEvent(event) = isSandboxName(event.name)   // 今ファイルにある名前で判定する
 ```
 
-- **大会 ID を含むルート**（表の「砂」）: ミドルウェア（本文を読む前）で大会ファイルを同期で読み、`isSandboxEvent` が偽なら 403 `sandbox`。大会が無ければ通して、ハンドラの 404 に任せる。
+- **大会 ID を含むルート**（表の「砂」）: ミドルウェア（本文を読む前）で大会ファイルを同期で読み、`isSandboxEvent` が偽なら 403 `sandbox`。大会が無ければ通して、ハンドラの 404 に任せる。**ファイルはあるが読めない（壊れた JSON など）ときは 403 `sandbox`**（名前で砂場か判定できない大会を AI に消させない・書かせない。「無い」とは分ける。レビュー R5。`authz.UNREADABLE`）。
+- **本文を読んだあとにもう一度**: `express.json` は非同期なので、本文をゆっくり送っている間に運営が大会名を「テスト用」から本番の名前に変えると、本文を読む前の判定だけでは本番の大会に書ける。`express.json` の直後に **AI だけ** 同じ判定（`authorize`）をもう一度通す同期のミドルウェアを置く。そこからハンドラの同期の検査・書き込みまでは割り込まれない（レビュー R4）。
 - **作る系**（3・6・7）: ハンドラの中で、新しい名前が `isSandboxName` でなければ 403 `sandbox`。作った大会には `test: true` と `createdBy: 'ai'` を付ける（11 章 D12。`test` は一覧で既定で隠すための既存の印、`createdBy` は新しい項目。`POST /api/events` の「許すキー」のコメント `index.js:738-741` に `createdBy` を足し、既存の値を引き継ぐ。`test` と同じ扱い）。
 - **改名**（4）: ハンドラの中で、`body.name` があれば新しい名前も `isSandboxName`。
 - **`POST /api/events` に `id`**: AI は 403（既存の大会の丸ごと上書きを AI にさせない。新規作成だけ）。
@@ -530,7 +535,7 @@ isSandboxEvent(event) = isSandboxName(event.name)   // 今ファイルにある�
   - 上部のリンク `トップ` `運営` `技得点表` `順位表示`（`scoring.html:47-51`）と「大会の作成は運営画面で」（`:63`）を隠す。`ヘルプ` は残す。
   - 上部に小さな札: 「採点専用 ・ A コート ・ 10/12 23:59 まで」。期限はサーバーの `expiresAt` を日本時間で表示（端末の時計で残り時間を数えない。T7）。
   - 札の右に [この端末の登録を解除]（確認のうえ `POST /api/session/logout`、未送信があれば止める）。
-  - 初回だけ「この画面をブックマーク（ホーム画面に追加）してください。次からはそこから開けます」を出す（`localStorage` に既読の印）。
+  - 初回だけ「この画面を Safari（ブラウザ）でブックマークしてください。次からはそこから開けます（ホーム画面に追加するなら、この画面ではなく `/join` を）」を出す（`localStorage` に既読の印。**一度出したら既読**にする。閉じずに再読み込みしても、もう出さない。結合試験 E3）。「ホーム画面に追加」を勧めないのは 6.9（要確認 e）の Cookie の共有が確かめられていないため（レビュー R6）。
 - `role: 'admin'` / `'none'` は今の画面のまま（`none` は保護ページなのでここまで来ない）。
 - 判定は純粋関数に切り出す: `Scope.filterEvents(events, session)`、`Scope.allowedCourts(event, session)`、`Scope.clampRoute(route, session, event)`（置き場所は `courts.js` か新しい `scope.js`。`scope.js` なら `PROTECTED_FILES` と採点に許すファイル（6.5）に足す）。`test.html` で固定する。
 
@@ -577,6 +582,8 @@ isSandboxEvent(event) = isSandboxName(event.name)   // 今ファイルにある�
 
 - join ページの **鍵の貼り付け欄**（6.1 の 2）。ホーム画面のアプリで `/join` を開き、運営からもらった URL を貼る。そのため **ホーム画面に追加するのは `/join`** にしてもらう運用もありうる（採点画面へは登録後に自動で移る）。
 - 採点画面の 401 の HTML に「[QR の URL を貼り付けて登録する]（`/join` へ）」のリンクを置く。
+- Cookie が無いと（ホーム画面のアプリで Cookie が別のとき）保護ページは Basic の 401 になり、パスワードのダイアログが出る。その 401 の本文（`auth.rejectPage`。ダイアログを閉じると見える）にも「採点端末の方は、運営から受け取った QR をもう一度読み取ってください」と `/join` へのリンクを置く。
+- 要確認 (e) が済むまでは、採点画面とヘルプの案内は「Safari（ブラウザ）でブックマーク」にし、ホーム画面に追加するなら `/join` を、と注記する。
 
 Android の Chrome の「ホーム画面に追加」は Chrome と Cookie を共有する想定だが、これも **要確認**。
 
@@ -591,7 +598,7 @@ tools/mcp/phx-tameshigiri/
   server.mjs      … 本体（stdio の MCP サーバー。依存なし、Node 18 以上）
   keystore.mjs    … キーの読み出し（資格情報マネージャー／環境変数）
   api.mjs         … サーバー API の呼び出し（fetch、15 秒で打ち切り、キーを出力に出さない）
-  scoring-vm.mjs  … サーバーの /scoring.js を vm で読み、採点画面と同じ計算をする（予行スクリプトと同じ）
+  scoring-vm.mjs  … このリポジトリの scoring.js・status.js を vm で読み、採点画面と同じ計算をする（接続先からコードは取らない。レビュー R1）
   set-key.ps1     … ユーザーが自分で実行してキーを保存する
   test.mjs        … MCP サーバーの自動テスト（8 章）
   README.md       … 7.7 の手順（本書から写す）
@@ -648,7 +655,7 @@ Write-Host "保存しました（資格情報マネージャー > Web 資格情�
 | `create_test_event` | `{ name, date?, venue?, courts?: string[] = ['A','B'], template?: 'blank'\|'systest' = 'blank' }` | `{ id, name }` | `POST /api/events` か `POST /api/events/from-template` |
 | `add_players` | `{ eventId, players: [{ name, court, isFemale?, isNewFace?, tech1?, tech2?, tech3? }] }`（最大 100） | `{ created, players: [{ id, name, order }] }` | `POST /api/events/:id/players/bulk`（`rows` 形） |
 | `score_player` | `{ eventId, playerId, rows: [{ values: ['○'\|'×'\|'△'\|'', …4], adjust?: 整数 }], totalAdjust?: 整数, confirmed?: boolean = true, note? }` | `{ playerId, score, rev, confirmed }` | `GET` で最新の行と `rev` → `PATCH …/players/:playerId`（`score` は `scoring-vm` で計算、`baseRev` を付ける） |
-| `auto_score` | `{ eventId, court?, seed?: 整数 = 20261001, confirm?: boolean = true }` | `{ scored, skipped, players: [{ name, score }] }` | 今の状態で採点できる行（`EventStatus.isRowScorable` と同じ規則。`/status.js` を vm で読む）を、予行スクリプトの `planScoring` と同じ乱数で採点 |
+| `auto_score` | `{ eventId, court?, seed?: 整数 = 20261001, confirm?: boolean = true }` | `{ scored, skipped, players: [{ name, score }] }` | 今の状態で採点できる行（`EventStatus.isRowScorable` と同じ規則。このリポジトリの `status.js` を vm で読む）を、予行スクリプトの `planScoring` と同じ乱数で採点 |
 | `change_status` | `{ eventId, to, force?: boolean = false }` | `{ status, round2 }` | `GET` で今の状態 → `POST …/status { to, from }` |
 | `get_ranking` | `{ eventId }` | ranking API の応答そのまま | `GET /api/events/:id/ranking` |
 | `delete_test_event` | `{ eventId, confirmName }` | `{ deleted: true, name }` | `GET` で名前 → 一致を確かめて `DELETE` |
@@ -901,4 +908,21 @@ Write-Host "保存しました（資格情報マネージャー > Web 資格情�
 - 発行ダイアログの期限は「大会の日の終わり／今日の終わり／明日の終わり」。サーバーは期限を今から 7 日後までに絞る（4.7）ので、大会の日が 7 日より先のときは「大会の日の終わり」を選べなくして（既定は今日の終わり）理由を書く。判定の元はサーバーで、画面の判定は目印だけ。
 - 鍵つき URL・AI 用キーは、発行の応答をクロージャの変数に持ち、ダイアログを閉じるときに捨てる。localStorage・sessionStorage・URL・コンソールには書かない。URL とキーは既定で伏せ、「表示」で出す。
 - 大会名を「テスト用」で始まる名前に変えて保存するときの確認は基本情報（desk-setup.js）に置いた。大会一覧（PC）とスマホ運営の大会一覧に「AI 書込可」の目印を出す。
-- **スマホ運営の大会名の編集（`admin.js` の基本情報の保存）には、まだ同じ確認を入れていない**（担当外のため）。T14 のために、`admin.js` の保存の直前で `DeskInvites` と同じ判定（`trim()` のあと「テスト用」の前方一致）の確認を足す必要がある。
+- スマホ運営の大会名の編集（`admin.js` の基本情報の保存）にも、同じ判定（`trim()` のあと「テスト用」の前方一致）の確認を入れた（7df9653）。
+- 発行ダイアログを閉じるとき、鍵つき URL・キーを表示していた枠（`.desk-secret`）の文字を消し、ダイアログの中身（QR を含む）を外す（閉じたあとも枠の要素はボタンの処理から参照されて残るため。レビュー R11）。
+
+### 14.3 レビューと結合試験の指摘への対応（2026-10-03）
+
+| 項目 | 対応 |
+|---|---|
+| R1 | MCP サーバーは接続先の `/scoring.js` を取らず、このリポジトリの `scoring.js`・`status.js` だけを vm で読む。vm の文脈にはホストの値を渡さない（`TECHNIQUES` も文脈の中で作る）。vm は安全境界ではないため、本番サーバーが乗っ取られても利用者の PC でコードが動かないように |
+| R2 | 3.6。`POST /api/join` は照合が通らない失敗だけ数える。正しい鍵・照合の通る鍵は上限中でも本来の応答 |
+| R3 | 4.4。別の招待で登録し直すと前のセッションを取り消す（`switch`） |
+| R4 | 5.4。`express.json` の直後に AI だけ認可をもう一度 |
+| R5 | 5.4。読めない大会ファイルは AI に 403 `sandbox` |
+| R6 | 6.4・6.9。ブックマークの案内、Basic の 401 の本文に `/join` |
+| R7・R8 | 3.6・5.2 の文言 |
+| R9 | `join.js` の `createKeyGate`。下見・登録の最中に届いた鍵は預かり、終わってから下見し直す |
+| E1 | 3.3 の `Max-Age`（期限 + 30 日）。採点専用モードでは `auth_required` も「登録が切れました・新しい QR」（`Scope.authLostText` の第 3 引数） |
+| E2 | `outbox.js` の `HistoryOutbox`。採点画面の履歴は送れなければ端末に控え、起動時・online・採点の送信の成功・30 秒ごとに送り直す。`clientId` を付け、サーバーは同じ `clientId` の履歴を二度積まない |
+| E3 | 6.4。ブックマークの案内は一度出したら既読 |
