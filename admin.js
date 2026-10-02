@@ -699,6 +699,15 @@ var Admin = (function() {
       if (!name) { alert('大会名を入力してください。'); return; }
       var courtErr = Courts.validateCourtList(extra);
       if (courtErr) { alert(courtErr); return; }
+      // 大会名を「テスト用」で始まる名前に変えると、AI 用キーで書き込める大会になる（設計書
+      // 2026-10-03 の T14。PC 運営 desk-setup.js の DeskInvites.sandboxRenameMessage と同じ判定:
+      // trim のあとの前方一致。外す向きと「テスト用」のままの改名では聞かない）。
+      var SANDBOX_PREFIX = 'テスト用';
+      var wasSandbox = String(ev.name || '').trim().indexOf(SANDBOX_PREFIX) === 0;
+      if (name.indexOf(SANDBOX_PREFIX) === 0 && !wasSandbox &&
+          !confirm('この大会は AI が書き込める大会になります（名前が「' + SANDBOX_PREFIX + '」で始まるため）。\nよろしいですか？')) {
+        return;
+      }
       btnSave.disabled = true;
       sheet.lock(true);
       // 決戦コートの名前（finalCourt）は廃止（暫定ベスト4 は先頭コートの最後に斬る。
