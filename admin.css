@@ -383,15 +383,21 @@ main { padding: 8px 12px 16px; }
   padding: 8px 10px; border-radius: 4px; font-size: 13px; margin-bottom: 12px;
   background: var(--card-bg); border: 1px solid var(--border); color: var(--text-muted);
 }
-/* 決戦（暫定ベスト4）の区画。PC 運営の desk-match-finale と同じ、金の細い枠で区別する
+/* 最終組（一巡目上位 4 名）の区画。PC 運営の desk-match-finale と同じ、金の細い枠で区別する
    （--gold 系はテーマに依らない「大会トーン」の色。--accent は光テーマで黒になるため使わない）。 */
 .round-finale { border: 1px solid var(--gold-deep); border-radius: 8px; padding: 6px; }
 .round-finale-caption { margin: 12px 0 6px; font-size: 13px; color: var(--gold-deep); }
-/* 状態の 1 行（段階表示の下）と、二巡目 進行中の決戦の候補の 1 行 */
+/* 状態の 1 行（段階表示の下）と、二巡目 進行中・最終組 進行中の最終組の 1 行・暫定ベスト4 の 1 行 */
 .round-todo { margin: 6px 2px 10px; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
 .round-finale-line {
   margin: 0 0 10px; padding: 8px 10px; font-size: 13px; line-height: 1.5; font-weight: bold;
   border: 1px solid var(--gold-deep); border-radius: 6px; background: var(--card-bg); color: var(--text);
+}
+/* 暫定ベスト4／ベスト4（合計）の 1 行。最終組の 1 行の下と、二巡目終了・表彰の上位 3 名の上 */
+.round-best4-line {
+  margin: 0 0 10px; padding: 8px 10px; font-size: 13px; line-height: 1.5; font-weight: bold;
+  border: 1px solid var(--border); border-left: 4px solid var(--gold-deep); border-radius: 6px;
+  background: var(--card-bg); color: var(--text);
 }
 /* 二巡目終了の順位の要約・最終結果の「表彰」。縦に 3 部門の小さな表を並べる */
 .round-summary, .round-award {

@@ -180,7 +180,7 @@ body.is-transparent { background: transparent; }
 
 .is-hidden { display: none !important; }
 
-/* ===== 決戦（暫定ベスト4）の順位 ===== */
+/* ===== 最終組（一巡目上位 4 名）の中の暫定順位 ===== */
 /* board.css は --accent を使わず、見出しの強調には --gold-light（.board-total と同じ）を
    使っているのでそれに合わせる。表そのものは .board-table を真似た最小限の見た目。 */
 .board-finale { margin-top: 12px; }

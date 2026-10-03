@@ -565,12 +565,22 @@ var App = (function() {
   }
 
   // いま開いている選手を採点してよいか。状態が採点できることに加えて、
-  // 決戦の制限（EventStatus.isPlayerScorable。行の印 finalist で判定。設計書 2026-09-28）も見る。
-  //   二巡目 進行中 … 決戦（暫定ベスト4）の行は「決戦を開始」の後
-  //   決戦 進行中   … 決戦の行だけ（他の選手は斬り終わっている）
+  // 最終組の制限（EventStatus.isPlayerScorable。行の印 finalist で判定。設計書 2026-09-28）も見る。
+  //   二巡目 進行中   … 最終組（一巡目上位 4 名）の行は「最終組を開始」の後
+  //   最終組 進行中   … 最終組の行だけ（他の選手は斬り終わっている）
   function scoringOpenHere() {
     if (!scoringOpen()) return false;
     return EventStatus.isPlayerScorable(currentStatus(), visiblePlayers[currentIndex]);
+  }
+
+  // 「最終組（一巡目上位 4 名）」（設計書 2026-10-04-finale-after-round2 5 章）
+  function finalGroupName() {
+    return EventStatus.FINALIST_LABEL + '（' + EventStatus.FINALIST_DESC + '）';
+  }
+
+  // 「最終組 進行中。採点できるのは最終組（一巡目上位 4 名）の選手だけです」
+  function finalOnlyMessage() {
+    return EventStatus.LABELS.round2_final + '。採点できるのは' + finalGroupName() + 'の選手だけです';
   }
 
   // 大会選択バーの下の状態バナー。採点できるかどうかと、できないときの次の手を出す。
@@ -582,19 +592,20 @@ var App = (function() {
     el.hidden = false;
     if (EventStatus.isScoringOpen(st)) {
       if (!scoringOpenHere()) {
-        // 状態は採点できるが、この選手は今は採点できない（決戦の制限。行の印で判定）
+        // 状態は採点できるが、この選手は今は採点できない（最終組の制限。行の印で判定）
         el.className = 'status-banner closed';
         el.textContent = (st === 'round2')
-          ? 'この選手は決戦（' + EventStatus.FINALIST_LABEL + '）です。他の選手が終わり、運営画面で「決戦を開始」を押すと採点できます'
-          : '決戦 進行中。採点できるのは決戦（' + EventStatus.FINALIST_LABEL + '）の選手だけです';
+          ? 'この選手は' + finalGroupName() + 'です。他の選手が終わり、運営画面で「' +
+            EventStatus.NEXT_LABELS.round2 + '」を押すと採点できます'
+          : finalOnlyMessage();
         return;
       }
-      // 決戦 進行中に、決戦の選手がいないコートを開いている（一覧が空）。
-      // 緑の「決戦 進行中」を出すと採点できるように見えるので、候補のコートを案内する。
+      // 最終組 進行中に、最終組の選手がいないコートを開いている（一覧が空）。
+      // 緑の「最終組 進行中」を出すと採点できるように見えるので、最終組のコートを案内する。
       if (st === 'round2_final' && !visiblePlayers[currentIndex]) {
         var finCourt = Courts.finaleCourt(players);
         el.className = 'status-banner closed';
-        el.textContent = '決戦 進行中。採点できるのは決戦（' + EventStatus.FINALIST_LABEL + '）の選手だけです' +
+        el.textContent = finalOnlyMessage() +
           (finCourt ? '（' + finCourt + ' コート）' : '');
         return;
       }
@@ -626,7 +637,7 @@ var App = (function() {
   }
 
   function applyScoringLock() {
-    // 決戦 進行中に候補のいないコートを開いている（一覧が空）ときも、バナー（renderStatusBanner）
+    // 最終組 進行中に最終組のいないコートを開いている（一覧が空）ときも、バナー（renderStatusBanner）
     // と同じく閉じた扱いにする。
     var empty = currentStatus() === 'round2_final' && !visiblePlayers[currentIndex];
     var locked = !!currentEvent && (!scoringOpenHere() || empty);
@@ -654,11 +665,11 @@ var App = (function() {
 
   // 表示する選手。進行中ならその巡目だけに絞る（コートの絞り込みと併用）。
   // 進行中でなければ全巡目を出す（見直し・確認のため）。
-  // 決戦（暫定ベスト4）は先頭コートの二巡目の末尾で斬る（設計書 2026-09-28）ので、
-  //   二巡目 進行中 … 全員を出し、決戦の行を末尾に寄せる（採点はできない。一覧で薄く出す）。
+  // 最終組（一巡目上位 4 名）は先頭コートの二巡目の末尾で斬る（設計書 2026-09-28）ので、
+  //   二巡目 進行中 … 全員を出し、最終組の行を末尾に寄せる（採点はできない。一覧で薄く出す）。
   //                   生成した順ですでに末尾のはずだが、差分追加などで崩れても末尾に来るよう
   //                   印の有無で安定に並べ直す。
-  //   決戦 進行中   … 決戦の行だけを出す。
+  //   最終組 進行中 … 最終組の行だけを出す。
   function filterForStatus(list) {
     var st = currentEvent ? currentStatus() : null;
     var round = st ? EventStatus.scoringRound(st) : null;
@@ -944,7 +955,7 @@ var App = (function() {
     if (changed) resetTimer();
     updatePlayerList();
     // 全コート表示（currentCourt が空）では選手ごとにコートが変わりうるので、
-    // バナーとロックを見直す（決戦の制限は選手の印 finalist で決まる）。
+    // バナーとロックを見直す（最終組の制限は選手の印 finalist で決まる）。
     renderStatusBanner();
     applyScoringLock();
     // 別の選手を開いたら、他端末（運営画面や別コートの端末）の書き込みを取りに行く。
@@ -1017,7 +1028,7 @@ var App = (function() {
       var roundName = m[3] === '1' ? '一巡目' : (m[3] === '2' ? '二巡目' : m[3] + '巡目');
       var stage = m[2] + 'の部　' + roundName + '　' + m[1] + ' コート';
       if (currentStatus() === 'round2_final' && p.finalist === true) {
-        stage = '決戦（' + EventStatus.FINALIST_LABEL + '）　' + m[1] + ' コート';
+        stage = finalGroupName() + '　' + m[1] + ' コート';
       }
       playerStageLabel.textContent = stage;
       courtLabel.textContent = '';
@@ -1031,7 +1042,7 @@ var App = (function() {
     // 級位・段位は名前の右に小さく（空なら :empty で消える）
     playerRankLabel.textContent = Courts.rankLabel(p.rank);
 
-    // 決戦 進行中は、決戦の何人目かを順番の右に添える（設計書「採点画面」）。
+    // 最終組 進行中は、最終組の何人目かを順番の右に添える（設計書「採点画面」）。
     if (currentStatus() === 'round2_final' && p.finalist === true) {
       var fin = Courts.finalists(players);
       var at = 0;
@@ -1039,7 +1050,7 @@ var App = (function() {
         if (fin[fi].id === p.id) { at = fi + 1; break; }
       }
       if (at > 0) {
-        playerOrderLabel.textContent += '　決戦 ' + at + '/' + fin.length;
+        playerOrderLabel.textContent += '　' + EventStatus.FINALIST_LABEL + ' ' + at + '/' + fin.length;
       }
     }
   }
@@ -2164,13 +2175,13 @@ var App = (function() {
     tr.dataset.index = index;
     if (index === currentIndex) tr.classList.add('current-player');
     if (p.confirmed) tr.classList.add('done');   // 確定済みの行はグレー（ユーザー要望）
-    // 決戦（暫定ベスト4）の行は番号の右に「決戦」の印。二巡目 進行中はまだ採点できないので
+    // 最終組（一巡目上位 4 名）の行は番号の右に「最終組」の印。二巡目 進行中はまだ採点できないので
     // 薄く出す（tr.finale。設計書 2026-09-28）。
     var isFinale = p.finalist === true && Courts.roundOf(p) === 2;
     if (isFinale && currentStatus() === 'round2') tr.classList.add('finale');
     var hasBib = (typeof p.bib === 'number');
     tr.innerHTML =
-      '<td>' + esc(p.order || '') + (isFinale ? ' <span class="finale-mark">決戦</span>' : '') + '</td>' +
+      '<td>' + esc(p.order || '') + (isFinale ? ' <span class="finale-mark">' + esc(EventStatus.FINALIST_LABEL) + '</span>' : '') + '</td>' +
       // 未設定は薄い「—」（数値なので esc は要らないが、列を空にはしない）
       '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
       '<td class="name">' + esc(p.name || '') + '</td>' +

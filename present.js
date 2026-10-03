@@ -1,6 +1,8 @@
 // present.html 専用のスクリプト（大画面用・発表モード）。
 // - 掲示モード（board）: 60秒ごとに自動更新しながら3部門を順に表示する。
-// - 発表モード（reveal）: 部門を選んで、下位から1人ずつタップで順位を開けていく（後続タスクで実装）。
+// - 発表モード（reveal）: 部門を選んで、下位から1人ずつタップで順位を開けていく。
+// - ベスト4 モード（best4）: 合計の一般男子上位 4 名（ranking API の best4）を 4 位 → 1 位の順に
+//   タップで出すカウントダウン（設計書 2026-10-04-finale-after-round2 4 章）。
 var Present = (function() {
   var REFRESH_MS = 60000;
 
@@ -24,21 +26,21 @@ var Present = (function() {
   var pendingRefresh = false;
   var tokenSeq = 0;
   var timerId = null;
-  // 運営者が自分でモードボタンを押したか。押した後は defaultMode で勝手に切り替えない
-  // （設計書「発表モード」。決戦 進行中でも「掲示」「発表」を見続けられるように）。
-  var modeChosen = false;
 
-  // 発表（reveal）モードの状態（後続タスクで使用）。
+  // 発表（reveal）モードの状態。
   var picking = true;
   var order = [];
   var step = 0;
+
+  // ベスト4（best4）モードで出し終えた組（同順位の人の組）の数。
+  var best4Step = 0;
 
   var elScreen = null;
   var elHint = null;
   var elStatus = null;
   var elModeBoard = null;
   var elModeReveal = null;
-  var elModeFinale = null;
+  var elModeBest4 = null;
   var elRefresh = null;
   var elFull = null;
 
@@ -60,7 +62,7 @@ var Present = (function() {
   function startTimer() {
     stopTimer();
     timerId = setInterval(function() {
-      if (mode === 'board' || mode === 'finale') load();
+      if (mode === 'board' || mode === 'best4') load();
     }, REFRESH_MS);
   }
 
@@ -100,16 +102,30 @@ var Present = (function() {
     return out;
   }
 
-  // 決戦の行（サーバーが計算した暫定順位）。試技順のまま返す。
-  function finaleRows(d) {
-    if (!d || !d.finale || !Array.isArray(d.finale.rows)) return [];
-    return d.finale.rows;
+  // ベスト4 の行（サーバーが計算した合計の上位。順位の昇順＝1 位が先頭）。無ければ空。
+  function best4Rows(d) {
+    if (!d || !d.best4 || !Array.isArray(d.best4.rows)) return [];
+    return d.best4.rows;
   }
 
-  // 最初に開くモード。決戦 進行中なら決戦を出す（設計書「発表モード」）。
-  function defaultMode(d) {
-    if (d && d.finale && d.finale.status === 'round2_final' &&
-        Array.isArray(d.finale.rows) && d.finale.rows.length > 0) return 'finale';
+  // ベスト4 を出す順。同じ順位の人は 1 つの組にまとめて同時に出し、下位の組から 1 組ずつ
+  // （4 位 → 3 位 → 2 位 → 1 位）。組の中は一覧の並び（同点は氏名順）のまま。
+  // 戻り値は rows への添字の配列の配列。
+  function best4Groups(rows) {
+    var groups = [];
+    var list = rows || [];
+    for (var i = list.length - 1; i >= 0; i--) {
+      var r = list[i];
+      var last = groups.length > 0 ? groups[groups.length - 1] : null;
+      if (last && list[last[0]] && r && list[last[0]].rank === r.rank) last.unshift(i);
+      else groups.push([i]);
+    }
+    return groups;
+  }
+
+  // 最初に開くモード。常に「掲示」（ベスト4 の発表は運営者がボタンを押して始める。
+  // 設計書 2026-10-04-finale-after-round2 4 章。状態を見て自動で切り替えることはしない）。
+  function defaultMode() {
     return 'board';
   }
 
@@ -144,13 +160,9 @@ var Present = (function() {
         order = revealOrder(rowsOf(catIndex));
         if (step > order.length) step = order.length;
       }
-
-      // 最初の取得で決戦 進行中なら決戦モードで開く（設計書「発表モード」）。
-      // 運営者が自分でモードを選んだ後は勝手に切り替えない。
-      if (!modeChosen) {
-        var want = defaultMode(data);
-        if (want !== mode) setMode(want);
-      }
+      // ベスト4 の人数（組の数）が変わったら、出し終えた組の数を切り詰める
+      var nGroups = best4Groups(best4Rows(data)).length;
+      if (best4Step > nGroups) best4Step = nGroups;
 
       var updatedAt = data.event ? data.event.updatedAt : null;
       if (!rendered || updatedAt !== lastUpdatedAt) {
@@ -206,57 +218,126 @@ var Present = (function() {
 
     if (mode === 'reveal') {
       renderReveal();
-    } else if (mode === 'finale') {
-      renderFinale();
+    } else if (mode === 'best4') {
+      renderBest4();
     } else {
       renderBoard();
     }
   }
 
-  function renderFinale() {
-    var rows = finaleRows(data);
+  // ベスト4 の発表。確定後は「ベスト4 発表」、確定前は「暫定ベスト4」に残り人数を小さく添える
+  // （確定前でもリハーサル・途中経過の発表に使える）。出し終えた組は上に積み（1 位が一番上）、
+  // 最新の組を強調する。
+  function renderBest4() {
+    var b4 = (data && data.best4) || null;
+    var isFinal = !!(b4 && b4.final);
+    var rows = best4Rows(data);
+    var groups = best4Groups(rows);
+    if (best4Step > groups.length) best4Step = groups.length;
+
     var h1 = document.createElement('h1');
     h1.className = 'present-title';
-    h1.textContent = '決戦（暫定）';
+    h1.textContent = isFinal ? 'ベスト4 発表' : '暫定ベスト4';
+    if (!isFinal && b4) {
+      var rest = document.createElement('span');
+      rest.className = 'present-page';
+      rest.textContent = '残り ' + (Number(b4.remaining) || 0) + ' 名';
+      h1.appendChild(rest);
+    }
     elScreen.appendChild(h1);
 
     if (rows.length === 0) {
       var empty = document.createElement('div');
       empty.className = 'present-error';
-      empty.textContent = '決戦はまだありません';
+      empty.textContent = 'ベスト4 はまだありません';
       elScreen.appendChild(empty);
       if (elHint) elHint.textContent = '';
       return;
     }
 
-    var ul = document.createElement('ul');
-    ul.className = 'present-list present-finale';
-    rows.forEach(function(r) {
-      var li = document.createElement('li');
-      var cls = '';
-      if (r.rank !== null && r.rank <= 3) cls = 'top';
-      if (!r.scored) cls = (cls ? cls + ' ' : '') + 'pending';
-      if (cls) li.className = cls;
+    var firstRank = rows[groups[0][0]].rank;
+    if (best4Step === 0) {
+      var ready = document.createElement('div');
+      ready.className = 'present-error present-best4-ready';
+      ready.textContent = 'タップで ' + firstRank + '位から発表します';
+      elScreen.appendChild(ready);
+    } else {
+      // 出し終えた組を、順位の昇順（1 位が上）に並べる。後から出た組ほど上に積まれる
+      var ul = document.createElement('ul');
+      ul.className = 'present-list present-best4';
+      for (var g = best4Step - 1; g >= 0; g--) {
+        var latest = (g === best4Step - 1);
+        groups[g].forEach(function(idx) {
+          ul.appendChild(buildBest4Item(rows[idx], latest));
+        });
+      }
+      elScreen.appendChild(ul);
+    }
 
-      var rankEl = document.createElement('span');
-      rankEl.className = 'present-rank';
-      rankEl.textContent = r.rank === null ? String(r.order) + '番' : String(r.rank);
-      li.appendChild(rankEl);
+    if (elHint) {
+      elHint.textContent = '';
+      var strong = document.createElement('strong');
+      if (best4Step < groups.length) {
+        var nextRank = rows[groups[best4Step][0]].rank;
+        strong.textContent = best4Step === 0
+          ? 'タップ／→ で ' + nextRank + '位から発表'
+          : 'タップで ' + nextRank + '位 を発表';
+        elHint.appendChild(strong);
+        if (best4Step > 0) elHint.appendChild(document.createTextNode('　←で 1 つ戻す'));
+      } else {
+        strong.textContent = isFinal ? '以上がベスト4 です' : '以上が暫定ベスト4 です';
+        elHint.appendChild(strong);
+        elHint.appendChild(document.createTextNode('　←で 1 つ戻す'));
+      }
+    }
+  }
 
-      var nameEl = document.createElement('span');
-      nameEl.className = 'present-name';
-      nameEl.textContent = r.name;
-      li.appendChild(nameEl);
+  // ベスト4 の 1 人。順位（大きく）・名前・一巡目と二巡目（小さく）・合計（大きく）。
+  function buildBest4Item(r, latest) {
+    var li = document.createElement('li');
+    var cls = [];
+    if (r.rank <= 3) cls.push('top');
+    if (latest) cls.push('latest');
+    if (cls.length) li.className = cls.join(' ');
 
-      var scoreEl = document.createElement('span');
-      scoreEl.className = 'present-score';
-      scoreEl.textContent = r.scored ? String(r.total) : '—';
-      li.appendChild(scoreEl);
+    var rankEl = document.createElement('span');
+    rankEl.className = 'present-rank';
+    rankEl.textContent = String(r.rank);
+    li.appendChild(rankEl);
 
-      ul.appendChild(li);
-    });
-    elScreen.appendChild(ul);
-    if (elHint) elHint.textContent = '斬った人から合計と暫定順位が埋まります';
+    var nameBox = document.createElement('span');
+    nameBox.className = 'present-name';
+    var nameEl = document.createElement('span');
+    nameEl.className = 'present-best4-name';
+    nameEl.textContent = r.name;
+    nameBox.appendChild(nameEl);
+    var detail = document.createElement('span');
+    detail.className = 'present-best4-detail';
+    detail.textContent = '一巡目 ' + (r.r1 == null ? '—' : r.r1) +
+      '　二巡目 ' + (r.r2 == null ? '—' : r.r2);
+    nameBox.appendChild(detail);
+    li.appendChild(nameBox);
+
+    var scoreEl = document.createElement('span');
+    scoreEl.className = 'present-score';
+    scoreEl.textContent = String(r.total);
+    li.appendChild(scoreEl);
+    return li;
+  }
+
+  function best4Next() {
+    var n = best4Groups(best4Rows(data)).length;
+    if (best4Step < n) {
+      best4Step++;
+      render();
+    }
+  }
+
+  function best4Prev() {
+    if (best4Step > 0) {
+      best4Step--;
+      render();
+    }
   }
 
   function renderBoard() {
@@ -435,10 +516,12 @@ var Present = (function() {
       revealNext();
       return;
     }
-    // 決戦モードはカテゴリを持たない単一の画面なので、送りは何もしない
-    // （レビュー指摘G。放っておくと catIndex だけが進み、掲示モードに戻ったときに
-    // 表示するカテゴリがずれる）。
-    if (mode === 'finale') return;
+    // ベスト4 モードはカテゴリを持たない単一の画面なので、送りは次の組を出すだけ
+    // （レビュー指摘G。catIndex を進めると、掲示モードに戻ったときに表示するカテゴリがずれる）。
+    if (mode === 'best4') {
+      best4Next();
+      return;
+    }
     catIndex = (catIndex + 1) % CATEGORIES.length;
     render();
   }
@@ -449,7 +532,10 @@ var Present = (function() {
       revealPrev();
       return;
     }
-    if (mode === 'finale') return;
+    if (mode === 'best4') {
+      best4Prev();
+      return;
+    }
     catIndex = (catIndex - 1 + CATEGORIES.length) % CATEGORIES.length;
     render();
   }
@@ -461,6 +547,7 @@ var Present = (function() {
       step = 0;
       order = [];
     }
+    if (m === 'best4') best4Step = 0;
     if (elModeBoard) {
       if (m === 'board') elModeBoard.classList.add('on');
       else elModeBoard.classList.remove('on');
@@ -469,9 +556,9 @@ var Present = (function() {
       if (m === 'reveal') elModeReveal.classList.add('on');
       else elModeReveal.classList.remove('on');
     }
-    if (elModeFinale) {
-      if (m === 'finale') elModeFinale.classList.add('on');
-      else elModeFinale.classList.remove('on');
+    if (elModeBest4) {
+      if (m === 'best4') elModeBest4.classList.add('on');
+      else elModeBest4.classList.remove('on');
     }
     render();
   }
@@ -514,7 +601,8 @@ var Present = (function() {
     elStatus = document.getElementById('presentStatus');
     elModeBoard = document.getElementById('btnModeBoard');
     elModeReveal = document.getElementById('btnModeReveal');
-    elModeFinale = document.getElementById('btnModeFinale');
+    // ボタンの id（btnModeFinale）は旧モードの名残のまま。中身はベスト4
+    elModeBest4 = document.getElementById('btnModeFinale');
     elRefresh = document.getElementById('btnPresentRefresh');
     elFull = document.getElementById('btnPresentFull');
 
@@ -526,19 +614,16 @@ var Present = (function() {
     document.addEventListener('keydown', onKey);
     elModeBoard.addEventListener('click', function() {
       this.blur();
-      modeChosen = true;
       setMode('board');
     });
     elModeReveal.addEventListener('click', function() {
       this.blur();
-      modeChosen = true;
       setMode('reveal');
     });
-    if (elModeFinale) {
-      elModeFinale.addEventListener('click', function() {
+    if (elModeBest4) {
+      elModeBest4.addEventListener('click', function() {
         this.blur();
-        modeChosen = true;
-        setMode('finale');
+        setMode('best4');
       });
     }
     elRefresh.addEventListener('click', function() {
@@ -553,7 +638,7 @@ var Present = (function() {
     document.addEventListener('visibilitychange', function() {
       if (document.hidden) return;
       if (invalid) return;
-      if (mode !== 'board' && mode !== 'finale') return;
+      if (mode !== 'board' && mode !== 'best4') return;
       // 直近の取得試行から5秒未満なら floor（可視化のたびに叩き過ぎない）
       if (lastAttemptAt && (new Date() - lastAttemptAt) < 5000) return;
       load();
@@ -574,12 +659,12 @@ var Present = (function() {
       picking = true;
       order = [];
       step = 0;
+      best4Step = 0;
       catIndex = 0;
-      mode = 'board';
-      modeChosen = false;
+      mode = defaultMode();
       if (elModeBoard) elModeBoard.classList.add('on');
       if (elModeReveal) elModeReveal.classList.remove('on');
-      if (elModeFinale) elModeFinale.classList.remove('on');
+      if (elModeBest4) elModeBest4.classList.remove('on');
       token = decodeToken();
       start();
     });
@@ -593,7 +678,8 @@ var Present = (function() {
 
   return {
     revealOrder: revealOrder,
-    finaleRows: finaleRows,
+    best4Rows: best4Rows,
+    best4Groups: best4Groups,
     defaultMode: defaultMode
   };
 })();

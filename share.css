@@ -35,10 +35,7 @@ body { max-width: var(--page-max-width); margin: 0; }
 .share-section h2 { color: var(--gold-light); border-bottom-color: var(--gold); font-family: var(--mincho); }
 .share-rank { color: var(--gold-light); }
 
-/* ===== 決戦（暫定） ===== */
-.share-finale li.pending { color: var(--text-muted); }
-.share-finale .share-rank { color: var(--gold-light); }
-/* .share-rank は要素に直接色を付けているので、親の li.pending の color は継承されない
-   （特異度ではなく「継承より自分への指定が勝つ」ため）。pending 行の順位だけ
-   明示的に打ち消す（レビュー指摘L）。 */
-.share-finale li.pending .share-rank { color: var(--text-muted); }
+/* ===== ベスト4（合計）。確定前は「暫定ベスト4（合計）」と残り人数 ===== */
+.share-best4-rest { margin-left: 10px; font-size: 12px; font-family: inherit; color: var(--text-muted); font-weight: normal; }
+.share-best4 .share-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.share-best4-detail { font-size: 12px; color: var(--text-muted); }

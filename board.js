@@ -79,10 +79,10 @@ var Board = (function() {
     return sum + ta === saved;
   }
 
-  // 決戦の表に出す行。決戦 進行中（finale.status === 'round2_final'）に、決戦の候補がいる
+  // 最終組の表に出す行。最終組 進行中（finale.status === 'round2_final'）に、最終組がいる
   // コート（finale.court。先頭コート＝通常 A。設計書 2026-09-28）を映しているときだけ返す。
-  // 候補は A コートの通常の選手と同じコートに並ぶので、状態を見ないと二巡目 進行中（決戦前）や
-  // 二巡目終了の後にも A コートのボードに表が出てしまう（発表モード present.js と同じ判定）。
+  // 最終組は A コートの通常の選手と同じコートに並ぶので、状態を見ないと二巡目 進行中（最終組の前）や
+  // 二巡目終了の後にも A コートのボードに表が出てしまう。
   // finale は GET /api/links/:token/ranking の応答（サーバーが計算した暫定順位）。
   // board.html は status.js を読まない（無認証で配信するページ）ので、
   // 状態の判定はサーバーが入れた finale.status / finale.court に任せる。
@@ -286,7 +286,7 @@ var Board = (function() {
     el.confirmed.classList.toggle('is-hidden', !confirmed);
   }
 
-  // 決戦の表を描く。0件（候補のコートを映していない・finale が無い）なら隠す。
+  // 最終組の表を描く。0件（最終組のコートを映していない・finale が無い）なら隠す。
   function renderFinale(rows) {
     if (rows.length === 0) {
       el.finale.classList.add('is-hidden');
@@ -333,7 +333,7 @@ var Board = (function() {
     renderFinale([]);
   }
 
-  // 決戦の暫定順位は2秒ごとに要らない（順位表の更新は10秒でじゅうぶん）ので、
+  // 最終組の暫定順位は2秒ごとに要らない（順位表の更新は10秒でじゅうぶん）ので、
   // 採点表のポーリング（poll）とは別に緩い周期で回す。
   async function pollFinale() {
     var mySeq = ++finaleSeq;
@@ -428,7 +428,7 @@ var Board = (function() {
     window.addEventListener('hashchange', function() {
       stopPolling();
       pollSeq++;     // 切替前に投げた応答は捨てる
-      finaleSeq++;   // 同上（決戦の順位）
+      finaleSeq++;   // 同上（最終組の順位）
       var next = parseHash(location.hash);
       token = next.token;
       court = next.court;

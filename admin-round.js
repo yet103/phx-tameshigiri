@@ -88,6 +88,9 @@ var AdminRound = (function() {
     var data = await Api.loadRanking(ctx.eventId);
     if (ctx.isStale()) return;
     box.textContent = '';
+    // 二巡目終了・最終結果: 上位 3 名の上にベスト4（合計）の 1 行（設計書 2026-10-04 D3。
+    // 順位と同じ応答の best4 を使う）
+    if (data && data.best4) box.appendChild(buildBest4Line(data.best4, box.id + 'Best4'));
     if (!data) {
       var fail = document.createElement('p');
       fail.className = 'round-rank-fail';
@@ -163,18 +166,32 @@ var AdminRound = (function() {
     return sec;
   }
 
-  // 二巡目 進行中: 決戦（ベスト4）の候補を 1 行で。名前は試技順（番号順）
+  // 二巡目 進行中・最終組 進行中: 最終組（一巡目上位 4 名。名前は試技順）の 1 行と、
+  // 暫定ベスト4（合計の上位 4 名と残り人数）の 1 行（設計書 2026-10-04-finale-after-round2 3.2）。
+  // 文言は PC 運営と共通（Courts.finalGroupLineText / Courts.best4LineText）。
+  // ベスト4 は手元の選手の行から計算する（ranking API の best4 と同じ EventStatus.best4Standings。
+  // 試合進行は読み直すたびに描き直すので、採点が入れば動く）。
   function buildFinaleLine(players) {
     var p = document.createElement('p');
     p.className = 'round-finale-line';
     p.id = 'roundFinaleLine';
-    var fin = Courts.finalists(players);
-    if (fin.length === 0) {
-      p.textContent = '決戦の候補はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）';
-    } else {
-      p.textContent = '決戦（ベスト' + EventStatus.FINALIST_COUNT + '・' + Courts.finaleCourt(players) +
-        ' コートの最後）: ' + fin.map(function(r) { return String(r.name || '').trim(); }).join('・');
-    }
+    p.textContent = Courts.finalGroupLineText(players);
+    return p;
+  }
+
+  function best4Of(players) {
+    var ev = CTX && CTX.event;
+    return EventStatus.best4Standings(players, {
+      status: EventStatus.of(ev),
+      countAll: !(ev && typeof ev.status === 'string')
+    });
+  }
+
+  function buildBest4Line(best4, id) {
+    var p = document.createElement('p');
+    p.className = 'round-best4-line';
+    p.id = id || 'roundBest4Line';
+    p.textContent = Courts.best4LineText(best4);
     return p;
   }
 
@@ -189,10 +206,10 @@ var AdminRound = (function() {
         return '各コートで一巡目を採点しています。全コートの確定がそろったら' + b + 'を押します。';
       case 'round2':
         return EventStatus.hasFinalists(players)
-          ? '各コートで二巡目を採点しています。決戦以外が斬り終わったら' + b + 'を押します。'
+          ? '各コートで二巡目を採点しています。' + EventStatus.FINALIST_LABEL + '以外が斬り終わったら' + b + 'を押します。'
           : '各コートで二巡目を採点しています。全コートの確定がそろったら' + b + 'を押します。';
       case 'round2_final':
-        return '決戦 進行中です（' + Courts.finaleCourt(players) + ' コートの最後）。斬り終わったら' + b + 'を押します。';
+        return EventStatus.LABELS.round2_final + 'です（' + Courts.finaleCourt(players) + ' コートの最後）。斬り終わったら' + b + 'を押します。';
       case 'round2_done':
         return '二巡目が終わりました。下の順位を確かめて' + b + 'を押します。';
       case 'final':
@@ -320,7 +337,7 @@ var AdminRound = (function() {
       }
       alert(res.error);
       // 読み直すのは他の端末が先に進めていた場合（transition）と、こちらの画面が
-      // 決戦の行の有無を取り違えている可能性がある場合（finale_pending / no_finale）。
+      // 最終組の行の有無を取り違えている可能性がある場合（finale_pending / no_finale）。
       // empty / no_round2 はこちらの入力不足であり、読み直しても状態は変わらない。
       if (res.reason === 'transition' || res.reason === 'finale_pending' ||
           res.reason === 'no_finale') {
@@ -330,7 +347,7 @@ var AdminRound = (function() {
     }
     var toastMsg = EventStatus.LABELS[to] + ' にしました';
     if (res.round2 && res.round2.created > 0) {
-      toastMsg += '（二巡目 ' + res.round2.created + ' 名／決戦 ' + res.round2.finalistCount + ' 名' +
+      toastMsg += '（二巡目 ' + res.round2.created + ' 名／' + EventStatus.FINALIST_LABEL + ' ' + res.round2.finalistCount + ' 名' +
         (res.round2.fromRequest > 0 ? '／申請の形 ' + res.round2.fromRequest + ' 名' : '') + '）';
     }
     if (res.round2 && res.round2.untrackedCount > 0) {
@@ -342,7 +359,7 @@ var AdminRound = (function() {
       alert('⚠ コートが決まっていない（未分類の）選手が ' + res.round2.unassignedCount +
         ' 名います。二巡目には入っていません。\n選手登録でコートを設定し、一巡目に戻して終了し直してください。');
     }
-    // 網羅検証 S18: 暫定ベスト4 が今の一巡目の確定得点で選び直した結果と違うときは警告する
+    // 網羅検証 S18: 最終組（一巡目上位 4 名）が今の一巡目の確定得点で選び直した結果と違うときは警告する
     if (res.round2 && res.round2.finalistDiff) {
       var diffMsg = Courts.finalistDiffMessage(res.round2.finalistDiff);
       if (diffMsg) alert(diffMsg);
@@ -363,8 +380,8 @@ var AdminRound = (function() {
     label.textContent = '現在の状態: ' + EventStatus.LABELS[st];
     wrap.appendChild(label);
 
-    // 「次へ進む」の行き先は選手データで変わる（二巡目 進行中は、決戦の行があれば
-    // 決戦へ、無ければ二巡目終了へ）。ラベルも同じ判定で決める。
+    // 「次へ進む」の行き先は選手データで変わる（二巡目 進行中は、最終組の行があれば
+    // 最終組へ、無ければ二巡目終了へ）。ラベルも同じ判定で決める。
     var next = EventStatus.nextStep(st, players);
     if (next) {
       var btn = document.createElement('button');
@@ -405,7 +422,8 @@ var AdminRound = (function() {
     // 段階表示(現在の状態と「次へ進む」)を先頭に置く
     var st = EventStatus.of(ctx.event);
     container.appendChild(buildStage(st, players));
-    // 状態の 1 行（仕様 2026-10-04 ③④⑤）と、二巡目 進行中の決戦の候補の 1 行
+    // 状態の 1 行（仕様 2026-10-04 ③④⑤）と、二巡目 進行中・最終組 進行中の
+    // 最終組の 1 行と暫定ベスト4 の 1 行
     var todoText = stageTodo(st, players);
     if (todoText) {
       var todoEl = document.createElement('p');
@@ -414,8 +432,11 @@ var AdminRound = (function() {
       todoEl.textContent = todoText;
       container.appendChild(todoEl);
     }
-    if (st === 'round2') container.appendChild(buildFinaleLine(players));
-    // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、決戦（暫定ベスト4）の
+    if (st === 'round2' || st === 'round2_final') {
+      container.appendChild(buildFinaleLine(players));
+      container.appendChild(buildBest4Line(best4Of(players)));
+    }
+    // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、最終組（一巡目上位 4 名）の
     // 印は選び直されない。今の一巡目の確定得点で選び直した結果と違うときに警告を出す
     // （判定は EventStatus.finalistDiff、文言は Courts.finalistDiffMessage。PC 運営と共通）。
     if (['round1_done', 'round2', 'round2_final', 'round2_done'].indexOf(st) !== -1) {
@@ -544,8 +565,8 @@ var AdminRound = (function() {
       listEl.appendChild(p);
     } else {
       var fin = rows.filter(function(r) { return r.finalist === true; });
-      // 決戦のカード（見出し＋候補の行）。候補の行は先頭コートの男子の続き番号なので、試技順に
-      // 並べると先頭コート男子の直後に来る（そこへ置く）。決戦 進行中は採点できるのが候補だけなので先頭へ。
+      // 最終組のカード（見出し＋最終組の行）。最終組の行は先頭コートの男子の続き番号なので、試技順に
+      // 並べると先頭コート男子の直後に来る（そこへ置く）。最終組 進行中は採点できるのが最終組だけなので先頭へ。
       var finBlock = fin.length > 0 ? buildFinaleBlock(fin) : null;
       var placed = false;
       if (finBlock && statStatus === 'round2_final') {
@@ -564,15 +585,15 @@ var AdminRound = (function() {
     updateCounter();
   }
 
-  // 決戦のカード。見出しは PC 運営と同じ「決戦（暫定ベスト4・A コートの最後）」に、
-  // 二巡目 進行中は「開始前」、決戦 進行中は「進行中」を添える。
-  // コートで絞っていても候補のコートを出すため、大会の全選手から引く。
+  // 最終組のカード。見出しは PC 運営と同じ「最終組（一巡目上位 4 名・A コートの最後）」に、
+  // 二巡目 進行中は「開始前」、最終組 進行中は「進行中」を添える。
+  // コートで絞っていても最終組のコートを出すため、大会の全選手から引く。
   function buildFinaleBlock(fin) {
     var frag = document.createDocumentFragment();
     var cap = document.createElement('div');
     cap.className = 'round-finale-caption';
     var state = statStatus === 'round2' ? '　開始前' : (statStatus === 'round2_final' ? '　進行中' : '');
-    cap.textContent = '決戦（' + EventStatus.FINALIST_LABEL + '・' +
+    cap.textContent = EventStatus.FINALIST_LABEL + '（' + EventStatus.FINALIST_DESC + '・' +
       Courts.finaleCourt((CTX && CTX.players) || fin) + ' コートの最後）' + state;
     frag.appendChild(cap);
     var box = document.createElement('div');

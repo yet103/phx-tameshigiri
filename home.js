@@ -99,7 +99,7 @@ var Home = (function() {
     round1: 'コート端末で採点',
     round1_done: '二巡目の形を確かめる',
     round2: 'コート端末で採点',
-    round2_final: EventStatus.FINALIST_LABEL + ' が最後に斬る',
+    round2_final: EventStatus.FINALIST_LABEL + '（' + EventStatus.FINALIST_DESC + '）が A コートの最後に斬る',
     round2_done: '順位を確認',
     final: '発表・共有',
     archived: '保管'

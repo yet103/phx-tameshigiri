@@ -50,6 +50,25 @@ body {
 .present-list li.top { font-family: var(--mincho); }
 .present-rank { color: var(--gold-light); }
 
-/* ===== 決戦（暫定） ===== */
-.present-finale li.pending { color: var(--text-muted); }
-.present-finale li.pending .present-rank { color: var(--text-muted); }
+/* ===== ベスト4 発表（4 位から 1 組ずつ。出し終えた組は上に積み、最新の組を強調） ===== */
+.present-best4 li { opacity: .78; }
+.present-best4 li.latest { opacity: 1; font-size: 40px; padding: 14px 0; }
+.present-best4 li.latest .present-rank, .present-best4 li.latest .present-score { color: var(--gold-light); }
+.present-best4 .present-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.present-best4-name { overflow-wrap: anywhere; }
+.present-best4-detail { font-size: 16px; font-weight: normal; color: var(--text-muted); font-family: inherit; }
+.present-best4 li.latest .present-best4-detail { font-size: 20px; }
+.present-best4 .present-score { width: auto; min-width: 3em; }
+/* 最新の組だけ文字が大きいので、順位の列は px で固定して縦にそろえる */
+.present-best4 .present-rank { width: 96px; flex: none; }
+.present-best4-ready { text-align: center; }
+@media (max-width: 600px) {
+  .present-screen { padding: 12px 14px; }
+  .present-title { font-size: 24px; }
+  .present-page { font-size: 16px; margin-left: 10px; }
+  .present-best4 li { gap: 12px; font-size: 22px; }
+  .present-best4 .present-rank { width: 40px; }
+  .present-best4 li.latest { font-size: 28px; }
+  .present-best4-detail { font-size: 13px; }
+  .present-best4 li.latest .present-best4-detail { font-size: 14px; }
+}

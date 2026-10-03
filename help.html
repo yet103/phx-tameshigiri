@@ -63,25 +63,25 @@
       <li><span class="ui">準備中</span> — 技得点表・選手を自由に入れられます。採点はまだできません。</li>
       <li><span class="ui">一巡目 進行中</span> — コートの端末で一巡目を採点します。</li>
       <li><span class="ui">二巡目準備（形の登録）</span> — 一巡目を終了すると、二巡目の行が自動でできます（形は<span class="term">申請された二巡目の形</span>。申請の無い選手は一巡目と同じ）。当日の変更があれば形を直し、確かめ終えたら二巡目を開始します。</li>
-      <li><span class="ui">二巡目 進行中</span> — コートの端末で二巡目を採点します。暫定ベスト4（決戦）はまだ斬りません（A コートの二巡目の最後に並んでいます）。</li>
-      <li><span class="ui">決戦 進行中</span> — 暫定ベスト4 が A コートの最後に1人ずつ斬ります。採点できるのは暫定ベスト4 の選手だけです。</li>
+      <li><span class="ui">二巡目 進行中</span> — コートの端末で二巡目を採点します。<span class="term">最終組</span>（一巡目上位 4 名）はまだ斬りません（A コートの二巡目の最後に並んでいます）。</li>
+      <li><span class="ui">最終組 進行中</span> — 最終組（一巡目上位 4 名）が A コートの最後に1人ずつ斬ります。採点できるのは最終組の選手だけです。最終組の試技は二巡目の1本です（追加の試技はありません）。</li>
       <li><span class="ui">二巡目終了</span> — 順位を確かめます。試合進行に3部門の上位3名の要約が出ます。直したいことがあれば1つ前に戻せます。</li>
       <li><span class="ui">最終結果</span> — 得点・選手・技を編集できなくなります。試合進行に<span class="ui">表彰</span>の区画（上位3名と、発表モード・共有リンク・成績表のボタン）が出ます。発表・共有・ファイル保存はできます。</li>
       <li><span class="ui">アーカイブ</span> — 見るだけ。大会一覧の「アーカイブ」欄に移り、採点画面の選択肢から消えます。</li>
     </ol>
-    <div class="note">暫定ベスト4（一般男子・一巡目の得点の上位4名。4位が同点なら全員）がいない大会は、<span class="ui">二巡目 進行中</span> から直接 <span class="ui">二巡目を終了 ▶</span> に進めます（決戦のある大会では、決戦のあとのボタンが <span class="ui">決戦を終了 ▶</span> です）。</div>
+    <div class="note">最終組（一般男子・一巡目の得点の上位4名。4位が同点なら全員）がいない大会は、<span class="ui">二巡目 進行中</span> から直接 <span class="ui">二巡目を終了 ▶</span> に進めます（最終組のある大会では、最終組のあとのボタンが <span class="ui">最終組を終了 ▶</span> です）。</div>
     <div class="note">二巡目を行わない大会は、<span class="ui">二巡目準備（形の登録）</span> のときに <span class="ui">二巡目を行わず最終結果へ</span>（PC 用。<span class="ui">試合進行</span> の工程表の下）／<span class="ui">二巡目なしで終了</span>（スマホ用。⋯ メニュー）で <span class="ui">最終結果</span> へ進めます。どの状態からも <span class="ui">戻す</span>（PC 用は <span class="ui">試合進行</span> の工程表の下、スマホ用は ⋯ メニュー）で1つ前に戻せます。</div>
-    <p>PC 用の運営画面では、大会名の下の<span class="term">状態バー</span>に <span class="ui">準備中</span> → <span class="ui">一巡目</span> → <span class="ui">形登録</span> → <span class="ui">二巡目</span> → <span class="ui">最終結果</span> の5段で出ます（いまの段が金色）。上の8つの状態との対応は次のとおりで、<span class="term">決戦・二巡目終了・アーカイブは段の中に小さく添えます</span>（例: <span class="ui">二巡目 決戦 進行中</span>、<span class="ui">最終結果 アーカイブ</span>）。右に <span class="ui">確定 5 / 8</span> のような件数が出ます。</p>
+    <p>PC 用の運営画面では、大会名の下の<span class="term">状態バー</span>に <span class="ui">準備中</span> → <span class="ui">一巡目</span> → <span class="ui">形登録</span> → <span class="ui">二巡目</span> → <span class="ui">最終結果</span> の5段で出ます（いまの段が金色）。上の8つの状態との対応は次のとおりで、<span class="term">最終組・二巡目終了・アーカイブは段の中に小さく添えます</span>（例: <span class="ui">二巡目 最終組 進行中</span>、<span class="ui">最終結果 アーカイブ</span>）。右に <span class="ui">確定 5 / 8</span> のような件数が出ます。</p>
     <ul>
       <li><span class="ui">一巡目</span> … 一巡目 進行中</li>
       <li><span class="ui">形登録</span> … 二巡目準備（形の登録）</li>
-      <li><span class="ui">二巡目</span> … 二巡目 進行中・決戦 進行中・二巡目終了</li>
+      <li><span class="ui">二巡目</span> … 二巡目 進行中・最終組 進行中・二巡目終了</li>
       <li><span class="ui">最終結果</span> … 最終結果・アーカイブ</li>
     </ul>
-    <div class="note">状態バーは<span class="term">表示だけ</span>です。状態を進める・戻すボタンは<span class="term">工程表の下</span>にだけあります。工程表は状態バーより細かく、<span class="ui">① 一巡目</span> → <span class="ui">② 二巡目の形登録</span> → <span class="ui">③ 二巡目</span> → <span class="ui">④ 決戦（ベスト4）</span> → <span class="ui">⑤ 結果・表彰</span> の5段です（状態バーの <span class="ui">二巡目</span> の段が、工程表では ③ と ④ に分かれます）。工程表は <span class="ui">試合進行</span> の区画の先頭と、二巡目準備のときは <span class="ui">二巡目の形登録</span> の区画の先頭にも出ます（§2「当日の流れ」）。</div>
+    <div class="note">状態バーは<span class="term">表示だけ</span>です。状態を進める・戻すボタンは<span class="term">工程表の下</span>にだけあります。工程表は状態バーより細かく、<span class="ui">① 一巡目</span> → <span class="ui">② 二巡目の形登録</span> → <span class="ui">③ 二巡目</span> → <span class="ui">④ 最終組</span> → <span class="ui">⑤ 結果・表彰</span> の5段です（状態バーの <span class="ui">二巡目</span> の段が、工程表では ③ と ④ に分かれます）。工程表は <span class="ui">試合進行</span> の区画の先頭と、二巡目準備のときは <span class="ui">二巡目の形登録</span> の区画の先頭にも出ます（§2「当日の流れ」）。</div>
 
     <div class="diagram">
-      <svg viewBox="0 0 360 772" role="img" aria-label="大会の8段階。準備中、一巡目 進行中、二巡目準備（形の登録）、二巡目 進行中、決戦 進行中、二巡目終了、最終結果、アーカイブの順に、運営者がボタンで1段ずつ進める流れ図。端末の役割は、運営者の PC とスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク、配信PC（OBS）が配信用ボード。">
+      <svg viewBox="0 0 360 772" role="img" aria-label="大会の8段階。準備中、一巡目 進行中、二巡目準備（形の登録）、二巡目 進行中、最終組 進行中、二巡目終了、最終結果、アーカイブの順に、運営者がボタンで1段ずつ進める流れ図。端末の役割は、運営者の PC とスマホが運営画面、コートのタブレットが採点画面、会場の大画面が発表モード、参加者のスマホが共有リンク、配信PC（OBS）が配信用ボード。">
         <defs>
           <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="d-arrow"/>
@@ -118,8 +118,8 @@
 
         <g transform="translate(10,302)">
           <rect class="d-box" width="340" height="52" rx="8"/>
-          <text class="d-title" x="14" y="23">決戦 進行中</text>
-          <text class="d-sub" x="14" y="42">暫定ベスト4 が A コートの最後に斬る</text>
+          <text class="d-title" x="14" y="23">最終組 進行中</text>
+          <text class="d-sub" x="14" y="42">一巡目上位 4 名が A コートの最後に斬る</text>
         </g>
         <line class="d-line" x1="180" y1="357" x2="180" y2="373" marker-end="url(#ah)"/>
 
@@ -316,7 +316,7 @@
       <li>コート名は32文字までです。<span class="ui">-</span> は使えません。<span class="ui">未分類</span> も使えません。</li>
     </ul>
     <p>右に <span class="ui">ゼッケン</span> <span class="ui">級位段位</span> <span class="ui">レンタル</span>、さらに <span class="ui">二巡目技①</span> <span class="ui">二巡目技②</span> <span class="ui">二巡目技③</span> の列を足せます（合わせて 13 列。PC 用の貼り付けと同じ並びです）。二巡目の技は、<span class="term">二巡目で形を変える選手だけ</span>書きます（空なら一巡目と同じ形。書くときは 3 つとも）。<span class="ui">二巡目技1</span> の書き方の見出しも読めます。</p>
-    <p>運営画面の結果確認の <span class="ui">CSV エクスポート</span> が出す形（<span class="ui">選手名</span> <span class="ui">順番</span> … の 9 列・12 列・15 列・18 列、<span class="ui">決戦</span> <span class="ui">一巡目の行</span> が付いた 20 列、そして最後に <span class="ui">二巡目 技 1</span> <span class="ui">二巡目 技 2</span> <span class="ui">二巡目 技 3</span> が付いた 23 列）もそのまま読み込めます。以前の 20 列のファイルも読めますが、その場合は二巡目の形の申請は空になります（二巡目の行の形は 3〜5 列目の技で往復します）。この形では順番は CSV の値をそのまま使います。<span class="term">1 行目の見出しを厳密に照合します</span>。読み込める形でないと <span class="msg">CSV の 1 行目（見出し）が、読み込める形式と合っていません。</span> と出て、何も読み込みません。</p>
+    <p>運営画面の結果確認の <span class="ui">CSV エクスポート</span> が出す形（<span class="ui">選手名</span> <span class="ui">順番</span> … の 9 列・12 列・15 列・18 列、<span class="ui">決戦</span>（最終組の印。列名は互換のため「決戦」のまま） <span class="ui">一巡目の行</span> が付いた 20 列、そして最後に <span class="ui">二巡目 技 1</span> <span class="ui">二巡目 技 2</span> <span class="ui">二巡目 技 3</span> が付いた 23 列）もそのまま読み込めます。以前の 20 列のファイルも読めますが、その場合は二巡目の形の申請は空になります（二巡目の行の形は 3〜5 列目の技で往復します）。この形では順番は CSV の値をそのまま使います。<span class="term">1 行目の見出しを厳密に照合します</span>。読み込める形でないと <span class="msg">CSV の 1 行目（見出し）が、読み込める形式と合っていません。</span> と出て、何も読み込みません。</p>
     <p>文字コードは UTF-8 を先に試し、化けていれば Shift_JIS で読み直します。どちらでも読めないときは <span class="msg">CSV の文字が化けていて読み取れませんでした。</span> と出ます。Excel なら <span class="ui">CSV UTF-8（コンマ区切り）</span> で保存し直してください。</p>
 
     <p>すでに選手がいる大会に読み込むと、<span class="term">取り込む直前にサーバーの選手数を読み直して</span>から、読み込み方を選ぶ画面が出ます（画面の表示が古くても、いま何名いるかで聞きます）。</p>
@@ -325,7 +325,7 @@
       <li><span class="ui">置き換える（既存 n 名を消す）</span> — 既存の選手を全部消して、CSV の内容だけにします。採点結果も消えます。<span class="term">押し間違えないよう、危ない方は赤いボタンで、何が消えるかをボタンに書いてあります</span>（OK で進む形にはなっていません）。</li>
       <li>置き換えで採点済みの選手がいるときは、失われる人数を示してもう一度確かめます。他のコートの採点も一緒に消えます。</li>
       <li>確かめている間に他の端末が選手を足したり消したりすると <span class="msg">取り込む間に選手の人数が変わりました</span> と出て、何も消さずに読み直します。内容を確かめてからやり直してください。</li>
-      <li><span class="term">二巡目の行がある大会</span>では、置き換え・追記とも結果確認の <span class="ui">CSV エクスポート</span>（23 列。以前の 20 列も可）で書き出したファイルだけ取り込めます（決戦の印と一巡目とのつながりを保つため）。ほかの形は <span class="msg">二巡目がある大会には、結果確認の CSV エクスポートで書き出した形のファイル（23 列。以前の 20 列も可）だけ取り込めます（置き換え・追記とも）。</span> と出ます。</li>
+      <li><span class="term">二巡目の行がある大会</span>では、置き換え・追記とも結果確認の <span class="ui">CSV エクスポート</span>（23 列。以前の 20 列も可）で書き出したファイルだけ取り込めます（最終組の印と一巡目とのつながりを保つため）。ほかの形は <span class="msg">二巡目がある大会には、結果確認の CSV エクスポートで書き出した形のファイル（23 列。以前の 20 列も可）だけ取り込めます（置き換え・追記とも）。</span> と出ます。</li>
     </ul>
     <div class="note">当日はできるだけ追記を選んでください。置き換えて入れ直すと選手の ID が変わるため、その前に採点していたコートの端末で「保存できなかった採点が n 件あります」が出ることがあります（§5 を見てください）。点数・補正点は範囲（得点 -9999〜9999、補正点 -999〜999 の整数）に収めて読み込み、名前は 100 字・技名は 50 字までです。</div>
 
@@ -495,11 +495,11 @@
     </div>
     <ol start="2">
       <li><span class="term">コート別の状況を見る</span> — <span class="ui">試合進行</span> の区画に、コートごとのカードが並びます（下の節）。</li>
-      <li><span class="ui">一巡目を終了 ▶</span> — 全コートの採点が済んだら押します。<span class="term">押した時点で二巡目の行が自動でできます</span>（形は申請された二巡目の形。申請の無い人は一巡目と同じ形。暫定ベスト4 は A コートの二巡目の最後に並びます）。申請があるときは確認に <span class="msg">二巡目の行は、申請された二巡目の形（申請の無い人は一巡目の形）で作ります。</span> と出て、押したあとのメッセージに <span class="msg">申請の形 3 名</span> と出ます。</li>
+      <li><span class="ui">一巡目を終了 ▶</span> — 全コートの採点が済んだら押します。<span class="term">押した時点で二巡目の行が自動でできます</span>（形は申請された二巡目の形。申請の無い人は一巡目と同じ形。最終組（一巡目上位 4 名）は A コートの二巡目の最後に並びます）。申請があるときは確認に <span class="msg">二巡目の行は、申請された二巡目の形（申請の無い人は一巡目の形）で作ります。</span> と出て、押したあとのメッセージに <span class="msg">申請の形 3 名</span> と出ます。</li>
       <li><span class="term">形を確かめる・直す</span> — PC 用は左の <span class="ui">二巡目の形登録</span> の区画（二巡目準備のときだけ出ます）の表で、申請された二巡目の形を確かめ、当日の変更があった選手だけ直します（下の節）。</li>
-      <li><span class="ui">二巡目を開始 ▶</span> — 二巡目の行の技に誤り（技得点表に無い技、回数制限が「あり」の同じ形の2回以上、レンタルの選手が選べない形）があると開始できません。PC 用では <span class="ui">二巡目を開始 ▶</span> が押せなくなり、工程表に <span class="msg">二巡目を開始できません。形登録で直してください。</span>（<span class="ui">二巡目の形登録</span> の区画では <span class="msg">…下の表で直してください。</span>）と人数・名前が出ます。スマホ用では押したときに同じ文言で止まります（PC 用でも、画面が古いまま押したときは押したときに止まります）。確認には <span class="msg">二巡目 20名のうち、一巡目から形を変える選手: 3名</span> と出ます。押すと <span class="ui">二巡目 進行中</span> になります。コートの端末で大会を選び直すと二巡目の選手が出ます。A コートの最後に並ぶ暫定ベスト4 は、薄く <span class="ui">決戦</span> の印が付いていて、まだ採点できません。</li>
-      <li><span class="ui">決戦を開始 ▶</span> — 決戦以外が全員斬り終わったら押します。<span class="ui">決戦 進行中</span> になり、A コートの端末には暫定ベスト4 だけが出て採点できるようになります（他のコートは採点できません）。<span class="ui">二巡目 進行中</span> のあいだ、決戦に出る人は <span class="msg">決戦（ベスト4・A コートの最後）: 男子08・男子01・男子05・男子09</span> のように、工程表の下（スマホ用は状態の1行の下）に試技順の名前で1行出ます。候補がいない大会は <span class="msg">決戦の候補はいません</span> と出ます。</li>
-      <li><span class="ui">決戦を終了 ▶</span> — 決戦を斬り終わったら押します。<span class="ui">二巡目終了</span> になり、試合進行の工程表の下に<span class="term">3部門（一般男子・新人枠・一般女子）の上位3名</span>が出ます。<span class="ui">結果確認で全順位 →</span> で全順位へ移れます（自動では移りません）。決戦の無い大会では、<span class="ui">二巡目 進行中</span> のボタンが <span class="ui">二巡目を終了 ▶</span> です。</li>
+      <li><span class="ui">二巡目を開始 ▶</span> — 二巡目の行の技に誤り（技得点表に無い技、回数制限が「あり」の同じ形の2回以上、レンタルの選手が選べない形）があると開始できません。PC 用では <span class="ui">二巡目を開始 ▶</span> が押せなくなり、工程表に <span class="msg">二巡目を開始できません。形登録で直してください。</span>（<span class="ui">二巡目の形登録</span> の区画では <span class="msg">…下の表で直してください。</span>）と人数・名前が出ます。スマホ用では押したときに同じ文言で止まります（PC 用でも、画面が古いまま押したときは押したときに止まります）。確認には <span class="msg">二巡目 20名のうち、一巡目から形を変える選手: 3名</span> と出ます。押すと <span class="ui">二巡目 進行中</span> になります。コートの端末で大会を選び直すと二巡目の選手が出ます。A コートの最後に並ぶ最終組（一巡目上位 4 名）は、薄く <span class="ui">最終組</span> の印が付いていて、まだ採点できません。</li>
+      <li><span class="ui">最終組を開始 ▶</span> — 最終組以外が全員斬り終わったら押します。<span class="ui">最終組 進行中</span> になり、A コートの端末には最終組（一巡目上位 4 名）だけが出て採点できるようになります（他のコートは採点できません）。<span class="ui">二巡目 進行中</span>・<span class="ui">最終組 進行中</span> のあいだ、工程表の下（スマホ用は状態の1行の下）に次の2行が出ます。<ul><li><span class="msg">最終組（一巡目上位 4 名・A コートの最後）: 男子08・男子01・男子05・男子09</span> — 最終組の名前を試技順で。最終組がいない大会は <span class="msg">最終組はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）</span> と出ます。</li><li><span class="msg">暫定ベスト4（合計）: 男子08（120点）・男子03（110点）・男子01（98点）・男子05（98点）　残り 6 名</span> — 一巡目＋二巡目の合計の上位4名と、二巡目がまだ確定していない一般男子の人数。採点が確定するたびに動きます（「最終組とベスト4」）。</li></ul></li>
+      <li><span class="ui">最終組を終了 ▶</span> — 最終組を斬り終わったら押します。<span class="ui">二巡目終了</span> になり、試合進行の工程表の下に<span class="term">3部門（一般男子・新人枠・一般女子）の上位3名</span>が出ます。<span class="ui">結果確認で全順位 →</span> で全順位へ移れます（自動では移りません）。上位3名の上には <span class="msg">ベスト4（合計）: …</span> の1行も出ます。最終組の無い大会では、<span class="ui">二巡目 進行中</span> のボタンが <span class="ui">二巡目を終了 ▶</span> です。</li>
       <li><span class="ui">結果を確定して表彰へ ▶</span> — 得点・選手・技を編集できなくなります。<span class="ui">最終結果</span> になり、試合進行に<span class="ui">表彰</span>の区画が出ます（下の節）。そのあと <span class="ui">アーカイブ ▶</span> で片づけます。</li>
     </ol>
     <div class="note"><span class="term">確認の件数は、押した直前にサーバーから読み直した値です。</span>ほかの端末が先に状態を進めていたときは <span class="msg">他の端末で状態が変わっていました（いまは「…」）。</span> と出て、何も変えずに画面を読み直します。もう一度確かめてから押してください。</div>
@@ -507,17 +507,17 @@
 
     <h3>試合進行（PC 用）— 工程表とコート別の状況</h3>
     <p>PC 用の <span class="ui">試合進行</span> は<span class="term">進み具合を見て、段階を進める</span>区画です。形の登録（二巡目の技の直し）は別の区画 <span class="ui">二巡目の形登録</span> で行います。<span class="term">その区画の先頭にも同じ工程表が出る</span>ので、形を確かめ終えたら、その場で <span class="ui">二巡目を開始 ▶</span> を押せます。</p>
-    <p>いちばん上に<span class="term">工程表</span>が出ます。<span class="ui">① 一巡目</span> → <span class="ui">② 二巡目の形登録</span> → <span class="ui">③ 二巡目</span> → <span class="ui">④ 決戦（ベスト4）</span> → <span class="ui">⑤ 結果・表彰</span> の5段で、いまの段が金色に塗られ、その下の1行に<span class="term">いまやること</span>が出ます。</p>
+    <p>いちばん上に<span class="term">工程表</span>が出ます。<span class="ui">① 一巡目</span> → <span class="ui">② 二巡目の形登録</span> → <span class="ui">③ 二巡目</span> → <span class="ui">④ 最終組</span> → <span class="ui">⑤ 結果・表彰</span> の5段で、いまの段が金色に塗られ、その下の1行に<span class="term">いまやること</span>が出ます。</p>
     <ul>
       <li>工程表の下に、その段階で押せるボタンだけが並びます（<span class="ui">試合開始 ▶</span> などの進むボタン、<span class="ui">◀ …に戻す</span>。二巡目準備のときは <span class="ui">二巡目を行わず最終結果へ</span> も）。確認の文言は今までと同じです。</li>
-      <li>状態との対応は、① 一巡目 進行中、② 二巡目準備（形の登録）、③ 二巡目 進行中、④ 決戦 進行中、⑤ 二巡目終了・最終結果・アーカイブです。準備中は工程表のどの段も塗られません（①の前）。</li>
+      <li>状態との対応は、① 一巡目 進行中、② 二巡目準備（形の登録）、③ 二巡目 進行中、④ 最終組 進行中、⑤ 二巡目終了・最終結果・アーカイブです。準備中は工程表のどの段も塗られません（①の前）。</li>
       <li>② のときは1行の右の <span class="ui">形登録へ →</span> で <span class="ui">二巡目の形登録</span> の区画へ（形登録の区画の工程表では、右の <span class="ui">試合進行へ →</span> で戻れます）、二巡目終了・最終結果のときは <span class="ui">結果確認へ →</span> で結果確認へ移れます。</li>
       <li>CSV エクスポートは <span class="ui">結果確認</span> にあります（この区画の <span class="ui">⋯</span> はなくなりました）。</li>
     </ul>
     <p>工程表の下は、状態によって次のものが出ます。</p>
     <ul>
-      <li><span class="ui">二巡目 進行中</span> — <span class="msg">決戦（ベスト4・A コートの最後）: …</span> の1行（決戦に出る人の名前を試技順で）。コートのカードのうち、決戦のカードは A コートの男子のカードの直後に並びます（<span class="ui">開始前</span>）。</li>
-      <li><span class="ui">決戦 進行中</span> — 先頭に決戦のカードと暫定順位。ほかのコートは折りたたまれます。</li>
+      <li><span class="ui">二巡目 進行中</span> — <span class="msg">最終組（一巡目上位 4 名・A コートの最後）: …</span> と <span class="msg">暫定ベスト4（合計）: …　残り n 名</span> の2行と、<span class="term">暫定ベスト4（合計）</span> の表（順位・名前・一巡目・二巡目・合計）。コートのカードのうち、最終組のカードは A コートの男子のカードの直後に並びます（<span class="ui">開始前</span>）。</li>
+      <li><span class="ui">最終組 進行中</span> — 同じ2行と暫定ベスト4 の表。先頭に最終組のカード。ほかのコートは折りたたまれます。</li>
       <li><span class="ui">二巡目終了</span> — 3部門（<span class="ui">一般男子</span> <span class="ui">新人枠</span> <span class="ui">一般女子</span>）の<span class="term">上位3名</span>（名前と合計点）を横3列の小さな表で。同点は同順位なので、4名以上並ぶことがあります。<span class="ui">結果確認で全順位 →</span> で結果確認へ。押すボタンは工程表の中の <span class="ui">結果を確定して表彰へ ▶</span> です。</li>
       <li><span class="ui">最終結果</span> — <span class="term">表彰</span>の区画。上位3名の表と、<span class="ui">発表モードで開く</span> <span class="ui">共有リンクをコピー</span> <span class="ui">成績表（HTML）を保存</span> のボタン（結果確認と同じ処理です）。自動で結果確認へは移りません。得点・選手・技は編集できません。</li>
       <li>順位が取れなかったときは <span class="msg">順位を読み込めませんでした。↻ 最新に更新</span> と出ます。</li>
@@ -604,7 +604,7 @@
       <li>できた表で、申請された形（申請の無い人は一巡目の形）を確かめ、当日の変更があった選手の技を直します。3つ入れるのが基本です。</li>
       <li>確かめ終えたら <span class="ui">二巡目を開始 ▶</span> を押します。</li>
     </ol>
-    <p>PC 用では、一巡目を終了すると左のメニューに <span class="ui">二巡目の形登録</span> が出て（二巡目準備のときだけ）、自動でその区画へ移ります。<span class="ui">試合進行</span> の工程表の ② からは <span class="ui">形登録へ →</span> で開けます。二巡目が <span class="term">巡・No.・名前・一巡目（一巡目の得点）・一巡目から・技1・技2・技3</span> の表になり、下に <span class="ui">決戦（暫定ベスト4）</span> の表が続きます。区画の先頭に<span class="term">工程表</span>が出ていて、確かめ終えたらその <span class="ui">二巡目を開始 ▶</span> を押します（表の末尾の <span class="ui">▲ 確かめ終えたら、上の「二巡目を開始 ▶」へ</span> を押すと、工程表までスクロールします）。二巡目を開始すると、自動で <span class="ui">試合進行</span> へ移ります。コート別の進み具合を先に見たいときは、工程表の右の <span class="ui">試合進行へ →</span> です。</p>
+    <p>PC 用では、一巡目を終了すると左のメニューに <span class="ui">二巡目の形登録</span> が出て（二巡目準備のときだけ）、自動でその区画へ移ります。<span class="ui">試合進行</span> の工程表の ② からは <span class="ui">形登録へ →</span> で開けます。二巡目が <span class="term">巡・No.・名前・一巡目（一巡目の得点）・一巡目から・技1・技2・技3</span> の表になり、下に <span class="ui">最終組（一巡目上位 4 名）</span> の表が続きます。区画の先頭に<span class="term">工程表</span>が出ていて、確かめ終えたらその <span class="ui">二巡目を開始 ▶</span> を押します（表の末尾の <span class="ui">▲ 確かめ終えたら、上の「二巡目を開始 ▶」へ</span> を押すと、工程表までスクロールします）。二巡目を開始すると、自動で <span class="ui">試合進行</span> へ移ります。コート別の進み具合を先に見たいときは、工程表の右の <span class="ui">試合進行へ →</span> です。</p>
     <ul>
       <li>技は<span class="term">選ぶだけ</span>で保存されます。まだ空の枠は赤い枠で示されます。</li>
       <li>行の右の <span class="ui">一巡目と同じ形に戻す</span> で、その選手の一巡目の技がそのまま入ります。</li>
@@ -619,10 +619,10 @@
     <p>技が入ると、各コートの採点画面の選手一覧に二巡目の選手が並びます。</p>
     <p>スマホ用の <span class="ui">試合進行</span> タブでも同じことができます。こちらは1人1枚のカードで、<span class="ui">① ＋</span> <span class="ui">② ＋</span> <span class="ui">③ ＋</span> の枠をタップして技を選びます。カードの右上の小さな札 <span class="ui">一巡目と同じ</span> / <span class="ui">変更</span> は、一巡目の形と比べた結果です。一覧の末尾の <span class="ui">▲ 確かめ終えたら、上の「二巡目を開始 ▶」へ</span> を押すと、先頭の段階表示（<span class="ui">二巡目を開始 ▶</span> のボタン）までスクロールします。</p>
 
-    <p>スマホ用の <span class="ui">試合進行</span> タブには工程表はありません。上の <span class="ui">現在の状態</span> と次へ進むボタンの下に、その状態でやることの1行が出ます（ボタン名は PC 用と同じ <span class="ui">決戦を終了 ▶</span> <span class="ui">結果を確定して表彰へ ▶</span> です）。</p>
+    <p>スマホ用の <span class="ui">試合進行</span> タブには工程表はありません。上の <span class="ui">現在の状態</span> と次へ進むボタンの下に、その状態でやることの1行が出ます（ボタン名は PC 用と同じ <span class="ui">最終組を終了 ▶</span> <span class="ui">結果を確定して表彰へ ▶</span> です）。</p>
     <ul>
-      <li><span class="ui">二巡目 進行中</span> — <span class="msg">決戦（ベスト4・A コートの最後）: …</span> の1行が出ます。決戦のカードは A コートの男子の直後に並びます。<span class="ui">決戦 進行中</span> のときは、決戦のカードが先頭です。</li>
-      <li><span class="ui">二巡目終了</span> — 3部門の上位3名が、縦に3つの小さな表で出ます。<span class="ui">結果確認で全順位 →</span> で結果確認タブへ。</li>
+      <li><span class="ui">二巡目 進行中</span>・<span class="ui">最終組 進行中</span> — <span class="msg">最終組（一巡目上位 4 名・A コートの最後）: …</span> と <span class="msg">暫定ベスト4（合計）: …　残り n 名</span> の2行が出ます（PC 用と同じ文言）。最終組のカード（<span class="ui">最終組（一巡目上位 4 名・A コートの最後）　開始前</span>）は A コートの男子の直後に並びます。<span class="ui">最終組 進行中</span> のときは、最終組のカードが先頭です。</li>
+      <li><span class="ui">二巡目終了</span> — <span class="msg">ベスト4（合計）: …</span> の1行と、3部門の上位3名が縦に3つの小さな表で出ます（最終結果の <span class="ui">表彰</span> も同じ）。<span class="ui">結果確認で全順位 →</span> で結果確認タブへ。</li>
       <li><span class="ui">最終結果</span> — <span class="ui">表彰</span> の区画に、上位3名の表と <span class="ui">発表モードで開く</span> <span class="ui">共有リンクをコピー</span> <span class="ui">成績表（HTML）を保存</span> のボタンが出ます。</li>
       <li><span class="ui">二巡目終了</span> 以降は、選手のカードの一覧が <span class="ui">二巡目の明細</span> に折りたたまれます（タップで開きます）。</li>
     </ul>
@@ -634,8 +634,8 @@
     <p>コートが決まっていない選手の二巡目は作れません。一巡目を終了すると <span class="msg">コートが決まっていない（未分類の）選手が n 名います。二巡目には入っていません。</span> と知らせます。選手登録でコートを設定し、一巡目に戻して終了し直してください。</p>
 
     <figure class="shot-mobile">
-      <img src="help/img/admin_round.png" loading="lazy" alt="運営画面の試合進行タブ。現在の状態「二巡目準備（形の登録）」、二巡目の形登録の注記、採点画面へ、コート絞り込み、二巡目の選手と技の枠、決戦（暫定ベスト4）の区画。">
-      <figcaption>試合進行タブ（画像は <span class="ui">一巡目と同じ</span> / <span class="ui">変更</span> の札が付く前のものです）。<span class="ui">二巡目準備（形の登録）</span> のときだけ技を直せます。<span class="ui">二巡目 9名　技 未入力 0</span> の行で、技がまだの人数が分かります。行の右上の <span class="ui">一巡目 84</span> はその選手の一巡目の得点です。下は <span class="ui">決戦（暫定ベスト4）</span> の区画です。</figcaption>
+      <img src="help/img/admin_round.png" loading="lazy" alt="運営画面の試合進行タブ。現在の状態「二巡目準備（形の登録）」、二巡目の形登録の注記、採点画面へ、コート絞り込み、二巡目の選手と技の枠、最終組（一巡目上位 4 名）の区画。">
+      <figcaption>試合進行タブ（画像は <span class="ui">一巡目と同じ</span> / <span class="ui">変更</span> の札が付く前のものです）。<span class="ui">二巡目準備（形の登録）</span> のときだけ技を直せます。<span class="ui">二巡目 9名　技 未入力 0</span> の行で、技がまだの人数が分かります。行の右上の <span class="ui">一巡目 84</span> はその選手の一巡目の得点です。下は <span class="ui">最終組（一巡目上位 4 名）</span> の区画です（画像は呼び名を「最終組」に改める前のものです）。</figcaption>
     </figure>
 
     <figure class="shot-mobile">
@@ -643,14 +643,21 @@
       <figcaption><span class="ui">B コート</span> のチップで絞り込んだところ。技が入った枠は黒くなり、技名が出ます。この状態で <span class="ui">採点画面へ</span> を押すと、B コートの採点画面が開きます。</figcaption>
     </figure>
 
-    <h3>決戦（暫定ベスト4）</h3>
-    <p>一巡目を終了したとき、<span class="term">一般男子（新人を含む）の一巡目の得点の上位4名</span>を <span class="term">決戦</span> の選手として、<span class="term">A コート</span>（コートの並びの先頭）の二巡目の最後に並べます。決戦用の別のコートはありません。4位が同点のときは同点の全員が入ります。得点が0点の選手は入りません。一般女子は決戦には入りません。</p>
+    <h3>最終組とベスト4</h3>
+    <p><span class="term">最終組</span>と<span class="term">ベスト4</span>は別のものです。最終組は<span class="term">斬る順番の演出</span>（選考ではありません）、ベスト4 は<span class="term">結果（合計の上位）</span>です。二巡目の結果で入れ替わるので、2つの顔ぶれが一致しないことがあります。</p>
+    <p><span class="term">最終組</span>: 一巡目を終了したとき、<span class="term">一般男子（新人を含む）の一巡目の得点の上位4名</span>を最終組として、<span class="term">A コート</span>（コートの並びの先頭）の二巡目の最後にまとめて並べます。別のコートはありません。4位が同点のときは同点の全員が入ります。得点が0点の選手は入りません。一般女子は入りません。</p>
     <ul>
-      <li>暫定ベスト4 は A コートの通常の選手が全員終わってから斬ります。他のコートは通常の二巡目が終われば終わりです。</li>
-      <li>決戦の試技順は <span class="term">一巡目の得点が低い順</span>です（最後に斬るのが一巡目の1位）。番号は A コートの男子の二巡目の続き番号です（例: A コートの通常の男子が 5 名なら 6 番から）。</li>
-      <li>決戦の1本で最終得点が決まります（3本目はありません）。</li>
-      <li>暫定ベスト4 は、一巡目を終了した時点の一巡目の確定得点で選びます。そのあとで一巡目の得点が確定・変更されて選び直した結果と違ってしまったら、試合進行（PC・スマホ）と形登録に <span class="msg">⚠ 暫定ベスト4 が、今の一巡目の確定得点で選び直した結果と違います。</span> と出て、入るべき選手・外れるべき選手を並べます。二巡目に採点済みがなければ、<span class="ui">◀ 戻す</span> で一巡目に戻して一巡目を終了し直すと選び直せます。二巡目に採点済みの選手がいるときは自動では選び直さないので、決戦の選手を確かめてください。</li>
-      <li>決戦の暫定順位は <span class="ui">発表モード</span> の <span class="ui">決戦</span>、<span class="ui">配信用ボード</span>（決戦 進行中に A コートを映しているとき）、<span class="ui">共有リンク</span> に出ます。斬った人から順に埋まります。</li>
+      <li>最終組は A コートの通常の選手が全員終わってから斬ります。他のコートは通常の二巡目が終われば終わりです。</li>
+      <li>最終組の試技順は <span class="term">一巡目の得点が低い順</span>です（最後に斬るのが一巡目の1位）。番号は A コートの男子の二巡目の続き番号です（例: A コートの通常の男子が 5 名なら 6 番から）。</li>
+      <li>最終組の試技は<span class="term">二巡目の1本</span>です（追加の試技や3本目はありません）。順位はほかの人と同じく 一巡目＋二巡目 の合計です。</li>
+      <li>最終組は、一巡目を終了した時点の一巡目の確定得点で選びます。そのあとで一巡目の得点が確定・変更されて選び直した結果と違ってしまったら、試合進行（PC・スマホ）と形登録に <span class="msg">⚠ 最終組（一巡目上位 4 名）が、今の一巡目の確定得点で選び直した結果と違います。</span> と出て、入るべき選手・外れるべき選手を並べます。二巡目に採点済みがなければ、<span class="ui">◀ 戻す</span> で一巡目に戻して一巡目を終了し直すと選び直せます。二巡目に採点済みの選手がいるときは自動では選び直さないので、最終組の選手を確かめてください。</li>
+      <li>最終組の中の暫定順位（斬った人から埋まる）は、<span class="ui">配信用ボード</span>（最終組 進行中に A コートを映しているとき）の <span class="ui">最終組</span> の表に出ます。</li>
+    </ul>
+    <p><span class="term">ベスト4</span>: 一般男子（新人を含む）の <span class="term">合計（一巡目＋二巡目）の上位4名</span>です。4位が同点なら同点の全員が入ります。合計0点以下の人は入りません。</p>
+    <ul>
+      <li>二巡目の途中は<span class="term">暫定ベスト4</span>です。二巡目の採点が確定するたびに動き、<span class="msg">残り n 名</span>（二巡目がまだ確定していない一般男子の人数）を添えます。二巡目がまだの人は二巡目が「—」で、合計は一巡目だけです。</li>
+      <li>全員が斬り終える（二巡目が全員確定する）か、最終結果にすると<span class="term">ベスト4</span>として確定します。</li>
+      <li>見られる場所: 試合進行（PC・スマホ）、二巡目終了・表彰の要約、<span class="ui">共有リンク</span>、<span class="ui">発表モード</span> の <span class="ui">ベスト4</span>。順位表の一般男子の上位4名（合計1点以上）と同じ人・同じ順位です。</li>
     </ul>
 
     <h3>通信が切れても続けられます</h3>
@@ -777,7 +784,7 @@
       <li>URL は <code>share.html#（トークン）</code> の形です。大会ごとに1本で、何度押しても同じ URL が返ります。</li>
       <li>受け取った人は、ログインなしで順位だけを見られます。採点や書き換えはできません。</li>
       <li>ページを開いたままにしておくと、60秒ごとに自動で最新の順位に変わります。配り直す必要はありません。</li>
-      <li><span class="ui">決戦 進行中</span> は、部門ごとの順位の上に <span class="ui">決戦（暫定）</span> の表が出ます。斬った人から合計と順位が埋まります。</li>
+      <li><span class="ui">二巡目 進行中</span> から（最終結果・アーカイブでも）、部門ごとの順位の上に <span class="ui">暫定ベスト4（合計）　残り n 名</span> の表が出ます（全員が斬り終えると <span class="ui">ベスト4（合計）</span>）。名前の下に一巡目・二巡目の得点が小さく出ます。二巡目準備（形の登録）までは出ません。</li>
     </ul>
 
     <figure class="shot-mobile">
@@ -787,7 +794,7 @@
 
     <h3>会場の大画面で見せる（発表モード）</h3>
     <p>結果確認タブで <span class="ui">発表モードで開く</span> を押すと、新しいタブで発表モードが開きます。会場のプロジェクターやテレビにつないだ端末で押してください。</p>
-    <p>上に <span class="ui">掲示</span> <span class="ui">発表</span> <span class="ui">決戦</span> <span class="ui">更新</span> <span class="ui">全画面</span> のボタンがあります。<span class="ui">決戦 進行中</span> の大会は、開いた時点で自動的に <span class="ui">決戦</span> モードになります。</p>
+    <p>上に <span class="ui">掲示</span> <span class="ui">発表</span> <span class="ui">ベスト4</span> <span class="ui">更新</span> <span class="ui">全画面</span> のボタンがあります。開いた時点は、大会の状態によらず <span class="ui">掲示</span> です（ほかのモードへ自動では切り替わりません）。</p>
 
     <h3>掲示</h3>
     <ul>
@@ -815,10 +822,14 @@
 
     <div class="note">発表の直前には <span class="ui">更新</span> を押して、最新の順位になっているか確かめてください。<span class="ui">全画面</span> でメニューを消せます。</div>
 
-    <h3>決戦</h3>
+    <h3>ベスト4</h3>
     <ul>
-      <li>暫定ベスト4 が試技順に並びます。斬った人から合計と暫定順位が埋まり、まだの人は「n番」と「—」のままです。</li>
-      <li>60秒ごとに自動で取り直します。<span class="ui">掲示</span>・<span class="ui">発表</span> に切り替えても、あとで <span class="ui">決戦</span> に戻れます。一度自分でモードを選ぶと、決戦が終わるまでは自動では切り替わりません。</li>
+      <li><span class="ui">ベスト4</span> を押すと <span class="msg">タップで 4位から発表します</span> と出ます。画面をタップするか <span class="ui">→</span>・スペースキーで、<span class="term">4位 → 3位 → 2位 → 1位</span> の順に出ます（カウントダウン）。<span class="ui">←</span> キーで1つ戻せます。</li>
+      <li>1人ごとに、順位・名前・<span class="term">合計</span>（大きく）と、一巡目・二巡目の得点が出ます。出し終えた人は上に積まれ（最後は1位が一番上）、いま出した人が大きく強調されます。</li>
+      <li>同点の人は同じ順位で同時に出ます（例: 3位が2人なら、3位の2人が一緒に出ます）。</li>
+      <li>全員出し終えると <span class="msg">以上がベスト4 です</span> と出ます。</li>
+      <li>二巡目がまだ全員確定していないときは、見出しが <span class="ui">暫定ベスト4</span> になり、<span class="msg">残り n 名</span> が小さく添えられます（リハーサルや途中経過の発表に使えます）。全員確定するか最終結果にすると、見出しが <span class="ui">ベスト4 発表</span> になります。</li>
+      <li>60秒ごとに自動で取り直します。発表の直前には <span class="ui">更新</span> を押してください。</li>
     </ul>
 
     <h3>YouTube 配信（OBS）に映す</h3>
@@ -839,7 +850,7 @@
       <li>そのコートでまだ誰も開いていないときは <span class="msg">待機中</span> と出ます。採点画面でその大会とコートを選べば映り始めます。</li>
       <li>採点が <span class="ui">確定</span> 済みの選手は、得点と合計が青くなり <span class="ui">確定</span> の札が付きます。</li>
       <li>通信が途切れても直前の表示は消えません。右下に小さく <span class="msg">更新できません</span> と出るだけで、つながれば自動で戻ります。</li>
-      <li><span class="ui">決戦 進行中</span> のあいだ、暫定ベスト4 が並ぶ A コートを映しているボード（<code>board.html#（トークン）/A</code>）は、採点表の下に <span class="ui">決戦（暫定）</span> の順位表も出ます。<span class="ui">二巡目 進行中</span> や他のコートには出ません。</li>
+      <li><span class="ui">最終組 進行中</span> のあいだ、最終組（一巡目上位 4 名）が並ぶ A コートを映しているボード（<code>board.html#（トークン）/A</code>）は、採点表の下に <span class="ui">最終組</span> の表（一巡目・二巡目・合計と、最終組の中の暫定順位）も出ます。<span class="ui">二巡目 進行中</span> や他のコートには出ません。ベスト4 はボードには出ません（共有リンクと発表モードで見せます）。</li>
     </ul>
 
     <div class="note">配信用ボードのアドレスは共有リンクと同じトークンを使います。配信に映すだけなら誰にも配る必要はありません（URL を知られると順位も見られます）。</div>
@@ -916,7 +927,7 @@
     <ul>
       <li><span class="msg">CSV の文字が化けていて読み取れませんでした。</span> — UTF-8 でも Shift_JIS でも読めませんでした。Excel なら <span class="ui">CSV UTF-8（コンマ区切り）</span> で保存し直してください。</li>
       <li><span class="msg">CSV の 1 行目（見出し）が、読み込める形式と合っていません。</span> — 1 行目を簡易形式（<span class="ui">名前</span> <span class="ui">コート</span> <span class="ui">性別</span> <span class="ui">技①</span> … <span class="ui">二巡目技①</span> <span class="ui">二巡目技②</span> <span class="ui">二巡目技③</span>）か、結果確認の <span class="ui">CSV エクスポート</span> の見出しにそろえてください。列を足す・抜く・並べ替えると読めません。</li>
-      <li><span class="msg">二巡目がある大会には、結果確認の CSV エクスポートで書き出した形のファイル（23 列。以前の 20 列も可）だけ取り込めます（置き換え・追記とも）。</span> — 二巡目の行がある大会を別の形の CSV で取り込むと、決戦の印や一巡目とのつながりが切れた行ができるため断ります。エクスポートしたファイルを使ってください。</li>
+      <li><span class="msg">二巡目がある大会には、結果確認の CSV エクスポートで書き出した形のファイル（23 列。以前の 20 列も可）だけ取り込めます（置き換え・追記とも）。</span> — 二巡目の行がある大会を別の形の CSV で取り込むと、最終組の印（CSV の列「決戦」）や一巡目とのつながりが切れた行ができるため断ります。エクスポートしたファイルを使ってください。</li>
       <li><span class="msg">取り込む間に選手の人数が変わりました</span> — 確かめている間に他の端末が選手を足した・消したときです。何も消さずに画面を読み直します。内容を確かめて、もう一度取り込んでください。</li>
     </ul>
 

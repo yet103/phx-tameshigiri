@@ -111,42 +111,66 @@ var Share = (function() {
     elHead.appendChild(meta);
   }
 
-  // 決戦の表を出す状態。二巡目準備（round1_done）ではまだ候補名を公開しない（形の登録中で、
-  // 一巡目の直しで選び直すこともある）。最終結果（final）以降は順位が確定しているので
-  // 「決戦（暫定）」を残さない（網羅検証 S11。2026-10-01）。
-  var FINALE_STATES = ['round2', 'round2_final', 'round2_done'];
+  // ベスト4（合計）の表を出す状態。二巡目準備（round1_done）以前は出さない（一巡目だけの合計は
+  // ベスト4 ではない）。最終結果・アーカイブでも出す（表彰で見るため）。設計書 2026-10-04 3.2。
+  var BEST4_STATES = ['round2', 'round2_final', 'round2_done', 'final', 'archived'];
 
-  // 決戦（暫定ベスト4）の表。finale が無ければ何も足さない。
-  // 順位の上に出す（いま会場で進んでいるのは決戦なので、参加者が最初に見たいもの）。
-  function renderFinale(finale) {
-    if (!finale || !Array.isArray(finale.rows) || finale.rows.length === 0) return null;
-    if (FINALE_STATES.indexOf(finale.status) === -1) return null;
+  // 共有リンクの応答には大会の状態そのものは無いので、最終組の表（finale.status）から読む。
+  // 最終組がいない大会（finale が null）は、確定したベスト4（best4.final。最終結果・アーカイブ、
+  // または二巡目が全員確定）のときだけ出す。
+  function best4Visible(best4, finale) {
+    if (!best4 || !Array.isArray(best4.rows)) return false;
+    if (finale && typeof finale.status === 'string') return BEST4_STATES.indexOf(finale.status) !== -1;
+    return best4.final === true;
+  }
+
+  // ベスト4（一般男子の合計の上位 4 名・同点は全員）の表。確定前は「暫定ベスト4（合計）」に
+  // 残り人数を添える。順位の上に出す（会場でいま一番気になる表なので）。
+  function renderBest4(best4, finale) {
+    if (!best4Visible(best4, finale)) return null;
     var section = document.createElement('section');
-    section.className = 'share-section share-finale';
+    section.className = 'share-section share-best4';
 
     var h2 = document.createElement('h2');
-    h2.textContent = '決戦（暫定）';
+    h2.textContent = (best4.final ? 'ベスト4' : '暫定ベスト4') + '（合計）';
+    if (!best4.final) {
+      var rest = document.createElement('span');
+      rest.className = 'share-best4-rest';
+      rest.textContent = '残り ' + (Number(best4.remaining) || 0) + ' 名';
+      h2.appendChild(rest);
+    }
     section.appendChild(h2);
+
+    if (best4.rows.length === 0) {
+      var empty = document.createElement('p');
+      empty.className = 'share-empty';
+      empty.textContent = best4.final ? 'いません' : 'まだいません';
+      section.appendChild(empty);
+      return section;
+    }
 
     var ul = document.createElement('ul');
     ul.className = 'share-list';
-    finale.rows.forEach(function(r) {
+    best4.rows.forEach(function(r) {
       var li = document.createElement('li');
-      if (!r.scored) li.className = 'pending';
 
       var rankEl = document.createElement('span');
       rankEl.className = 'share-rank';
-      rankEl.textContent = r.rank === null ? String(r.order) + '番' : String(r.rank);
+      rankEl.textContent = String(r.rank);
       li.appendChild(rankEl);
 
       var nameEl = document.createElement('span');
       nameEl.className = 'share-name';
-      nameEl.textContent = r.name;
+      nameEl.appendChild(document.createTextNode(r.name));
+      var detail = document.createElement('span');
+      detail.className = 'share-best4-detail';
+      detail.textContent = '一巡目 ' + (r.r1 == null ? '—' : r.r1) + '　二巡目 ' + (r.r2 == null ? '—' : r.r2);
+      nameEl.appendChild(detail);
       li.appendChild(nameEl);
 
       var scoreEl = document.createElement('span');
       scoreEl.className = 'share-score';
-      scoreEl.textContent = r.scored ? String(r.total) : '—';
+      scoreEl.textContent = String(r.total);
       li.appendChild(scoreEl);
 
       ul.appendChild(li);
@@ -155,10 +179,10 @@ var Share = (function() {
     return section;
   }
 
-  function renderBody(rankings, finale) {
+  function renderBody(rankings, best4, finale) {
     elBody.textContent = '';
-    var fin = renderFinale(finale);
-    if (fin) elBody.appendChild(fin);
+    var b4 = renderBest4(best4, finale);
+    if (b4) elBody.appendChild(b4);
     for (var i = 0; i < CATEGORIES.length; i++) {
       var cat = CATEGORIES[i];
       var list = (rankings && rankings[cat.key]) || [];
@@ -239,7 +263,7 @@ var Share = (function() {
         lastUpdatedAt = updatedAt;
         rendered = true;
         renderHead(result.data.event || {});
-        renderBody(result.data.rankings || {}, result.data.finale);
+        renderBody(result.data.rankings || {}, result.data.best4, result.data.finale);
       }
 
       if (isFirstSuccess && result.data.event && result.data.event.name) {
@@ -307,6 +331,7 @@ var Share = (function() {
   });
 
   return {
-    refresh: refresh
+    refresh: refresh,
+    best4Visible: best4Visible
   };
 })();
