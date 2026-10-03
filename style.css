@@ -353,6 +353,8 @@ body { max-width: var(--page-max-width); margin: 0; }
 /* ===== 確定 ===== */
 .btn-confirm { background: var(--btn-confirm); color: #fff; }        /* 未確定＝水色 */
 .btn-confirm.on { background: var(--btn-confirm-on); color: #fff; }  /* 確定済み＝青 */
+/* 「確定して次へ ▶」は確定と同じ色で、確定済みの表示（.on）には連動しない（押すと次へ移るだけ） */
+.btn-confirm-next { white-space: nowrap; }
 
 /* ===== アクションバー =====
    .action-block の1段目（補正点・備考のすぐ下）。2段目の .timer-bar との境界線はここの

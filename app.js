@@ -443,6 +443,7 @@ var App = (function() {
 
     document.getElementById('btnPlayerListToggle').addEventListener('click', togglePlayerList);
     btnConfirm.addEventListener('click', onConfirm);
+    document.getElementById('btnConfirmNext').addEventListener('click', onConfirmNext);
     totalAdjustInput.addEventListener('change', onTotalAdjustChange);
     noteInput.addEventListener('change', onNoteChange);
     btnNotePreset.addEventListener('click', openNotePresetSheet);
@@ -635,6 +636,8 @@ var App = (function() {
     document.body.classList.toggle('scoring-locked', locked);
     document.body.classList.toggle('score-frozen', frozen);
     btnConfirm.disabled = locked || gridBlocked;
+    // 「確定して次へ」は確定と同じ条件で押せる（確定済みなら次へ移るだけ）
+    document.getElementById('btnConfirmNext').disabled = locked || gridBlocked;
     var btnRecalc = document.getElementById('btnRecalc');
     if (btnRecalc) btnRecalc.disabled = locked;
     document.getElementById('btnAllSuccess').disabled = frozen;
@@ -1594,6 +1597,24 @@ var App = (function() {
       return;
     }
     confirmCurrent(false);
+  }
+
+  // 「確定して次へ ▶」（ユーザー要望 2026-10-04）。確定ボタンと次の選手ボタンを 1 回で。
+  // 未確定なら確定（確定の確認文はそのまま出る）してから次の選手へ。確定できなければ留まる。
+  // 確定済みで押したら、取り消しはせずに次の選手へ移るだけ（取り消しは「確定済み」ボタンで）。
+  // 最後の選手なら確定だけして、その旨を知らせる。
+  function onConfirmNext() {
+    if (!currentEvent) { alert('大会が選択されていません。'); return; }
+    var p = visiblePlayers[currentIndex];
+    if (!p) return;
+    if (!p.confirmed && !confirmCurrent(false)) return;
+    var next = currentIndex + 1;
+    if (next >= visiblePlayers.length) {
+      alert('確定しました。この選手が最後です。');
+      return;
+    }
+    saveCurrentState();
+    selectPlayer(next);
   }
 
   // 表示中の選手を確定できるか（技があり、内訳が復元できている）。
