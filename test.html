@@ -4785,10 +4785,10 @@
       '二巡目の未確定が 1名います。\n二巡目を終了しますか？');
     assert('statusConfirmMessage: round2_done → final は全巡目の未確定を出す（S2）',
       Courts.statusConfirmMessage('round2_done', 'final', tcP),
-      '⚠ 未確定が 一巡目 1名・二巡目 1名 います（未確定の得点は順位に入りません）。\n得点・選手・技を編集できなくなります。\n最終結果を確定しますか？');
+      '⚠ 未確定が 一巡目 1名・二巡目 1名 います（未確定の得点は順位に入りません）。\n得点・選手・技を編集できなくなります。\n結果を確定して表彰へ進みますか？');
     assert('statusConfirmMessage: round2_done → final で全員確定なら従来の文言',
       Courts.statusConfirmMessage('round2_done', 'final', [tcP[0]]),
-      '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？');
+      '得点・選手・技を編集できなくなります。\n結果を確定して表彰へ進みますか？');
     assert('statusConfirmMessage: final → archived',
       Courts.statusConfirmMessage('final', 'archived', tcP),
       '一覧のアーカイブ欄に移り、採点画面の選択肢から消えます。\nアーカイブしますか？');
@@ -4835,7 +4835,7 @@
       '決戦以外の未確定がいません。\n決戦を開始しますか？');
     assert('statusConfirmMessage: round2_final → round2_done は決戦の未採点を数える',
       Courts.statusConfirmMessage('round2_final', 'round2_done', cfP),
-      '決戦の未確定が 1名います。\n二巡目を終了しますか？');
+      '決戦の未確定が 1名います。\n決戦を終了しますか？');
     assert('statusConfirmMessage: round2_final → round2 は戻す文言',
       Courts.statusConfirmMessage('round2_final', 'round2', cfP),
       '二巡目 進行中に戻します。よろしいですか？');

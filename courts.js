@@ -605,7 +605,7 @@ var Courts = (function() {
     if (from === 'round2_final' && to === 'round2_done') {
       return countPhrase('決戦の未確定',
         EventStatus.finalists(list).filter(function(p) { return !isConfirmed(p); }).length) +
-        '\n二巡目を終了しますか？';
+        '\n決戦を終了しますか？';
     }
     if (from === 'round2' && to === 'round2_done') {
       return countPhrase('二巡目の未確定', round(2).filter(function(p) { return !isConfirmed(p); }).length) +
@@ -615,7 +615,7 @@ var Courts = (function() {
       return '最終結果に戻します。よろしいですか？';
     }
     if (to === 'final') {
-      return unconfirmedWarning(list, [1, 2]) + '得点・選手・技を編集できなくなります。\n最終結果を確定しますか？';
+      return unconfirmedWarning(list, [1, 2]) + '得点・選手・技を編集できなくなります。\n結果を確定して表彰へ進みますか？';
     }
     if (to === 'archived') {
       return '一覧のアーカイブ欄に移り、採点画面の選択肢から消えます。\nアーカイブしますか？';

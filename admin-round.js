@@ -170,7 +170,7 @@ var AdminRound = (function() {
     p.id = 'roundFinaleLine';
     var fin = Courts.finalists(players);
     if (fin.length === 0) {
-      p.textContent = '決戦の候補はいません（一般男子の一巡目の確定得点が 0 点を超える人がいない）';
+      p.textContent = '決戦の候補はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）';
     } else {
       p.textContent = '決戦（ベスト' + EventStatus.FINALIST_COUNT + '・' + Courts.finaleCourt(players) +
         ' コートの最後）: ' + fin.map(function(r) { return String(r.name || '').trim(); }).join('・');
