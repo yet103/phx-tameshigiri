@@ -23,16 +23,20 @@
   };
 
   // 「次へ進む」ボタンの文言。archived から進む先は無い。
+  // 決戦のあとは「決戦を終了」、二巡目終了からは「結果を確定して表彰へ」（2026-10-04 試合進行の
+  // 二巡目以降の見直し。状態名 round2_done の「二巡目終了」は変えない）。
   var NEXT_LABELS = {
     draft: '試合開始',
     round1: '一巡目を終了',
     round1_done: '二巡目を開始',
     round2: '決戦を開始',
-    round2_final: '二巡目を終了',
-    round2_done: '最終結果を確定',
+    round2_final: '決戦を終了',
+    round2_done: '結果を確定して表彰へ',
     final: 'アーカイブ',
     archived: null
   };
+  // 決戦の無い大会で二巡目 進行中から二巡目終了へ進むボタンの文言（nextLabel）
+  var ROUND2_END_LABEL = '二巡目を終了';
 
   // 許される遷移（設計書「状態と遷移」の表）。ここに無い組み合わせはサーバーが 409 で拒む。
   var TRANSITIONS = {
@@ -296,9 +300,9 @@
 
   // 「次へ進む」ボタンの文言。nextStep と対になる。
   function nextLabel(status, players) {
-    // 決戦が無い大会の二巡目は、そのまま「二巡目を終了」（round2_final の文言を借りる。
-    // 同じ文言を2箇所に書かないため）。
-    if (status === 'round2' && !hasFinalists(players)) return NEXT_LABELS.round2_final;
+    // 決戦が無い大会の二巡目は、そのまま「二巡目を終了」（以前は round2_final の文言を借りていたが、
+    // 決戦のあとの文言を「決戦を終了」にしたので別に持つ）。
+    if (status === 'round2' && !hasFinalists(players)) return ROUND2_END_LABEL;
     var label = NEXT_LABELS[status];
     return label === undefined ? null : label;
   }
@@ -419,6 +423,7 @@
     STATES: STATES,
     LABELS: LABELS,
     NEXT_LABELS: NEXT_LABELS,
+    ROUND2_END_LABEL: ROUND2_END_LABEL,
     canTransition: canTransition,
     next: next,
     prev: prev,

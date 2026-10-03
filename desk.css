@@ -529,6 +529,47 @@ a { color: var(--accent); }
 .desk-match-others { margin-bottom: 16px; }
 .desk-match-others > summary { cursor: pointer; color: var(--text-muted); padding: 4px 0; }
 .desk-match-finale-rank tr.is-pending { color: var(--text-muted); }
+/* 決戦のカードを先頭コートの男子のカードの直後に差し込むとき（desk-match.js の appendGroupsWithFinale。
+   2026-10-04）。金の枠（.desk-match-finale）で囲み、前後のグリッドの余白を詰める */
+.desk-match-finale .desk-match-courts { margin-bottom: 0; }
+.desk-match-courts.split { margin-bottom: 12px; }
+/* 二巡目 進行中の「決戦（ベスト4・A コートの最後）: …」の 1 行（工程表の下） */
+.desk-match-finale-line {
+  margin-bottom: 12px; padding: 6px 12px; font-size: 14px; font-weight: bold;
+  background: var(--card-bg); border: 1px solid var(--gold-deep); border-left: 4px solid var(--gold); border-radius: 4px;
+}
+[data-theme="dark"] .desk-match-finale-line { border-color: var(--gold); }
+
+/* 順位の要約（二巡目終了は工程表の中、最終結果は「表彰」の区画の中。desk-match.js の renderRankSummary）。
+   3 部門の上位 3 名を横 3 列の小さな表に。工程表の黒地の上でも読めるよう、列は紙の地（--card-bg）にする */
+.desk-rank-slot { margin-top: 10px; }
+.desk-rank-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; align-items: start; }
+.desk-rank-col {
+  padding: 6px 10px 8px; border-radius: 6px; background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--gold-deep);
+}
+.desk-rank-col h4 {
+  margin: 0 0 4px; padding-bottom: 3px; font-size: 13px; font-family: var(--mincho);
+  border-bottom: 1px solid var(--border);
+}
+.desk-rank-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.desk-rank-table td { padding: 2px 4px; vertical-align: baseline; }
+.desk-rank-table td.rank { width: 3em; white-space: nowrap; color: var(--text-muted); }
+.desk-rank-table td.name { font-family: var(--mincho); font-weight: bold; overflow-wrap: anywhere; }
+.desk-rank-table td.score { width: 3em; text-align: right; font-weight: bold; color: var(--score-color); }
+.desk-rank-none { font-size: 13px; color: var(--text-muted); }
+.desk-rank-msg { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+.desk-rank-more { margin-top: 8px; }
+
+/* 最終結果の「表彰」の区画（工程表の下）。要約と、結果確認と同じ 3 つのボタン */
+.desk-award {
+  margin-bottom: 16px; padding: 10px 14px; border-radius: 6px;
+  background: var(--card-bg); border: 1px solid var(--gold-deep);
+}
+[data-theme="dark"] .desk-award { border-color: var(--gold); }
+.desk-award .desk-rank-slot { margin-top: 0; }
+.desk-award .desk-rank-more .desk-btn-sub { border: 1px solid var(--gold-deep); }
+.desk-award-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 /* ===== 結果の区画（desk-results.js。計画5） ===== */
 .desk-results-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }

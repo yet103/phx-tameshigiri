@@ -247,4 +247,14 @@
   }
 
   Desk.registerTab('results', { render: render });
+
+  // 試合進行（desk-match.js）の最終結果の「表彰」の区画が、同じ部門の並びと同じ処理を使う（2026-10-04）。
+  // どれも (押したボタン, ctx) を受け取る。present は空のタブをクリックの処理の中で同期に開くので、
+  // 呼ぶ側は await を挟まずにクリックの処理から直接呼ぶこと。
+  window.DeskResults = {
+    CATEGORIES: CATEGORIES,
+    present: onPresent,
+    copyShare: onCopyShare,
+    downloadHtml: onDownloadHtml
+  };
 })();
