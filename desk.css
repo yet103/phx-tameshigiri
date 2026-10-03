@@ -52,7 +52,7 @@ a { color: var(--accent); }
 .desk-stage-step.on { color: var(--accent); font-weight: bold; font-size: 14px; }
 .desk-stage-sep { color: var(--text-muted); }
 .desk-stage-count { font-size: 13px; color: var(--text-muted); }
-/* 現在の段の補足文（決戦 進行中・二巡目終了・アーカイブなど。desk.js の STAGE_NOTES） */
+/* 現在の段の補足文（最終組 進行中・二巡目終了・アーカイブなど。desk.js の STAGE_NOTES） */
 .desk-stage-note { margin-left: 6px; font-size: 12px; font-weight: normal; }
 
 /* ===== ボタン ===== */
@@ -482,7 +482,7 @@ a { color: var(--accent); }
 }
 
 /* 二巡目の形登録の区画（desk-round2.js）。「一巡目から」の列（同じ／変更）と、末尾の「▲ …へ」 */
-/* 「一巡目から」の列を足したぶん、1100px の窓（決戦の枠の中の表）でも横にはみ出さないよう技のセレクトを詰める。
+/* 「一巡目から」の列を足したぶん、1100px の窓（最終組の枠の中の表）でも横にはみ出さないよう技のセレクトを詰める。
    1100px の窓の内側は 1100 − 180 − 15 − 40 = 865px。118px では表が 897px になりはみ出していた（レビュー指摘
    2026-10-03）。セレクトの幅は既定では一番長い選択肢で決まる（min-width だけでは縮まない）ので width で決める
    （下の .desk-match-table select の min-width: 130px もここで上書きする）。
@@ -511,7 +511,7 @@ a { color: var(--accent); }
 .desk-match-table td.copy { text-align: center; }
 .desk-match-table td.copy .desk-btn { min-height: 30px; padding: 0 10px; font-size: 12px; }
 
-/* 決戦（暫定ベスト4）の区画と暫定順位の表。金の細い枠で他のコートと区別する
+/* 最終組（一巡目上位 4 名）の区画とベスト4（合計）の表。金の細い枠で他のコートと区別する
    （--gold 系は「大会トーン」の節と同じ、テーマに依らない黒金の配色）。 */
 .desk-match-finale,
 .desk-match-finale-rank {
@@ -529,16 +529,27 @@ a { color: var(--accent); }
 .desk-match-others { margin-bottom: 16px; }
 .desk-match-others > summary { cursor: pointer; color: var(--text-muted); padding: 4px 0; }
 .desk-match-finale-rank tr.is-pending { color: var(--text-muted); }
-/* 決戦のカードを先頭コートの男子のカードの直後に差し込むとき（desk-match.js の appendGroupsWithFinale。
+/* 最終組のカードを先頭コートの男子のカードの直後に差し込むとき（desk-match.js の appendGroupsWithFinale。
    2026-10-04）。金の枠（.desk-match-finale）で囲み、前後のグリッドの余白を詰める */
 .desk-match-finale .desk-match-courts { margin-bottom: 0; }
 .desk-match-courts.split { margin-bottom: 12px; }
-/* 二巡目 進行中の「決戦（ベスト4・A コートの最後）: …」の 1 行（工程表の下） */
+/* 二巡目 進行中・最終組 進行中の 2 行（工程表の下。desk-match.js の buildMatchLines）。
+   1 行目「最終組（一巡目上位 4 名・A コートの最後）: …」、2 行目（.best4）「暫定ベスト4（合計）: …　残り n 名」。
+   .best4 は二巡目終了・最終結果の順位の要約の上（工程表の黒地・表彰の区画の中）にも出すので、文字色も決める */
+.desk-match-lines { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .desk-match-finale-line {
-  margin-bottom: 12px; padding: 6px 12px; font-size: 14px; font-weight: bold;
+  margin-bottom: 12px; padding: 6px 12px; font-size: 14px; font-weight: bold; color: var(--text);
   background: var(--card-bg); border: 1px solid var(--gold-deep); border-left: 4px solid var(--gold); border-radius: 4px;
 }
+.desk-match-lines .desk-match-finale-line { margin-bottom: 0; }
+.desk-match-finale-line.best4 { border-left-color: var(--vermilion); }
+.desk-rank-slot .desk-match-finale-line.best4 { margin-bottom: 8px; }
 [data-theme="dark"] .desk-match-finale-line { border-color: var(--gold); }
+[data-theme="dark"] .desk-match-finale-line.best4 { border-left-color: var(--vermilion); }
+/* ベスト4 の表の見出しの右の「残り n 名」 */
+/* 5 列だけの表なので画面幅いっぱいに広げない */
+.desk-match-best4 .desk-table { width: auto; min-width: 520px; }
+.desk-match-best4-rest { margin-left: 12px; font-size: 13px; font-weight: normal; color: var(--text-muted); }
 
 /* 順位の要約（二巡目終了は工程表の中、最終結果は「表彰」の区画の中。desk-match.js の renderRankSummary）。
    3 部門の上位 3 名を横 3 列の小さな表に。工程表の黒地の上でも読めるよう、列は紙の地（--card-bg）にする */

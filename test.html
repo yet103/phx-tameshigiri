@@ -6337,18 +6337,20 @@
     assert('stageOf: 段の名前',
       ['draft', 'round1', 'round1_done', 'round2', 'final'].map(function(s) { return Desk.stageOf(s).label; }),
       ['準備中', '一巡目', '形登録', '二巡目', '最終結果']);
-    assert('stageOf: 決戦・二巡目終了・アーカイブは段の補足文で示す',
+    assert('stageOf: 最終組・二巡目終了・アーカイブは段の補足文で示す（最終組は状態の表示名と同じ）',
       ['round2_final', 'round2_done', 'archived', 'final', 'draft'].map(function(s) { return Desk.stageOf(s).note; }),
-      ['決戦 進行中', '二巡目終了', 'アーカイブ', '', '']);
+      ['最終組 進行中', '二巡目終了', 'アーカイブ', '', '']);
+    assert('stageOf: 最終組の補足文は EventStatus.LABELS.round2_final',
+      Desk.stageOf('round2_final').note, EventStatus.LABELS.round2_final);
     assert('stageOf: 知らない状態は -1', Desk.stageOf('zzz').index, -1);
 
     // 状態を変えたあとのトースト（二巡目の形の申請。設計書 2026-10-03 3.4・6.5）
     assert('statusToastText: 生成の結果が無ければ「〜にしました」だけ',
       Desk.statusToastText('round2', null), EventStatus.LABELS.round2 + ' にしました');
-    assert('statusToastText: 申請の形の数と決戦の人数を添える',
+    assert('statusToastText: 申請の形の数と最終組の人数を添える',
       Desk.statusToastText('round1_done', { created: 20, fromRequest: 3, finalistCount: 4 }),
-      EventStatus.LABELS.round1_done + ' にしました（二巡目 20 名分作りました・申請の形 3 名・決戦 4 名）');
-    assert('statusToastText: 申請 0 名・決戦 0 名は書かない',
+      EventStatus.LABELS.round1_done + ' にしました（二巡目 20 名分作りました・申請の形 3 名・最終組 4 名）');
+    assert('statusToastText: 申請 0 名・最終組 0 名は書かない',
       Desk.statusToastText('round1_done', { created: 5, fromRequest: 0, finalistCount: 0 }),
       EventStatus.LABELS.round1_done + ' にしました（二巡目 5 名分作りました）');
     assert('statusToastText: 0 名分なら「作りました」を出さない・追跡できない行は添える',
@@ -6362,8 +6364,8 @@
 
     assert('MATCH_STEPS: 工程表は 5 段',
       DeskMatch.MATCH_STEPS.map(function(s) { return s.label; }),
-      ['① 一巡目', '② 二巡目の形登録', '③ 二巡目', '④ 決戦（ベスト4）', '⑤ 結果・表彰']);
-    assert('matchStepIndex: 準備中は①の手前、二巡目・決戦は③④、二巡目終了・最終結果・アーカイブは⑤',
+      ['① 一巡目', '② 二巡目の形登録', '③ 二巡目', '④ 最終組', '⑤ 結果・表彰']);
+    assert('matchStepIndex: 準備中は①の手前、二巡目・最終組は③④、二巡目終了・最終結果・アーカイブは⑤',
       EventStatus.STATES.map(function(s) { return DeskMatch.matchStepIndex(s); }), [-1, 0, 1, 2, 3, 4, 4, 4]);
     assert('matchStepIndex: 知らない状態は -1', DeskMatch.matchStepIndex('zzz'), -1);
 
@@ -6376,15 +6378,15 @@
       { order: 'B-男子-2-1', name: '男子10' }
     ];
     var DM_NOFIN = [{ order: 'A-男子-1-1', name: '男子01' }, { order: 'A-男子-2-1', name: '男子01' }];
-    assert('stepTodo: 二巡目（決戦あり）はボタンの文言に ▶ を添える',
+    assert('stepTodo: 二巡目（最終組あり）は「最終組以外」と「最終組を開始 ▶」',
       DeskMatch.stepTodo('round2', DM_FIN, 'match'),
-      '各コートで二巡目を採点しています。決戦以外が斬り終わったら「最終組を開始 ▶」を押します。');
-    assert('stepTodo: 二巡目（決戦なし）は「二巡目を終了 ▶」',
+      '各コートで二巡目を採点しています。最終組以外が斬り終わったら「最終組を開始 ▶」を押します。');
+    assert('stepTodo: 二巡目（最終組なし）は「二巡目を終了 ▶」',
       DeskMatch.stepTodo('round2', DM_NOFIN, 'match'),
       '各コートで二巡目を採点しています。全コートの確定がそろったら「二巡目を終了 ▶」を押します。');
-    assert('stepTodo: 決戦 進行中は「決戦を終了 ▶」',
+    assert('stepTodo: 最終組 進行中は「最終組を終了 ▶」',
       DeskMatch.stepTodo('round2_final', DM_FIN, 'match'),
-      '決戦 進行中です（A コートの最後）。斬り終わったら「最終組を終了 ▶」を押します。');
+      '最終組 進行中です（A コートの最後）。斬り終わったら「最終組を終了 ▶」を押します。');
     assert('stepTodo: 二巡目終了は「結果を確定して表彰へ ▶」',
       DeskMatch.stepTodo('round2_done', DM_FIN, 'match'),
       '二巡目が終わりました。下の順位を確かめて「結果を確定して表彰へ ▶」を押します。');
@@ -6397,12 +6399,42 @@
        '申請された二巡目の形（申請の無い人は一巡目の形）が入っています。当日の変更があれば下の表で直し、' +
        '確かめ終えたら「二巡目を開始 ▶」を押します。試技順は一巡目の得点が低い順です。']);
 
-    assert('finaleLineText: 二巡目の決戦の行を試技順に（一巡目の印・印の無い行は入れない・名前は trim）',
-      DeskMatch.finaleLineText(DM_FIN), '決戦（ベスト4・A コートの最後）: 男子01・男子05・男子08');
-    assert('finaleLineText: 候補が 0 名なら理由',
-      DeskMatch.finaleLineText(DM_NOFIN), '決戦の候補はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）');
-    assert('finaleLineText: players が無くても落ちない',
-      DeskMatch.finaleLineText(null), '決戦の候補はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）');
+    // 「決戦」の語は画面から無くした（設計書 2026-10-04-finale-after-round2-design.md。内部名・CSV の列名だけ残す）
+    assert('PC 試合進行: 工程表と全状態の 1 行に「決戦」の語が無い',
+      DeskMatch.MATCH_STEPS.map(function(s) { return s.label; })
+        .concat(EventStatus.STATES.map(function(s) { return DeskMatch.stepTodo(s, DM_FIN, 'match'); }))
+        .concat(EventStatus.STATES.map(function(s) { return DeskMatch.stepTodo(s, DM_FIN, 'round2'); }))
+        .filter(function(t) { return t.indexOf('決戦') !== -1; }), []);
+
+    // 二巡目 進行中・最終組 進行中の 2 行の 1 行目（PC は Courts.finalGroupLineText をそのまま使う）
+    assert('PC 試合進行の 1 行目: 最終組の名前を試技順に（一巡目の印・印の無い行は入れない・名前は trim）',
+      Courts.finalGroupLineText(DM_FIN), '最終組（一巡目上位 4 名・A コートの最後）: 男子01・男子05・男子08');
+
+    // ベスト4（合計）の表（以前の「決戦の暫定順位」を置き換えた。設計書 3.1・D2）
+    var DM_B4 = { final: false, remaining: 3, rows: [
+      { name: '男子08', total: 120, r1: 60, r2: 60, rank: 1 },
+      { name: ' 男子03 ', total: 98, r1: 98, r2: null, rank: 2 },
+      { name: '', total: 98, r1: 40, r2: 58, rank: 2 }
+    ] };
+    assert('best4Caption: 確定前は「暫定ベスト4（合計）」と残り人数',
+      DeskMatch.best4Caption(DM_B4), { title: '暫定ベスト4（合計）', rest: '残り 3 名' });
+    assert('best4Caption: 確定後は「ベスト4（合計）」で残りは出さない（remaining が 0 でなくても）',
+      DeskMatch.best4Caption({ final: true, remaining: 2, rows: [] }), { title: 'ベスト4（合計）', rest: '' });
+    assert('best4Caption: 残り 0 名でも確定前なら出す・best4 が無くても落ちない',
+      [DeskMatch.best4Caption({ final: false, remaining: 0, rows: [] }).rest, DeskMatch.best4Caption(null).title],
+      ['残り 0 名', '暫定ベスト4（合計）']);
+    assert('best4TableRows: 順位・名前・一巡目・二巡目・合計（二巡目がまだなら「—」で pending・名前は trim・空は名称未設定）',
+      DeskMatch.best4TableRows(DM_B4), [
+        { cells: ['1', '男子08', '60', '60', '120'], pending: false },
+        { cells: ['2', '男子03', '98', '—', '98'], pending: true },
+        { cells: ['2', '(名称未設定)', '40', '58', '98'], pending: false }
+      ]);
+    assert('best4TableRows: 0 件・null は空',
+      [DeskMatch.best4TableRows({ final: true, remaining: 0, rows: [] }), DeskMatch.best4TableRows(null)], [[], []]);
+    // 2 行目・要約の 1 行は Courts.best4LineText（スマホと共通）。表の見出しと同じ語で始まる
+    assert('PC 試合進行の 2 行目: 表の見出しと同じ語（暫定ベスト4（合計）／ベスト4（合計））で始まる',
+      [Courts.best4LineText(DM_B4).indexOf(DeskMatch.best4Caption(DM_B4).title + ': '),
+       Courts.best4LineText({ final: true, remaining: 0, rows: DM_B4.rows }).indexOf('ベスト4（合計）: ')], [0, 0]);
 
     assert('topRanked: 3 位までの全員（同点で 4 名以上になりうる）',
       DeskMatch.topRanked([
@@ -6713,15 +6745,24 @@
     assert('revealOrder: 最後に開くのは1位の行',
       revRows[Present.revealOrder(revRows)[revRows.length - 1]].rank, 1);
 
-    // ---- 発表モードの決戦 ----
-    assert('Present.finaleRows: finale があれば試技順のまま返す',
-      Present.finaleRows({ finale: { rows: [{ name: 'A', order: 1 }, { name: 'B', order: 2 }] } })
+    // ---- 発表モードのベスト4（以前の「決戦」モードを置き換えた。設計書 2026-10-04-finale-after-round2 4 章） ----
+    assert('Present.best4Rows: best4 があれば rows を並びのまま返す',
+      Present.best4Rows({ best4: { rows: [{ name: 'A', rank: 1 }, { name: 'B', rank: 2 }] } })
         .map(function(r) { return r.name; }), ['A', 'B']);
-    assert('Present.finaleRows: finale が無ければ空', Present.finaleRows({ rankings: {} }), []);
-    assert('Present.finaleRows: data が null でも空', Present.finaleRows(null), []);
-    assert('Present.defaultMode: 決戦 進行中なら finale',
-      Present.defaultMode({ finale: { status: 'round2_final', rows: [{ name: 'A' }] } }), 'finale');
-    assert('Present.defaultMode: 決戦 進行中でなければ board',
+    assert('Present.best4Rows: best4 が無ければ空', Present.best4Rows({ rankings: {} }), []);
+    assert('Present.best4Rows: data が null でも空', Present.best4Rows(null), []);
+    function b4Ranks(ranks) { return ranks.map(function(k, i) { return { name: 'P' + i, rank: k }; }); }
+    assert('Present.best4Groups: 4 位から 1 人ずつ（添字の組を下位から）',
+      Present.best4Groups(b4Ranks([1, 2, 3, 4])), [[3], [2], [1], [0]]);
+    assert('Present.best4Groups: 同順位は 1 組にまとめて同時に出す（3 位タイ）',
+      Present.best4Groups(b4Ranks([1, 2, 3, 3])), [[2, 3], [1], [0]]);
+    assert('Present.best4Groups: 1 位タイ（1, 1, 3）',
+      Present.best4Groups(b4Ranks([1, 1, 3])), [[2], [0, 1]]);
+    assert('Present.best4Groups: 空配列・null は空',
+      [Present.best4Groups([]), Present.best4Groups(null)], [[], []]);
+    assert('Present.defaultMode: 最終組 進行中でも board（自動で切り替えない）',
+      Present.defaultMode({ finale: { status: 'round2_final', rows: [{ name: 'A' }] } }), 'board');
+    assert('Present.defaultMode: 最終組 進行中でなければ board',
       Present.defaultMode({ finale: { status: 'round2', rows: [{ name: 'A' }] } }), 'board');
     assert('Present.defaultMode: finale が無ければ board', Present.defaultMode({}), 'board');
 

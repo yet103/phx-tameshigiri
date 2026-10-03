@@ -18,9 +18,9 @@
   // 大会が持つコート（選手がまだ 1 人もいないコート）を 0 / 0 の行として補う。
   // 並びは Courts.listFrom に合わせる（昇順・未分類は末尾）。
   // コート名が 'constructor' でも壊れないよう Object.create(null) + hasOwnProperty で引く。
-  // 決戦（暫定ベスト4）の行は数えない（決戦は別のカードにする。設計書 2026-09-28）。
-  // コートの一覧も決戦以外の行から作る。2026-09-22 の設計で専用コート「決戦」に候補を
-  // 置いた既存大会で、「決戦 コート 0 / 0」の通常のカードが出ないように。
+  // 最終組（一巡目上位 4 名。finalist の印。以前の呼び名は決戦）の行は数えない（最終組は別のカードにする。
+  // 設計書 2026-09-28）。コートの一覧も最終組以外の行から作る。2026-09-22 の設計で専用コート「決戦」に
+  // 候補を置いた既存大会で、そのコート名の 0 / 0 の通常のカードが出ないように。
   // female が真偽値なら、その性別の行だけを数える（男子の部・女子の部でカードを分ける。
   // ユーザー要望 2026-09-30）。カードに female を持たせ、レンタル人数もその性別で数える。
   function courtCards(ctx, round, female) {
@@ -54,28 +54,37 @@
     container.innerHTML = '';
     var st = EventStatus.of(ctx.event);
 
+    // ranking API（Api.loadRanking）は 1 回の描画で 1 度だけ読む（ベスト4 の行・表と順位の要約が同じ応答を使う）
+    var loadRanking = rankingLoader(ctx);
+
     container.appendChild(buildHead(ctx));
     var steps = buildSteps(st, ctx);
     container.appendChild(steps);
-    // 二巡目 進行中: 決戦に出る人（ベスト4）を工程表の下に 1 行で（2026-10-04）
-    if (st === 'round2') container.appendChild(buildFinaleLine(ctx.players));
+    // 二巡目 進行中・最終組 進行中: 工程表の下に 2 行（最終組の名前と暫定ベスト4。
+    // 設計書 2026-10-04-finale-after-round2-design.md 3.1）。暫定ベスト4 は ranking API の best4 で描く（非同期）
+    var live2 = (st === 'round2' || st === 'round2_final');
+    if (live2) container.appendChild(buildMatchLines(ctx.players));
     // 最終結果: 工程表の下に「表彰」の区画（上位 3 名・発表モード・共有リンク・成績表）
     var award = (st === 'final') ? buildAwardSection(ctx) : null;
     if (award) container.appendChild(award);
     var diffBox = buildFinalistDiff(st, ctx.players);
     if (diffBox) container.appendChild(diffBox);
     container.appendChild(buildCourts(st, ctx));
-    // 決戦 進行中のときだけ、決戦のカード（buildCourts）の直後に暫定順位を出す
-    // （非同期。あとから差し込む。レビュー指摘E）。二巡目の形登録の表は desk-round2.js に移した。
-    if (st === 'round2_final') renderFinaleTable(container, ctx);
+    // 二巡目 進行中・最終組 進行中: ベスト4（合計）の表（以前の「決戦の暫定順位」を置き換えた。設計書 D2）。
+    // 最終組 進行中は最終組のカードの直後、二巡目 進行中はコートのカードの下に置く（非同期。あとから中身を描く）
+    if (live2) {
+      placeBest4Table(container, buildBest4Box());
+      renderBest4(container, ctx, loadRanking);
+    }
     // 二巡目終了: 順位の要約を工程表の中、遷移ボタン（結果を確定して表彰へ）の上に差し込む。
-    // 最終結果: 表彰の区画の中に（どちらも非同期。Api.loadRanking は結果確認と同じ）
+    // 最終結果: 表彰の区画の中に（どちらも非同期。Api.loadRanking は結果確認と同じ）。
+    // 要約の上にベスト4（合計）の 1 行を添える（設計書 D3）
     if (st === 'round2_done') {
       var slot = buildRankSlot();
       steps.insertBefore(slot, steps.querySelector('.desk-steps-actions'));
-      renderRankSummary(slot, ctx);
+      renderRankSummary(slot, ctx, loadRanking);
     } else if (award) {
-      renderRankSummary(award.querySelector('.desk-rank-slot'), ctx);
+      renderRankSummary(award.querySelector('.desk-rank-slot'), ctx, loadRanking);
     }
     // 招待した採点端末の一覧（設計書 2026-10-03 6.2。desk-invites.js）。試合進行の末尾に置く
     if (window.DeskInvites) container.appendChild(DeskInvites.buildInvitesSection(ctx));
@@ -103,7 +112,7 @@
   }
 
   // --- 工程表（ユーザー要望 2026-09-30。5 段にしたのは 2026-10-04） ---
-  // 試合進行の先頭に「① 一巡目 → ② 二巡目の形登録 → ③ 二巡目 → ④ 決戦（ベスト4） → ⑤ 結果・表彰」の
+  // 試合進行の先頭に「① 一巡目 → ② 二巡目の形登録 → ③ 二巡目 → ④ 最終組 → ⑤ 結果・表彰」の
   // 5 段を置き、現在の段を金で塗って、その段階でやることを 1 行で示す。下に、その段階に関係する遷移ボタン
   // （進める・戻す。二巡目準備なら「二巡目を行わず最終結果へ」も）を置く。段階の遷移ボタンは
   // 工程表の中だけ（上部の状態バーは表示だけ）。押したときの確認と通信は Desk.applyStatus（desk.js）。
@@ -111,14 +120,16 @@
   // DeskMatch.buildSteps(st, ctx, { where: 'round2' })）。区画は同時に 1 つしか描かないので、
   // 遷移ボタンの id（btnDeskNext など）は重ならない。
   // 上部の状態バー（desk.js の STAGE_GROUPS）は幅が限られるので 5 段のまま変えない。工程表の ③ 二巡目・
-  // ④ 決戦・⑤ のうち二巡目終了は、状態バーの「二巡目」の段（補足文 進行中／決戦 進行中／二巡目終了）に、
+  // ④ 最終組・⑤ のうち二巡目終了は、状態バーの「二巡目」の段（補足文 進行中／最終組 進行中／二巡目終了）に、
   // ⑤ の最終結果・アーカイブは状態バーの「最終結果」に当たる。準備中はどの段も光らない（①の手前）。
+  // ④ は「最終組」（一巡目上位 4 名を A コートの最後にまとめて斬る順番の演出。以前の呼び名は決戦。
+  // 設計書 2026-10-04-finale-after-round2-design.md）。
   var MATCH_STEPS = [
-    { label: '① 一巡目',                                     states: ['round1'] },
-    { label: '② 二巡目の形登録',                             states: ['round1_done'] },
-    { label: '③ 二巡目',                                     states: ['round2'] },
-    { label: '④ 決戦（ベスト' + EventStatus.FINALIST_COUNT + '）', states: ['round2_final'] },
-    { label: '⑤ 結果・表彰',                                 states: ['round2_done', 'final', 'archived'] }
+    { label: '① 一巡目',                         states: ['round1'] },
+    { label: '② 二巡目の形登録',                 states: ['round1_done'] },
+    { label: '③ 二巡目',                         states: ['round2'] },
+    { label: '④ ' + EventStatus.FINALIST_LABEL,  states: ['round2_final'] },
+    { label: '⑤ 結果・表彰',                     states: ['round2_done', 'final', 'archived'] }
   ];
 
   // 工程表の現在の段の添字。準備中と知らない状態は -1（まだ①の前）。
@@ -147,10 +158,11 @@
           : '二巡目の行ができました。形登録で形を確かめてから' + q + 'を押します。';
       case 'round2':
         return EventStatus.hasFinalists(players)
-          ? '各コートで二巡目を採点しています。決戦以外が斬り終わったら' + q + 'を押します。'
+          ? '各コートで二巡目を採点しています。' + EventStatus.FINALIST_LABEL + '以外が斬り終わったら' + q + 'を押します。'
           : '各コートで二巡目を採点しています。全コートの確定がそろったら' + q + 'を押します。';
       case 'round2_final':
-        return '決戦 進行中です（' + Courts.finaleCourt(players) + ' コートの最後）。斬り終わったら' + q + 'を押します。';
+        return EventStatus.LABELS.round2_final + 'です（' + Courts.finaleCourt(players) +
+          ' コートの最後）。斬り終わったら' + q + 'を押します。';
       case 'round2_done':
         return '二巡目が終わりました。下の順位を確かめて' + q + 'を押します。';
       case 'final':
@@ -162,24 +174,130 @@
     }
   }
 
-  // 二巡目 進行中に工程表の下に出す 1 行（純粋関数。test.html で固定する）。決戦に出る人（二巡目の行で
-  // finalist の印）の名前を試技順（Courts.finalists。order の番号の低い順）で並べる。
-  // 0 名なら候補がいない理由を書く（選考は一般男子の一巡目の確定得点が 0 点より上の人。EventStatus.pickFinalists）。
-  function finaleLineText(players) {
-    var fin = Courts.finalists(players || []);
-    if (fin.length === 0) {
-      return '決戦の候補はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）';
-    }
-    return '決戦（ベスト' + EventStatus.FINALIST_COUNT + '・' + Courts.finaleCourt(players) + ' コートの最後）: ' +
-      fin.map(function(p) { return String(p.name || '').trim() || '(名称未設定)'; }).join('・');
+  // --- 最終組とベスト4（二巡目 進行中・最終組 進行中。設計書 2026-10-04-finale-after-round2-design.md 3.1） ---
+  // 工程表の下の 2 行。1 行目は最終組（一巡目上位 4 名）の名前（Courts.finalGroupLineText。選手の行から同期で）、
+  // 2 行目は暫定ベスト4（合計）（Courts.best4LineText。ranking API の best4 を読んでから描く。renderBest4）。
+  // 文言はスマホの試合進行と共通（courts.js）。
+  function buildMatchLines(players) {
+    var box = document.createElement('div');
+    box.className = 'desk-match-lines';
+    box.id = 'matchLines';
+    var fin = document.createElement('p');
+    fin.className = 'desk-match-finale-line';
+    fin.id = 'matchFinaleLine';
+    fin.textContent = Courts.finalGroupLineText(players);
+    box.appendChild(fin);
+    var b4 = document.createElement('p');
+    b4.className = 'desk-match-finale-line best4';
+    b4.id = 'matchBest4Line';
+    b4.textContent = EventStatus.BEST4_PROVISIONAL_LABEL + ' を読み込み中…';
+    box.appendChild(b4);
+    return box;
   }
 
-  function buildFinaleLine(players) {
-    var p = document.createElement('p');
-    p.className = 'desk-match-finale-line';
-    p.id = 'matchFinaleLine';
-    p.textContent = finaleLineText(players);
-    return p;
+  // ベスト4 の表の見出し（純粋関数。test.html で固定する）。best4 は ranking API の best4
+  // （EventStatus.best4Standings と同じ形）。確定前は「暫定ベスト4（合計）」と「残り n 名」、
+  // 確定後は「ベスト4（合計）」だけ（final のとき remaining は出さない。設計書 2.3）。
+  function best4Caption(best4) {
+    var fin = !!(best4 && best4.final);
+    return {
+      title: (fin ? EventStatus.BEST4_LABEL : EventStatus.BEST4_PROVISIONAL_LABEL) + '（合計）',
+      rest: fin ? '' : '残り ' + (Number(best4 && best4.remaining) || 0) + ' 名'
+    };
+  }
+
+  // ベスト4 の表の行（純粋関数。test.html で固定する）。列は 順位・名前・一巡目・二巡目・合計。
+  // 二巡目がまだの人（r2 が null）は「—」にして pending（薄く出す）。名前が空なら「(名称未設定)」。
+  function best4TableRows(best4) {
+    var rows = (best4 && Array.isArray(best4.rows)) ? best4.rows : [];
+    return rows.map(function(r) {
+      var pending = (r.r2 === null || r.r2 === undefined);
+      return {
+        cells: [String(r.rank), String(r.name || '').trim() || '(名称未設定)',
+          String(r.r1 || 0), pending ? '—' : String(r.r2), String(r.total || 0)],
+        pending: pending
+      };
+    });
+  }
+
+  // ベスト4 の表の枠（中身は renderBest4 が描く）
+  function buildBest4Box() {
+    var box = document.createElement('div');
+    box.className = 'desk-match-finale-rank desk-match-best4';
+    box.id = 'matchBest4';
+    box.textContent = EventStatus.BEST4_PROVISIONAL_LABEL + ' を読み込み中…';
+    return box;
+  }
+
+  // 表の置き場所。最終組 進行中は最終組のカード（#matchFinaleGrid）の直後（「他のコート」の畳みより上）、
+  // 二巡目 進行中はコートのカードの下（「一巡目の結果」の畳みの上）。どちらも無ければ末尾
+  function placeBest4Table(container, box) {
+    var grid = container.querySelector('#matchFinaleGrid');
+    var r1 = container.querySelector('#matchRound1Results');
+    if (grid) grid.insertAdjacentElement('afterend', box);
+    else if (r1) r1.insertAdjacentElement('beforebegin', box);
+    else container.appendChild(box);
+  }
+
+  // 2 行目と表を ranking API の best4 で描く（非同期）。ポーリングはしない（「↻ 最新に更新」で読み直す、
+  // というこの区画の方針を変えない。選手の行を読み直すたびに描き直される）。
+  // 読めなければ 2 行目に「暫定ベスト4 を読み込めませんでした」を出し、表は外す。
+  async function renderBest4(container, ctx, loadRanking) {
+    var data = await loadRanking();
+    if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
+    var line = container.querySelector('#matchBest4Line');
+    var box = container.querySelector('#matchBest4');
+    if (!data || !data.best4) {
+      if (line) line.textContent = EventStatus.BEST4_PROVISIONAL_LABEL + ' を読み込めませんでした（↻ 最新に更新 で読み直します）';
+      if (box) box.remove();
+      return;
+    }
+    if (line) line.textContent = Courts.best4LineText(data.best4);
+    if (!box) return;
+    box.textContent = '';
+    var cap = best4Caption(data.best4);
+    var h3 = document.createElement('h3');
+    h3.className = 'desk-match-caption';
+    h3.appendChild(document.createTextNode(cap.title));
+    if (cap.rest) {
+      var rest = document.createElement('span');
+      rest.className = 'desk-match-best4-rest';
+      rest.id = 'matchBest4Rest';
+      rest.textContent = cap.rest;
+      h3.appendChild(rest);
+    }
+    box.appendChild(h3);
+    var rows = best4TableRows(data.best4);
+    if (rows.length === 0) {
+      var none = document.createElement('p');
+      none.className = 'desk-rank-none';
+      none.textContent = data.best4.final ? 'いません（一般男子に合計 1 点以上の人がいない）' : 'まだいません';
+      box.appendChild(none);
+      return;
+    }
+    var table = document.createElement('table');
+    table.className = 'desk-table';
+    table.innerHTML = '<thead><tr><th>順位</th><th>名前</th><th>一巡目</th><th>二巡目</th>' +
+      '<th>合計</th></tr></thead>';
+    var tbody = document.createElement('tbody');
+    var classes = ['num', 'desk-cell-main', 'num', 'num', 'num'];
+    rows.forEach(function(r) {
+      var tr = document.createElement('tr');
+      r.cells.forEach(function(text, i) { tr.appendChild(cell(text, classes[i])); });
+      if (r.pending) tr.className = 'is-pending';
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    box.appendChild(table);
+  }
+
+  // ranking API を 1 回の描画で 1 度だけ読む関数を返す（同じ Promise を返す）
+  function rankingLoader(ctx) {
+    var p = null;
+    return function() {
+      if (!p) p = Api.loadRanking(ctx.eventId);
+      return p;
+    };
   }
 
   // --- 順位の要約（二巡目終了・最終結果。2026-10-04） ---
@@ -213,10 +331,11 @@
     return slot;
   }
 
-  // 要約を slot に描く（非同期）。読めなければ「順位を読み込めませんでした。↻ 最新に更新」
-  async function renderRankSummary(slot, ctx) {
+  // 要約を slot に描く（非同期）。読めなければ「順位を読み込めませんでした。↻ 最新に更新」。
+  // 3 部門の上にベスト4（合計）の 1 行（Courts.best4LineText。確定後は「ベスト4（合計）: …」。設計書 D3）
+  async function renderRankSummary(slot, ctx, loadRanking) {
     if (!slot) return;
-    var data = await Api.loadRanking(ctx.eventId);
+    var data = await (loadRanking ? loadRanking() : Api.loadRanking(ctx.eventId));
     if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
     slot.innerHTML = '';
     if (!data || !data.rankings) {
@@ -233,6 +352,14 @@
       err.appendChild(jumpButton('btnMatchGoResults', '結果確認へ →', 'results', ctx));
       slot.appendChild(err);
       return;
+    }
+    var b4Text = Courts.best4LineText(data.best4);
+    if (b4Text) {
+      var b4 = document.createElement('p');
+      b4.className = 'desk-match-finale-line best4';
+      b4.id = 'matchBest4Summary';
+      b4.textContent = b4Text;
+      slot.appendChild(b4);
     }
     var cols = document.createElement('div');
     cols.className = 'desk-rank-summary';
@@ -307,7 +434,7 @@
     return sec;
   }
 
-  // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、決戦（暫定ベスト4）の
+  // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、最終組（一巡目上位 4 名）の
   // 印は選び直されない。今の一巡目の確定得点で選び直した結果と違うときに警告を出す
   // （判定は EventStatus.finalistDiff、文言は Courts.finalistDiffMessage。スマホ運営と共通）。
   // 一巡目終了より前は二巡目の行が無いので出ない。
@@ -390,8 +517,8 @@
     var actions = document.createElement('div');
     actions.className = 'desk-steps-actions';
 
-    // 「次へ進む」の行き先は選手データで変わる（二巡目 進行中は、決戦の行があれば
-    // 決戦へ、無ければ二巡目終了へ）。ラベルも同じ判定で決める。
+    // 「次へ進む」の行き先は選手データで変わる（二巡目 進行中は、最終組の行があれば
+    // 最終組 進行中へ、無ければ二巡目終了へ）。ラベルも同じ判定で決める。
     var nx = EventStatus.nextStep(st, players);
     if (nx) {
       var next = stepButton('btnDeskNext', 'desk-btn primary',
@@ -479,9 +606,9 @@
       return wrap;
     }
 
-    // 決戦（暫定ベスト4）は先頭コート（通常 A）の二巡目の末尾で斬る（設計書 2026-09-28）。
-    // 通常のカード（rows）は決戦の行を数えず、決戦は候補の行だけを数えるカード 1 枚にして別枠に置く。
-    // 決戦かどうかはコート名ではなく行の印 finalist で分ける。二巡目を数えるときだけ出す。
+    // 最終組（一巡目上位 4 名）は先頭コート（通常 A）の二巡目の末尾で斬る（設計書 2026-09-28）。
+    // 通常のカード（rows）は最終組の行を数えず、最終組はその行だけを数えるカード 1 枚にして別枠に置く。
+    // 最終組かどうかはコート名ではなく行の印 finalist で分ける。二巡目を数えるときだけ出す。
     var finale = [];
     var fin = Courts.finalists(ctx.players);
     if (round === 2 && fin.length > 0) {
@@ -493,12 +620,12 @@
       }];
     }
     var caption = finale.length > 0
-      ? '決戦（' + EventStatus.FINALIST_LABEL + '・' + finale[0].court + ' コートの最後）' : '';
+      ? EventStatus.FINALIST_LABEL + '（' + EventStatus.FINALIST_DESC + '・' + finale[0].court + ' コートの最後）' : '';
 
-    // 決戦 進行中は決戦のカードを先に、他コートは畳む（設計書「画面」）。
+    // 最終組 進行中は最終組のカードを先に、他コートは畳む（設計書「画面」）。
     if (st === 'round2_final' && finale.length > 0) {
       var finaleGrid = buildCourtGrid(finale, ctx, round, caption);
-      finaleGrid.id = 'matchFinaleGrid';   // 暫定順位（renderFinaleTable）をこの直後に差し込む
+      finaleGrid.id = 'matchFinaleGrid';   // ベスト4 の表（placeBest4Table）をこの直後に差し込む
       wrap.appendChild(finaleGrid);
       var others = document.createElement('details');
       others.className = 'desk-match-others';
@@ -528,8 +655,8 @@
     return wrap;
   }
 
-  // 部ごとのカードを並べ、決戦のカードは先頭コート（EventStatus.firstCourt）の男子のカードの直後に
-  // 金の枠で囲んで差し込む（2026-10-04。以前はページの末尾。決戦は先頭コートの二巡目の最後に斬るので、
+  // 部ごとのカードを並べ、最終組のカードは先頭コート（EventStatus.firstCourt）の男子のカードの直後に
+  // 金の枠で囲んで差し込む（2026-10-04。以前はページの末尾。最終組は先頭コートの二巡目の最後に斬るので、
   // そのコートのカードの隣に見せる）。先頭コートの男子のカードが無ければ末尾に置く。
   function appendGroupsWithFinale(target, groups, finale, ctx, round, finaleCaption) {
     var first = EventStatus.firstCourt(ctx.players, extraCourts(ctx));
@@ -653,7 +780,7 @@
     card.appendChild(live);
 
     // そのカードの選手の表（順番・ゼッケン・選手名・級位段位・得点・備考。ユーザー要望 2026-09-30）。
-    // 数えている行（同じコート・巡目・性別・決戦の印）を試技順に並べる。
+    // 数えている行（同じコート・巡目・性別・最終組の印）を試技順に並べる。
     card.appendChild(buildCardTable(ctx, row, round, liveP ? liveP.id : null));
 
     var actions = document.createElement('div');
@@ -682,7 +809,7 @@
     card.appendChild(actions);
 
     // 採点端末の招待（QR）。上の「採点画面を開く」「📺 配信用ボード」は自分の画面・見るだけの URL、
-    // こちらは採点が書き込める鍵なので、段と色を分けて並べない（設計書 T10）。決戦のカードには出さない
+    // こちらは採点が書き込める鍵なので、段と色を分けて並べない（設計書 T10）。最終組のカードには出さない
     // （同じコートの通常のカードから発行する）。
     if (window.DeskInvites && row.finale !== true) {
       var inviteCap = document.createElement('div');
@@ -761,11 +888,11 @@
     return table;
   }
 
-  // そのカードで「いま採点中」に出す名前。決戦のカードと先頭コートの通常のカードは同じコート
+  // そのカードで「いま採点中」に出す名前。最終組のカードと先頭コートの通常のカードは同じコート
   // （live はコートごとに 1 人）を分け合うので、採点中の選手の印がカードと合うときだけ出す
-  // （二巡目 進行中に A の通常の選手を採点しているとき、決戦のカードに名前を出さないように）。
+  // （二巡目 進行中に A の通常の選手を採点しているとき、最終組のカードに名前を出さないように）。
   // そのカードで「いま採点中」の選手（行）。live はコートごとに 1 人なので、その選手が
-  // このカードの組（部・巡目・決戦の印）に属するときだけ返す（ユーザー要望 2026-09-30:
+  // このカードの組（部・巡目・最終組の印）に属するときだけ返す（ユーザー要望 2026-09-30:
   // 男女＋コート＋巡目で判定）。属さなければ null。
   function livePlayerFor(ctx, row, round) {
     var who = Courts.livePlayerName(ctx.event && ctx.event.live, row.court, ctx.players);
@@ -796,46 +923,6 @@
     }
   }
 
-  // 決戦 進行中のときだけ、決戦のカードの直後に暫定順位を出す。
-  // 順位はサーバーが計算する（computeRanking の finale）。ポーリングはしない
-  // （「↻ 最新に更新」で読み直す、というこの区画の方針を変えない）。
-  async function renderFinaleTable(container, ctx) {
-    var box = document.createElement('div');
-    box.className = 'desk-match-finale-rank';
-    box.id = 'matchFinaleRank';
-    box.textContent = '読み込み中…';
-    // 決戦のカードの直後に置く（「他のコート」「一巡目の結果」の畳みより上）。カードが無ければ末尾
-    var anchor = container.querySelector('#matchFinaleGrid');
-    if (anchor) anchor.insertAdjacentElement('afterend', box);
-    else container.appendChild(box);
-    var data = await Api.loadRanking(ctx.eventId);
-    if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた
-    if (!data || !data.finale) { box.textContent = '暫定順位を取得できませんでした。'; return; }
-    box.textContent = '';
-    var h3 = document.createElement('h3');
-    h3.className = 'desk-match-caption';
-    h3.textContent = '決戦の暫定順位';
-    box.appendChild(h3);
-    var table = document.createElement('table');
-    table.className = 'desk-table';
-    table.innerHTML = '<thead><tr><th>試技順</th><th>名前</th><th>一巡目</th><th>二巡目</th>' +
-      '<th>合計</th><th>暫定順位</th></tr></thead>';
-    var tbody = document.createElement('tbody');
-    data.finale.rows.forEach(function(r) {
-      var tr = document.createElement('tr');
-      tr.appendChild(cell(String(r.order), 'num'));
-      tr.appendChild(cell(r.name, 'desk-cell-main'));
-      tr.appendChild(cell(String(r.r1), 'num'));
-      tr.appendChild(cell(r.r2 === null ? '—' : String(r.r2), 'num'));
-      tr.appendChild(cell(r.scored ? String(r.total) : '—', 'num'));
-      tr.appendChild(cell(r.rank === null ? '—' : String(r.rank), 'num'));
-      if (!r.scored) tr.className = 'is-pending';
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    box.appendChild(table);
-  }
-
   function cell(text, cls) {
     var td = document.createElement('td');
     td.textContent = text;
@@ -846,13 +933,14 @@
   Desk.registerTab('match', { render: render });
 
   // 形登録の区画（desk-round2.js）が工程表を使う。desk-invites.js の DeskInvites と同じ作り。
-  // MATCH_STEPS・matchStepIndex・stepTodo・finaleLineText・topRanked は test.html で固定する純粋関数。
+  // MATCH_STEPS・matchStepIndex・stepTodo・best4Caption・best4TableRows・topRanked は test.html で固定する純粋関数。
   window.DeskMatch = {
     buildSteps: buildSteps,
     MATCH_STEPS: MATCH_STEPS,
     matchStepIndex: matchStepIndex,
     stepTodo: stepTodo,
-    finaleLineText: finaleLineText,
+    best4Caption: best4Caption,
+    best4TableRows: best4TableRows,
     topRanked: topRanked
   };
 })();

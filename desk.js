@@ -24,8 +24,8 @@ var Desk = (function() {
   var TABS = NAV.map(function(n) { return n.tab; });
 
   // 上部の状態バーの 5 段（ユーザー要望 2026-09-30）。EventStatus の状態値と遷移はそのままで、
-  // 見せ方だけをまとめる。決戦・二巡目終了・アーカイブは段の中の補足文（STAGE_NOTES）で示す。
-  // 試合進行の工程表（desk-match.js の MATCH_STEPS）は 5 段（① 一巡目 … ③ 二巡目・④ 決戦・⑤ 結果・表彰）。
+  // 見せ方だけをまとめる。最終組・二巡目終了・アーカイブは段の中の補足文（STAGE_NOTES）で示す。
+  // 試合進行の工程表（desk-match.js の MATCH_STEPS）は 5 段（① 一巡目 … ③ 二巡目・④ 最終組・⑤ 結果・表彰）。
   // 状態バーは幅が限られるので段を分けず、工程表の ③④ と ⑤ の二巡目終了はここの「二巡目」
   // （補足文で区別）、⑤ の最終結果・アーカイブは「最終結果」に当たる（2026-10-04）。
   var STAGE_GROUPS = [
@@ -38,7 +38,7 @@ var Desk = (function() {
   var STAGE_NOTES = {
     round1: '進行中',
     round2: '進行中',
-    round2_final: '決戦 進行中',
+    round2_final: EventStatus.LABELS.round2_final,   // 「最終組 進行中」（状態の表示名に寄せた。2026-10-04）
     round2_done: '二巡目終了',
     archived: 'アーカイブ'
   };
@@ -305,7 +305,7 @@ var Desk = (function() {
   // 上部の状態バー。現在の段階を金で塗り、通過した段階を塗る（表示だけ。進める・戻すのボタンは
   // 工程表（desk-match.js の DeskMatch.buildSteps）の中にだけ置く。ユーザー要望 2026-09-30「段階の
   // 遷移ボタンは 1 か所に」。工程表は試合進行と二巡目の形登録の先頭に出す。2026-10-03）。
-  // 決戦・二巡目終了・アーカイブは、現在の段の補足文（stageOf の note）で示す。
+  // 最終組・二巡目終了・アーカイブは、現在の段の補足文（stageOf の note）で示す。
   function buildStage(st, players) {
     var wrap = document.createElement('div');
     wrap.className = 'desk-stage';
@@ -375,13 +375,13 @@ var Desk = (function() {
   // 状態を変えたあとのトーストの文言（純粋関数。test.html で固定する）。
   // round2 は一巡目終了の応答の生成結果（無ければ null）。二巡目 0 名分のときは何も作っていないので
   // 「作りました」を出さない（レビュー指摘I）。申請の形で作った行（fromRequest。設計書 2026-10-03 3.4）と
-  // 決戦の人数は 0 なら書かない。
+  // 最終組の人数は 0 なら書かない。
   function statusToastText(to, round2) {
     var msg = (EventStatus.LABELS[to] || to) + ' にしました';
     if (round2 && round2.created > 0) {
       var notes = [];
       if (round2.fromRequest > 0) notes.push('申請の形 ' + round2.fromRequest + ' 名');
-      if (round2.finalistCount > 0) notes.push('決戦 ' + round2.finalistCount + ' 名');
+      if (round2.finalistCount > 0) notes.push(EventStatus.FINALIST_LABEL + ' ' + round2.finalistCount + ' 名');
       msg += '（二巡目 ' + round2.created + ' 名分作りました' + (notes.length ? '・' + notes.join('・') : '') + '）';
     }
     if (round2 && round2.untrackedCount > 0) {
@@ -485,7 +485,7 @@ var Desk = (function() {
       }
       alert(res.error);
       // 他の端末が先に進めていたときだけ読み直す。
-      // finale_pending / no_finale はこちらの画面が古い（決戦の行の有無を取り違えている）
+      // finale_pending / no_finale はこちらの画面が古い（最終組の行の有無を取り違えている）
       // 可能性があるので、これも読み直す。empty / no_round2 は入力不足なので読み直さない。
       if (res.reason === 'transition' || res.reason === 'finale_pending' ||
           res.reason === 'no_finale') {
@@ -499,7 +499,7 @@ var Desk = (function() {
       alert('⚠ コートが決まっていない（未分類の）選手が ' + res.round2.unassignedCount +
         ' 名います。二巡目には入っていません。\n選手登録でコートを設定し、一巡目に戻して終了し直してください。');
     }
-    // 網羅検証 S18: 暫定ベスト4 が今の一巡目の確定得点で選び直した結果と違うときは警告する
+    // 網羅検証 S18: 最終組（一巡目上位 4 名）が今の一巡目の確定得点で選び直した結果と違うときは警告する
     if (res.round2 && res.round2.finalistDiff) {
       var diffMsg = Courts.finalistDiffMessage(res.round2.finalistDiff);
       if (diffMsg) alert(diffMsg);

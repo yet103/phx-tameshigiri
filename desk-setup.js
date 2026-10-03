@@ -139,7 +139,7 @@
       btn.disabled = true;
       // settings はサーバーが requireBib / requireRank / courts だけを拾う（キーごとの部分更新）。
       // 変わったキーだけ送る。courts は送ると置き換えになる（和集合にはしない）。
-      // 決戦コートの名前（finalCourt）は廃止（暫定ベスト4 は先頭コートの最後に斬る。設計書 2026-09-28）。
+      // 決戦コートの名前（finalCourt。以前の呼び名）は廃止（最終組は先頭コートの最後に斬る。設計書 2026-09-28）。
       var settingsPatch = {};
       if (chkBib.checked !== origBib) settingsPatch.requireBib = chkBib.checked;
       if (chkRank.checked !== origRank) settingsPatch.requireRank = chkRank.checked;
