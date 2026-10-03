@@ -387,6 +387,47 @@ main { padding: 8px 12px 16px; }
    （--gold 系はテーマに依らない「大会トーン」の色。--accent は光テーマで黒になるため使わない）。 */
 .round-finale { border: 1px solid var(--gold-deep); border-radius: 8px; padding: 6px; }
 .round-finale-caption { margin: 12px 0 6px; font-size: 13px; color: var(--gold-deep); }
+/* 状態の 1 行（段階表示の下）と、二巡目 進行中の決戦の候補の 1 行 */
+.round-todo { margin: 6px 2px 10px; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+.round-finale-line {
+  margin: 0 0 10px; padding: 8px 10px; font-size: 13px; line-height: 1.5; font-weight: bold;
+  border: 1px solid var(--gold-deep); border-radius: 6px; background: var(--card-bg); color: var(--text);
+}
+/* 二巡目終了の順位の要約・最終結果の「表彰」。縦に 3 部門の小さな表を並べる */
+.round-summary, .round-award {
+  margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card-bg);
+}
+.round-award { border-color: var(--gold-deep); }
+.round-summary h3, .round-award h3 { margin: 0 0 8px; font-size: 15px; font-family: var(--mincho); }
+.round-top3 { display: flex; flex-direction: column; gap: 8px; }
+.round-top3-sec h4 { margin: 0 0 2px; font-size: 13px; color: var(--gold-deep); }
+.round-top3-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.round-top3-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); }
+.round-top3-rank { width: 2.2em; text-align: right; color: var(--score-color); font-weight: bold; }
+.round-top3-score { text-align: right; font-weight: bold; white-space: nowrap; }
+.round-top3-none { margin: 0; padding: 4px 6px; font-size: 13px; color: var(--text-muted); }
+.round-rank-fail { margin: 0; font-size: 13px; color: var(--text-muted); }
+.round-rank-reload {
+  margin-left: 8px; min-height: 36px; padding: 6px 10px; font-size: 13px;
+  background: transparent; color: var(--accent); border: 1px solid var(--border); border-radius: 6px;
+}
+.round-rank-link {
+  display: inline-flex; align-items: center; min-height: 44px; margin-top: 4px;
+  font-size: 14px; color: var(--accent);
+}
+.round-award-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.round-award-bar button {
+  flex: 1 1 auto; min-height: 44px; padding: 10px 12px; font-size: 13px;
+  background: var(--band-bg-2); color: var(--gold-light); border: 1px solid var(--gold); border-radius: 6px;
+}
+.round-award-bar button:disabled { opacity: .5; }
+/* 二巡目の明細（二巡目終了以降の折りたたみ） */
+.round-detail { margin: 0 0 12px; }
+.round-detail > summary {
+  cursor: pointer; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-secondary); color: var(--text); font-size: 14px; margin-bottom: 8px;
+}
 
 /* ===== 結果タブ（admin-results.js） ===== */
 .results-bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 0; }

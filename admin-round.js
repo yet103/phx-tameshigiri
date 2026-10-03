@@ -31,6 +31,179 @@ var AdminRound = (function() {
     return (players || []).filter(function(p) { return Courts.roundOf(p) === 2; });
   }
 
+  // --- 順位の要約（二巡目終了・最終結果）---
+  // 部門名は結果確認（admin-results.js）と同じ。同点は同順位なので、上位 3 名は rank <= 3 の全員
+  // （4 名以上になりうる）。順位は Api.loadRanking（結果確認と同じ）から取る。
+  var CATEGORIES = [
+    { key: 'male',    title: '一般男子' },
+    { key: 'newFace', title: '新人枠' },
+    { key: 'female',  title: '一般女子' }
+  ];
+
+  function topRows(list) {
+    return (list || []).filter(function(r) { return r && Number(r.rank) <= 3; });
+  }
+
+  // 3 部門の上位 3 名を縦に 3 つの小さな表で描く（PC 運営は横 3 列）
+  function buildTopThree(data) {
+    var wrap = document.createElement('div');
+    wrap.className = 'round-top3';
+    CATEGORIES.forEach(function(c) {
+      var sec = document.createElement('section');
+      sec.className = 'round-top3-sec';
+      var h = document.createElement('h4');
+      h.textContent = c.title;
+      sec.appendChild(h);
+      var rows = topRows(data && data.rankings && data.rankings[c.key]);
+      if (rows.length === 0) {
+        var none = document.createElement('p');
+        none.className = 'round-top3-none';
+        none.textContent = 'データなし';
+        sec.appendChild(none);
+      } else {
+        var table = document.createElement('table');
+        table.className = 'round-top3-table';
+        rows.forEach(function(r) {
+          var tr = document.createElement('tr');
+          [['round-top3-rank', String(r.rank)], ['round-top3-name', String(r.name == null ? '' : r.name)],
+           ['round-top3-score', String(r.score)]].forEach(function(cell) {
+            var td = document.createElement('td');
+            td.className = cell[0];
+            td.textContent = cell[1];
+            tr.appendChild(td);
+          });
+          table.appendChild(tr);
+        });
+        sec.appendChild(table);
+      }
+      wrap.appendChild(sec);
+    });
+    return wrap;
+  }
+
+  // 順位を読み込んで box に上位 3 名を描く。取れなかったら理由と「↻ 最新に更新」を出す。
+  // 描画を待たせないよう呼び出し側は await しない（通信中に画面を離れたら ctx.isStale() で捨てる）。
+  async function fillTopThree(box, ctx) {
+    box.textContent = '順位を読み込み中…';
+    var data = await Api.loadRanking(ctx.eventId);
+    if (ctx.isStale()) return;
+    box.textContent = '';
+    if (!data) {
+      var fail = document.createElement('p');
+      fail.className = 'round-rank-fail';
+      fail.appendChild(document.createTextNode('順位を読み込めませんでした。'));
+      var re = document.createElement('button');
+      re.type = 'button';
+      re.className = 'round-rank-reload';
+      re.textContent = '↻ 最新に更新';
+      re.addEventListener('click', function() { Admin.reloadEvent(); });
+      fail.appendChild(re);
+      box.appendChild(fail);
+      return;
+    }
+    box.appendChild(buildTopThree(data));
+  }
+
+  function buildRankLink(ctx) {
+    var a = document.createElement('a');
+    a.className = 'round-rank-link';
+    a.href = '#results/' + encodeURIComponent(ctx.eventId);
+    a.textContent = '結果確認で全順位 →';
+    return a;
+  }
+
+  // 二巡目終了: 状態の 1 行の下に順位の要約（遷移ボタンは段階表示の中）
+  function buildSummary(ctx) {
+    var sec = document.createElement('section');
+    sec.className = 'round-summary';
+    sec.id = 'roundSummary';
+    var h = document.createElement('h3');
+    h.textContent = '順位（上位 3 名）';
+    sec.appendChild(h);
+    var body = document.createElement('div');
+    body.className = 'round-rank-body';
+    body.id = 'roundSummaryBody';
+    sec.appendChild(body);
+    sec.appendChild(buildRankLink(ctx));
+    fillTopThree(body, ctx).catch(function(e) { console.error(e); });
+    return sec;
+  }
+
+  // 最終結果: 「表彰」の区画。上位 3 名と、発表・共有・成績表のボタン（処理は admin-results.js のものを呼ぶ）
+  function buildAward(ctx) {
+    var sec = document.createElement('section');
+    sec.className = 'round-award';
+    sec.id = 'roundAward';
+    var h = document.createElement('h3');
+    h.textContent = '表彰';
+    sec.appendChild(h);
+    var body = document.createElement('div');
+    body.className = 'round-rank-body';
+    body.id = 'roundAwardBody';
+    sec.appendChild(body);
+    sec.appendChild(buildRankLink(ctx));
+    var bar = document.createElement('div');
+    bar.className = 'round-award-bar';
+    [
+      ['btnRoundPresent', '発表モードで開く', 'present'],
+      ['btnRoundCopy', '共有リンクをコピー', 'copyLink'],
+      ['btnRoundHtml', '成績表（HTML）を保存', 'downloadHtml']
+    ].forEach(function(d) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.id = d[0];
+      b.textContent = d[1];
+      b.addEventListener('click', function() {
+        if (window.AdminResults && typeof AdminResults[d[2]] === 'function') AdminResults[d[2]](b);
+      });
+      bar.appendChild(b);
+    });
+    sec.appendChild(bar);
+    fillTopThree(body, ctx).catch(function(e) { console.error(e); });
+    return sec;
+  }
+
+  // 二巡目 進行中: 決戦（ベスト4）の候補を 1 行で。名前は試技順（番号順）
+  function buildFinaleLine(players) {
+    var p = document.createElement('p');
+    p.className = 'round-finale-line';
+    p.id = 'roundFinaleLine';
+    var fin = Courts.finalists(players);
+    if (fin.length === 0) {
+      p.textContent = '決戦の候補はいません（一般男子の一巡目の確定得点が 0 点を超える人がいない）';
+    } else {
+      p.textContent = '決戦（ベスト' + EventStatus.FINALIST_COUNT + '・' + Courts.finaleCourt(players) +
+        ' コートの最後）: ' + fin.map(function(r) { return String(r.name || '').trim(); }).join('・');
+    }
+    return p;
+  }
+
+  // 状態の 1 行（PC 運営の工程表の 1 行と同じ文言。二巡目準備は下の注記が兼ねるので出さない）
+  function stageTodo(st, players) {
+    var nx = EventStatus.nextLabel(st, players);
+    var b = nx ? '「' + nx + ' ▶」' : '';
+    switch (st) {
+      case 'draft':
+        return '準備中です。選手と技をそろえたら' + b + 'を押します。';
+      case 'round1':
+        return '各コートで一巡目を採点しています。全コートの確定がそろったら' + b + 'を押します。';
+      case 'round2':
+        return EventStatus.hasFinalists(players)
+          ? '各コートで二巡目を採点しています。決戦以外が斬り終わったら' + b + 'を押します。'
+          : '各コートで二巡目を採点しています。全コートの確定がそろったら' + b + 'を押します。';
+      case 'round2_final':
+        return '決戦 進行中です（' + Courts.finaleCourt(players) + ' コートの最後）。斬り終わったら' + b + 'を押します。';
+      case 'round2_done':
+        return '二巡目が終わりました。下の順位を確かめて' + b + 'を押します。';
+      case 'final':
+        return '最終結果です。表彰は下の順位と発表モードで。得点・選手・技は編集できません。';
+      case 'archived':
+        return 'アーカイブ済みです。';
+      default:
+        return '';
+    }
+  }
+
   // 現在のコート絞り込みで見えている二巡目の行
   function visibleRows() {
     return Courts.filter(roundTwo(CTX ? CTX.players : []), currentCourt).slice().sort(Courts.compareOrder);
@@ -232,6 +405,16 @@ var AdminRound = (function() {
     // 段階表示(現在の状態と「次へ進む」)を先頭に置く
     var st = EventStatus.of(ctx.event);
     container.appendChild(buildStage(st, players));
+    // 状態の 1 行（仕様 2026-10-04 ③④⑤）と、二巡目 進行中の決戦の候補の 1 行
+    var todoText = stageTodo(st, players);
+    if (todoText) {
+      var todoEl = document.createElement('p');
+      todoEl.className = 'round-todo';
+      todoEl.id = 'roundTodo';
+      todoEl.textContent = todoText;
+      container.appendChild(todoEl);
+    }
+    if (st === 'round2') container.appendChild(buildFinaleLine(players));
     // 網羅検証 S18: 一巡目の終了のあとで一巡目の行が確定・得点変更されると、決戦（暫定ベスト4）の
     // 印は選び直されない。今の一巡目の確定得点で選び直した結果と違うときに警告を出す
     // （判定は EventStatus.finalistDiff、文言は Courts.finalistDiffMessage。PC 運営と共通）。
@@ -246,6 +429,10 @@ var AdminRound = (function() {
         container.appendChild(diffBox);
       }
     }
+    // 二巡目終了は順位の要約、最終結果は「表彰」の区画（アーカイブは要約だけ）。
+    // 自動で結果確認へは移さない（ユーザー決定）。
+    if (st === 'round2_done' || st === 'archived') container.appendChild(buildSummary(ctx));
+    if (st === 'final') container.appendChild(buildAward(ctx));
 
     // 技を入れられるのは「一巡目終了」のときだけ（PC 運営 desk-match.js の editable と同じ）。
     // それ以外の状態では行タップ・チップ・「一巡目と同じ技をコピー」を止め、同じ注記を出す
@@ -276,11 +463,25 @@ var AdminRound = (function() {
     if (menu) head.appendChild(menu);
     container.appendChild(head);
 
+    // 二巡目終了以降は、コートの一覧（絞り込み・注記・件数・行）を「二巡目の明細」として
+    // 折りたたむ（既定は閉じる）。見るのは順位、明細は必要なときだけ開く。
+    var body = container;
+    if (st === 'round2_done' || st === 'final' || st === 'archived') {
+      var detail = document.createElement('details');
+      detail.className = 'round-detail';
+      detail.id = 'roundDetail';
+      var dsum = document.createElement('summary');
+      dsum.textContent = '二巡目の明細';
+      detail.appendChild(dsum);
+      container.appendChild(detail);
+      body = detail;
+    }
+
     // コート絞り込み。チップは大会全体のコートから作る。
     // 二巡目が未生成のときにチップ列が消えないようにするため。
     var chipsWrap = document.createElement('div');
     chipsWrap.className = 'court-chips round-courts';
-    container.appendChild(chipsWrap);
+    body.appendChild(chipsWrap);
     function onCourtChange(court) {
       currentCourt = court;
       Admin.renderCourtChips(chipsWrap, players, currentCourt, onCourtChange);
@@ -301,17 +502,17 @@ var AdminRound = (function() {
       guide.textContent = '形を直せるのは「' + EventStatus.LABELS.round1_done + '」のときだけです（いまは「' +
         EventStatus.LABELS[st] + '」）。直すときは「⋯」の「戻す」で戻してください。';
     }
-    container.appendChild(guide);
+    body.appendChild(guide);
 
     counterEl = document.createElement('div');
     counterEl.className = 'round-counter';
     counterEl.id = 'roundCounter';
-    container.appendChild(counterEl);
+    body.appendChild(counterEl);
 
     listEl = document.createElement('div');
     listEl.className = 'round-list';
     listEl.id = 'roundList';
-    container.appendChild(listEl);
+    body.appendChild(listEl);
 
     // 一覧の末尾から、上の「二巡目を開始 ▶」（段階表示）へ戻る近道（長い一覧の末尾で、
     // 遷移ボタンが画面の上にあることに気づくため）。遷移ボタンそのものは段階表示の 1 つだけ。
@@ -342,24 +543,43 @@ var AdminRound = (function() {
       p.textContent = '二巡目の選手はいません。上部の ⋯ から一巡目に戻ると作り直せます。';
       listEl.appendChild(p);
     } else {
-      var plain = rows.filter(function(r) { return r.finalist !== true; });
       var fin = rows.filter(function(r) { return r.finalist === true; });
-      plain.forEach(function(r) { listEl.appendChild(buildRow(r)); });
-      if (fin.length > 0) {
-        var cap = document.createElement('div');
-        cap.className = 'round-finale-caption';
-        // 候補は先頭コート（通常 A）の二巡目の末尾で斬る（設計書 2026-09-28）。
-        // コートで絞っていても候補のコートを出すため、大会の全選手から引く。
-        cap.textContent = '決戦（' + EventStatus.FINALIST_LABEL + '）　' +
-          Courts.finaleCourt((CTX && CTX.players) || fin) + ' コートの最後に斬ります';
-        listEl.appendChild(cap);
-        var box = document.createElement('div');
-        box.className = 'round-finale';
-        fin.forEach(function(r) { box.appendChild(buildRow(r)); });
-        listEl.appendChild(box);
+      // 決戦のカード（見出し＋候補の行）。候補の行は先頭コートの男子の続き番号なので、試技順に
+      // 並べると先頭コート男子の直後に来る（そこへ置く）。決戦 進行中は採点できるのが候補だけなので先頭へ。
+      var finBlock = fin.length > 0 ? buildFinaleBlock(fin) : null;
+      var placed = false;
+      if (finBlock && statStatus === 'round2_final') {
+        listEl.appendChild(finBlock);
+        placed = true;
       }
+      rows.forEach(function(r) {
+        if (r.finalist === true) {
+          if (!placed && finBlock) { listEl.appendChild(finBlock); placed = true; }
+          return;
+        }
+        listEl.appendChild(buildRow(r));
+      });
+      if (!placed && finBlock) listEl.appendChild(finBlock);
     }
     updateCounter();
+  }
+
+  // 決戦のカード。見出しは PC 運営と同じ「決戦（暫定ベスト4・A コートの最後）」に、
+  // 二巡目 進行中は「開始前」、決戦 進行中は「進行中」を添える。
+  // コートで絞っていても候補のコートを出すため、大会の全選手から引く。
+  function buildFinaleBlock(fin) {
+    var frag = document.createDocumentFragment();
+    var cap = document.createElement('div');
+    cap.className = 'round-finale-caption';
+    var state = statStatus === 'round2' ? '　開始前' : (statStatus === 'round2_final' ? '　進行中' : '');
+    cap.textContent = '決戦（' + EventStatus.FINALIST_LABEL + '・' +
+      Courts.finaleCourt((CTX && CTX.players) || fin) + ' コートの最後）' + state;
+    frag.appendChild(cap);
+    var box = document.createElement('div');
+    box.className = 'round-finale';
+    fin.forEach(function(r) { box.appendChild(buildRow(r)); });
+    frag.appendChild(box);
+    return frag;
   }
 
   function updateCounter() {

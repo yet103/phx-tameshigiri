@@ -21,12 +21,12 @@ var AdminResults = (function() {
     var bar = document.createElement('div');
     bar.className = 'results-bar';
     bar.appendChild(makeBtn('btnResultsReload', '最新に更新', onReload));
-    bar.appendChild(makeBtn('btnResultsPresent', '発表モードで開く', onPresent));
-    bar.appendChild(makeBtn('btnResultsCopy', '共有リンクをコピー', onCopy));
+    bar.appendChild(makeBtn('btnResultsPresent', '発表モードで開く', function() { onPresent(this); }));
+    bar.appendChild(makeBtn('btnResultsCopy', '共有リンクをコピー', function() { onCopy(this); }));
     // 成績表（HTML）の保存。採点画面の「HTML保存」をここへ移した（2026-09-29）
-    bar.appendChild(makeBtn('btnResultsHtml', '成績表（HTML）を保存', onDownloadHtml));
+    bar.appendChild(makeBtn('btnResultsHtml', '成績表（HTML）を保存', function() { onDownloadHtml(this); }));
     // CSV エクスポート（全選手の内訳）。試合進行の ⋯ からここへ移した（1 画面 1 目的。ユーザー要望 2026-09-30）
-    bar.appendChild(makeBtn('btnResultsCsv', 'CSVエクスポート', onExportCsv));
+    bar.appendChild(makeBtn('btnResultsCsv', 'CSVエクスポート', function() { onExportCsv(this); }));
     container.appendChild(bar);
 
     var body = document.createElement('div');
@@ -105,14 +105,14 @@ var AdminResults = (function() {
     return link.token;
   }
 
-  async function onPresent() {
+  // btn: 押されたボタン（連打を止めるため。試合進行タブの「表彰」の区画からも呼ばれる）
+  async function onPresent(btn) {
     var eventId = Admin.currentEventId();
     if (!eventId) {
       alert('大会を選んでください。');
       return;
     }
-    var btn = this;
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     // ポップアップブロッカーは「クリックイベント処理中の同期的な window.open」しか
     // 許可しないブラウザが多い。await をまたいでから開こうとするとブロックされる
     // ことがあるので、まず空タブを同期的に開いておき、トークン取得後に location を差し替える。
@@ -130,19 +130,18 @@ var AdminResults = (function() {
       }
       w.location = url;
     } finally {
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
 
   // 成績表（HTML）。必ずサーバーから取り直す（他コートの端末がその後つけた得点を入れるため）
-  async function onDownloadHtml() {
+  async function onDownloadHtml(btn) {
     var eventId = Admin.currentEventId();
     if (!eventId) {
       alert('大会を選んでください。');
       return;
     }
-    var btn = this;
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
       var latest = await Api.loadEvent(eventId);
       if (!latest) { alert('最新の大会データを取得できませんでした。'); return; }
@@ -150,47 +149,52 @@ var AdminResults = (function() {
       if (all.length === 0) { alert('ダウンロードするデータがありません。'); return; }
       Storage.downloadHtml('result.html', Storage.buildPlayersHtml(all));
     } finally {
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
 
   // 全選手の内訳の CSV（players.csv）。サーバーが最新の大会から作る
-  async function onExportCsv() {
+  async function onExportCsv(btn) {
     var eventId = Admin.currentEventId();
     if (!eventId) {
       alert('大会を選んでください。');
       return;
     }
-    var btn = this;
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
       var csv = await Api.exportCsv(eventId);
       if (Admin.currentEventId() !== eventId) return;   // 通信中に大会を切り替えられた
       if (!csv) { alert('エクスポートに失敗しました。'); return; }
       Storage.downloadCsv('players.csv', csv);
     } finally {
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
 
-  async function onCopy() {
+  async function onCopy(btn) {
     var eventId = Admin.currentEventId();
     if (!eventId) {
       alert('大会を選んでください。');
       return;
     }
-    var btn = this;
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
       var token = await shareToken(eventId);
       if (!token) return;
       await Admin.copyText(new URL('share.html#' + token, location.href).href, 'リンクをコピーしました');
     } finally {
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
 
   Admin.registerTab('results', { render: render });
 
-  return { render: render };
+  // 試合進行タブの「表彰」の区画（admin-round.js）が同じ処理を呼ぶための入口。
+  // btn には押されたボタンを渡す（処理中だけ無効にする）。
+  return {
+    render: render,
+    present: onPresent,
+    copyLink: onCopy,
+    downloadHtml: onDownloadHtml
+  };
 })();
