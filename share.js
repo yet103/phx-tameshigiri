@@ -8,7 +8,7 @@ var Share = (function() {
 
   var CATEGORIES = [
     { key: 'male', title: '一般男子' },
-    { key: 'newFace', title: '新人' },
+    { key: 'newFace', title: '新人枠' },
     { key: 'female', title: '一般女子' }
   ];
 
