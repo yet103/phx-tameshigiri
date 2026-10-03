@@ -197,7 +197,7 @@ var Api = (function() {
     // 409 の reason は 'stale' | 'transition' | 'empty' | 'no_round2' | 'no_finale' |
     //   'finale_pending' | 'generate_failed' | 'exists'（round1 → round1_done で追跡できない
     //   二巡目の行がある。opts.force: true で再送すると越えられる。レビュー指摘A）。
-    //   画面はこれで「読み直す」「先に決戦を開始する」「force で確認して進む」などの
+    //   画面はこれで「読み直す」「先に最終組を開始する」「force で確認して進む」などの
     //   次の行動を出し分けるので、error だけでなく reason も返す（他の API と違って
     //   ok:false に理由を載せるのはこのため）。
     // round2 は round1 → round1_done のときだけ入る
@@ -206,7 +206,7 @@ var Api = (function() {
     //   fromRequest は二巡目の形の申請（一巡目の行の r2tech1〜3）の形で作った行の数
     //   （設計書 2026-10-03 3.4。画面のトーストに出す）。
     //   finalistDiff は EventStatus.finalistDiff の戻り値（選考の差。網羅検証 S18）。
-    //   reordered: true は、誰も採点していなかったため暫定ベスト4と番号を現在の
+    //   reordered: true は、誰も採点していなかったため最終組と番号を現在の
     //   一巡目の得点から付け直したことを表す（レビュー指摘J）。
     // opts.force: true を渡すと、追跡できない二巡目の行があっても確認済みとして進める。
     try {
@@ -588,7 +588,7 @@ var Api = (function() {
     // 戻り値:
     //   { success: true, created, skipped, existingCount, untrackedCount, unassignedCount,
     //     finalistCount, reordered }
-    //     reordered: true は、誰も採点していなかったため暫定ベスト4と番号を現在の
+    //     reordered: true は、誰も採点していなかったため最終組と番号を現在の
     //       一巡目の得点から付け直したことを表す（レビュー指摘J）
     //     created: 新規に作った二巡目行数
     //     skipped: source（order が解析できる一巡目）のうち既に二巡目行を生成済みだった人数
@@ -597,8 +597,8 @@ var Api = (function() {
     //     untrackedCount: 既存の二巡目行のうち sourcePlayerId を持たない件数
     //                     （CSVインポート由来。force すると重複生成される）
     //     unassignedCount: order が解析できず二巡目を作れなかった一巡目選手の人数
-    //     finalistCount: 決戦（暫定ベスト4）に入った人数（設計書 2026-09-22）
-    //     finalistDiff: 選考の差（EventStatus.finalistDiff の戻り値。差分追加では決戦の印を
+    //     finalistCount: 最終組（一巡目上位 4 名。以前の呼び名は決戦）に入った人数（設計書 2026-09-22）
+    //     finalistDiff: 選考の差（EventStatus.finalistDiff の戻り値。差分追加では最終組の印を
     //                   選び直さないので、画面が Courts.finalistDiffMessage で警告する。網羅検証 S18）
     //   | { blocked: true, reason: 'unscored' | 'exists' | 'status' | 'locked', error,
     //       unscoredCount, existingCount, untrackedCount, unassignedCount }
@@ -839,8 +839,15 @@ var Api = (function() {
     // 戻り値: { event: { name, date, venue, updatedAt },
     //          rankings: { male: [{ rank, name, score }], female: [...], newFace: [...] },
     //          finale: { court, status, rows: [{ name, order, r1, r2, total, scored, rank }] }
-    //                  | null（決戦の行が無ければ null。設計書 2026-09-22） }
+    //                  | null（最終組＝一巡目上位 4 名の表。以前の呼び名は決戦。最終組の行が
+    //                    無ければ null。設計書 2026-09-22）,
+    //          best4: { final, remaining, rows: [{ name, total, r1, r2, rank }] } }
+    //                  （ベスト4＝一般男子の合計の上位 4 名・同点は全員・0 点以下は除く。
+    //                    final: false の間は暫定ベスト4 で、remaining は二巡目が未確定の一般男子の人数。
+    //                    r2 は二巡目を終えた人だけ、まだなら null。EventStatus.best4Standings と同じ。
+    //                    設計書 2026-10-04-finale-after-round2-design.md 2.6）
     //       | null（400/404/通信失敗）
+    //   共有リンク越しの GET /api/links/:token/ranking（fetchSharedRanking）も同じ形。
     try {
       var res = await fetch('/api/events/' + eventId + '/ranking');
       if (!res.ok) return null;

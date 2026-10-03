@@ -282,8 +282,8 @@ var Courts = (function() {
       .sort(function(a, b) { return compareOrder(a.player, b.player); });
   }
 
-  // 決戦（暫定ベスト4）の行を試技順（番号順）に並べて返す。
-  // 誰が決戦かの判定は status.js（サーバーと共有）にあり、ここは並べるだけ。
+  // 最終組（一巡目上位 4 名。以前の呼び名は「決戦」）の行を試技順（番号順）に並べて返す。
+  // 誰が最終組かの判定は status.js（サーバーと共有）にあり、ここは並べるだけ。
   function finalists(players) {
     return EventStatus.finalists(players).slice().sort(compareOrder);
   }
@@ -293,10 +293,44 @@ var Courts = (function() {
     return EventStatus.normalizeRank(rank);
   }
 
-  // 決戦の候補がいるコートの名前（無ければ ''）。判定は status.js に一本化してあるので、
+  // 最終組がいるコートの名前（無ければ ''）。判定は status.js に一本化してあるので、
   // ここは呼び直すだけ（courts.js を主に使う画面から使えるようにするための入口）。
   function finaleCourt(players) {
     return EventStatus.finaleCourt(players);
+  }
+
+  // ---- 最終組とベスト4 の 1 行（設計書 2026-10-04-finale-after-round2-design.md 2.5） ----
+  // PC・スマホの試合進行が同じ文言を出すための純粋関数。
+
+  // 最終組の 1 行。名前は試技順（finalists の順）、trim、空なら「(名称未設定)」。
+  // 0 名なら最終組がいない理由（選考は一般男子の一巡目の確定得点が 0 点より上の人。EventStatus.pickFinalists）。
+  function finalGroupLineText(players) {
+    var fin = finalists(players || []);
+    if (fin.length === 0) {
+      return EventStatus.FINALIST_LABEL + 'はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）';
+    }
+    return EventStatus.FINALIST_LABEL + '（' + EventStatus.FINALIST_DESC + '・' + finaleCourt(players) +
+      ' コートの最後）: ' +
+      fin.map(function(p) { return String(p.name || '').trim() || '(名称未設定)'; }).join('・');
+  }
+
+  // 暫定ベスト4／ベスト4 の 1 行。best4 は EventStatus.best4Standings の戻り値（ranking API の best4 も同じ形）。
+  // 確定前は「暫定ベスト4（合計）: 名前（n点）・…　残り n 名」、確定後は「ベスト4（合計）: …」。
+  // best4 が無ければ ''。
+  function best4LineText(best4) {
+    if (!best4 || typeof best4 !== 'object') return '';
+    var rows = Array.isArray(best4.rows) ? best4.rows : [];
+    var head = (best4.final ? EventStatus.BEST4_LABEL : EventStatus.BEST4_PROVISIONAL_LABEL) + '（合計）: ';
+    var body;
+    if (rows.length > 0) {
+      body = rows.map(function(r) {
+        return (String((r && r.name) || '').trim() || '(名称未設定)') + '（' + ((r && r.total) || 0) + '点）';
+      }).join('・');
+    } else {
+      body = best4.final ? 'いません（一般男子に合計 1 点以上の人がいない）' : 'まだいません';
+    }
+    var rest = best4.final ? '' : '　残り ' + (Number(best4.remaining) || 0) + ' 名';
+    return head + body + rest;
   }
 
   // 二巡目生成 API の 409 応答（reason: 'unscored' | 'exists'）を確認文言にする。
@@ -392,15 +426,15 @@ var Courts = (function() {
 
   function stageCountText(status, players) {
     var list = players || [];
-    // 決戦 進行中は決戦の行だけを数える（他のコートはもう斬り終わっている）。
+    // 最終組 進行中は最終組の行だけを数える（他のコートはもう斬り終わっている）。
     // scoringRound('round2_final') は 2 を返すので、必ずこの分岐を先に置くこと。
     if (status === 'round2_final') {
       var fin = EventStatus.finalists(list);
-      return '決戦 確定 ' + fin.filter(isConfirmed).length + ' / ' + fin.length;
+      return EventStatus.FINALIST_LABEL + ' 確定 ' + fin.filter(isConfirmed).length + ' / ' + fin.length;
     }
     var r = EventStatus.scoringRound(status);
     if (r) {
-      // 二巡目 進行中は決戦の行を除いて数える（決戦の行は「決戦を開始」の後に斬るので、
+      // 二巡目 進行中は最終組の行を除いて数える（最終組の行は「最終組を開始」の後に斬るので、
       // 入れると「確定 n / N」がいつまでも埋まらない。網羅検証 S12）。
       var rows = list.filter(function(p) {
         return roundOf(p) === r && !(status === 'round2' && p && p.finalist === true);
@@ -597,15 +631,15 @@ var Courts = (function() {
       return unconfirmedWarning(list, [1]) + '二巡目を行わずに最終結果にします。\nよろしいですか？';
     }
     if (from === 'round2' && to === 'round2_final') {
-      // 決戦に出ない選手（暫定ベスト4 以外）が全員斬り終わっているかを数える
+      // 最終組でない選手が全員斬り終わっているかを数える
       var others = round(2).filter(function(p) { return p.finalist !== true; });
-      return countPhrase('決戦以外の未確定', others.filter(function(p) { return !isConfirmed(p); }).length) +
-        '\n決戦を開始しますか？';
+      return countPhrase(EventStatus.FINALIST_LABEL + '以外の未確定', others.filter(function(p) { return !isConfirmed(p); }).length) +
+        '\n' + EventStatus.NEXT_LABELS.round2 + 'しますか？';
     }
     if (from === 'round2_final' && to === 'round2_done') {
-      return countPhrase('決戦の未確定',
+      return countPhrase(EventStatus.FINALIST_LABEL + 'の未確定',
         EventStatus.finalists(list).filter(function(p) { return !isConfirmed(p); }).length) +
-        '\n決戦を終了しますか？';
+        '\n' + EventStatus.NEXT_LABELS.round2_final + 'しますか？';
     }
     if (from === 'round2' && to === 'round2_done') {
       return countPhrase('二巡目の未確定', round(2).filter(function(p) { return !isConfirmed(p); }).length) +
@@ -719,11 +753,14 @@ var Courts = (function() {
       if (all.length > BLOCKER_NAME_LIMIT) s += '…ほか ' + (all.length - BLOCKER_NAME_LIMIT) + ' 名';
       return s;
     }
-    var lines = ['⚠ ' + (typeof EventStatus !== 'undefined' ? EventStatus.FINALIST_LABEL : '暫定ベスト4') + ' が、今の一巡目の確定得点で選び直した結果と違います。'];
+    var hasStatus = typeof EventStatus !== 'undefined';
+    var label = hasStatus ? EventStatus.FINALIST_LABEL : '最終組';
+    var desc = hasStatus ? EventStatus.FINALIST_DESC : '一巡目上位 4 名';
+    var lines = ['⚠ ' + label + '（' + desc + '）が、今の一巡目の確定得点で選び直した結果と違います。'];
     if (diff.missing && diff.missing.length > 0) lines.push('入るべき選手: ' + names(diff.missing));
     if (diff.extra && diff.extra.length > 0) lines.push('外れるべき選手: ' + names(diff.extra));
     lines.push(diff.round2Scored
-      ? '二巡目に採点済みの選手がいるため、自動では選び直しません。決戦の選手を確認してください。'
+      ? '二巡目に採点済みの選手がいるため、自動では選び直しません。' + label + 'の選手を確認してください。'
       : '「戻す」で一巡目に戻して一巡目を終了し直すと選び直せます。');
     return lines.join('\n');
   }
@@ -1072,6 +1109,8 @@ var Courts = (function() {
     finalists: finalists,
     rankLabel: rankLabel,
     finaleCourt: finaleCourt,
+    finalGroupLineText: finalGroupLineText,
+    best4LineText: best4LineText,
     techCopyTargets: techCopyTargets,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage,

@@ -388,7 +388,7 @@ function playerWithRev(p) {
   return Object.assign({}, p, { rev: EventStatus.revOf(p) });
 }
 
-// 決戦（暫定ベスト4）の表。決戦の行が無ければ null（設計書 2026-09-22）。
+// 最終組（一巡目上位 4 名。以前の呼び名は「決戦」）の表。最終組の行が無ければ null（設計書 2026-09-22）。
 // rows は試技順（候補の行の番号順。候補は先頭コートの男子の二巡目の末尾に並ぶ。設計書 2026-09-28）。r1 は一巡目の得点（sourcePlayerId で引く）、
 // r2 は斬った人だけ（未採点は null）、rank も斬った人だけの中での暫定順位
 // （合計降順・同点同順位。1, 1, 3）。
@@ -447,70 +447,29 @@ function computeFinale(event) {
 }
 
 // 順位の集計。順位ロジックの唯一の実装。
-// 一巡目の行ごとに合算する（一巡目＋二巡目。網羅検証 M1。設計書 2026-10-01 2.3）:
+// 一巡目の行ごとに合算する（一巡目＋二巡目。網羅検証 M1。設計書 2026-10-01 2.3）。
+// まとめ方は status.js の EventStatus.playerTotals（ベスト4 の best4Standings と共有。
+// 「順位の一般男子の上位 4 ＝ ベスト4」を同じまとめ方で保証する。設計書 2026-10-04 2.2）:
 //   一巡目の行 … 自分の id の組
 //   sourcePlayerId を持つ行 … その id の組（元の行が消えていてもその id でまとめる）
 //   sourcePlayerId を持たない二巡目以降の行（旧データ・CSV 由来）… 従来どおり氏名と性別で、
 //     同じ氏名・同じ性別の一巡目の組に足す（無ければ氏名の組を作る）
-// 以前は氏名だけで合算していたため、一巡目の氏名を直すと 2 行に割れ、同姓同名の別人は合算されていた。
 // 組の氏名・性別・新人は組の代表（一巡目の行。無ければ最初に入った行）から取る。
 // 得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
 // ○×の生データ（result）や order・id は返さない（共有リンクから無認証で読まれるため）。
 function computeRanking(event) {
   const lockedEvent = countsAllScores(event);   // 旧データ（status 無し）だけ全行を数える
   const players = ((event && event.players) || []).filter(p => p && typeof p === 'object');
-  // id や氏名が __proto__ / constructor などでも壊れないよう、プロトタイプ無しの辞書を使う
-  const groups = Object.create(null);   // key -> { rep, score }
-  const byNameSex = Object.create(null);   // '女|氏名' -> 一巡目の組の key（最初の 1 つ）
-  const keys = [];
-  const nameOf = p => String((p && p.name) || '').trim();
-  const sexKey = p => (p.isFemale === true ? '女' : '男') + '|' + nameOf(p);
-  const scoreOf = p => ((p.confirmed === true || lockedEvent) && typeof p.score === 'number') ? p.score : 0;
-  const addTo = (key, p) => {
-    if (!groups[key]) { groups[key] = { rep: p, score: 0 }; keys.push(key); }
-    groups[key].score += scoreOf(p);
-  };
-
-  // 行ごとの組の key。id の無い一巡目の行（ごく古いデータ）は行ごとに別の組にする
-  // （'id:' に寄せると id の無い行どうしが 1 人に合算されてしまう）。
-  const keyOf = new Array(players.length);
-  // 1 周目: 一巡目の行が組を作る（二巡目の行が配列の前にあっても代表は一巡目になる）
-  players.forEach((p, i) => {
-    if (EventStatus.roundOf(p) !== 1) return;
-    const key = (typeof p.id === 'string' && p.id) ? 'id:' + p.id : 'row:' + i;
-    keyOf[i] = key;
-    addTo(key, p);
-    const nk = sexKey(p);
-    if (!byNameSex[nk]) byNameSex[nk] = key;
-  });
-  // 2 周目: 二巡目以降の行
-  players.forEach((p, i) => {
-    if (EventStatus.roundOf(p) === 1) return;
-    const key = (typeof p.sourcePlayerId === 'string' && p.sourcePlayerId) ? 'id:' + p.sourcePlayerId
-      : (byNameSex[sexKey(p)] || ('name:' + sexKey(p)));
-    keyOf[i] = key;
-    addTo(key, p);
-  });
-
-  // CSV エクスポートは氏名の前後に空白が付くことがある。trim して表示する。
-  // 代表の氏名が空なら組の中の最初の空でない氏名を使い、それも無ければ出さない（従来どおり）。
-  const namesByKey = Object.create(null);
-  players.forEach((p, i) => {
-    const n = nameOf(p);
-    if (n && !namesByKey[keyOf[i]]) namesByKey[keyOf[i]] = n;
-  });
+  const totals = EventStatus.playerTotals(players, { countAll: lockedEvent });
 
   const male = [];
   const female = [];
   const newFace = [];
-  keys.forEach(key => {
-    const g = groups[key];
-    const name = nameOf(g.rep) || namesByKey[key] || '';
-    if (!name) return;
-    const entry = { name: name, score: g.score };
-    if (g.rep.isFemale === true) female.push(entry);
+  totals.forEach(t => {
+    const entry = { name: t.name, score: t.total };
+    if (t.isFemale) female.push(entry);
     else male.push(entry);
-    if (g.rep.isNewFace === true) newFace.push(entry);
+    if (t.isNewFace) newFace.push(entry);
   });
 
   const rank = list => {
@@ -538,9 +497,13 @@ function computeRanking(event) {
       female: rank(female),
       newFace: rank(newFace)
     },
-    // 決戦（暫定ベスト4）の表。決戦の行が無ければ null。
-    // 順位の集計（rankings）は変えない（氏名で合算、一般男子／新人／一般女子）。
-    finale: computeFinale(event)
+    // 最終組（一巡目上位 4 名。以前の呼び名は「決戦」）の表。最終組の行が無ければ null。
+    // 順位の集計（rankings）は変えない（一般男子／新人／一般女子）。
+    finale: computeFinale(event),
+    // ベスト4（一般男子の合計の上位 4 名・同点は全員・0 点以下は除く）。二巡目の途中は
+    // final: false（暫定ベスト4）で、remaining に二巡目が未確定の一般男子の人数。常にある。
+    // rows は name・total・r1・r2・rank だけ（○× や order・id は返さない）。設計書 2026-10-04 2.6。
+    best4: EventStatus.best4Standings(players, { countAll: lockedEvent, status: EventStatus.of(event) })
   };
 }
 
@@ -2015,16 +1978,16 @@ app.post('/api/events/:id/status', (req, res) => {
         players.filter(p => EventStatus.roundOf(p) === 2).length === 0) {
       return res.status(409).json({ error: '二巡目が生成されていません', reason: 'no_round2' });
     }
-    // 決戦の行が無ければ決戦は始められない（暫定ベスト4 が 0 名の大会）
+    // 最終組の行が無ければ最終組は始められない（最終組が 0 名の大会）
     if (from === 'round2' && to === 'round2_final' && !EventStatus.hasFinalists(event.players)) {
-      return res.status(409).json({ error: '決戦の選手がいません', reason: 'no_finale' });
+      return res.status(409).json({ error: '最終組の選手がいません', reason: 'no_finale' });
     }
-    // 決戦の行があるのに二巡目を終了しようとしたら止める（先に「決戦を開始」を押す）。
-    // 決戦の行が無い大会（この機能より前に作られた大会）は round2 → round2_done を素通しする
+    // 最終組の行があるのに二巡目を終了しようとしたら止める（先に「最終組を開始」を押す）。
+    // 最終組の行が無い大会（この機能より前に作られた大会）は round2 → round2_done を素通しする
     // （既存データの移行）。
     if (from === 'round2' && to === 'round2_done' && EventStatus.hasFinalists(event.players)) {
       return res.status(409).json({
-        error: '決戦がまだです。先に「決戦を開始」を押してください', reason: 'finale_pending'
+        error: '最終組がまだです。先に「最終組を開始」を押してください', reason: 'finale_pending'
       });
     }
 
@@ -2037,7 +2000,7 @@ app.post('/api/events/:id/status', (req, res) => {
     appendHistory(req.params.id, {
       action: 'status_change',
       detail: EventStatus.LABELS[from] + ' → ' + EventStatus.LABELS[to] +
-        (round2Info ? '（二巡目 ' + round2Info.created + ' 名を生成。決戦 ' +
+        (round2Info ? '（二巡目 ' + round2Info.created + ' 名を生成。最終組 ' +
                       round2Info.finalistCount + ' 名）' : '')
     }, req.principal);
     res.json({ success: true, status: to, round2: round2Info });

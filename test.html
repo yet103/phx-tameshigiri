@@ -1889,6 +1889,7 @@
     var fnBlocked = await Api.changeStatus(fnEvent.id, 'round2_done');
     assert('決戦があるのに round2 → round2_done は 409 finale_pending',
       [fnBlocked.ok, fnBlocked.status, fnBlocked.reason], [false, 409, 'finale_pending']);
+    assert('finale_pending の文言は「最終組」', fnBlocked.error, '最終組がまだです。先に「最終組を開始」を押してください');
     assert('round2 → round2_final に進める',
       (await Api.changeStatus(fnEvent.id, 'round2_final')).status, 'round2_final');
     assert('round2_final → round2_done に進める',
@@ -1907,6 +1908,7 @@
     var fnNoFinale = await Api.changeStatus(fnNone.id, 'round2_final');
     assert('決戦の行が無ければ round2 → round2_final は 409 no_finale',
       [fnNoFinale.ok, fnNoFinale.status, fnNoFinale.reason], [false, 409, 'no_finale']);
+    assert('no_finale の文言は「最終組」', fnNoFinale.error, '最終組の選手がいません');
     assert('決戦の行が無ければ round2 → round2_done がそのまま通る',
       (await Api.changeStatus(fnNone.id, 'round2_done')).status, 'round2_done');
     await Api.deleteEvent(fnNone.id);
@@ -1994,6 +1996,63 @@
     var flNone = await makeGenEvent('決戦なし順位', 'H1,A-女子-1-1,真,,,30,,○,1    \n');
     assert('決戦の行が無ければ finale は null', (await Api.loadRanking(flNone.id)).finale, null);
     await Api.deleteEvent(flNone.id);
+
+    // ---- ベスト4（ranking の best4。設計書 2026-10-04 2.6） ----
+    var bfEvent = await makeGenEvent('ベスト4順位',
+      'B1,A-男子-1-1,真,,,40,,,1    \nB2,A-男子-1-2,真,,,30,,,1    \nB3,A-男子-1-3,真,,,20,,,1    \n' +
+      'B4,A-男子-1-4,真,,,10,,,1    \nB5,A-男子-1-5,真,,,5,○,,1    \nB6,A-男子-1-6,真,,,0,,,\n' +
+      'BF,A-女子-1-1,真,,,50,,○,1    \n');
+    await toRound1Done(bfEvent.id);
+    function bfRows(rk) { return rk.best4.rows.map(function(r) { return [r.name, r.total, r.r1, r.r2, r.rank]; }); }
+    // 順位の一般男子のうち score > 0 かつ rank <= 4 と同じ行・同じ順位であること
+    function bfSameAsRanking(rk) {
+      return JSON.stringify(rk.best4.rows.map(function(r) { return [r.rank, r.name, r.total]; })) ===
+        JSON.stringify(rk.rankings.male.filter(function(r) { return r.score > 0 && r.rank <= 4; })
+          .map(function(r) { return [r.rank, r.name, r.score]; }));
+    }
+    var bfRank0 = await Api.loadRanking(bfEvent.id);
+    assert('ranking の best4: 二巡目の前は一巡目の上位 4・残りは男子 6 名',
+      [bfRank0.best4.final, bfRank0.best4.remaining, bfRows(bfRank0)],
+      [false, 6, [['B1', 40, 40, null, 1], ['B2', 30, 30, null, 2], ['B3', 20, 20, null, 3], ['B4', 10, 10, null, 4]]]);
+    assert('ranking の best4: 項目は final・remaining・rows、行は name・total・r1・r2・rank だけ',
+      [Object.keys(bfRank0.best4), Object.keys(bfRank0.best4.rows[0])],
+      [['final', 'remaining', 'rows'], ['name', 'total', 'r1', 'r2', 'rank']]);
+    await Api.changeStatus(bfEvent.id, 'round2');
+    function bfR2(name) {
+      return Api.loadEvent(bfEvent.id).then(function(ev) {
+        return ev.players.filter(function(p) { return Courts.roundOf(p) === 2 && p.name === name; })[0];
+      });
+    }
+    await Api.updatePlayer(bfEvent.id, (await bfR2('B5')).id, { score: 50, result: '1    ', confirmed: true });
+    var bfRank1 = await Api.loadRanking(bfEvent.id);
+    assert('ranking の best4: 二巡目の確定で動く（B5 が 55 で 1 位、B4 が外れる）・残りが減る',
+      [bfRank1.best4.final, bfRank1.best4.remaining, bfRows(bfRank1)],
+      [false, 5, [['B5', 55, 5, 50, 1], ['B1', 40, 40, null, 2], ['B2', 30, 30, null, 3], ['B3', 20, 20, null, 4]]]);
+    assert('ranking の best4: 順位の一般男子の上位（score > 0・rank <= 4）と一致', bfSameAsRanking(bfRank1), true);
+    await Api.updatePlayer(bfEvent.id, (await bfR2('B6')).id, { score: 20, result: '1    ', confirmed: true });
+    var bfRank2 = await Api.loadRanking(bfEvent.id);
+    assert('ranking の best4: 4 位が同点なら全員',
+      [bfRank2.best4.remaining, bfRows(bfRank2).map(function(r) { return [r[0], r[4]]; })],
+      [4, [['B5', 1], ['B1', 2], ['B2', 3], ['B3', 4], ['B6', 4]]]);
+    // 最終組（B1〜B4）は最終組 進行中に斬る
+    await Api.changeStatus(bfEvent.id, 'round2_final');
+    await Api.updatePlayer(bfEvent.id, (await bfR2('B1')).id, { score: 10, result: '1    ', confirmed: true });
+    var bfRank3 = await Api.loadRanking(bfEvent.id);
+    assert('ranking の best4: 最終組の途中はまだ暫定（残り 3 名）', [bfRank3.best4.final, bfRank3.best4.remaining], [false, 3]);
+    await Api.updatePlayer(bfEvent.id, (await bfR2('B2')).id, { score: 30, result: '1    ', confirmed: true });
+    await Api.updatePlayer(bfEvent.id, (await bfR2('B3')).id, { score: 0, result: '0    ', confirmed: true });
+    await Api.updatePlayer(bfEvent.id, (await bfR2('B4')).id, { score: 40, result: '1    ', confirmed: true });
+    var bfRank4 = await Api.loadRanking(bfEvent.id);
+    assert('ranking の best4: 一般男子が全員確定すれば final（女子の二巡目は未確定のまま）・同順位 3 位が 2 名',
+      [bfRank4.best4.final, bfRank4.best4.remaining, bfRows(bfRank4)],
+      [true, 0, [['B2', 60, 30, 30, 1], ['B5', 55, 5, 50, 2], ['B1', 50, 40, 10, 3], ['B4', 50, 10, 40, 3]]]);
+    assert('ranking の best4: 確定後も順位の一般男子の上位と一致', bfSameAsRanking(bfRank4), true);
+    assert('ranking の best4 と最終組の表（finale）は別（最終組は一巡目上位の B1〜B4 のまま）',
+      bfRank4.finale.rows.map(function(r) { return r.name; }).sort(), ['B1', 'B2', 'B3', 'B4']);
+    var bfLink = await Api.createShareLink(bfEvent.id);
+    assert('共有リンクの ranking にも同じ best4 が入る',
+      (await Api.loadSharedRanking(bfLink.token)).best4, bfRank4.best4);
+    await Api.deleteEvent(bfEvent.id);
 
     // --- 共有リンク ---
     var shareEvent = await Api.saveEvent({ name: '共有テスト', date: '2026-03-02', venue: '', players: [] });
@@ -4824,32 +4883,32 @@
       { order: '決戦-男子-2-1', finalist: true, score: 0, result: '' },
       { order: '決戦-男子-2-2', finalist: true, score: 20, result: '1    ', confirmed: true }
     ];
-    assert('statusConfirmMessage: round2 → round2_final は決戦以外の未採点を数える',
+    assert('statusConfirmMessage: round2 → round2_final は最終組以外の未採点を数える',
       Courts.statusConfirmMessage('round2', 'round2_final', cfP),
-      '決戦以外の未確定が 1名います。\n決戦を開始しますか？');
+      '最終組以外の未確定が 1名います。\n最終組を開始しますか？');
     assert('statusConfirmMessage: round2 → round2_final で未採点0なら「いません」',
       Courts.statusConfirmMessage('round2', 'round2_final', [
         { order: 'A-男子-2-1', score: 12, result: '1    ', confirmed: true },
         { order: '決戦-男子-2-1', finalist: true, score: 0, result: '' }
       ]),
-      '決戦以外の未確定がいません。\n決戦を開始しますか？');
-    assert('statusConfirmMessage: round2_final → round2_done は決戦の未採点を数える',
+      '最終組以外の未確定がいません。\n最終組を開始しますか？');
+    assert('statusConfirmMessage: round2_final → round2_done は最終組の未採点を数える',
       Courts.statusConfirmMessage('round2_final', 'round2_done', cfP),
-      '決戦の未確定が 1名います。\n決戦を終了しますか？');
+      '最終組の未確定が 1名います。\n最終組を終了しますか？');
     assert('statusConfirmMessage: round2_final → round2 は戻す文言',
       Courts.statusConfirmMessage('round2_final', 'round2', cfP),
       '二巡目 進行中に戻します。よろしいですか？');
     assert('statusConfirmMessage: round2_done → round2_final は戻す文言',
       Courts.statusConfirmMessage('round2_done', 'round2_final', cfP),
-      '決戦 進行中に戻します。よろしいですか？');
-    assert('statusConfirmMessage: 決戦の無い大会の round2 → round2_done は従来どおり',
+      '最終組 進行中に戻します。よろしいですか？');
+    assert('statusConfirmMessage: 最終組の無い大会の round2 → round2_done は従来どおり',
       Courts.statusConfirmMessage('round2', 'round2_done',
         [{ order: 'A-男子-2-1', score: 0, result: '' }]),
       '二巡目の未確定が 1名います。\n二巡目を終了しますか？');
 
     // ---- 段階表示の件数 ----
-    assert('stageCountText: round2_final は決戦だけを数える',
-      Courts.stageCountText('round2_final', cfP), '決戦 確定 1 / 2');
+    assert('stageCountText: round2_final は最終組だけを数える',
+      Courts.stageCountText('round2_final', cfP), '最終組 確定 1 / 2');
     // 網羅検証 S12（2026-10-01）: 二巡目 進行中は決戦の行を除いて数える（決戦は「決戦を開始」の後）
     assert('stageCountText: round2 は決戦の行を除いて数える（S12）',
       Courts.stageCountText('round2', cfP), '確定 1 / 2');
@@ -5595,7 +5654,10 @@
         { id: 'c', score: 10, confirmed: true }, { id: 'd', score: 0, confirmed: true },
         { id: 'e', score: 0, confirmed: true }
       ])).sort(), ['a', 'b', 'c']);
-    assert('EventStatus.FINALIST_LABEL は定数から組み立てる', EventStatus.FINALIST_LABEL, '暫定ベスト4');
+    assert('EventStatus.FINALIST_LABEL は「最終組」（以前の「決戦（暫定ベスト4）」。2026-10-04）', EventStatus.FINALIST_LABEL, '最終組');
+    assert('EventStatus.FINALIST_DESC は人数の定数から組み立てる', EventStatus.FINALIST_DESC, '一巡目上位 4 名');
+    assert('EventStatus のベスト4 の呼び名', [EventStatus.BEST4_COUNT, EventStatus.BEST4_LABEL, EventStatus.BEST4_PROVISIONAL_LABEL],
+      [4, 'ベスト4', '暫定ベスト4']);
     assert('pickFinalists: 空でも落ちない', Object.keys(EventStatus.pickFinalists([])), []);
 
     // finalistDiff: 選ぶべき候補と決戦の印の差（S18）
@@ -5618,12 +5680,116 @@
     assert('finalistDiff: 二巡目に採点済みがあれば round2Scored: true', EventStatus.finalistDiff(fdScored).round2Scored, true);
     assert('finalistDiffMessage: 差があれば入るべき・外れるべきと、戻して選び直す案内',
       Courts.finalistDiffMessage(fdRes),
-      '⚠ 暫定ベスト4 が、今の一巡目の確定得点で選び直した結果と違います。\n' +
+      '⚠ 最終組（一巡目上位 4 名）が、今の一巡目の確定得点で選び直した結果と違います。\n' +
       '入るべき選手: 乙（10点）\n外れるべき選手: 丙（0点）\n' +
       '「戻す」で一巡目に戻して一巡目を終了し直すと選び直せます。');
     assert('finalistDiffMessage: 二巡目に採点済みがあれば自動では選び直さない旨',
-      /自動では選び直しません/.test(Courts.finalistDiffMessage(EventStatus.finalistDiff(fdScored))), true);
+      /自動では選び直しません。最終組の選手を確認してください。$/.test(Courts.finalistDiffMessage(EventStatus.finalistDiff(fdScored))), true);
     assert('finalistDiffMessage: 差が無ければ空文字', Courts.finalistDiffMessage({ changed: false }), '');
+
+    // ---- 合計とベスト4（設計書 2026-10-04-finale-after-round2-design.md 2.2・2.3・2.5） ----
+    var PT = [
+      { id: 'a', name: ' 甲 ', order: 'A-男子-1-1', score: 30, confirmed: true },
+      { id: 'b', name: '乙', order: 'A-男子-1-2', score: 20, confirmed: true },
+      { id: 'c', name: '丙', order: 'A-女子-1-1', score: 50, confirmed: true, isFemale: true },
+      { id: 'd', name: '丁', order: 'A-男子-1-3', score: 25, result: '1    ' },
+      { id: 'a2', name: '甲', order: 'A-男子-2-1', sourcePlayerId: 'a', score: 12, confirmed: true },
+      { id: 'b2', name: '乙', order: 'A-男子-2-2', score: 7, result: '1    ' },
+      { id: 'n', name: '', order: 'A-男子-1-4', score: 3, confirmed: true }
+    ];
+    assert('playerTotals: 一巡目の行ごとに合算（sourcePlayerId・無ければ氏名＋性別）、未確定は数えない、氏名の無い組は返さない',
+      EventStatus.playerTotals(PT).map(function(t) { return [t.name, t.isFemale, t.r1, t.r2, t.total, t.r2Rows, t.r2Done]; }),
+      [['甲', false, 30, 12, 42, 1, true], ['乙', false, 20, 0, 20, 1, false],
+       ['丙', true, 50, 0, 50, 0, false], ['丁', false, 0, 0, 0, 0, false]]);
+    assert('playerTotals: countAll（status の無い旧データ）なら確定の印を見ずに数え、採点済みを終えた扱い',
+      EventStatus.playerTotals(PT, { countAll: true }).map(function(t) { return [t.name, t.total, t.r2Done]; }),
+      [['甲', 42, true], ['乙', 27, true], ['丙', 50, false], ['丁', 25, false]]);
+    assert('playerTotals: 空・null でも落ちない', [EventStatus.playerTotals([]), EventStatus.playerTotals(null)], [[], []]);
+
+    // 男子 6 名＋新人 1 名＋女子 1 名。二巡目の行は全員にあり、r2 に名前があれば確定済み。
+    var B4_R1 = [['M1', 50], ['M2', 40], ['M3', 30], ['M4', 20], ['M5', 10], ['M6', 0],
+      ['N1', 15, 'new'], ['F1', 99, 'female']];
+    function b4Players(r2) {
+      var out = [];
+      B4_R1.forEach(function(x, i) {
+        var fem = x[2] === 'female';
+        var sex = fem ? '女子' : '男子';
+        var r1 = { id: 'r1-' + x[0], name: x[0], order: 'A-' + sex + '-1-' + (i + 1), score: x[1],
+          result: '1    ', confirmed: true, isFemale: fem, isNewFace: x[2] === 'new' };
+        var row2 = { id: 'r2-' + x[0], name: x[0], order: 'A-' + sex + '-2-' + (i + 1), sourcePlayerId: r1.id,
+          isFemale: fem, score: 0, result: '' };
+        if (r2 && Object.prototype.hasOwnProperty.call(r2, x[0])) {
+          row2.score = r2[x[0]]; row2.result = '1    '; row2.confirmed = true;
+        }
+        out.push(r1, row2);
+      });
+      return out;
+    }
+    function b4Rows(b) { return b.rows.map(function(r) { return [r.name, r.total, r.r1, r.r2, r.rank]; }); }
+    var b4a = EventStatus.best4Standings(b4Players({}), { status: 'round2' });
+    assert('best4Standings: 二巡目の前は一巡目の合計の上位 4（女子は入らない・r2 は null）、残りは男子の全員',
+      [b4a.final, b4a.remaining, b4Rows(b4a)],
+      [false, 7, [['M1', 50, 50, null, 1], ['M2', 40, 40, null, 2], ['M3', 30, 30, null, 3], ['M4', 20, 20, null, 4]]]);
+    assert('best4Standings: 戻り値の項目は final・remaining・rows、行は name・total・r1・r2・rank だけ',
+      [Object.keys(b4a), Object.keys(b4a.rows[0])], [['final', 'remaining', 'rows'], ['name', 'total', 'r1', 'r2', 'rank']]);
+    var b4b = EventStatus.best4Standings(b4Players({ M5: 35 }), { status: 'round2' });
+    assert('best4Standings: 二巡目の確定が入ると動く（M5 が 45 で 2 位、M4 が外れる）・残りが 1 減る',
+      [b4b.final, b4b.remaining, b4Rows(b4b)],
+      [false, 6, [['M1', 50, 50, null, 1], ['M5', 45, 10, 35, 2], ['M2', 40, 40, null, 3], ['M3', 30, 30, null, 4]]]);
+    var b4c = EventStatus.best4Standings(b4Players({ M5: 35, N1: 15 }), { status: 'round2' });
+    assert('best4Standings: 4 位が同点なら全員（新人も一般男子として入る。同点は氏名順・同順位）',
+      [b4c.remaining, b4Rows(b4c)],
+      [5, [['M1', 50, 50, null, 1], ['M5', 45, 10, 35, 2], ['M2', 40, 40, null, 3],
+           ['M3', 30, 30, null, 4], ['N1', 30, 15, 15, 4]]]);
+    var b4d = EventStatus.best4Standings(b4Players({ M1: 0, M2: 0, M3: 0, M4: 0, M5: 35, M6: 0, N1: 15 }), { status: 'round2_final' });
+    assert('best4Standings: 一般男子が全員確定すれば final（女子の未確定は数えない）・二巡目 0 点は r2: 0',
+      [b4d.final, b4d.remaining, b4Rows(b4d)],
+      [true, 0, [['M1', 50, 50, 0, 1], ['M5', 45, 10, 35, 2], ['M2', 40, 40, 0, 3],
+                 ['M3', 30, 30, 0, 4], ['N1', 30, 15, 15, 4]]]);
+    var b4e = EventStatus.best4Standings(b4Players({}), { status: 'final' });
+    assert('best4Standings: 最終結果・アーカイブは未確定が残っていても final（二巡目を行わずに最終結果にした大会）',
+      [b4e.final, b4e.remaining, EventStatus.best4Standings(b4Players({}), { status: 'archived' }).final], [true, 7, true]);
+    var b4r1 = b4Players({}).filter(function(p) { return Courts.roundOf(p) === 1; });
+    assert('best4Standings: 二巡目の行が 1 つも無い大会（一巡目の途中）は final でなく、残りは一般男子の全員',
+      [EventStatus.best4Standings(b4r1, { status: 'round1' }).final, EventStatus.best4Standings(b4r1, { status: 'round1' }).remaining],
+      [false, 7]);
+    assert('best4Standings: 二巡目の行が無い人（コート未分類など）は残りに数えない',
+      EventStatus.best4Standings(b4Players({}).concat([{ id: 'u', name: 'U1', order: '', score: 5, confirmed: true }]),
+        { status: 'round2' }).remaining, 7);
+    assert('best4Standings: 合計 0 点以下は入らない',
+      EventStatus.best4Standings([
+        { id: 'z', name: 'Z', order: 'A-男子-1-1', score: 0, confirmed: true },
+        { id: 'y', name: 'Y', order: 'A-男子-1-2', score: -2, confirmed: true }
+      ]).rows, []);
+    assert('best4Standings: 空・null でも落ちない',
+      [EventStatus.best4Standings([]), EventStatus.best4Standings(null)],
+      [{ final: false, remaining: 0, rows: [] }, { final: false, remaining: 0, rows: [] }]);
+
+    var FG = [
+      { order: 'A-男子-1-1', name: '男子01', finalist: true },
+      { order: 'A-男子-2-6', name: ' 男子05 ', finalist: true },
+      { order: 'A-男子-2-5', name: '男子01', finalist: true },
+      { order: 'A-男子-2-1', name: '男子09' },
+      { order: 'A-男子-2-7', name: '', finalist: true }
+    ];
+    assert('finalGroupLineText: 最終組を試技順に（一巡目の印・印の無い行は入れない・名前は trim）',
+      Courts.finalGroupLineText(FG), '最終組（一巡目上位 4 名・A コートの最後）: 男子01・男子05・(名称未設定)');
+    assert('finalGroupLineText: 0 名・null なら理由',
+      [Courts.finalGroupLineText([]), Courts.finalGroupLineText(null)],
+      ['最終組はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）',
+       '最終組はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）']);
+    assert('best4LineText: 確定前は「暫定ベスト4（合計）」と残り人数',
+      Courts.best4LineText({ final: false, remaining: 3, rows: [{ name: '甲', total: 120 }, { name: ' 乙 ', total: 98 }] }),
+      '暫定ベスト4（合計）: 甲（120点）・乙（98点）　残り 3 名');
+    assert('best4LineText: 確定後は「ベスト4（合計）」で残り人数は出さない',
+      Courts.best4LineText({ final: true, remaining: 2, rows: [{ name: '甲', total: 120 }] }), 'ベスト4（合計）: 甲（120点）');
+    assert('best4LineText: 0 件（確定前・確定後）と null',
+      [Courts.best4LineText({ final: false, remaining: 5, rows: [] }),
+       Courts.best4LineText({ final: true, remaining: 0, rows: [] }),
+       Courts.best4LineText(null)],
+      ['暫定ベスト4（合計）: まだいません　残り 5 名', 'ベスト4（合計）: いません（一般男子に合計 1 点以上の人がいない）', '']);
+    assert('best4LineText: best4Standings の戻り値をそのまま渡せる',
+      Courts.best4LineText(b4b), '暫定ベスト4（合計）: M1（50点）・M5（45点）・M2（40点）・M3（30点）　残り 6 名');
 
     // unknownTechs / startBlockers の unknownTech（M3）
     var UT_TECH = [{ name: '甲', strikes: [5, null, null, null] }, { name: '丙(男)', strikes: [7, null, null, null] }];
@@ -5669,12 +5835,12 @@
       EventStatus.nextStep('round2', null), 'round2_done');
     assert('nextStep: round2 以外は next と同じ',
       EventStatus.nextStep('round1_done', FIN_ROWS), 'round2');
-    assert('nextLabel: round2 は決戦があれば「決戦を開始」',
-      EventStatus.nextLabel('round2', FIN_ROWS), '決戦を開始');
-    assert('nextLabel: round2 は決戦が無ければ「二巡目を終了」',
+    assert('nextLabel: round2 は最終組があれば「最終組を開始」',
+      EventStatus.nextLabel('round2', FIN_ROWS), '最終組を開始');
+    assert('nextLabel: round2 は最終組が無ければ「二巡目を終了」',
       EventStatus.nextLabel('round2', NOFIN_ROWS), '二巡目を終了');
-    assert('nextLabel: round2_final は「決戦を終了」',
-      EventStatus.nextLabel('round2_final', FIN_ROWS), '決戦を終了');
+    assert('nextLabel: round2_final は「最終組を終了」',
+      EventStatus.nextLabel('round2_final', FIN_ROWS), '最終組を終了');
     assert('nextLabel: round2_done は「結果を確定して表彰へ」',
       EventStatus.nextLabel('round2_done', FIN_ROWS), '結果を確定して表彰へ');
     assert('nextLabel: archived は null', EventStatus.nextLabel('archived', FIN_ROWS), null);
@@ -5857,12 +6023,12 @@
     assert('LABELS: round1 は「一巡目 進行中」', EventStatus.LABELS.round1, '一巡目 進行中');
     assert('LABELS: round1_done は「二巡目準備（形の登録）」',
       EventStatus.LABELS.round1_done, '二巡目準備（形の登録）');
-    assert('LABELS: round2_final は「決戦 進行中」', EventStatus.LABELS.round2_final, '決戦 進行中');
+    assert('LABELS: round2_final は「最終組 進行中」', EventStatus.LABELS.round2_final, '最終組 進行中');
     assert('NEXT_LABELS: draft は「試合開始」', EventStatus.NEXT_LABELS.draft, '試合開始');
     assert('NEXT_LABELS: round1_done は「二巡目を開始」', EventStatus.NEXT_LABELS.round1_done, '二巡目を開始');
-    assert('NEXT_LABELS: round2 は「決戦を開始」', EventStatus.NEXT_LABELS.round2, '決戦を開始');
-    assert('NEXT_LABELS: round2_final は「決戦を終了」',
-      EventStatus.NEXT_LABELS.round2_final, '決戦を終了');
+    assert('NEXT_LABELS: round2 は「最終組を開始」', EventStatus.NEXT_LABELS.round2, '最終組を開始');
+    assert('NEXT_LABELS: round2_final は「最終組を終了」',
+      EventStatus.NEXT_LABELS.round2_final, '最終組を終了');
     assert('NEXT_LABELS: round2_done は「結果を確定して表彰へ」',
       EventStatus.NEXT_LABELS.round2_done, '結果を確定して表彰へ');
     assert('ROUND2_END_LABEL は「二巡目を終了」（決戦の無い二巡目のボタン）',
@@ -6212,13 +6378,13 @@
     var DM_NOFIN = [{ order: 'A-男子-1-1', name: '男子01' }, { order: 'A-男子-2-1', name: '男子01' }];
     assert('stepTodo: 二巡目（決戦あり）はボタンの文言に ▶ を添える',
       DeskMatch.stepTodo('round2', DM_FIN, 'match'),
-      '各コートで二巡目を採点しています。決戦以外が斬り終わったら「決戦を開始 ▶」を押します。');
+      '各コートで二巡目を採点しています。決戦以外が斬り終わったら「最終組を開始 ▶」を押します。');
     assert('stepTodo: 二巡目（決戦なし）は「二巡目を終了 ▶」',
       DeskMatch.stepTodo('round2', DM_NOFIN, 'match'),
       '各コートで二巡目を採点しています。全コートの確定がそろったら「二巡目を終了 ▶」を押します。');
     assert('stepTodo: 決戦 進行中は「決戦を終了 ▶」',
       DeskMatch.stepTodo('round2_final', DM_FIN, 'match'),
-      '決戦 進行中です（A コートの最後）。斬り終わったら「決戦を終了 ▶」を押します。');
+      '決戦 進行中です（A コートの最後）。斬り終わったら「最終組を終了 ▶」を押します。');
     assert('stepTodo: 二巡目終了は「結果を確定して表彰へ ▶」',
       DeskMatch.stepTodo('round2_done', DM_FIN, 'match'),
       '二巡目が終わりました。下の順位を確かめて「結果を確定して表彰へ ▶」を押します。');

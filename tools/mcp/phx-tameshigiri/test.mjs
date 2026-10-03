@@ -4,7 +4,7 @@
 //
 // - プロジェクトのサーバー（server/index.js）を一時データ（TMG_DATA_DIR）・テスト用の Basic 認証で起動し、
 //   Basic で AI 用キーを発行して、PHX_KEY_SOURCE=env で MCP サーバーを子プロセスとして起動し、stdio で JSON-RPC を話す。
-// - 予行と同じ流れ（作成 → 男子 10・女子 8 の登録 → 試合開始 → 採点 → 一巡目終了 → 二巡目 → 決戦 → 二巡目終了 → 順位 → 削除）、
+// - 予行と同じ流れ（作成 → 男子 10・女子 8 の登録 → 試合開始 → 採点 → 一巡目終了 → 二巡目 → 最終組 → 二巡目終了 → 順位 → 削除）、
 //   安全策（本番の大会への書き込みはクライアントで拒否・サーバーでも 403 sandbox、confirmName の不一致、final は force 無しで拒否）、
 //   キーが MCP サーバーの標準出力・標準エラーのどこにも出ないこと、を確かめる。
 // - --vault: 資格情報マネージャーの経路も確かめる。テスト用のリソース名（phx-tameshigiri-ai-test）に一時キーを保存し、
@@ -525,7 +525,7 @@ try {
   });
 
   let finalistCount = 0;
-  await step('auto_score（二巡目）: 決戦以外を採点。決戦の行は飛ばす', async () => {
+  await step('auto_score（二巡目）: 最終組以外を採点。最終組の行は飛ばす', async () => {
     const r = await mcp.ok('auto_score', { eventId: EID, seed: 7 });
     const ev = (await http(base, 'GET', '/api/events/' + EID, undefined, BASIC)).body;
     const r2 = ev.players.filter(p => roundOf(p) === 2);
@@ -534,7 +534,7 @@ try {
     assert.equal(r.skipped, finalistCount);
   });
 
-  await step('change_status: 決戦を開始 → auto_score（決戦は試技順＝一巡目の低い順）→ 二巡目を終了', async () => {
+  await step('change_status: 最終組を開始 → auto_score（最終組は試技順＝一巡目の低い順）→ 二巡目を終了', async () => {
     assert.equal((await mcp.ok('change_status', { eventId: EID, to: 'round2_final' })).status, 'round2_final');
     const r = await mcp.ok('auto_score', { eventId: EID, seed: 11 });
     assert.equal(r.scored, finalistCount);
@@ -544,7 +544,7 @@ try {
     assert.equal((await mcp.ok('change_status', { eventId: EID, to: 'round2_done' })).status, 'round2_done');
   });
 
-  await step('get_ranking: 一般男子・一般女子・新人・決戦の表が期待（独立の計算）と一致', async () => {
+  await step('get_ranking: 一般男子・一般女子・新人・最終組の表・ベスト4 が期待（独立の計算）と一致', async () => {
     const rk = await mcp.ok('get_ranking', { eventId: EID });
     const ev = (await http(base, 'GET', '/api/events/' + EID, undefined, BASIC)).body;
     const r1rows = ev.players.filter(p => roundOf(p) === 1);
@@ -556,7 +556,7 @@ try {
     assert.ok(sameRanking(rk.rankings.male, rankOf(r1rows.filter(p => !p.isFemale).map(mk))), '一般男子');
     assert.ok(sameRanking(rk.rankings.female, rankOf(r1rows.filter(p => p.isFemale).map(mk))), '一般女子');
     assert.ok(sameRanking(rk.rankings.newFace, rankOf(r1rows.filter(p => p.isNewFace).map(mk))), '新人');
-    // 決戦の候補: 一般男子の一巡目上位 4（0 点除外、4 位同点は全員）
+    // 最終組（以前の呼び名は決戦）: 一般男子の一巡目上位 4（0 点除外、4 位同点は全員）
     const males = r1rows.filter(p => !p.isFemale && r1.get(p.id) > 0).sort((a, b) => r1.get(b.id) - r1.get(a.id));
     const cut = males.length ? r1.get(males[Math.min(3, males.length - 1)].id) : Infinity;
     const expFinal = males.filter(p => r1.get(p.id) >= cut);
@@ -570,6 +570,10 @@ try {
       assert.deepEqual([r.r1, r.r2, r.total, r.rank, r.scored], [e.r1, e.r2, e.total, rankByName.get(r.name), true], r.name);
       if (i > 0) assert.ok(rk.finale.rows[i - 1].r1 <= r.r1, '低い順');
     });
+    // ベスト4（合計の一般男子上位 4、0 点以下除外、4 位同点は全員）。全員確定済みなので確定（設計書 2026-10-04）
+    const totals = rankOf(r1rows.filter(p => !p.isFemale).map(mk)).filter(x => x.score > 0 && x.rank <= 4);
+    assert.deepEqual([rk.best4.final, rk.best4.remaining], [true, 0], 'ベスト4 は確定');
+    assert.deepEqual(rk.best4.rows.map(r => [r.rank, r.name, r.total]), totals.map(x => [x.rank, x.name, x.score]), 'ベスト4');
   });
 
   // ── 安全策 ──
