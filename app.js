@@ -2132,6 +2132,16 @@ var App = (function() {
       if (wideMedia.addEventListener) wideMedia.addEventListener('change', onChange);
       else if (wideMedia.addListener) wideMedia.addListener(onChange);
     }
+    // 広い窓の中の 2 択（横並び／縦積み）は窓幅とコート数で決まるので、窓の大きさが変わるたびに見直す
+    var resizeTimer = null;
+    window.addEventListener('resize', function() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function() {
+        var before = document.body.className;
+        applyListLayout();
+        if (document.body.className !== before) updatePlayerList();
+      }, 100);
+    });
     applyListLayout();
   }
 
@@ -2139,8 +2149,27 @@ var App = (function() {
     return !!(wideMedia && wideMedia.matches);
   }
 
+  // 広い窓: 全コートが横に並ぶ幅があれば横並び（採点｜A｜B）、無ければ右の列に縦に積む
+  // （body.scoring-wide-stack。採点｜[A の上に B]）。2 択の判定は Courts.listLayout。
+  // コート数は描いた区画の数（renderPlayerList の後にも呼ぶ。大会の切り替えでコート数が変わるため）。
   function applyListLayout() {
-    document.body.classList.toggle('scoring-wide', isWideLayout());
+    var wide = isWideLayout();
+    var count = playerListCourts.querySelectorAll('.court-list').length;
+    document.body.classList.toggle('scoring-wide', wide);
+    document.body.classList.toggle('scoring-wide-stack', wide && Courts.listLayout(window.innerWidth, count) === 'stack');
+    fitListTables(wide);
+  }
+
+  // 広い窓で、列の幅に収まらない表だけ詰める（.compact。見出しと順番の欄を折り返す）。
+  // 収まる幅では今までどおり 1 行で出す。狭い窓（1 列・スマホ）は今までどおり枠の中で横スクロール。
+  function fitListTables(wide) {
+    var tables = playerListCourts.querySelectorAll('.player-list-table');
+    for (var i = 0; i < tables.length; i++) {
+      var t = tables[i];
+      t.classList.remove('compact');
+      var box = t.parentNode;
+      if (wide && box && box.scrollWidth > box.clientWidth + 1) t.classList.add('compact');
+    }
   }
 
   // 一覧の見出し行（10 列）
@@ -2166,6 +2195,7 @@ var App = (function() {
     sections.forEach(function(s) {
       playerListCourts.appendChild(buildCourtList(s, s.current ? visiblePlayers : courtPlayers(s.court)));
     });
+    applyListLayout();   // コート数が変わると横並び／縦積みが変わりうる
   }
 
   // コート 1 つ分の区画（見出し＋表）
@@ -2248,7 +2278,7 @@ var App = (function() {
     if (isFinale && currentStatus() === 'round2') tr.classList.add('finale');
     var hasBib = (typeof p.bib === 'number');
     tr.innerHTML =
-      '<td>' + esc(p.order || '') + (isFinale ? ' <span class="finale-mark">' + esc(EventStatus.FINALIST_LABEL) + '</span>' : '') + '</td>' +
+      '<td><span class="order-text">' + esc(p.order || '') + '</span>' + (isFinale ? ' <span class="finale-mark">' + esc(EventStatus.FINALIST_LABEL) + '</span>' : '') + '</td>' +
       // 未設定は薄い「—」（数値なので esc は要らないが、列を空にはしない）
       '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
       '<td class="name">' + esc(p.name || '') + '</td>' +
@@ -2347,14 +2377,16 @@ var App = (function() {
   // 一覧の枠（.player-list-body）の中だけをスクロールさせる。
   // 一覧はページのフローに置いたので、scrollIntoView を使うとページ全体が動き、
   // スマホでは「次の選手」ボタンが画面の外へ逃げてしまう。閉じた区画（高さ 0）では何もしない。
+  // 広い窓の縦積み（body.scoring-wide-stack）では、表の枠ではなく右の列（一覧の欄）全体がスクロールする。
   function scrollPlayerListTo(row) {
     if (!row) return;
-    var box = row.closest('.player-list-body');
+    var stacked = document.body.classList.contains('scoring-wide-stack');
+    var box = stacked ? playerListSection : row.closest('.player-list-body');
     if (!box || box.clientHeight === 0) return;
     var boxRect = box.getBoundingClientRect();
     var rowRect = row.getBoundingClientRect();
-    // 見出し行は position:sticky で枠の上端に居座るので、その分だけ下を使う
-    var head = box.querySelector('thead');
+    // 見出し行は position:sticky で枠の上端に居座るので、その分だけ下を使う（縦積みでは居座らない）
+    var head = stacked ? null : box.querySelector('thead');
     var headHeight = head ? head.getBoundingClientRect().height : 0;
     var top = boxRect.top + headHeight;
     if (rowRect.top < top) {

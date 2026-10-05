@@ -38,12 +38,23 @@
     }
     body.scoring-wide .player-list-courts { display: flex; height: 100%; }
     body.scoring-wide .court-list {
-      flex: 1 0 440px; max-width: 640px; min-height: 0;
+      flex: 1 1 0; min-width: 0; max-width: 640px; min-height: 0;
       display: flex; flex-direction: column; border-left: 2px solid var(--gold);
     }
     body.scoring-wide .court-list + .court-list .court-list-head { border-top: none; }
     body.scoring-wide .court-list-head { padding-left: 12px; padding-right: 12px; cursor: default; }
     body.scoring-wide .court-list .player-list-body { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0 8px 8px; }
+    /* 広い窓で表が列の幅に収まらないときだけ（app.js の fitListTables が .compact を付ける）、見出しと
+       順番の欄（番号と「最終組」の印の間）を折り返して列の幅に収める（横スクロールを出さない） */
+    body.scoring-wide .player-list-table.compact th { white-space: normal; }
+    body.scoring-wide .player-list-table.compact td:first-child { white-space: normal; }
+    .player-list-table .order-text { white-space: nowrap; }
+    /* 全コートが横に並ぶ幅が無いとき（Courts.listLayout が 'stack'。app.js が body.scoring-wide-stack を付ける）:
+       右の列にコートの一覧を縦に積み、各一覧は列の幅いっぱい。縦に収まらなければ右の列だけがスクロールする。 */
+    body.scoring-wide-stack .player-list-section { overflow-x: hidden; overflow-y: auto; border-left: 2px solid var(--gold); }
+    body.scoring-wide-stack .player-list-courts { flex-direction: column; height: auto; }
+    body.scoring-wide-stack .court-list { flex: 0 0 auto; max-width: none; border-left: none; }
+    body.scoring-wide-stack .court-list + .court-list .court-list-head { border-top: 2px solid var(--gold); }
     .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--gold); flex-wrap:wrap; }
     .event-bar select { padding:4px 8px; }
     /* 指で押す前提のタップ目標（style.css のバー類と同じ 44px） */

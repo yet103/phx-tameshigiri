@@ -116,6 +116,16 @@ var Courts = (function() {
   //     最終組 進行中 … 最終組の行だけ
   //   進行中でない（status が空・準備中・終了など）… 全巡目（見直し・確認のため）
   // EventStatus（status.js）は呼び出し時に参照する。
+  // 広い窓（1100px 以上）での採点画面の一覧の並べ方（2026-10-05）。全コートが横に並ぶか、全部縦に積むかの 2 択。
+  //   'row'   … 採点｜A｜B｜…（窓幅が 採点の区画 660 ＋ コート数 × 一覧の最小幅 520 ＋ 余白 60 以上。2 コートなら 1760px）
+  //   'stack' … 採点｜[A の上に B …]（足りないとき。右の列の幅いっぱいに縦に積む）
+  // コートが 0〜1 なら 1 列で収まる幅かどうかで同じ式（1 コートは 1240px 以上で row。見た目はどちらも 採点｜A）。
+  var LIST_PANEL_WIDTH = 660, LIST_COLUMN_MIN = 520, LIST_MARGIN = 60;
+  function listLayout(windowWidth, courtCount) {
+    var n = Math.max(1, Number(courtCount) || 0);
+    return (Number(windowWidth) || 0) >= LIST_PANEL_WIDTH + n * LIST_COLUMN_MIN + LIST_MARGIN ? 'row' : 'stack';
+  }
+
   function listForStatus(players, court, status) {
     var list = filter(players, court).sort(compareOrder);
     var round = status ? EventStatus.scoringRound(status) : null;
@@ -1119,6 +1129,7 @@ var Courts = (function() {
     isScored: isScored,
     compareOrder: compareOrder,
     listForStatus: listForStatus,
+    listLayout: listLayout,
     orderKey: orderKey,
     normalizeName: normalizeName,
     hasNoTech: hasNoTech,
