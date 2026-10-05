@@ -608,13 +608,16 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 .court-list.read-only .player-list-table tr:hover td { opacity: 1; }
 /* 確定済みの行はグレー。選択中の行（下の .current-player）のほうが後にあるので勝つ */
 .player-list-table tr.done td { background: var(--cell-disabled); color: var(--text-muted); }
+/* 採点中の選手の行は黄色のハイライト（黒の反転は見つけにくい。ユーザー要望 2026-10-05）。文字は太く */
 .player-list-table tr.current-player td {
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--row-current);
+  color: var(--row-current-text);
+  font-weight: bold;
 }
 .player-list-table tr.current-player td.score {
-  color: var(--accent-text);
+  color: var(--row-current-text);
 }
+.player-list-table tr.current-player td.no-bib { color: var(--row-current-text); }
 /* 試技順を入れ替える掴み手（⋮⋮）の列。運営の端末だけ（app.js の canReorder。2026-10-05）。
    指で掴めるよう掴み手の上ではスクロールにしない（touch-action: none）。長押しのメニュー・文字の選択も出さない */
 .player-list-table th.grip, .player-list-table td.grip { width: 22px; min-width: 22px; padding: 0; }
@@ -625,7 +628,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
 [data-theme="dark"] .player-list-table .drag-handle { color: var(--gold); }
-.player-list-table tr.current-player .drag-handle { color: var(--accent-text); }
+.player-list-table tr.current-player .drag-handle { color: var(--row-current-text); }
 .player-list-table .drag-handle.disabled { cursor: not-allowed; opacity: .3; }
 /* ドラッグ中の行は指に付いて動く（transform は app.js）。落とす位置に金の線、帯をまたぐ所では朱の枠 */
 .player-list-table tr.dragging { position: relative; z-index: 2; }
@@ -659,11 +662,11 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 /* 順位の数字は金。ライトの生成りの上では明るい金が沈むので濃い金（ダークは明るい金） */
 .rank-panel-table td.rank { color: var(--gold-deep); font-weight: bold; }
 [data-theme="dark"] .rank-panel-table td.rank { color: var(--gold-light); }
-.rank-panel-table tr.current td.rank { color: var(--accent-text); }
+.rank-panel-table tr.current td.rank { color: var(--row-current-text); }
 .rank-panel-table td.name { font-weight: bold; white-space: normal; overflow-wrap: anywhere; }
 .rank-panel-table td.total { font-weight: bold; color: var(--score-confirmed); }
 /* 今開いている選手の行（一覧の .current-player と同じ色。D7） */
-.rank-panel-table tr.current td { background: var(--accent); color: var(--accent-text); }
+.rank-panel-table tr.current td { background: var(--row-current); color: var(--row-current-text); }
 
 /* ===== 保存状態の表示 ===== */
 .save-status {

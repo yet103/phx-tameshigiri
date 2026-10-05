@@ -62,6 +62,8 @@
   --warn:         #a9711b;
   --banner-text:  #ffffff;
   --row-selected: #f3e5b5;   /* 選択中の技の行 */
+  --row-current:  #ffe66b;   /* 採点中の選手の行（一覧・順位表）。黒の反転は見つけにくい（ユーザー要望 2026-10-05）*/
+  --row-current-text: #1b1b1b;
   --score-confirmed: #1f4fa3; /* 確定済みの得点 */
   --btn-confirm:     #5aa9e6; /* 確定ボタン（未確定＝水色） */
   --btn-confirm-on:  #1f4fa3; /* 確定ボタン（確定済み＝青）。タイマー稼働中の「開始」も同じ */
@@ -92,6 +94,8 @@
   --warn:         #f0b64a;
   --banner-text:  #ffffff;
   --row-selected: #3b3216;
+  --row-current:  #8a7a1a;   /* 暗いテーマでは濃い黄。文字は生成り */
+  --row-current-text: #fff8dc;
   --score-confirmed: #7fb7ff;
   --btn-confirm:     #3d7fc4;
   --btn-confirm-on:  #7fb7ff;
