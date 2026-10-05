@@ -6995,6 +6995,26 @@
     assert('Dashboard.saveLayout → loadLayout（壊れた列は落ちる）', Dashboard.loadLayout(), { row: 70, cols: { bottom: [40, 60] } });
     try { localStorage.removeItem('tmg_dashboard_layout'); } catch (e) {}
 
+    // ---- EventStatus.roundProgress（順位表の「〜巡目 済み/全員」。ユーザー要望 2026-10-05） ----
+    (function() {
+      var ps = [
+        { name: 'a', order: 'A-男子-1-1', confirmed: true },
+        { name: 'b', order: 'A-男子-1-2', isNewFace: true },
+        { name: 'c', order: 'A-女子-1-1', isFemale: true, confirmed: true },
+        { name: 'a', order: 'A-男子-2-1', sourcePlayerId: 'x' },
+        { name: 'b', order: 'A-男子-2-2', isNewFace: true, confirmed: true }
+      ];
+      var r1 = EventStatus.roundProgress(ps, 'round1');
+      assert('roundProgress: 一巡目 進行中は一巡目の行で数える（一般男子は新人込み）',
+        [r1.male.label, r1.female.label, r1.newFace.label], ['一巡目 1/2', '一巡目 1/1', '一巡目 0/1']);
+      var r2 = EventStatus.roundProgress(ps, 'round2');
+      assert('roundProgress: 二巡目 進行中は二巡目の行', [r2.male.label, r2.female.label, r2.newFace.label],
+        ['二巡目 1/2', '二巡目 0/0', '二巡目 1/1']);
+      assert('roundProgress: 進行中でなければ行のある最大の巡目', EventStatus.roundProgress(ps, 'final').male.round, 2);
+      assert('roundProgress: 行が無ければ一巡目 0/0', EventStatus.roundProgress([], 'draft').male, { round: 1, done: 0, total: 0, label: '一巡目 0/0' });
+      assert('roundProgress: null でも落ちない', EventStatus.roundProgress(null, null).female.total, 0);
+    })();
+
     // ---- bundle-import.js（トップ・PC 運営・スマホ運営で共用の取り込み処理。設計書 2026-10-05 §3） ----
     await (async function() {
       var biAlerts = [], biConfirms = [], biSent = [];

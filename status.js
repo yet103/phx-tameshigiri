@@ -276,6 +276,33 @@
   //   newFace … isNewFace が true の組（男女混合）
   //   並びと順位は rankByTotal（合計の降順・同点は氏名順・同点同順位 1, 1, 3。0 点も順位に入る）
   //   key / counted は playerTotals のもの（共有リンクには出さない。サーバーが落とす）
+  // 順位表の見出しに添える「〜巡目 済み/全員」（ユーザー要望 2026-10-05）。
+  // 巡目は進行中（round1 / round2）ならその巡目、そうでなければ行のある最大の巡目（無ければ 1）。
+  // 済み = その巡目の行のうち確定済み（confirmed）の数、全員 = その巡目の行の数。部門の分け方は rankings と同じ
+  // （一般男子は新人を含む）。label は「一巡目 12/17」の形（ranking.html はこれをそのまま出す）。
+  var ROUND_KANJI = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  function roundLabel(round) {
+    return (ROUND_KANJI[round - 1] || String(round)) + '巡目';
+  }
+  function roundProgress(players, status) {
+    var list = (Array.isArray(players) ? players : []).filter(function(p) { return p && typeof p === 'object'; });
+    var round = scoringRound(status);
+    if (!round) {
+      round = 1;
+      list.forEach(function(p) { round = Math.max(round, roundOf(p)); });
+    }
+    function count(filter) {
+      var rows = list.filter(function(p) { return roundOf(p) === round && filter(p); });
+      var done = rows.filter(function(p) { return p.confirmed === true; }).length;
+      return { round: round, done: done, total: rows.length, label: roundLabel(round) + ' ' + done + '/' + rows.length };
+    }
+    return {
+      male: count(function(p) { return p.isFemale !== true; }),
+      female: count(function(p) { return p.isFemale === true; }),
+      newFace: count(function(p) { return p.isNewFace === true; })
+    };
+  }
+
   function rankings(players, opts) {
     var totals = playerTotals(players, opts);
     function rank(list) {
@@ -465,6 +492,7 @@
     playerTotals: playerTotals,
     best4Standings: best4Standings,
     rankings: rankings,
+    roundProgress: roundProgress,
     isScoringOpen: isScoringOpen,
     scoringRound: scoringRound,
     isLocked: isLocked,

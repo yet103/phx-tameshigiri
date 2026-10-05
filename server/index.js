@@ -420,6 +420,8 @@ function computeRanking(event) {
       female: r.female.map(strip),
       newFace: r.newFace.map(strip)
     },
+    // 部門ごとの「〜巡目 済み/全員」（{ round, done, total, label }。順位表示ページの見出し用。ユーザー要望 2026-10-05）
+    progress: EventStatus.roundProgress(players, EventStatus.of(event)),
     // ベスト4（一般男子の合計の上位 4 名・同点は全員・0 点以下は除く）。二巡目の途中は
     // final: false（暫定ベスト4）で、remaining に二巡目が未確定の一般男子の人数。常にある。
     // rows は name・total・r1・r2・rank だけ（○× や order・id は返さない）。設計書 2026-10-04 2.6。

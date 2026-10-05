@@ -156,22 +156,28 @@
       }
       CATEGORIES.forEach(function(c) {
         rankingContainer.appendChild(
-          buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || []));
+          buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || [],
+            data.progress && data.progress[c.key]));
       });
     }
 
-    function buildRankTable(title, rows) {
+    // progress（省略可）: { label } 「一巡目 12/17」= その巡目で確定した人数／全員（サーバーの roundProgress）
+    function buildRankTable(title, rows, progress) {
       var div = document.createElement('div');
       div.className = 'ranking-section';
+      var head = '<h3>' + Storage.esc(title) +
+        (progress && progress.label
+          ? ' <span style="font-weight:normal;font-size:13px;color:#666">' + Storage.esc(progress.label) + '</span>'
+          : '') + '</h3>';
       if (rows.length === 0) {
-        div.innerHTML = '<h3>' + Storage.esc(title) + '</h3><p style="color:#666">データなし</p>';
+        div.innerHTML = head + '<p style="color:#666">データなし</p>';
         return div;
       }
       var trs = rows.map(function(r) {
         return '<tr><td>' + Storage.esc(String(r.rank)) + '</td><td>' + Storage.esc(r.name) +
                '</td><td>' + Storage.esc(String(r.score)) + '</td></tr>';
       }).join('');
-      div.innerHTML = '<h3>' + Storage.esc(title) + '</h3>' +
+      div.innerHTML = head +
         '<table class="rank-table"><tr><th>順位</th><th>選手名</th><th>得点</th></tr>' +
         trs + '</table>';
       return div;

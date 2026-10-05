@@ -2596,6 +2596,8 @@ var App = (function() {
     rankPanelCols.innerHTML = '';
     if (!currentEvent) return;
     var cats = Courts.rankPanel(players, { countAll: typeof currentEvent.status !== 'string' });
+    // 見出しに「〜巡目 済み/全員」（何人中何人が確定したか。ユーザー要望 2026-10-05）
+    var progress = EventStatus.roundProgress(players, currentStatus());
     var any = cats.some(function(c) { return c.rows.length > 0; });
     rankPanelCols.classList.toggle('empty', !any);
     if (!any) {
@@ -2611,6 +2613,14 @@ var App = (function() {
       col.dataset.category = c.key;
       var h = document.createElement('h3');
       h.textContent = c.title;
+      var pr = progress[c.key];
+      if (pr) {
+        var prEl = document.createElement('span');
+        prEl.className = 'rank-panel-progress';
+        prEl.textContent = pr.label;
+        prEl.title = pr.round + ' 巡目の行 ' + pr.total + ' 名のうち、確定済み ' + pr.done + ' 名';
+        h.appendChild(prEl);
+      }
       col.appendChild(h);
       if (c.rows.length === 0) {
         var none = document.createElement('p');
