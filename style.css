@@ -440,12 +440,8 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 /* ===== 順位テーブル（ranking.html） ===== */
 /* 順位表示ページ（ranking.html）。採点画面の順位表（.rank-panel-cols / .rank-panel-col / .rank-panel-table）と
    同じ横並びの配置に（ユーザー要望 2026-10-05）。大会名の見出し（.rank-heading）は 3 列ぶち抜き */
-.ranking-container { padding: 12px 0; overflow-x: auto; }
-/* 名前を折り返さない（ユーザー要望 2026-10-05）。列は中身の幅で決め、はみ出す分は横スクロール */
-@media (min-width: 600px) { .ranking-container.rank-panel-cols { grid-template-columns: repeat(3, max-content); justify-content: start; gap: 16px; } }
-.ranking-container .rank-panel-table td.name, .ranking-container .rank-panel-table th.name { white-space: nowrap; overflow-wrap: normal; }
-.ranking-container .rank-panel-table td.chance { white-space: nowrap; }
-.ranking-container .rank-heading { grid-column: 1 / -1; }
+.ranking-container { padding: 12px 0; gap: 16px; }
+.ranking-container .rank-heading { flex-basis: 100%; }
 .ranking-container .rank-heading h2 { margin: 0 0 2px; }
 .ranking-container .rank-heading p { margin: 0 0 4px; }
 .rank-zoom { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
@@ -647,14 +643,16 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .rank-panel-section { border-top: 2px solid var(--border); margin-top: 8px; padding-top: 8px; padding-bottom: 24px; }
 .rank-panel-title { font-size: 16px; margin: 0 0 8px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; }
 .rank-panel-note { font-size: 12px; font-weight: normal; color: var(--text-muted); }
-.rank-panel-cols { display: grid; grid-template-columns: 1fr; gap: 12px; }
-@media (min-width: 600px) { .rank-panel-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* 表は中身の幅のまま横に並べ、入らない表は次の行へ回す（名前を折り返さない。ユーザー要望 2026-10-05）。
+   凡例は常に 1 行ぶち抜き */
+.rank-panel-cols { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
 .rank-panel-cols.empty { display: block; }
-.rank-panel-col { min-width: 0; }
+.rank-panel-col { flex: 0 0 auto; max-width: 100%; }
 .rank-panel-col h3 { font-size: 14px; margin: 0; padding: 4px 8px; background: var(--bg-header); }
 .rank-panel-empty, .rank-panel-none { margin: 4px 0; font-size: 13px; color: var(--text-muted); }
 .rank-panel-none { padding: 4px 8px; border: 1px solid var(--border); border-top: none; }
-.rank-panel-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rank-panel-table { width: auto; border-collapse: collapse; font-size: 13px; }
+.rank-panel-table th.name, .rank-panel-table td.name { white-space: nowrap; overflow-wrap: normal; }
 .rank-panel-table th, .rank-panel-table td { border: 1px solid var(--border); padding: 2px 6px; line-height: 1.3; }
 .rank-panel-table th { background: var(--bg-header); white-space: nowrap; font-weight: bold; }
 .rank-panel-table th.rank, .rank-panel-table td.rank,
@@ -663,11 +661,11 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .rank-panel-table td.rank { color: var(--gold-deep); font-weight: bold; }
 [data-theme="dark"] .rank-panel-table td.rank { color: var(--gold-light); }
 .rank-panel-table tr.current td.rank { color: var(--row-current-text); }
-.rank-panel-table td.name { font-weight: bold; white-space: normal; overflow-wrap: anywhere; }
+.rank-panel-table td.name { font-weight: bold; white-space: nowrap; }   /* 折り返さない（ユーザー要望 2026-10-05） */
 .rank-panel-table td.total { font-weight: bold; color: var(--score-confirmed); }
 /* ベスト4 に残れる可能性（一般男子の列。◎ 確定・○ 可能性あり・✕ 圏外） */
 .rank-panel-table th.chance, .rank-panel-table td.chance { font-size: 13px; white-space: nowrap; text-align: center; width: 1%; }
-.rank-panel-legend { grid-column: 1 / -1; margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }
+.rank-panel-legend { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }
 .rank-panel-max { margin-left: 2px; font-size: 11px; font-weight: normal; color: var(--text-muted); }
 .rank-panel-table td.chance.sure { color: var(--gold-deep); font-weight: bold; }
 [data-theme="dark"] .rank-panel-table td.chance.sure { color: var(--gold-light); }
