@@ -94,6 +94,18 @@
     head.appendChild(h2);
     head.appendChild(spacer);
 
+    // ダッシュボード（採点をコートごと・試合進行・順位を 1 画面に。設計書 2026-10-05-dashboard-design.md）
+    var btnDash = document.createElement('button');
+    btnDash.type = 'button';
+    btnDash.className = 'desk-btn';
+    btnDash.id = 'btnMatchDashboard';
+    btnDash.textContent = '📊 ダッシュボード';
+    btnDash.title = '採点画面（コートごと）・試合進行・順位を 1 画面に並べて新しいタブで開きます';
+    btnDash.addEventListener('click', function() {
+      window.open('dashboard.html#event/' + encodeURIComponent(ctx.eventId), '_blank');
+    });
+    head.appendChild(btnDash);
+
     var btnReload = document.createElement('button');
     btnReload.type = 'button';
     btnReload.className = 'desk-btn';
