@@ -499,9 +499,14 @@ a { color: var(--accent); }
    2026-10-03）。セレクトの幅は既定では一番長い選択肢で決まる（min-width だけでは縮まない）ので width で決める
    （下の .desk-match-table select の min-width: 130px もここで上書きする）。
    100px は最長の「立位逆袈裟」が矢印と並んで入る幅 */
-.desk-match-table.desk-round2-table select { width: 100px; min-width: 100px; padding-left: 3px; padding-right: 3px; }
+.desk-match-table.desk-round2-table select { width: 124px; min-width: 124px; padding-left: 3px; padding-right: 3px; }   /* 「立位逆袈裟（2）」が入る幅 */
+/* 表は列をデータの幅に詰めて左に寄せる（窓いっぱいに広げない。ユーザー要望 2026-10-05） */
+.desk-match-table.desk-round2-table { width: auto; }
 .desk-match-table.desk-round2-table td.copy .desk-btn { padding: 0 6px; }
 .desk-round2-table td.differ.changed { color: var(--score-color); font-weight: bold; }
+/* 一巡目から形を変えた枠（セレクト／見るだけのときはセル）は黄色のハイライト */
+.desk-round2-table select.changed-slot { background: var(--row-current); color: var(--row-current-text); border-color: var(--gold-deep); font-weight: bold; }
+.desk-round2-table td.changed-slot { background: var(--row-current); color: var(--row-current-text); font-weight: bold; }
 .desk-round2-table td.differ.same, .desk-round2-table td.differ.none { color: var(--text-muted); }
 .desk-round2-tosteps { margin-top: 16px; }
 .desk-round2-tosteps .desk-btn-sub { min-height: 34px; padding: 0 14px; font-size: 13px; border: 1px solid var(--gold-deep); }

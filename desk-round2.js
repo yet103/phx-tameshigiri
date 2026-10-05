@@ -36,7 +36,8 @@
     table.className = 'desk-table desk-match-table desk-round2-table';
     // 「一巡目から」は形を一巡目から変えるか（同じ／変更）。最終確認で誰が形を変えるかを一目で見る
     table.innerHTML =
-      '<thead><tr><th>巡</th><th>No.</th><th>名前</th><th>一巡目</th><th>一巡目から</th>' +
+      // 「No.」はゼッケンと紛らわしいので「順番」（コート内の試技順）にし、ゼッケンの列を足す（ユーザー要望 2026-10-05）
+      '<thead><tr><th>巡</th><th>順番</th><th>名前</th><th>ゼッケン</th><th>一巡目</th><th>一巡目から</th>' +
       '<th>技1</th><th>技2</th><th>技3</th>' + (editable ? '<th></th>' : '') + '</tr></thead>';
     var tbody = document.createElement('tbody');
     rows.forEach(function(p) { tbody.appendChild(buildRow(p, ctx, editable, techniques)); });
@@ -209,6 +210,7 @@
     tr.appendChild(cell('2', 'num'));
     tr.appendChild(cell(String(Courts.orderKey(p).no || ''), 'num'));
     tr.appendChild(cell(p.name || '', 'desk-cell-main'));
+    tr.appendChild(cell(Number.isInteger(p.bib) ? String(p.bib) : '—', 'num'));
     // 一巡目の得点は確定済みだけ出す（採点途中の値は順位にも入らない。網羅検証 S10）
     var r1Cell = cell((src && src.confirmed === true) ? String(src.score || 0) : '—', 'num');
     if (src && src.confirmed !== true) r1Cell.title = '一巡目が未確定です';
@@ -220,9 +222,11 @@
     tr.appendChild(diffCell);
 
     if (!editable) {
-      tr.appendChild(cell(p.tech1 || ''));
-      tr.appendChild(cell(p.tech2 || ''));
-      tr.appendChild(cell(p.tech3 || ''));
+      [1, 2, 3].forEach(function(slot) {
+        var td = cell(p['tech' + slot] || '');
+        if (slotChanged(p, src, slot)) td.className = 'changed-slot';
+        tr.appendChild(td);
+      });
       return tr;
     }
 
@@ -243,6 +247,7 @@
     // 空欄の赤枠に加えて、同じ形の回数制限の赤枠も塗る（3枠揃った時点で判定するので、
     // ループの外でまとめて呼ぶ。設計書 2026-09-20-rules-alignment-design.md）。
     updateTechMarks(selects, techniques, !!p.isFemale);
+    paintSlots(selects, p, src);
 
     var tdCopy = document.createElement('td');
     tdCopy.className = 'copy';
@@ -276,7 +281,7 @@
     (techniques || []).forEach(function(t) {
       var o = document.createElement('option');
       o.value = t.name;
-      o.textContent = t.name;
+      o.textContent = Courts.techniqueLabel(t);   // 「夢想返し（18）」。value は技名のまま
       sel.appendChild(o);
     });
     // その大会の技リストから消えた技名が入っている行でも、値を落とさずに見せる
@@ -402,6 +407,7 @@
     if (res.player && typeof res.player.rev === 'number') p.rev = res.player.rev;
     absorbSource(ctx, res.source);   // 一巡目の行の申請へ書き戻した（設計書 2026-10-03 2.4）
     setValues(selects, arr, ctx.techniques, !!p.isFemale);
+    paintSlots(selects, p, sourceOf(p, ctx.players));
     var diffCell = tr.querySelector('td.differ');
     if (diffCell) paintDiffer(diffCell, p, ctx);
     updateCount(ctx);
@@ -423,6 +429,22 @@
   }
 
   // 「一巡目から」のセル。一巡目の行が無ければ「—」、形が違えば「変更」（金）、同じなら「同じ」（薄い）。
+  // その枠の形が一巡目と違うか（一巡目の行が無ければ違いなし）
+  function slotChanged(p, src, slot) {
+    if (!src) return false;
+    return String(p['tech' + slot] || '') !== String(src['tech' + slot] || '');
+  }
+
+  // 一巡目から形を変えた枠のセレクトを黄色にして、どの形を変えたか一目で分かるようにする（ユーザー要望 2026-10-05）。
+  // 「一巡目から」の列（行ごとの 同じ／変更）に加えて、枠ごとに塗る。値は手元の控え（p.techN）で見る
+  function paintSlots(selects, p, src) {
+    selects.forEach(function(sel, i) {
+      var changed = slotChanged(p, src, i + 1);
+      sel.classList.toggle('changed-slot', changed);
+      sel.title = changed ? ('一巡目: ' + (src['tech' + (i + 1)] || '—')) : '';
+    });
+  }
+
   function paintDiffer(td, p, ctx) {
     var src = sourceOf(p, ctx.players);
     if (!src || Courts.roundOf(src) !== 1) {

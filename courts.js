@@ -871,6 +871,16 @@ var Courts = (function() {
   //   末尾が性別と一致しない技       … 出さない
   // rental が true なら、さらに drawn（抜刀後の形）の技だけに絞る（性別の絞り込みと AND）。
   // 省略時は false 扱い（既存の2引数呼び出しは変えない）。
+  // 技の選択肢の表示名「夢想返し（18）」= 技名＋満点（配点のある太刀の合計）。配点が無ければ技名だけ
+  // （選択肢で点数も見たい。ユーザー要望 2026-10-05）。option の value は技名のまま（保存する値は変えない）
+  function techniqueLabel(t) {
+    var name = (t && typeof t.name === 'string') ? t.name : '';
+    var strikes = (t && Array.isArray(t.strikes)) ? t.strikes : [];
+    var total = 0, any = false;
+    strikes.forEach(function(v) { if (typeof v === 'number' && isFinite(v)) { total += v; any = true; } });
+    return any ? name + '（' + total + '）' : name;
+  }
+
   function techniqueOptions(techniques, isFemale, rental) {
     var suffix = isFemale ? '(女)' : '(男)';
     var otherSuffix = isFemale ? '(男)' : '(女)';
@@ -1169,6 +1179,7 @@ var Courts = (function() {
     stripGenderSuffix: stripGenderSuffix,
     resolveTechnique: resolveTechnique,
     techniqueOptions: techniqueOptions,
+    techniqueLabel: techniqueLabel,
     isDrawnTechnique: isDrawnTechnique,
     duplicateForms: duplicateForms
   };

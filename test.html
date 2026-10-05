@@ -7015,6 +7015,14 @@
       assert('roundProgress: null でも落ちない', EventStatus.roundProgress(null, null).female.total, 0);
     })();
 
+    // ---- Courts.techniqueLabel（選択肢の「技名（満点）」。ユーザー要望 2026-10-05） ----
+    assert('techniqueLabel: 配点のある太刀の合計を添える',
+      [Courts.techniqueLabel({ name: '夢想返し', strikes: [13, 5, null, null] }), Courts.techniqueLabel({ name: '四方', strikes: [17, 5, 7, 3] }),
+       Courts.techniqueLabel({ name: '置藁水月', strikes: [35, null, null, null] })],
+      ['夢想返し（18）', '四方（32）', '置藁水月（35）']);
+    assert('techniqueLabel: 配点が無ければ技名だけ。null でも落ちない',
+      [Courts.techniqueLabel({ name: 'x', strikes: [] }), Courts.techniqueLabel({ name: 'y' }), Courts.techniqueLabel(null)], ['x', 'y', '']);
+
     // ---- bundle-import.js（トップ・PC 運営・スマホ運営で共用の取り込み処理。設計書 2026-10-05 §3） ----
     await (async function() {
       var biAlerts = [], biConfirms = [], biSent = [];

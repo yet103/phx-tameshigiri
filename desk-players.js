@@ -1526,7 +1526,7 @@
       Courts.techniqueOptions(ctx.techniques, !!p.isFemale, p.rental === true).forEach(function(t) {
         var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
         if (!n) return;
-        addOption(sel, n, n);
+        addOption(sel, n, Courts.techniqueLabel(t));   // 「夢想返し（18）」。value は技名のまま
         if (n === cur) found = true;
       });
       if (cur && !found) {
@@ -1625,7 +1625,7 @@
     Courts.techniqueOptions(ctx.techniques, !!p.isFemale, p.rental === true).forEach(function(t) {
       var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
       if (!n) return;
-      addOption(sel, n, n);
+      addOption(sel, n, Courts.techniqueLabel(t));
       if (n === value) found = true;
     });
     if (value && !found) {
@@ -1950,7 +1950,7 @@
       addOption(sel, '', '—');
       Courts.techniqueOptions(ctx.techniques, d.isFemale, d.rental).forEach(function(t) {
         var n = (t && typeof t.name === 'string') ? t.name.trim() : '';
-        if (n) addOption(sel, n, n);
+        if (n) addOption(sel, n, Courts.techniqueLabel(t));
       });
       sel.value = cur || '';
     }
