@@ -591,23 +591,10 @@ var App = (function() {
     return !!currentEvent && EventStatus.isScoringOpen(currentStatus());
   }
 
-  // いま開いている選手を採点してよいか。状態が採点できることに加えて、
-  // 最終組の制限（EventStatus.isPlayerScorable。行の印 finalist で判定。設計書 2026-09-28）も見る。
-  //   二巡目 進行中   … 最終組（一巡目上位 4 名）の行は「最終組を開始」の後
-  //   最終組 進行中   … 最終組の行だけ（他の選手は斬り終わっている）
+  // いま開いている選手を採点してよいか。状態が採点できるかだけで決まる（行ごとの制限は無い。
+  // 設計書 2026-10-05）。呼び出し側が多いので名前は残す。
   function scoringOpenHere() {
-    if (!scoringOpen()) return false;
-    return EventStatus.isPlayerScorable(currentStatus(), visiblePlayers[currentIndex]);
-  }
-
-  // 「最終組（一巡目上位 4 名）」（設計書 2026-10-04-finale-after-round2 5 章）
-  function finalGroupName() {
-    return EventStatus.FINALIST_LABEL + '（' + EventStatus.FINALIST_DESC + '）';
-  }
-
-  // 「最終組 進行中。採点できるのは最終組（一巡目上位 4 名）の選手だけです」
-  function finalOnlyMessage() {
-    return EventStatus.LABELS.round2_final + '。採点できるのは' + finalGroupName() + 'の選手だけです';
+    return scoringOpen();
   }
 
   // 大会選択バーの下の状態バナー。採点できるかどうかと、できないときの次の手を出す。
@@ -618,24 +605,6 @@ var App = (function() {
     var st = currentStatus();
     el.hidden = false;
     if (EventStatus.isScoringOpen(st)) {
-      if (!scoringOpenHere()) {
-        // 状態は採点できるが、この選手は今は採点できない（最終組の制限。行の印で判定）
-        el.className = 'status-banner closed';
-        el.textContent = (st === 'round2')
-          ? 'この選手は' + finalGroupName() + 'です。他の選手が終わり、運営画面で「' +
-            EventStatus.NEXT_LABELS.round2 + '」を押すと採点できます'
-          : finalOnlyMessage();
-        return;
-      }
-      // 最終組 進行中に、最終組の選手がいないコートを開いている（一覧が空）。
-      // 緑の「最終組 進行中」を出すと採点できるように見えるので、最終組のコートを案内する。
-      if (st === 'round2_final' && !visiblePlayers[currentIndex]) {
-        var finCourt = Courts.finaleCourt(players);
-        el.className = 'status-banner closed';
-        el.textContent = finalOnlyMessage() +
-          (finCourt ? '（' + finCourt + ' コート）' : '');
-        return;
-      }
       el.className = 'status-banner open';
       el.textContent = EventStatus.LABELS[st];
       return;
@@ -664,10 +633,7 @@ var App = (function() {
   }
 
   function applyScoringLock() {
-    // 最終組 進行中に最終組のいないコートを開いている（一覧が空）ときも、バナー（renderStatusBanner）
-    // と同じく閉じた扱いにする。
-    var empty = currentStatus() === 'round2_final' && !visiblePlayers[currentIndex];
-    var locked = !!currentEvent && (!scoringOpenHere() || empty);
+    var locked = !!currentEvent && !scoringOpen();
     // 確定済みは「採点できる状態」のまま入力だけ止める。確定ボタンは押せる（取り消しのトグル）。
     // 技得点表に無い技がある選手（gridBlocked）は、保存・確定（取り消しも）を止める（網羅検証 M3）。
     var frozen = locked || currentConfirmed() || gridBlocked;
@@ -690,7 +656,7 @@ var App = (function() {
     for (var i = 0; i < inputs.length; i++) inputs[i].disabled = frozen;
   }
 
-  // 表示する選手の絞り込み（進行中ならその巡目だけ、最終組の扱い）は Courts.listForStatus に移した
+  // 表示する選手の絞り込み（進行中ならその巡目だけ。並びは試技順のまま）は Courts.listForStatus に移した
   // （他のコートの一覧でも同じ規則を使うため。2026-10-05）。
 
   // --- 大会管理 ---
@@ -963,7 +929,7 @@ var App = (function() {
     if (changed) resetTimer();
     updatePlayerList();
     // 全コート表示（currentCourt が空）では選手ごとにコートが変わりうるので、
-    // バナーとロックを見直す（最終組の制限は選手の印 finalist で決まる）。
+    // バナーとロックを見直す。
     renderStatusBanner();
     applyScoringLock();
     // 別の選手を開いたら、他端末（運営画面や別コートの端末）の書き込みを取りに行く。
@@ -1034,11 +1000,7 @@ var App = (function() {
       // 部・巡目・コートは帯の 1 行目に大きく出す（「男子の部　一巡目　A コート」）。
       // 左端のコートのバッジは同じ内容の重複になるので出さない。
       var roundName = m[3] === '1' ? '一巡目' : (m[3] === '2' ? '二巡目' : m[3] + '巡目');
-      var stage = m[2] + 'の部　' + roundName + '　' + m[1] + ' コート';
-      if (currentStatus() === 'round2_final' && p.finalist === true) {
-        stage = finalGroupName() + '　' + m[1] + ' コート';
-      }
-      playerStageLabel.textContent = stage;
+      playerStageLabel.textContent = m[2] + 'の部　' + roundName + '　' + m[1] + ' コート';
       courtLabel.textContent = '';
       playerOrderLabel.textContent = m[4] + '番' + bib;
     } else {
@@ -1049,18 +1011,6 @@ var App = (function() {
     playerNameLabel.textContent = p.name || '';
     // 級位・段位は名前の右に小さく（空なら :empty で消える）
     playerRankLabel.textContent = Courts.rankLabel(p.rank);
-
-    // 最終組 進行中は、最終組の何人目かを順番の右に添える（設計書「採点画面」）。
-    if (currentStatus() === 'round2_final' && p.finalist === true) {
-      var fin = Courts.finalists(players);
-      var at = 0;
-      for (var fi = 0; fi < fin.length; fi++) {
-        if (fin[fi].id === p.id) { at = fi + 1; break; }
-      }
-      if (at > 0) {
-        playerOrderLabel.textContent += '　' + EventStatus.FINALIST_LABEL + ' ' + at + '/' + fin.length;
-      }
-    }
   }
 
   // --- スコアグリッド描画 ---
@@ -2122,60 +2072,35 @@ var App = (function() {
   // コート端末は目の前の選手の採点だけを受け持つ。
 
   // --- 選手一覧（コートごとの区画。ユーザー要望 2026-10-05） ---
-  // 広い窓（WIDE_QUERY）: body.scoring-wide で採点の右にコートの列を横に並べる（常に開いている）。
-  // 狭い窓: 採点の下にコートの区画を縦に積み、採点中のコートだけ開く。他のコートは見出しを押すと開く。
+  // どの窓幅でも採点の下にコートの区画を縦に並べる（ページ幅 --page-max-width の中。設計書 2026-10-05 5.2）。
+  // 広い窓（WIDE_QUERY。PC）: 全コートを開いたまま（見出しを押しても畳まない。区画に pinned）。
+  // 狭い窓（スマホ）: 採点中のコートだけ開く。他のコートは見出しを押すと開く。
   // 以前の「▾ 選手一覧」の開閉（localStorage の tmg_player_list_open）はやめた。
   // 採点中のコートの一覧は visiblePlayers（巡回の対象）そのもの、他のコートは courtPlayers で同じ規則で作る。
+  // 一覧の下に順位表（renderRankPanel）。
   function initListLayout() {
-    if (window.matchMedia) {
-      wideMedia = window.matchMedia(WIDE_QUERY);
-      var onChange = function() {
-        applyListLayout();
-        updatePlayerList();   // 列の高さが変わるので、採点中の行を見える所へ
-      };
-      if (wideMedia.addEventListener) wideMedia.addEventListener('change', onChange);
-      else if (wideMedia.addListener) wideMedia.addListener(onChange);
-    }
-    // 列の幅は窓幅で変わるので、窓の大きさが変わるたびに一覧を詰めるかどうか（.compact）を見直す
-    var resizeTimer = null;
-    window.addEventListener('resize', function() {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(applyListLayout, 100);
-    });
-    applyListLayout();
+    if (!window.matchMedia) return;
+    wideMedia = window.matchMedia(WIDE_QUERY);
+    // 1100px をまたいだら開閉の既定が変わるので描き直す
+    var onChange = function() {
+      if (!currentEvent) return;
+      renderPlayerList();
+      updatePlayerList();   // 開いた区画の採点中の行を見える所へ
+    };
+    if (wideMedia.addEventListener) wideMedia.addEventListener('change', onChange);
+    else if (wideMedia.addListener) wideMedia.addListener(onChange);
   }
 
+  // 広い窓（PC）か。開閉の既定を決めるためだけに使う（配置はどの幅でも縦並び）
   function isWideLayout() {
     return !!(wideMedia && wideMedia.matches);
   }
 
-  // 広い窓では常に横並び（採点｜A｜B｜…。Courts.listLayout）。列は残り幅を等分する。
-  // renderPlayerList の後にも呼ぶ（大会の切り替えでコート数＝列の幅が変わるため）。
-  function applyListLayout() {
-    var wide = isWideLayout();
-    document.body.classList.toggle('scoring-wide', wide);
-    fitListTables(wide);
-  }
-
-  // 広い窓で、列の幅に収まらない表だけ詰める（.compact。文字を小さく、順番は番号だけ、ゼッケンの「—」は空欄、
-  // 級位・段位と備考は省略記号、見出しは折り返す）。それでも入らなければその一覧の枠の中だけ横スクロール
-  // （ページは横にスクロールさせない）。収まる幅では今までどおり 1 行で出す。
-  // 狭い窓（1 列・スマホ）は詰めない（今までどおり枠の中で横スクロール）。
-  function fitListTables(wide) {
-    var tables = playerListCourts.querySelectorAll('.player-list-table');
-    for (var i = 0; i < tables.length; i++) {
-      var t = tables[i];
-      t.classList.remove('compact');
-      var box = t.parentNode;
-      if (wide && box && box.scrollWidth > box.clientWidth + 1) t.classList.add('compact');
-    }
-  }
-
-  // 一覧の見出し行（10 列。運営の端末では左端に掴み手の列を足して 11 列）
+  // 一覧の見出し行（7 列。運営の端末では左端に掴み手の列を足して 8 列）。
+  // 合計・順位・新人枠の列はやめ、順位は一覧の下の順位表に出す（設計書 2026-10-05 5.3）
   var PLAYER_LIST_HEAD =
     '<th>順番</th><th>ゼッケン</th><th>選手名</th><th>級位・段位</th>' +
-    '<th>一巡目</th><th>二巡目</th><th>合計</th>' +
-    '<th class="rank">順位</th><th class="rank">新人枠</th><th class="note">備考</th>';
+    '<th>一巡目</th><th>二巡目</th><th class="note">備考</th>';
 
   function playerListHead() {
     return '<tr>' + (canReorder ? '<th class="grip" title="⋮⋮ をドラッグして試技順を入れ替えます"></th>' : '') +
@@ -2183,36 +2108,39 @@ var App = (function() {
   }
 
   function playerListColumns() {
-    return canReorder ? 11 : 10;
+    return canReorder ? 8 : 7;
   }
 
-  // 狭い窓でそのコートの区画を開いているか（採点中のコートは既定で開き、他は既定で閉じる）
+  // そのコートの区画を開いているか。広い窓では常に開く。狭い窓では採点中のコートは既定で開き、
+  // 他は既定で閉じる（利用者が開閉したら listOpen に従う）
   function isCourtListOpen(section) {
+    if (isWideLayout()) return true;
     if (section.court in listOpen) return listOpen[section.court];
     return section.current;
   }
 
   function renderPlayerList() {
+    // 順位表は一覧と同じ時機に描く（確定・取り消し・保存・読み直し・コートの切り替え）。
+    // 並べ替えでは得点が変わらないので、ドラッグ中に一覧の描き直しを保留しても先に描いてよい
+    renderRankPanel();
     // ドラッグ中は描き直さない（掴んだ行が DOM から外れる）。離したあとに描く（endListDrag）
     if (listDrag) { listRenderPending = true; return; }
     listRenderPending = false;
     playerListCourts.innerHTML = '';
     if (listOpenCourt !== currentCourt) { listOpen = {}; listOpenCourt = currentCourt; }
-    // その時点の順位（一般男子・一般女子・新人枠）。順位の集計と同じ規則（確定済みだけ。
-    // status の無い旧データは全行）で、一覧を描くたびに 1 回だけ計算する（全コート共通。ユーザー要望 2026-10-05）
-    rankCache = EventStatus.rankMap(players, { countAll: !!currentEvent && typeof currentEvent.status !== 'string' });
     var sections = currentEvent ? Scope.listSections(currentEvent, scorerSession, currentCourt) : [];
     playerListSection.hidden = sections.length === 0;
     sections.forEach(function(s) {
       playerListCourts.appendChild(buildCourtList(s, s.current ? visiblePlayers : courtPlayers(s.court)));
     });
-    applyListLayout();   // コート数が変わると横並び／縦積みが変わりうる
   }
 
   // コート 1 つ分の区画（見出し＋表）
   function buildCourtList(section, list) {
     var box = document.createElement('div');
-    box.className = 'court-list' + (section.current ? ' current' : '') + (section.readOnly ? ' read-only' : '');
+    var pinned = isWideLayout();   // 広い窓では畳めない（▾/▸ の矢印も出さない。CSS の .pinned）
+    box.className = 'court-list' + (section.current ? ' current' : '') + (section.readOnly ? ' read-only' : '') +
+      (pinned ? ' pinned' : '');
     box.dataset.court = section.court;
     var open = isCourtListOpen(section);
     box.classList.toggle('collapsed', !open);
@@ -2262,7 +2190,7 @@ var App = (function() {
         var band = document.createElement('tr');
         band.className = 'player-list-band';
         var td = document.createElement('td');
-        td.colSpan = playerListColumns();   // （掴み手・）順番・ゼッケン・選手名・級位段位・一巡目・二巡目・合計・順位・新人枠・備考
+        td.colSpan = playerListColumns();   // （掴み手・）順番・ゼッケン・選手名・級位段位・一巡目・二巡目・備考
         td.textContent = sex;
         band.appendChild(td);
         tbody.appendChild(band);
@@ -2283,31 +2211,21 @@ var App = (function() {
       if (index === currentIndex) tr.classList.add('current-player');
     }
     if (p.confirmed) tr.classList.add('done');   // 確定済みの行はグレー（ユーザー要望）
-    // 最終組（一巡目上位 4 名）の行は番号の右に「最終組」の印。二巡目 進行中はまだ採点できないので
-    // 薄く出す（tr.finale。設計書 2026-09-28）。
-    var isFinale = p.finalist === true && Courts.roundOf(p) === 2;
-    if (isFinale && currentStatus() === 'round2') tr.classList.add('finale');
     var hasBib = (typeof p.bib === 'number');
     tr.dataset.playerId = p.id || '';
     tr.innerHTML =
       // 運営の端末だけ、左端に試技順を入れ替える掴み手（⋮⋮。中身は下の gripHandle）
       (canReorder ? '<td class="grip"></td>' : '') +
-      // 順番は「A-男子-2-1」と、詰めたとき（.compact）用の番号だけ「1」の両方を入れ、CSS で出し分ける
-      // （コート・性別・巡目は見出しと帯にある）
-      '<td class="order"><span class="order-text">' + esc(p.order || '') + '</span>' +
-      '<span class="order-no">' + esc(orderNo(p.order)) + '</span>' + (isFinale ? ' <span class="finale-mark">' + esc(EventStatus.FINALIST_LABEL) + '</span>' : '') + '</td>' +
+      // 順番は「A-男子-2-1」（コート・性別・巡目は見出しと帯にもある）
+      '<td class="order">' + esc(p.order || '') + '</td>' +
       // 未設定は薄い「—」（数値なので esc は要らないが、列を空にはしない）
-      // 詰めたときは「—」を出さない（span ごと隠す）
-      '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '<span class="no-bib-dash">—</span>') + '</td>' +
+      '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
       '<td class="name">' + esc(p.name || '') + '</td>' +
-      // 級位・段位は空なら空セル（ゼッケンと違い「—」は出さない）
-      // 詰めたときは幅が足りなければ省略記号（.clip）。title に全文
+      // 級位・段位は空なら空セル（ゼッケンと違い「—」は出さない）。title に全文
       '<td class="grade" title="' + escAttr(Courts.rankLabel(p.rank)) + '"><div class="clip">' + esc(Courts.rankLabel(p.rank)) + '</div></td>' +
-      // 得点は一巡目・二巡目・合計の 3 列（ユーザー要望 2026-10-05）。確定済みの値だけ出す
+      // 得点は一巡目・二巡目の 2 列（合計・順位は一覧の下の順位表。設計書 2026-10-05 5.3）。確定済みの値だけ出す
       // （採点途中の値は一覧に出さない。2026-09-30）。中身は fillScoreCells で入れる
-      '<td class="score r1"></td><td class="score r2"></td><td class="score total"></td>' +
-      // その時点の順位（男子なら一般男子、女子なら一般女子）と新人枠の順位。技 1〜3 の列はやめた（2026-10-05）
-      '<td class="rank division"></td><td class="rank newface"></td>' +
+      '<td class="score r1"></td><td class="score r2"></td>' +
       // 備考は残り幅を吸収する列。折り返し可
       '<td class="note" title="' + escAttr(p.note || '') + '"><div class="clip">' + esc(p.note || '') + '</div></td>';
     if (canReorder) tr.querySelector('td.grip').appendChild(gripHandle(p));
@@ -2335,8 +2253,7 @@ var App = (function() {
   // マウスも同じ経路。掴み手は押した瞬間に掴む（CSS の touch-action: none で画面のスクロールにしない）。
   // 掴み手以外のタップは今までどおり選手の切り替え。ドラッグを離した直後のクリックは捨てる（listClickBlocked）。
   // 入れ替えられるのは同じ帯（コート×性別×巡目。Courts.sameReorderGroup）の中だけ。帯をまたぐ所・行の無い所で
-  // 離したら元に戻す（PC 運営の選手登録の表と同じ。最終組の行も同じ組の中なら入れ替えられる。ただし二巡目 進行中は
-  // 一覧が最終組を末尾に寄せて出すので、最終組と他の行の間はまたがせない。Courts.canDropInList）。
+  // 離したら元に戻す（PC 運営の選手登録の表と同じ。Courts.canDropInList）。
   // 離したら POST …/players/reorder で保存し、サーバーが振り直した番号で一覧を作り直す（採点中の選手は id で保つ）。
   var listDrag = null;           // ドラッグ中の状態（null なら掴んでいない）
   var listRenderPending = false; // ドラッグ中に一覧の描き直しを頼まれた（離したあとに描く）
@@ -2594,9 +2511,9 @@ var App = (function() {
     refreshFromServer();
   }
 
-  // 一覧の行の一巡目・二巡目・合計。どの巡目の行でも、同じ選手（sourcePlayerId でつながる
+  // 一覧の行の一巡目・二巡目（と合計）。どの巡目の行でも、同じ選手（sourcePlayerId でつながる
   // 一巡目の行と二巡目の行）の確定済みの得点を出す。確定していない巡目は空欄、合計は確定した分の和
-  // （どちらも未確定なら空欄）。順位と同じ「確定だけ反映」の基準。
+  // （どちらも未確定なら空欄。一覧には出さない）。順位と同じ「確定だけ反映」の基準。
   function scorePair(p) {
     var r1 = null, r2 = null;
     if (Courts.roundOf(p) === 2) {
@@ -2612,26 +2529,9 @@ var App = (function() {
     return { r1: s1, r2: s2, total: total };
   }
 
-  var rankCache = null;   // renderPlayerList が計算した EventStatus.rankMap の結果
-
-  // 行の選手の順位（{ division, newFace } か null）。playerTotals と同じ鍵（一巡目の行の id）で引き、
-  // 無ければ性別＋氏名で引く（CSV 由来で sourcePlayerId の無い二巡目の行）。
-  function rankOf(p) {
-    if (!rankCache) return null;
-    var id = Courts.roundOf(p) === 2 ? p.sourcePlayerId : p.id;
-    var e = id ? rankCache.byKey['id:' + id] : null;
-    if (!e) e = rankCache.byNameSex[(p.isFemale === true ? '女' : '男') + '|' + String(p.name || '').trim()];
-    return e || null;
-  }
-
   function fillScoreCells(tr, p) {
     var sp = scorePair(p);
-    // 順位は確定した得点が 1 つでもある選手だけ出す（未確定だけの選手は 0 点扱いで最下位に並ぶため、出さない）
-    var rk = sp.total === null ? null : rankOf(p);
-    var dv = tr.querySelector('td.rank.division'), nf = tr.querySelector('td.rank.newface');
-    if (dv) dv.textContent = rk && rk.division ? rk.division + '位' : '';
-    if (nf) nf.textContent = rk && rk.newFace ? rk.newFace + '位' : '';
-    var cells = { r1: tr.querySelector('td.score.r1'), r2: tr.querySelector('td.score.r2'), total: tr.querySelector('td.score.total') };
+    var cells = { r1: tr.querySelector('td.score.r1'), r2: tr.querySelector('td.score.r2') };
     Object.keys(cells).forEach(function(k) {
       if (!cells[k]) return;
       cells[k].textContent = sp[k] === null ? '' : String(sp[k]);
@@ -2650,6 +2550,7 @@ var App = (function() {
   }
 
   function updatePlayerList() {
+    markRankPanelCurrent();   // 順位表の今の選手の強調も付け替える
     var body = currentListBody();
     if (!body) return;
     var rows = body.querySelectorAll('tr[data-index]');
@@ -2684,13 +2585,13 @@ var App = (function() {
   function updatePlayerListScore(index, score) {
     var p = visiblePlayers[index];
     if (!p || p.confirmed !== true) return;   // 確定前の途中の値は一覧に出さない
-    // 得点が変わると他の選手（他のコートも）の順位も動くので、一覧ごと描き直す（表は小さい）
+    // 得点が変わると順位表（全コートの選手）も動くので、一覧と順位表ごと描き直す（表は小さい）
     renderPlayerList();
     updatePlayerList();
   }
 
   function updatePlayerListConfirmed(index, on) {
-    // 確定・取り消しで得点と順位が動くので、一覧ごと描き直す（一巡目・二巡目・合計・順位。他のコートの順位も）
+    // 確定・取り消しで一覧の得点（一巡目・二巡目）と順位表が動くので、一覧ごと描き直す（renderPlayerList が順位表も描く）
     renderPlayerList();
     updatePlayerList();
   }
@@ -2706,10 +2607,79 @@ var App = (function() {
     (clip || cell).textContent = note || '';
   }
 
-  // 順番の番号だけ（「A-男子-2-1」→「1」）。形が違えば全体をそのまま返す
-  function orderNo(order) {
-    var m = String(order || '').match(/^[^-]+-(?:男子|女子)-\d+-(\d+)$/);
-    return m ? m[1] : String(order || '');
+  // --- 順位表（一覧の下の #rankPanelSection。設計書 2026-10-05 5.4） ---
+  // 一般男子・新人枠・一般女子の 3 表（順位・名前・合計）。材料は Courts.rankPanel（順位の集計 computeRanking と
+  // 同じ EventStatus.rankings）。採点の鍵の端末は順位 API を呼べないので画面で計算する（players は全コートの選手）。
+  // 確定した得点のある選手だけ出す（結果確認は全員。ここだけ違う。D4）。順位は全員で付けたものをそのまま使う。
+  // countAll（status の無い旧データ）は GET /api/events/:id が status を推定値で埋めるので、今は常に偽になる（D10）。
+  var rankPanelSection = document.getElementById('rankPanelSection');
+  var rankPanelCols = document.getElementById('rankPanelCols');
+
+  function renderRankPanel() {
+    if (!rankPanelSection || !rankPanelCols) return;
+    rankPanelSection.hidden = !currentEvent;
+    rankPanelCols.innerHTML = '';
+    if (!currentEvent) return;
+    var cats = Courts.rankPanel(players, { countAll: typeof currentEvent.status !== 'string' });
+    var any = cats.some(function(c) { return c.rows.length > 0; });
+    rankPanelCols.classList.toggle('empty', !any);
+    if (!any) {
+      var msg = document.createElement('p');
+      msg.className = 'rank-panel-empty';
+      msg.textContent = 'まだ確定した得点がありません';
+      rankPanelCols.appendChild(msg);
+      return;
+    }
+    cats.forEach(function(c) {
+      var col = document.createElement('section');
+      col.className = 'rank-panel-col';
+      col.dataset.category = c.key;
+      var h = document.createElement('h3');
+      h.textContent = c.title;
+      col.appendChild(h);
+      if (c.rows.length === 0) {
+        var none = document.createElement('p');
+        none.className = 'rank-panel-none';
+        none.textContent = 'まだいません';
+        col.appendChild(none);
+      } else {
+        var table = document.createElement('table');
+        table.className = 'rank-panel-table';
+        table.innerHTML = '<thead><tr><th class="rank">順位</th><th class="name">名前</th>' +
+          '<th class="total">合計</th></tr></thead>';
+        var tbody = document.createElement('tbody');
+        c.rows.forEach(function(r) {
+          var tr = document.createElement('tr');
+          tr.dataset.key = r.key || '';
+          tr.innerHTML = '<td class="rank">' + (Number(r.rank) || 0) + '</td>' +
+            '<td class="name">' + esc(r.name || '') + '</td>' +
+            '<td class="total">' + (Number(r.score) || 0) + '</td>';
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        col.appendChild(table);
+      }
+      rankPanelCols.appendChild(col);
+    });
+    markRankPanelCurrent();
+  }
+
+  // 今開いている選手の組の鍵（playerTotals の key）。一巡目の行なら自分の id、二巡目の行なら sourcePlayerId
+  function currentRankKey() {
+    var p = visiblePlayers[currentIndex];
+    if (!p) return null;
+    var id = Courts.roundOf(p) === 1 ? p.id : p.sourcePlayerId;
+    return (typeof id === 'string' && id) ? 'id:' + id : null;
+  }
+
+  // 順位表の今の選手の行を強調する（一覧の今の選手と同じ色。D7）
+  function markRankPanelCurrent() {
+    if (!rankPanelCols) return;
+    var key = currentRankKey();
+    var rows = rankPanelCols.querySelectorAll('tr[data-key]');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle('current', !!key && rows[i].dataset.key === key);
+    }
   }
 
   function escAttr(s) {

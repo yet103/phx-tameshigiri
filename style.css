@@ -402,7 +402,7 @@ body { max-width: var(--page-max-width); margin: 0; }
 .status-banner {
   padding: 8px 12px;
   font-size: 14px;
-  line-height: 1.4;   /* 決戦の注意文が2行になっても詰まらないように */
+  line-height: 1.4;   /* 状態の案内が2行になっても詰まらないように */
   border-bottom: 1px solid var(--border);
 }
 .status-banner.open { background: var(--bg-secondary); color: var(--text-muted); }
@@ -534,8 +534,9 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 /* ===== 選手一覧（コートごとの区画。ユーザー要望 2026-10-05） =====
    上下の余白を詰め、備考以外の列は文字が収まる幅（width:1% + nowrap）。
    備考の列が残り幅を吸収する（ユーザー要望）。
-   狭い窓では採点の下にコートの区画（.court-list ＝ 見出し＋表）を縦に積み、採点中のコートだけ開く
-   （.collapsed は狭い窓だけ効く）。広い窓（body.scoring-wide）の横並びは scoring.html の style にある。 */
+   どの窓幅でも採点の下にコートの区画（.court-list ＝ 見出し＋表）を縦に積む（設計書 2026-10-05 5.2）。
+   狭い窓では採点中のコートだけ開き、他は見出しで開閉する（.collapsed）。広い窓（1100px 以上）では
+   全コートを開いたまま畳まない（app.js が .pinned を付ける。矢印は出さない）。 */
 /* 採点の区画（ツールバーまで）と選手一覧の間を空けて、別のブロックに見せる（ユーザー要望） */
 .player-list-section { border-top: 2px solid var(--border); margin-top: 20px; }
 .court-list-head {
@@ -549,8 +550,9 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
   font-size: 12px; font-weight: normal; line-height: 1.6;
 }
 .court-list-count { margin-left: auto; font-size: 12px; font-weight: normal; }
-body:not(.scoring-wide) .court-list.collapsed .player-list-body { display: none; }
-body.scoring-wide .court-list-arrow { display: none; }
+.court-list.collapsed .player-list-body { display: none; }
+.court-list.pinned .court-list-arrow { display: none; }
+.court-list.pinned .court-list-head { cursor: default; }
 .player-list-body { overflow: auto; max-height: 50vh; }
 .player-list-table {
   width: 100%;
@@ -583,12 +585,8 @@ body.scoring-wide .court-list-arrow { display: none; }
   color: var(--score-color);
 }
 .player-list-table td.confirmed { color: var(--score-confirmed); }
-/* 一巡目・二巡目・合計の 3 列（2026-10-05）。合計だけ一回り大きく、数字は右寄せ */
+/* 一巡目・二巡目の 2 列（合計・順位は一覧の下の順位表。設計書 2026-10-05 5.3）。数字は右寄せ */
 .player-list-table td.score { text-align: right; white-space: nowrap; }
-.player-list-table td.score.total { font-size: 1.1em; }
-/* その時点の順位（男子・女子・新人枠）。確定した得点のある選手だけ出る */
-.player-list-table th.rank, .player-list-table td.rank { white-space: nowrap; text-align: right; }
-.player-list-table td.rank { color: var(--gold-light); }
 /* 備考の列は残り幅を吸収し、長ければ折り返す */
 .player-list-table th.note, .player-list-table td.note {
   width: auto;
@@ -613,19 +611,6 @@ body.scoring-wide .court-list-arrow { display: none; }
 .court-list.read-only .player-list-table tr:hover td { opacity: 1; }
 /* 確定済みの行はグレー。選択中の行（下の .current-player）のほうが後にあるので勝つ */
 .player-list-table tr.done td { background: var(--cell-disabled); color: var(--text-muted); }
-/* 決戦（暫定ベスト4）の行。二巡目 進行中はまだ採点できないので薄く（app.js の tr.finale）。
-   選択中の行（下の .current-player）のほうが後にあるので、開いたときは反転した色が勝つ。 */
-.player-list-table tr.finale td { color: var(--text-muted); }
-.player-list-table .finale-mark {
-  display: inline-block;
-  margin-left: 4px;
-  padding: 0 4px;
-  border: 1px solid currentColor;
-  border-radius: 3px;
-  font-size: 0.75em;
-  line-height: 1.4;
-  vertical-align: middle;
-}
 .player-list-table tr.current-player td {
   background: var(--accent);
   color: var(--accent-text);
@@ -655,6 +640,33 @@ body.scoring-wide .court-list-arrow { display: none; }
 body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 /* 保存の通信中は一覧を触れなくする */
 .player-list-section.reorder-saving .player-list-body { pointer-events: none; opacity: .6; }
+
+/* ===== 順位表（採点画面の一覧の下。設計書 2026-10-05 5.4） =====
+   一般男子・新人枠・一般女子の 3 表（順位・名前・合計）。600px 以上で 3 列横並び、未満は縦（D5）。
+   名前が長ければ折り返す（D11）。全員を出してページのスクロールに任せる（D12）。 */
+.rank-panel-section { border-top: 2px solid var(--border); margin-top: 8px; padding-top: 8px; padding-bottom: 24px; }
+.rank-panel-title { font-size: 16px; margin: 0 0 8px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; }
+.rank-panel-note { font-size: 12px; font-weight: normal; color: var(--text-muted); }
+.rank-panel-cols { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 600px) { .rank-panel-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rank-panel-cols.empty { display: block; }
+.rank-panel-col { min-width: 0; }
+.rank-panel-col h3 { font-size: 14px; margin: 0; padding: 4px 8px; background: var(--bg-header); }
+.rank-panel-empty, .rank-panel-none { margin: 4px 0; font-size: 13px; color: var(--text-muted); }
+.rank-panel-none { padding: 4px 8px; border: 1px solid var(--border); border-top: none; }
+.rank-panel-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rank-panel-table th, .rank-panel-table td { border: 1px solid var(--border); padding: 2px 6px; line-height: 1.3; }
+.rank-panel-table th { background: var(--bg-header); white-space: nowrap; font-weight: bold; }
+.rank-panel-table th.rank, .rank-panel-table td.rank,
+.rank-panel-table th.total, .rank-panel-table td.total { width: 1%; white-space: nowrap; text-align: right; }
+/* 順位の数字は金。ライトの生成りの上では明るい金が沈むので濃い金（ダークは明るい金） */
+.rank-panel-table td.rank { color: var(--gold-deep); font-weight: bold; }
+[data-theme="dark"] .rank-panel-table td.rank { color: var(--gold-light); }
+.rank-panel-table tr.current td.rank { color: var(--accent-text); }
+.rank-panel-table td.name { font-weight: bold; white-space: normal; overflow-wrap: anywhere; }
+.rank-panel-table td.total { font-weight: bold; color: var(--score-confirmed); }
+/* 今開いている選手の行（一覧の .current-player と同じ色。D7） */
+.rank-panel-table tr.current td { background: var(--accent); color: var(--accent-text); }
 
 /* ===== 保存状態の表示 ===== */
 .save-status {
@@ -735,10 +747,15 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .total-score, .total-score.confirmed { color: var(--gold-light); }
 .court-list-head { background: var(--band-bg); color: var(--gold-light); }
 .court-list + .court-list .court-list-head { border-top-color: var(--gold-deep); }
-/* 採点中のコートの札は金地に黒（どのコートを採点しているか、横並びでも一目で分かるように） */
+/* 採点中のコートの札は金地に黒（どのコートを採点しているか、一目で分かるように） */
 .court-list-tag:not(.view-only) { background: var(--gold-light); color: var(--band-bg); border-color: var(--gold-light); }
 .court-list-tag.view-only, .court-list-count { color: var(--band-muted); }
 .player-list-section { border-top-color: var(--gold); }
+/* 順位表も一覧と同じ明朝・黒地に金の見出し */
+.rank-panel-section { border-top-color: var(--gold); }
+.rank-panel-title, .rank-panel-table { font-family: var(--mincho); }
+.rank-panel-col h3 { background: var(--band-bg); color: var(--gold-light); font-family: var(--mincho); border: 1px solid var(--gold); border-bottom: none; }
+.rank-panel-table th { background: var(--band-bg-2); color: var(--gold-light); border-color: var(--gold); }
 .ranking-section h3 { font-family: var(--mincho); }
 .note-preset-sheet { border-top-color: var(--gold); }
 .note-preset-head { background: var(--band-bg); color: var(--band-text); border-color: var(--gold); }
