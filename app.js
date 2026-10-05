@@ -2132,15 +2132,11 @@ var App = (function() {
       if (wideMedia.addEventListener) wideMedia.addEventListener('change', onChange);
       else if (wideMedia.addListener) wideMedia.addListener(onChange);
     }
-    // 広い窓の中の 2 択（横並び／縦積み）は窓幅とコート数で決まるので、窓の大きさが変わるたびに見直す
+    // 列の幅は窓幅で変わるので、窓の大きさが変わるたびに一覧を詰めるかどうか（.compact）を見直す
     var resizeTimer = null;
     window.addEventListener('resize', function() {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(function() {
-        var before = document.body.className;
-        applyListLayout();
-        if (document.body.className !== before) updatePlayerList();
-      }, 100);
+      resizeTimer = setTimeout(applyListLayout, 100);
     });
     applyListLayout();
   }
@@ -2149,19 +2145,18 @@ var App = (function() {
     return !!(wideMedia && wideMedia.matches);
   }
 
-  // 広い窓: 全コートが横に並ぶ幅があれば横並び（採点｜A｜B）、無ければ右の列に縦に積む
-  // （body.scoring-wide-stack。採点｜[A の上に B]）。2 択の判定は Courts.listLayout。
-  // コート数は描いた区画の数（renderPlayerList の後にも呼ぶ。大会の切り替えでコート数が変わるため）。
+  // 広い窓では常に横並び（採点｜A｜B｜…。Courts.listLayout）。列は残り幅を等分する。
+  // renderPlayerList の後にも呼ぶ（大会の切り替えでコート数＝列の幅が変わるため）。
   function applyListLayout() {
     var wide = isWideLayout();
-    var count = playerListCourts.querySelectorAll('.court-list').length;
     document.body.classList.toggle('scoring-wide', wide);
-    document.body.classList.toggle('scoring-wide-stack', wide && Courts.listLayout(window.innerWidth, count) === 'stack');
     fitListTables(wide);
   }
 
-  // 広い窓で、列の幅に収まらない表だけ詰める（.compact。見出しと順番の欄を折り返す）。
-  // 収まる幅では今までどおり 1 行で出す。狭い窓（1 列・スマホ）は今までどおり枠の中で横スクロール。
+  // 広い窓で、列の幅に収まらない表だけ詰める（.compact。文字を小さく、順番は番号だけ、ゼッケンの「—」は空欄、
+  // 級位・段位と備考は省略記号、見出しは折り返す）。それでも入らなければその一覧の枠の中だけ横スクロール
+  // （ページは横にスクロールさせない）。収まる幅では今までどおり 1 行で出す。
+  // 狭い窓（1 列・スマホ）は詰めない（今までどおり枠の中で横スクロール）。
   function fitListTables(wide) {
     var tables = playerListCourts.querySelectorAll('.player-list-table');
     for (var i = 0; i < tables.length; i++) {
@@ -2278,19 +2273,24 @@ var App = (function() {
     if (isFinale && currentStatus() === 'round2') tr.classList.add('finale');
     var hasBib = (typeof p.bib === 'number');
     tr.innerHTML =
-      '<td><span class="order-text">' + esc(p.order || '') + '</span>' + (isFinale ? ' <span class="finale-mark">' + esc(EventStatus.FINALIST_LABEL) + '</span>' : '') + '</td>' +
+      // 順番は「A-男子-2-1」と、詰めたとき（.compact）用の番号だけ「1」の両方を入れ、CSS で出し分ける
+      // （コート・性別・巡目は見出しと帯にある）
+      '<td class="order"><span class="order-text">' + esc(p.order || '') + '</span>' +
+      '<span class="order-no">' + esc(orderNo(p.order)) + '</span>' + (isFinale ? ' <span class="finale-mark">' + esc(EventStatus.FINALIST_LABEL) + '</span>' : '') + '</td>' +
       // 未設定は薄い「—」（数値なので esc は要らないが、列を空にはしない）
-      '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
+      // 詰めたときは「—」を出さない（span ごと隠す）
+      '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '<span class="no-bib-dash">—</span>') + '</td>' +
       '<td class="name">' + esc(p.name || '') + '</td>' +
       // 級位・段位は空なら空セル（ゼッケンと違い「—」は出さない）
-      '<td>' + esc(Courts.rankLabel(p.rank)) + '</td>' +
+      // 詰めたときは幅が足りなければ省略記号（.clip）。title に全文
+      '<td class="grade" title="' + escAttr(Courts.rankLabel(p.rank)) + '"><div class="clip">' + esc(Courts.rankLabel(p.rank)) + '</div></td>' +
       // 得点は一巡目・二巡目・合計の 3 列（ユーザー要望 2026-10-05）。確定済みの値だけ出す
       // （採点途中の値は一覧に出さない。2026-09-30）。中身は fillScoreCells で入れる
       '<td class="score r1"></td><td class="score r2"></td><td class="score total"></td>' +
       // その時点の順位（男子なら一般男子、女子なら一般女子）と新人枠の順位。技 1〜3 の列はやめた（2026-10-05）
       '<td class="rank division"></td><td class="rank newface"></td>' +
       // 備考は残り幅を吸収する列。折り返し可
-      '<td class="note">' + esc(p.note || '') + '</td>';
+      '<td class="note" title="' + escAttr(p.note || '') + '"><div class="clip">' + esc(p.note || '') + '</div></td>';
     if (section.current) {
       tr.addEventListener('click', function() {
         var idx = parseInt(this.dataset.index, 10);
@@ -2377,16 +2377,14 @@ var App = (function() {
   // 一覧の枠（.player-list-body）の中だけをスクロールさせる。
   // 一覧はページのフローに置いたので、scrollIntoView を使うとページ全体が動き、
   // スマホでは「次の選手」ボタンが画面の外へ逃げてしまう。閉じた区画（高さ 0）では何もしない。
-  // 広い窓の縦積み（body.scoring-wide-stack）では、表の枠ではなく右の列（一覧の欄）全体がスクロールする。
   function scrollPlayerListTo(row) {
     if (!row) return;
-    var stacked = document.body.classList.contains('scoring-wide-stack');
-    var box = stacked ? playerListSection : row.closest('.player-list-body');
+    var box = row.closest('.player-list-body');
     if (!box || box.clientHeight === 0) return;
     var boxRect = box.getBoundingClientRect();
     var rowRect = row.getBoundingClientRect();
-    // 見出し行は position:sticky で枠の上端に居座るので、その分だけ下を使う（縦積みでは居座らない）
-    var head = stacked ? null : box.querySelector('thead');
+    // 見出し行は position:sticky で枠の上端に居座るので、その分だけ下を使う
+    var head = box.querySelector('thead');
     var headHeight = head ? head.getBoundingClientRect().height : 0;
     var top = boxRect.top + headHeight;
     if (rowRect.top < top) {
@@ -2415,7 +2413,20 @@ var App = (function() {
     var body = currentListBody();
     var row = body ? body.querySelector('tr[data-index="' + index + '"]') : null;
     var cell = row ? row.querySelector('td.note') : null;
-    if (cell) cell.textContent = note || '';
+    if (!cell) return;
+    cell.title = note || '';
+    var clip = cell.querySelector('.clip');
+    (clip || cell).textContent = note || '';
+  }
+
+  // 順番の番号だけ（「A-男子-2-1」→「1」）。形が違えば全体をそのまま返す
+  function orderNo(order) {
+    var m = String(order || '').match(/^[^-]+-(?:男子|女子)-\d+-(\d+)$/);
+    return m ? m[1] : String(order || '');
+  }
+
+  function escAttr(s) {
+    return esc(s).replace(/"/g, '&quot;');
   }
 
   function esc(s) {

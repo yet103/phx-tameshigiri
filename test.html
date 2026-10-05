@@ -3510,12 +3510,9 @@
        lfIds(Courts.listForStatus(lfP, 'B', 'round2_final'))],
       [['r2a', 'r2f'], ['r2f'], []]);
     assert('Courts.listForStatus: 元の配列は並べ替えない', lfIds(lfP).slice(0, 2), ['a2', 'b1']);
-    assert('Courts.listLayout: 2 コートは 1760px 以上で横並び、未満は縦積み',
-      [Courts.listLayout(1920, 2), Courts.listLayout(1760, 2), Courts.listLayout(1759, 2), Courts.listLayout(1280, 2), Courts.listLayout(1100, 2)],
-      ['row', 'row', 'stack', 'stack', 'stack']);
-    assert('Courts.listLayout: 3 コートは 2280px 以上で横並び（全部横か全部縦の 2 択）、1 コート・0 コートは 1240px 以上で横並び',
-      [Courts.listLayout(1920, 3), Courts.listLayout(2280, 3), Courts.listLayout(1280, 1), Courts.listLayout(1239, 1), Courts.listLayout(1280, 0)],
-      ['stack', 'row', 'row', 'stack', 'row']);
+    assert('Courts.listLayout: 広い窓では窓幅・コート数によらず常に横並び（縦積みはやめた）',
+      [Courts.listLayout(1920, 2), Courts.listLayout(1280, 2), Courts.listLayout(1100, 2), Courts.listLayout(1280, 3), Courts.listLayout(1100, 1), Courts.listLayout(1280, 0)],
+      ['row', 'row', 'row', 'row', 'row', 'row']);
     assert('Scope.formatExpiry: 日本時間で出す（UTC の 14:59 は 23:59）',
       [Scope.formatExpiry('2026-10-12T14:59:59.999Z'), Scope.formatExpiry('2026-10-12T14:59:59.999Z', true),
        Scope.formatExpiry('2026-10-12T15:00:00.000Z'), Scope.formatExpiry('壊れた値'), Scope.formatExpiry(null)],

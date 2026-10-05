@@ -28,13 +28,14 @@
     .player-list-table th, .player-list-table td { padding: 2px 4px; }
     .player-list-table th.note, .player-list-table td.note { min-width: 5em; }
     /* 広い窓（1100px 以上。app.js の WIDE_QUERY が body.scoring-wide を付ける）: 採点の区画は今の 660px のまま左に置き、
-       右にコートごとの選手一覧の列を横に並べる（ユーザー要望 2026-10-05）。一覧の欄は窓の高さに貼り付け、
-       各列の表は列の中で縦にスクロールする。列が収まらなければ一覧の欄が横にスクロールする。 */
+       右にコートごとの選手一覧の列を常に横に並べる（採点｜A｜B｜…。ユーザー要望 2026-10-05「PC は A コート B コート横並べて」）。
+       列は残り幅を等分する（2 コートなら 1280px で約 300px、1920px で約 620px）。一覧の欄は窓の高さに貼り付け、
+       各列の表は列の中で縦にスクロールする。ページは横にスクロールさせない。 */
     body.scoring-wide { max-width: none; display: flex; align-items: flex-start; }
     body.scoring-wide .scoring-main { flex: 0 0 var(--page-max-width); width: var(--page-max-width); min-width: 0; }
     body.scoring-wide .player-list-section {
-      flex: 1 1 auto; min-width: 0; margin-top: 0; border-top: none;
-      position: sticky; top: 0; height: 100vh; overflow-x: auto; overflow-y: hidden;
+      flex: 1 1 0; min-width: 0; margin-top: 0; border-top: none;
+      position: sticky; top: 0; height: 100vh; overflow: hidden;
     }
     body.scoring-wide .player-list-courts { display: flex; height: 100%; }
     body.scoring-wide .court-list {
@@ -44,17 +45,25 @@
     body.scoring-wide .court-list + .court-list .court-list-head { border-top: none; }
     body.scoring-wide .court-list-head { padding-left: 12px; padding-right: 12px; cursor: default; }
     body.scoring-wide .court-list .player-list-body { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0 8px 8px; }
-    /* 広い窓で表が列の幅に収まらないときだけ（app.js の fitListTables が .compact を付ける）、見出しと
-       順番の欄（番号と「最終組」の印の間）を折り返して列の幅に収める（横スクロールを出さない） */
+    /* 順番の番号だけの表示（.order-no）は詰めたときだけ使う */
+    .player-list-table .order-no { display: none; }
+    /* 列の幅に表が収まらないときだけ（app.js の fitListTables が .compact を付ける）一覧を詰める:
+       文字 11px・余白 1〜2px、見出しは折り返す、順番は番号だけ（最終組の印は番号の横に小さく）、
+       ゼッケンの「—」は出さない、級位・段位と備考は省略記号（title に全文）。
+       それでも入らなければ、その一覧の枠（.player-list-body）の中だけ横にスクロールする。 */
+    body.scoring-wide .player-list-table.compact { font-size: 11px; }
+    body.scoring-wide .player-list-table.compact th,
+    body.scoring-wide .player-list-table.compact td { padding: 1px 2px; }
     body.scoring-wide .player-list-table.compact th { white-space: normal; }
-    body.scoring-wide .player-list-table.compact td:first-child { white-space: normal; }
-    .player-list-table .order-text { white-space: nowrap; }
-    /* 全コートが横に並ぶ幅が無いとき（Courts.listLayout が 'stack'。app.js が body.scoring-wide-stack を付ける）:
-       右の列にコートの一覧を縦に積み、各一覧は列の幅いっぱい。縦に収まらなければ右の列だけがスクロールする。 */
-    body.scoring-wide-stack .player-list-section { overflow-x: hidden; overflow-y: auto; border-left: 2px solid var(--gold); }
-    body.scoring-wide-stack .player-list-courts { flex-direction: column; height: auto; }
-    body.scoring-wide-stack .court-list { flex: 0 0 auto; max-width: none; border-left: none; }
-    body.scoring-wide-stack .court-list + .court-list .court-list-head { border-top: 2px solid var(--gold); }
+    body.scoring-wide .player-list-table.compact .order-text,
+    body.scoring-wide .player-list-table.compact .no-bib-dash { display: none; }
+    body.scoring-wide .player-list-table.compact .order-no { display: inline; }
+    body.scoring-wide .player-list-table.compact .finale-mark { margin-left: 2px; padding: 0 2px; font-size: 0.7em; }
+    body.scoring-wide .player-list-table.compact th.note,
+    body.scoring-wide .player-list-table.compact td.note { min-width: 0; white-space: nowrap; }
+    body.scoring-wide .player-list-table.compact td.grade .clip { max-width: 3.5em; }
+    body.scoring-wide .player-list-table.compact td.note .clip { max-width: 4em; }
+    body.scoring-wide .player-list-table.compact .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--gold); flex-wrap:wrap; }
     .event-bar select { padding:4px 8px; }
     /* 指で押す前提のタップ目標（style.css のバー類と同じ 44px） */
