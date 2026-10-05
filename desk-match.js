@@ -436,15 +436,16 @@
       : '二巡目を開始できません。形登録で直してください。');
   }
 
-  // 工程表。opts.where: 'match'（既定。試合進行）| 'round2'（二巡目の形登録の区画の先頭）。
+  // 工程表。opts.where: 'match'（既定。試合進行）| 'round2'（二巡目の形登録の区画の先頭）
+  // | 'players'（選手登録の先頭。「試合開始 ▶」を探して迷わないように。ユーザー要望 2026-10-05）。
   // 違いは形登録の段の 1 行（stepTodo）と近道のボタンだけ（設計書 2026-10-03 6.2）。
   // 形登録の区画は技を直すたびにこれを作り直して差し替える（帯と「二巡目を開始」の可否を合わせるため）。
   function buildSteps(st, ctx, opts) {
-    var where = (opts && opts.where === 'round2') ? 'round2' : 'match';
+    var where = (opts && (opts.where === 'round2' || opts.where === 'players')) ? opts.where : 'match';
     var players = ctx.players || [];
     var box = document.createElement('div');
     box.className = 'desk-steps';
-    box.id = where === 'round2' ? 'round2Steps' : 'matchSteps';
+    box.id = where === 'round2' ? 'round2Steps' : (where === 'players' ? 'playersSteps' : 'matchSteps');
 
     var row = document.createElement('div');
     row.className = 'desk-steps-row';
@@ -465,7 +466,7 @@
 
     var todo = document.createElement('p');
     todo.className = 'desk-steps-todo';
-    todo.id = where === 'round2' ? 'round2StepsTodo' : 'matchStepsTodo';
+    todo.id = where === 'round2' ? 'round2StepsTodo' : (where === 'players' ? 'playersStepsTodo' : 'matchStepsTodo');
     todo.appendChild(document.createTextNode(stepTodo(st, players, where)));
     // 形登録（②）と結果確認への近道。形登録の区画では、逆向きに試合進行への近道
     // （コート別の進み具合を見たいとき）を置く。
@@ -483,7 +484,7 @@
     if (blockText) {
       var band = document.createElement('p');
       band.className = 'desk-steps-blockers';
-      band.id = where === 'round2' ? 'round2StepsBlockers' : 'matchStepsBlockers';
+      band.id = where === 'round2' ? 'round2StepsBlockers' : (where === 'players' ? 'playersStepsBlockers' : 'matchStepsBlockers');
       band.textContent = blockText;
       box.appendChild(band);
     }

@@ -161,6 +161,12 @@
     head.appendChild(btnCsv);
     container.appendChild(head);
 
+    // 工程表（試合開始 ▶ などの遷移ボタン）。試合進行・形登録と同じ部品を先頭に置く
+    // （「試合開始」を探して迷わないように。ユーザー要望 2026-10-05）
+    if (window.DeskMatch && DeskMatch.buildSteps) {
+      container.appendChild(DeskMatch.buildSteps(EventStatus.of(ctx.event), ctx, { where: 'players' }));
+    }
+
     // 二巡目準備の段階は、やることが「形を直す」なので二巡目の形登録の区画へ誘導する。
     if (EventStatus.of(ctx.event) === 'round1_done') {
       var guide = document.createElement('p');
@@ -717,9 +723,12 @@
   }
 
   // --- 行のドラッグで試技順を入れ替える（ユーザー要望 2026-09-30） ---
-  // 同じ帯（＝同じ コート×性別×巡目）の中だけで入れ替え、落としたらその帯の No. を
-  // 上から 1, 2, 3 … に振り直して保存する（POST …/players/reorder）。帯をまたぐドロップは
-  // 受け付けない（コートの変更はコートのセル、性別は行の削除と追加で行う）。
+  // 同じ帯（＝同じ コート×性別×巡目）の中で入れ替え、落としたらその帯の No. を
+  // 上から 1, 2, 3 … に振り直して保存する（POST …/players/reorder）。
+  // 同じ部・同じ巡目の別のコートの帯にも落とせる（ユーザー要望 2026-10-05）: 先にコートを変え
+  // （PATCH court。サーバーは移動先の末尾の番号を付ける）、移動先の帯を落とした位置で並べ直し、
+  // 元の帯の番号も詰める（moveRowToBand）。性別や巡目をまたぐドロップは受け付けない
+  // （性別は行の削除と追加で行う）。
   // 掴めるのは行の左端の掴み手（⋮⋮）だけ。行全体を draggable にすると、行の中の入力欄で
   // 文字を選ぶ操作がドラッグに化けるため。
 
@@ -799,23 +808,95 @@
     return e.clientY > r.top + r.height / 2;
   }
 
-  // 同じ帯の行だけを落とし先にする（dragover で preventDefault しない行には落とせない）。
+  // 落とし先にできる帯か: 同じ帯（並べ替え）か、同じ部・同じ巡目の別のコート（コートの移動）。
   // 帯の比較は band オブジェクトの同一性（fillRows の 1 回の描画で帯ごとに 1 つ）。
+  function canDropOnBand(from, to) {
+    if (!from || !to) return false;
+    if (from === to) return true;
+    return !to.blocked && to.court !== Courts.UNASSIGNED &&
+      to.isFemale === from.isFemale && to.round === from.round;
+  }
+
+  // 落とせる帯の行だけを落とし先にする（dragover で preventDefault しない行には落とせない）。
   function bindDropTarget(ctx, tr, band) {
     tr.addEventListener('dragover', function(e) {
-      if (!drag || drag.band !== band) { clearDropMark(); return; }
+      if (!drag || !canDropOnBand(drag.band, band)) { clearDropMark(); return; }
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       setDropMark(tr, isAfter(tr, e));
     });
     tr.addEventListener('drop', function(e) {
-      if (!drag || drag.band !== band) return;
+      if (!drag || !canDropOnBand(drag.band, band)) return;
       e.preventDefault();
       var moving = drag.tr;
+      var fromBand = drag.band;
       var after = isAfter(tr, e);
       clearDrag();
-      dropRow(ctx, band, moving, tr, after);
+      if (fromBand === band) dropRow(ctx, band, moving, tr, after);
+      else moveRowToBand(ctx, fromBand, band, moving, tr, after);
     });
+  }
+
+  // 別のコートの帯に落とした（コートの移動）。先に表の上で行を動かして見せ、
+  // (1) コートを変える（PATCH court。移動先の末尾の番号になる）→ (2) 移動先の帯を落とした位置で並べ直す
+  // → (3) 元の帯の番号を詰める、の順に保存し、最後に大会を読み直す。途中で失敗したら読み直して今の状態を出す
+  // （(1) が済んでいればコートは移っている）。
+  async function moveRowToBand(ctx, fromBand, toBand, moving, target, after) {
+    if (reorderBusy) return;
+    var movingId = moving.dataset.playerId;
+    var targetIds = toBand.rows.map(function(p) { return p.id; });
+    var to = targetIds.indexOf(target.dataset.playerId);
+    if (to === -1 || fromBand.rows.every(function(p) { return p.id !== movingId; })) return;
+    targetIds.splice(after ? to + 1 : to, 0, movingId);
+    var sourceIds = fromBand.rows.map(function(p) { return p.id; }).filter(function(id) { return id !== movingId; });
+
+    var msg = courtLabel(fromBand.court) + ' から ' + courtLabel(toBand.court) + ' へ移します。';
+    if (EventStatus.isScoringOpen(EventStatus.of(ctx.event))) {
+      msg += '\n採点中です。両方のコートの呼び出し順（No.）が変わります。';
+    }
+    if (!confirm(msg + '\nよろしいですか？')) return;
+    target.parentNode.insertBefore(moving, after ? target.nextSibling : target);
+    renumberShown(targetIds);
+    renumberShown(sourceIds);
+
+    var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
+    reorderBusy = true;
+    if (view && view.tbody) view.tbody.classList.add('reorder-saving');
+    try {
+      var res = await Api.updatePlayerInfo(eventId, movingId, { court: toBand.court });
+      if (ctx.isStale()) return;
+      if (!res || !res.ok) {
+        if (res && res.reason === 'locked') {
+          alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else {
+          alert('コートを移せませんでした。\n' + ((res && res.error) || '通信を確認してください。'));
+        }
+        redrawTable();   // 元の並びに戻す
+        return;
+      }
+      var r2 = await Api.reorderPlayers(eventId, {
+        court: toBand.court, isFemale: toBand.isFemale, round: toBand.round, ids: targetIds
+      });
+      if (ctx.isStale()) return;
+      var r3 = null;
+      if (r2 && r2.ok && sourceIds.length > 0) {
+        r3 = await Api.reorderPlayers(eventId, {
+          court: fromBand.court, isFemale: fromBand.isFemale, round: fromBand.round, ids: sourceIds
+        });
+        if (ctx.isStale()) return;
+      }
+      if (!r2 || !r2.ok || (sourceIds.length > 0 && (!r3 || !r3.ok))) {
+        // コートは移った。番号は移動先の末尾（または元の帯に欠番）のまま。最新を読み直して出す
+        alert('コートは移しましたが、試技順を保存できませんでした。\n最新の並びを読み直します。');
+        await Desk.reloadEvent();
+        return;
+      }
+      Desk.toast(courtLabel(toBand.court) + ' へ移して試技順を保存しました');
+      await Desk.reloadEvent();
+    } finally {
+      reorderBusy = false;
+      if (view && view.tbody && Desk.currentEventId() === eventId) view.tbody.classList.remove('reorder-saving');
+    }
   }
 
   // 落としたあと。先に表の上で行を動かして No. を振り直して見せ、保存する。
@@ -946,7 +1027,8 @@
     tr.appendChild(cell(p.confirmed === true ? String(p.score || 0) : '', 'num col-score'));
     var tdAct = document.createElement('td');
     tdAct.className = 'act';
-    if (!locked) tdAct.appendChild(buildRowMenu(ctx, p));
+    // 「⋯」の中に削除だけ入れていたが分かりにくいので、文字の「削除」を直接置く（ユーザー要望 2026-10-05）
+    if (!locked) tdAct.appendChild(buildDeleteLink(ctx, p));
     tr.appendChild(tdAct);
     markRow(ctx, refs, p);   // 描いた時点の赤枠
     return tr;
@@ -2297,10 +2379,15 @@
     return { el: menu, body: body };
   }
 
-  function buildRowMenu(ctx, p) {
-    var menu = buildMenu((p.name || '') + ' の操作');
-    menu.body.appendChild(menuItem(menu.el, '🗑 削除', function() { onDelete(ctx, p); }));
-    return menu.el;
+  // 行の右端の「削除」（文字のボタン）。押すと onDelete の確認へ
+  function buildDeleteLink(ctx, p) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'desk-link-btn';
+    b.textContent = '削除';
+    b.setAttribute('aria-label', (p.name || '') + ' を削除');
+    b.addEventListener('click', function() { onDelete(ctx, p); });
+    return b;
   }
 
   // 削除の二重実行ガード。confirm() が開いている間やサーバーとの通信中に、

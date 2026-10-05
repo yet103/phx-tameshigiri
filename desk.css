@@ -180,7 +180,10 @@ a { color: var(--accent); }
 /* ボタンの文字（「一巡目と同じ」・技名の要約）を広く取るため、セルの余白を詰める */
 .desk-players-table td.col-r2 { padding-left: 2px; padding-right: 2px; }
 .desk-players-table .col-score { width: 42px; color: var(--score-color); font-weight: bold; }
-.desk-players-table th.act, .desk-players-table td.act { width: 34px; }
+.desk-players-table th.act, .desk-players-table td.act { width: 44px; }
+/* 行の右端の「削除」（文字のボタン。⋯ の中に隠さない） */
+.desk-link-btn { background: none; border: 0; padding: 2px 4px; color: var(--vermilion); font-size: 12px; cursor: pointer; text-decoration: underline; white-space: nowrap; }
+.desk-link-btn:hover { color: var(--cell-fail-text); }
 .desk-players-table td.act { padding-left: 2px; padding-right: 2px; }
 
 /* セルの入力。ふだんは枠を見せず、触ったときだけ枠を出す（表が線だらけにならない）。 */
