@@ -31,8 +31,21 @@ body {
 .dash-link:hover { color: var(--gold-light); }
 
 /* ===== 面のグリッド ===== */
-.dash-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 3fr 2fr; gap: 8px; padding: 8px; }
-.dash-row { display: grid; gap: 8px; min-height: 0; }
+.dash-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 60fr 8px 40fr; padding: 8px; }
+.dash-row { display: grid; min-height: 0; }
+
+/* 面の仕切り（dashboard.js の buildGutter）。段の間は横線、面の間は縦線。掴むと金 */
+.dash-gutter { touch-action: none; background: transparent; position: relative; }
+.dash-gutter-h { cursor: row-resize; }
+.dash-gutter-v { cursor: col-resize; }
+.dash-gutter::after {
+  content: ""; position: absolute; background: var(--border); border-radius: 2px;
+}
+.dash-gutter-h::after { left: 40%; right: 40%; top: 3px; height: 2px; }
+.dash-gutter-v::after { top: 40%; bottom: 40%; left: 3px; width: 2px; }
+.dash-gutter:hover::after, body.dash-dragging .dash-gutter::after { background: var(--gold); }
+body.dash-dragging { cursor: grabbing; user-select: none; }
+body.dash-dragging .dash-pane-body iframe { pointer-events: none; }
 .dash-pane {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg); overflow: hidden;

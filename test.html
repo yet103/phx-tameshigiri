@@ -6972,6 +6972,25 @@
     assert('Dashboard.saveZoom / saveMode → load', [Dashboard.loadZoom(), Dashboard.loadMode()], [60, 'edit']);
     try { localStorage.removeItem('tmg_dashboard_zoom'); localStorage.removeItem('tmg_dashboard_mode'); } catch (e) {}
 
+    assert('Dashboard.normalizeLayout: 無い・壊れた値は既定（row 60・列は空）',
+      [Dashboard.normalizeLayout(null), Dashboard.normalizeLayout({ row: 'x', cols: { top2: [10, 90], bottom: [50, 60], zzz: [50, 50] } })],
+      [{ row: 60, cols: {} }, { row: 60, cols: {} }]);
+    assert('Dashboard.normalizeLayout: 妥当な値はそのまま（row は 15〜85 に丸める）',
+      [Dashboard.normalizeLayout({ row: 5 }).row, Dashboard.normalizeLayout({ row: 95 }).row, Dashboard.normalizeLayout({ row: 42.26, cols: { top3: [20, 30, 50], bottom: [30, 70] } })],
+      [15, 85, { row: 42.3, cols: { top3: [20, 30, 50], bottom: [30, 70] } }]);
+    assert('Dashboard.colsFor: 控えが無い・数が合わなければ等分',
+      [Dashboard.colsFor({ row: 60, cols: {} }, 'top2', 2), Dashboard.colsFor({ row: 60, cols: { top2: [30, 70] } }, 'top2', 3), Dashboard.colsFor({ row: 60, cols: { top2: [30, 70] } }, 'top2', 2)],
+      [[50, 50], [33.3, 33.3, 33.4], [30, 70]]);
+    assert('Dashboard.dragCols: 右の面から奪う。各面 15% 未満にはしない',
+      [Dashboard.dragCols([50, 50], 0, 10), Dashboard.dragCols([50, 50], 0, 60), Dashboard.dragCols([50, 50], 0, -60), Dashboard.dragCols([50, 50], 1, 10)],
+      [[60, 40], [85, 15], [15, 85], [50, 50]]);
+    assert('Dashboard.dragRow: 15〜85 に収める', [Dashboard.dragRow(60, 10), Dashboard.dragRow(60, 40), Dashboard.dragRow(60, -60), Dashboard.dragRow('x', 0)], [70, 85, 15, 60]);
+    try { localStorage.removeItem('tmg_dashboard_layout'); } catch (e) {}
+    assert('Dashboard.loadLayout: 控えが無ければ既定', Dashboard.loadLayout(), { row: 60, cols: {} });
+    Dashboard.saveLayout({ row: 70, cols: { bottom: [40, 60], top2: [10, 90] } });
+    assert('Dashboard.saveLayout → loadLayout（壊れた列は落ちる）', Dashboard.loadLayout(), { row: 70, cols: { bottom: [40, 60] } });
+    try { localStorage.removeItem('tmg_dashboard_layout'); } catch (e) {}
+
     // ---- bundle-import.js（トップ・PC 運営・スマホ運営で共用の取り込み処理。設計書 2026-10-05 §3） ----
     await (async function() {
       var biAlerts = [], biConfirms = [], biSent = [];
