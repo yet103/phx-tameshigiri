@@ -112,22 +112,22 @@ var Share = (function() {
   }
 
   // ベスト4（合計）の表を出す状態。二巡目準備（round1_done）以前は出さない（一巡目だけの合計は
-  // ベスト4 ではない）。最終結果・アーカイブでも出す（表彰で見るため）。設計書 2026-10-04 3.2。
-  var BEST4_STATES = ['round2', 'round2_final', 'round2_done', 'final', 'archived'];
+  // ベスト4 ではない）。最終結果・アーカイブでも出す（表彰で見るため）。設計書 2026-10-05 7.2。
+  var BEST4_STATES = ['round2', 'round2_done', 'final', 'archived'];
 
-  // 共有リンクの応答には大会の状態そのものは無いので、最終組の表（finale.status）から読む。
-  // 最終組がいない大会（finale が null）は、確定したベスト4（best4.final。最終結果・アーカイブ、
+  // status は ranking の応答の event.status（大会の状態。設計書 2026-10-05 4.2）。
+  // status が無い（古いサーバーの応答）ときは、確定したベスト4（best4.final。最終結果・アーカイブ、
   // または二巡目が全員確定）のときだけ出す。
-  function best4Visible(best4, finale) {
+  function best4Visible(best4, status) {
     if (!best4 || !Array.isArray(best4.rows)) return false;
-    if (finale && typeof finale.status === 'string') return BEST4_STATES.indexOf(finale.status) !== -1;
+    if (typeof status === 'string') return BEST4_STATES.indexOf(status) !== -1;
     return best4.final === true;
   }
 
   // ベスト4（一般男子の合計の上位 4 名・同点は全員）の表。確定前は「暫定ベスト4（合計）」に
   // 残り人数を添える。順位の上に出す（会場でいま一番気になる表なので）。
-  function renderBest4(best4, finale) {
-    if (!best4Visible(best4, finale)) return null;
+  function renderBest4(best4, status) {
+    if (!best4Visible(best4, status)) return null;
     var section = document.createElement('section');
     section.className = 'share-section share-best4';
 
@@ -179,9 +179,9 @@ var Share = (function() {
     return section;
   }
 
-  function renderBody(rankings, best4, finale) {
+  function renderBody(rankings, best4, status) {
     elBody.textContent = '';
-    var b4 = renderBest4(best4, finale);
+    var b4 = renderBest4(best4, status);
     if (b4) elBody.appendChild(b4);
     for (var i = 0; i < CATEGORIES.length; i++) {
       var cat = CATEGORIES[i];
@@ -263,7 +263,8 @@ var Share = (function() {
         lastUpdatedAt = updatedAt;
         rendered = true;
         renderHead(result.data.event || {});
-        renderBody(result.data.rankings || {}, result.data.best4, result.data.finale);
+        renderBody(result.data.rankings || {}, result.data.best4,
+          result.data.event ? result.data.event.status : undefined);
       }
 
       if (isFirstSuccess && result.data.event && result.data.event.name) {

@@ -25,7 +25,7 @@ const INSTRUCTIONS = '試し斬り採点システムの API を AI 用キーで�
   '（本番の大会は一覧・詳細・順位を読むだけ。書き込みを頼まれたら断り、運営画面での操作を案内する）。' +
   '大会の削除・final / archived への状態遷移は、実行前に大会名と操作をユーザーに示して承認を得る。' +
   '予行の流れ: create_test_event → add_players → change_status(round1) → auto_score → change_status(round1_done) → ' +
-  'change_status(round2) → auto_score → change_status(round2_final) → auto_score → change_status(round2_done) → get_ranking → delete_test_event。';
+  'change_status(round2) → auto_score → change_status(round2_done) → get_ranking → delete_test_event。';
 
 // 標準出力に誤ってログを書かない（JSON-RPC が壊れる）
 console.log = (...a) => console.error(...a);

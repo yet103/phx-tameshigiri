@@ -1,6 +1,6 @@
 // 二巡目の形登録の区画（#round2/<id>）。状態が「二巡目準備（形の登録）」（round1_done）のときだけ
 // 左メニューに出す（desk.js の NAV の when）。以前は試合進行（desk-match.js）の下に出していた
-// 二巡目の表（一巡目の得点・一巡目と同じ形に戻す・最終組の枠・技のセレクト）をそのまま移した
+// 二巡目の表（一巡目の得点・一巡目と同じ形に戻す・技のセレクト）をそのまま移した
 // （ユーザー要望 2026-09-30「試合進行は進み具合を見る画面に限定し、形登録は独立した区画にする」）。
 // 段階の遷移ボタン（二巡目を開始 など）は工程表（DeskMatch.buildSteps）の中にだけ置く。工程表は
 // 試合進行と、この区画の先頭に出す（2026-10-03。設計書 2026-10-03-round2-forms-prereg-design.md 6.3・6.4）。
@@ -23,9 +23,8 @@
     return (players || []).filter(function(q) { return q && q.id === p.sourcePlayerId; })[0] || null;
   }
 
-  // 二巡目の表を1つ作る（最終組とそれ以外で同じ作り）。
-  // rows が0件（全員が最終組に入ったときの「最終組以外」など）なら、見出しだけの空表を
-  // 出さず試合進行のカード（desk-match.js の buildCourtGrid）と同じ空メッセージにする（レビュー指摘F）。
+  // 二巡目の表を作る。rows が0件なら、見出しだけの空表を出さず試合進行のカード
+  // （desk-match.js の buildCourtGrid）と同じ空メッセージにする（レビュー指摘F）。
   function buildRound2Table(rows, ctx, editable, techniques) {
     if (rows.length === 0) {
       var none = document.createElement('p');
@@ -89,17 +88,6 @@
     guide.textContent = 'ここで直すと選手登録の申請（「二巡目の形」）にも書き戻されます。';
     container.appendChild(guide);
 
-    // 一巡目の行が終了後に確定・得点変更されたときの選考の差（網羅検証 S18。試合進行と同じ警告）
-    var diffMsg = Courts.finalistDiffMessage(EventStatus.finalistDiff(ctx.players || []));
-    if (diffMsg) {
-      var diffBox = document.createElement('p');
-      diffBox.className = 'desk-warn';
-      diffBox.id = 'round2FinalistDiff';
-      diffBox.style.whiteSpace = 'pre-line';
-      diffBox.textContent = diffMsg;
-      container.appendChild(diffBox);
-    }
-
     container.appendChild(buildRound2(ctx));
   }
 
@@ -142,7 +130,7 @@
     return go;
   }
 
-  // 二巡目の表（最終組以外・最終組）。この区画は round1_done のときだけ描くので常に編集できる
+  // 二巡目の表（全員を試技順に 1 つ）。この区画は round1_done のときだけ描くので常に編集できる
   // （技得点表が取れていないときだけ読み取り専用に落とす）。
   function buildRound2(ctx) {
     var wrap = document.createElement('div');
@@ -201,34 +189,7 @@
       }
     }
 
-    var finalRows = Courts.finalists(ctx.players);
-    var plainRows = rows.filter(function(p) { return p.finalist !== true; });
-
-    // 最終組以外（元のコートで先に斬る）
-    wrap.appendChild(buildRound2Table(plainRows, ctx, editable, techniques));
-
-    // 最終組（一巡目上位 4 名。以前の呼び名は決戦）の区画。0 名なら節ごと出さない。
-    if (finalRows.length > 0) {
-      var finHead = document.createElement('div');
-      finHead.className = 'desk-section-head';
-      var finH2 = document.createElement('h2');
-      finH2.textContent = EventStatus.FINALIST_LABEL + '（' + EventStatus.FINALIST_DESC + '）';
-      finHead.appendChild(finH2);
-      wrap.appendChild(finHead);
-
-      var finNote = document.createElement('p');
-      finNote.className = 'desk-note';
-      finNote.id = 'round2FinaleNote';
-      // 最終組は順番の演出（追加の試技は無い）。設計書 2026-10-04-finale-after-round2-design.md 3.1
-      finNote.textContent = EventStatus.FINALIST_LABEL + '（一般男子・一巡目の得点上位 ' + EventStatus.FINALIST_COUNT +
-        ' 名）。' + Courts.finaleCourt(ctx.players) + ' コートの二巡目の最後にまとめて斬る順番です。';
-      wrap.appendChild(finNote);
-
-      var finWrap = document.createElement('div');
-      finWrap.className = 'desk-match-finale';
-      finWrap.appendChild(buildRound2Table(finalRows, ctx, editable, techniques));
-      wrap.appendChild(finWrap);
-    }
+    wrap.appendChild(buildRound2Table(rows, ctx, editable, techniques));
 
     wrap.appendChild(toStepsButton());
     return wrap;

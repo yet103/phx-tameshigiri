@@ -114,7 +114,7 @@ Claude Code ではツール名が `mcp__phx-tameshigiri__<名前>` になりま�
 | `delete_test_event` | AI が作ったテスト用の大会を消す。`confirmName` が今の名前と完全一致しなければ拒否 |
 
 予行の流れ: `create_test_event` → `add_players` → `change_status(round1)` → `auto_score` → `change_status(round1_done)` →
-`change_status(round2)` → `auto_score` → `change_status(round2_final)` → `auto_score` → `change_status(round2_done)` → `get_ranking` → `delete_test_event`。
+`change_status(round2)` → `auto_score` → `change_status(round2_done)` → `get_ranking` → `delete_test_event`。
 
 - `auto_score` の乱数は予行スクリプト（`rehearse.mjs`）の `planScoring` と同じ式です。ただし予行スクリプトは選手登録の技選びでも同じ乱数を使うので、
   得点の並びまでは一致しません（同じ種・同じ手順の組み合わせなら MCP 同士では同じ結果になります）。

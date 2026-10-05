@@ -4,7 +4,7 @@
 //
 // - プロジェクトのサーバー（server/index.js）を一時データ（TMG_DATA_DIR）・テスト用の Basic 認証で起動し、
 //   Basic で AI 用キーを発行して、PHX_KEY_SOURCE=env で MCP サーバーを子プロセスとして起動し、stdio で JSON-RPC を話す。
-// - 予行と同じ流れ（作成 → 男子 10・女子 8 の登録 → 試合開始 → 採点 → 一巡目終了 → 二巡目 → 最終組 → 二巡目終了 → 順位 → 削除）、
+// - 予行と同じ流れ（作成 → 男子 10・女子 8 の登録 → 試合開始 → 採点 → 一巡目終了 → 二巡目 → 二巡目終了 → 順位 → 削除）、
 //   安全策（本番の大会への書き込みはクライアントで拒否・サーバーでも 403 sandbox、confirmName の不一致、final は force 無しで拒否）、
 //   キーが MCP サーバーの標準出力・標準エラーのどこにも出ないこと、を確かめる。
 // - --vault: 資格情報マネージャーの経路も確かめる。テスト用のリソース名（phx-tameshigiri-ai-test）に一時キーを保存し、
@@ -207,7 +207,6 @@ async function expectStartRefused(env) {
 const ORDER = /^([^-]+)-(男子|女子)-(\d+)-(\d+)$/;
 const parseOrder = o => { const m = ORDER.exec(String(o || '')); return m ? { court: m[1], gender: m[2], round: +m[3], number: +m[4] } : null; };
 const roundOf = p => { const o = parseOrder(p.order); return o ? o.round : 1; };
-const numberOf = p => { const o = parseOrder(p.order); return o ? o.number : 0; };
 function rankOf(list) {
   const e = list.slice().sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ja'));
   let cur = 1, prev = null;
@@ -520,31 +519,36 @@ try {
     const r = await mcp.ok('change_status', { eventId: EID, to: 'round1_done' });
     assert.equal(r.status, 'round1_done');
     assert.equal(r.round2.created, 18);
-    assert.ok(r.round2.finalistCount >= 1);
+    assert.ok(!('finalistCount' in r.round2) && !('finalistDiff' in r.round2), '最終組の項目は無い（設計書 2026-10-05）');
+    const ev = (await http(base, 'GET', '/api/events/' + EID, undefined, BASIC)).body;
+    assert.ok(ev.players.every(p => p.finalist === undefined), 'finalist の印はどの行にも付かない');
     assert.equal((await mcp.ok('change_status', { eventId: EID, to: 'round2' })).status, 'round2');
   });
 
-  let finalistCount = 0;
-  await step('auto_score（二巡目）: 最終組以外を採点。最終組の行は飛ばす', async () => {
-    const r = await mcp.ok('auto_score', { eventId: EID, seed: 7 });
+  await step('change_status: round2_final は今は無い状態なので bad_input（API を呼ばない）', async () => {
+    const r = await mcp.call('change_status', { eventId: EID, to: 'round2_final' });
+    assert.deepEqual([r.isError, r.detail.reason], [true, 'bad_input'], r.text);
     const ev = (await http(base, 'GET', '/api/events/' + EID, undefined, BASIC)).body;
-    const r2 = ev.players.filter(p => roundOf(p) === 2);
-    finalistCount = r2.filter(p => p.finalist === true).length;
-    assert.equal(r.scored, 18 - finalistCount);
-    assert.equal(r.skipped, finalistCount);
+    assert.equal(ev.status, 'round2', '状態は変わらない');
   });
 
-  await step('change_status: 最終組を開始 → auto_score（最終組は試技順＝一巡目の低い順）→ 二巡目を終了', async () => {
-    assert.equal((await mcp.ok('change_status', { eventId: EID, to: 'round2_final' })).status, 'round2_final');
-    const r = await mcp.ok('auto_score', { eventId: EID, seed: 11 });
-    assert.equal(r.scored, finalistCount);
+  await step('auto_score（二巡目）: 18 名全員をコート → 男子・女子 → 番号の順に採点 → 二巡目を終了', async () => {
+    const r = await mcp.ok('auto_score', { eventId: EID, seed: 7 });
+    assert.equal(r.status, 'round2');
+    assert.deepEqual([r.scored, r.skipped], [18, 0]);
     const ev = (await http(base, 'GET', '/api/events/' + EID, undefined, BASIC)).body;
-    const fin = ev.players.filter(p => roundOf(p) === 2 && p.finalist === true).sort((a, b) => numberOf(a) - numberOf(b));
-    assert.deepEqual(r.players.map(p => p.id), fin.map(p => p.id), '試技順に採点した');
+    const r2 = ev.players.filter(p => roundOf(p) === 2).sort((a, b) => {
+      const oa = parseOrder(a.order), ob = parseOrder(b.order);
+      if (oa.court !== ob.court) return oa.court < ob.court ? -1 : 1;
+      if (oa.gender !== ob.gender) return oa.gender === '男子' ? -1 : 1;
+      return oa.number - ob.number;
+    });
+    assert.deepEqual(r.players.map(p => p.id), r2.map(p => p.id), '試技順に採点した');
+    assert.ok(r2.every(p => p.confirmed === true));
     assert.equal((await mcp.ok('change_status', { eventId: EID, to: 'round2_done' })).status, 'round2_done');
   });
 
-  await step('get_ranking: 一般男子・一般女子・新人・最終組の表・ベスト4 が期待（独立の計算）と一致', async () => {
+  await step('get_ranking: 一般男子・一般女子・新人・ベスト4 が期待（独立の計算）と一致。finale は無く event.status は round2_done', async () => {
     const rk = await mcp.ok('get_ranking', { eventId: EID });
     const ev = (await http(base, 'GET', '/api/events/' + EID, undefined, BASIC)).body;
     const r1rows = ev.players.filter(p => roundOf(p) === 1);
@@ -556,20 +560,8 @@ try {
     assert.ok(sameRanking(rk.rankings.male, rankOf(r1rows.filter(p => !p.isFemale).map(mk))), '一般男子');
     assert.ok(sameRanking(rk.rankings.female, rankOf(r1rows.filter(p => p.isFemale).map(mk))), '一般女子');
     assert.ok(sameRanking(rk.rankings.newFace, rankOf(r1rows.filter(p => p.isNewFace).map(mk))), '新人');
-    // 最終組（以前の呼び名は決戦）: 一般男子の一巡目上位 4（0 点除外、4 位同点は全員）
-    const males = r1rows.filter(p => !p.isFemale && r1.get(p.id) > 0).sort((a, b) => r1.get(b.id) - r1.get(a.id));
-    const cut = males.length ? r1.get(males[Math.min(3, males.length - 1)].id) : Infinity;
-    const expFinal = males.filter(p => r1.get(p.id) >= cut);
-    assert.equal(rk.finale.rows.length, expFinal.length);
-    assert.equal(rk.finale.status, 'round2_done');
-    const expRows = expFinal.map(p => ({ name: p.name, r1: r1.get(p.id), r2: r2.get(p.id), total: total(p.id) }));
-    const rankByName = new Map(rankOf(expRows.map(x => ({ name: x.name, score: x.total }))).map(x => [x.name, x.rank]));
-    rk.finale.rows.forEach((r, i) => {
-      const e = expRows.find(x => x.name === r.name);
-      assert.ok(e, r.name);
-      assert.deepEqual([r.r1, r.r2, r.total, r.rank, r.scored], [e.r1, e.r2, e.total, rankByName.get(r.name), true], r.name);
-      if (i > 0) assert.ok(rk.finale.rows[i - 1].r1 <= r.r1, '低い順');
-    });
+    assert.ok(!('finale' in rk), 'finale は無い（設計書 2026-10-05 D3）');
+    assert.equal(rk.event.status, 'round2_done');
     // ベスト4（合計の一般男子上位 4、0 点以下除外、4 位同点は全員）。全員確定済みなので確定（設計書 2026-10-04）
     const totals = rankOf(r1rows.filter(p => !p.isFemale).map(mk)).filter(x => x.score > 0 && x.rank <= 4);
     assert.deepEqual([rk.best4.final, rk.best4.remaining], [true, 0], 'ベスト4 は確定');

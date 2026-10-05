@@ -710,7 +710,7 @@ var Admin = (function() {
       }
       btnSave.disabled = true;
       sheet.lock(true);
-      // 旧「決戦コート」の名前（finalCourt）は廃止（最終組は先頭コートの最後に斬る。
+      // 旧「決戦コート」の名前の設定（finalCourt）は廃止（2026-10-05 に仕組みごとやめた。
       // 設計書 2026-09-28）。PC 運営 desk-setup.js と同じく、変わった settings のキーだけ送る。
       var settingsPatch = {};
       if (chkBib.checked !== origBib) settingsPatch.requireBib = chkBib.checked;

@@ -8,7 +8,7 @@ export const SANDBOX_PREFIX = 'テスト用';
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const ORDER_PATTERN = /^([^-]+)-(男子|女子)-(\d+)-(\d+)$/;
 const VALUES = ['○', '×', '△', ''];
-const STATES = ['draft', 'round1', 'round1_done', 'round2', 'round2_final', 'round2_done', 'final', 'archived'];
+const STATES = ['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final', 'archived'];
 const FORCE_STATES = ['final', 'archived'];
 const MAX_EVENT_ROWS = 300;
 const MAX_ADD_PLAYERS = 100;
@@ -71,16 +71,15 @@ function playerView(p) {
     isFemale: p.isFemale === true, isNewFace: p.isNewFace === true,
     tech1: p.tech1 || '', tech2: p.tech2 || '', tech3: p.tech3 || '',
     score: typeof p.score === 'number' ? p.score : 0, confirmed: p.confirmed === true,
-    finalist: p.finalist === true, rev: revOf(p)
+    rev: revOf(p)
   };
 }
 
-// 採点の行の並び: コート → 男子・女子 → 番号。最終組（round2_final。以前の呼び名は決戦）は試技順（番号）
-function rowSort(status) {
+// 採点の行の並び: コート → 男子・女子 → 番号
+function rowSort() {
   return (a, b) => {
     const oa = parseOrder(a.order) || { court: '', gender: '', number: 0 };
     const ob = parseOrder(b.order) || { court: '', gender: '', number: 0 };
-    if (status === 'round2_final') return oa.number - ob.number;
     if (oa.court !== ob.court) return oa.court < ob.court ? -1 : 1;
     if (oa.gender !== ob.gender) return oa.gender === '男子' ? -1 : 1;
     return oa.number - ob.number;
@@ -219,7 +218,7 @@ export const TOOL_DEFS = [
     name: 'auto_score',
     title: '乱数で採点する（予行用）',
     description: 'テスト用の大会で、今の状態で採点できる行のうち未確定の行を、予行スクリプトと同じ乱数（mulberry32）と割合で採点・確定する。' +
-      '確定済みの行は飛ばす（途中で回数の上限に当たっても、もう一度呼べば続きから）。court で絞れる。最終組（round2_final）は試技順に採点する。',
+      '確定済みの行は飛ばす（途中で回数の上限に当たっても、もう一度呼べば続きから）。court で絞れる。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -237,7 +236,7 @@ export const TOOL_DEFS = [
     name: 'change_status',
     title: '大会の状態を変える',
     description: 'テスト用の大会の状態を変える（今の状態を読んでから from を付けて送る）。状態: draft 準備中 / round1 一巡目 / round1_done 二巡目準備（一巡目の終了で二巡目を生成）/ ' +
-      'round2 二巡目 / round2_final 最終組 / round2_done 二巡目終了 / final 最終結果 / archived アーカイブ。final と archived は force: true が無ければ拒否する。',
+      'round2 二巡目 / round2_done 二巡目終了 / final 最終結果 / archived アーカイブ。final と archived は force: true が無ければ拒否する。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -253,7 +252,7 @@ export const TOOL_DEFS = [
   {
     name: 'get_ranking',
     title: '順位',
-    description: '大会の順位（一般男子・一般女子・新人と最終組の表 finale・ベスト4 の best4）。サーバーの ranking API の応答そのまま。',
+    description: '大会の順位（一般男子・一般女子・新人の rankings、ベスト4 の best4、大会の状態 event.status）。サーバーの ranking API の応答そのまま。',
     inputSchema: { type: 'object', properties: { eventId: EVENT_ID }, required: ['eventId'], additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: false }
   },
@@ -448,12 +447,12 @@ export function createHandlers(api) {
       const EventStatus = loadStatus();
       const status = ev.status;
       if (!EventStatus.isScoringOpen(status)) {
-        throw badInput('今の状態（' + (EventStatus.LABELS[status] || status) + '）では採点できません。change_status で一巡目・二巡目・最終組に進めてください', { eventStatus: status });
+        throw badInput('今の状態（' + (EventStatus.LABELS[status] || status) + '）では採点できません。change_status で一巡目・二巡目に進めてください', { eventStatus: status });
       }
       const all = (Array.isArray(ev.players) ? ev.players : []).filter(p => p && typeof p === 'object');
       const inScope = all.filter(p => roundOf(p) === EventStatus.scoringRound(status) && (court === undefined || courtOf(p) === court));
       const targets = inScope.filter(p => EventStatus.isRowScorable(status, p) && p.confirmed !== true && techsOf(p).length > 0)
-        .sort(rowSort(status));
+        .sort(rowSort());
       const { Scoring } = loadScoring();
       const rnd = mulberry32(seed);
       const done = [];
