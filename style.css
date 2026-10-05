@@ -440,7 +440,11 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 /* ===== 順位テーブル（ranking.html） ===== */
 /* 順位表示ページ（ranking.html）。採点画面の順位表（.rank-panel-cols / .rank-panel-col / .rank-panel-table）と
    同じ横並びの配置に（ユーザー要望 2026-10-05）。大会名の見出し（.rank-heading）は 3 列ぶち抜き */
-.ranking-container { padding: 12px 0; }
+.ranking-container { padding: 12px 0; overflow-x: auto; }
+/* 名前を折り返さない（ユーザー要望 2026-10-05）。列は中身の幅で決め、はみ出す分は横スクロール */
+@media (min-width: 600px) { .ranking-container.rank-panel-cols { grid-template-columns: repeat(3, max-content); justify-content: start; gap: 16px; } }
+.ranking-container .rank-panel-table td.name, .ranking-container .rank-panel-table th.name { white-space: nowrap; overflow-wrap: normal; }
+.ranking-container .rank-panel-table td.chance { white-space: nowrap; }
 .ranking-container .rank-heading { grid-column: 1 / -1; }
 .ranking-container .rank-heading h2 { margin: 0 0 2px; }
 .ranking-container .rank-heading p { margin: 0 0 4px; }
