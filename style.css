@@ -574,6 +574,9 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
   color: var(--score-color);
 }
 .player-list-table td.confirmed { color: var(--score-confirmed); }
+/* 一巡目・二巡目・合計の 3 列（2026-10-05）。合計だけ一回り大きく、数字は右寄せ */
+.player-list-table td.score { text-align: right; white-space: nowrap; }
+.player-list-table td.score.total { font-size: 1.1em; }
 /* 備考の列は残り幅を吸収し、長ければ折り返す */
 .player-list-table th.note, .player-list-table td.note {
   width: auto;

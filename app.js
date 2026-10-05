@@ -2159,7 +2159,7 @@ var App = (function() {
         var band = document.createElement('tr');
         band.className = 'player-list-band';
         var td = document.createElement('td');
-        td.colSpan = 9;
+        td.colSpan = 11;   // 順番・ゼッケン・選手名・級位段位・技1〜3・一巡目・二巡目・合計・備考
         td.textContent = sex;
         band.appendChild(td);
         playerListBody.appendChild(band);
@@ -2190,8 +2190,9 @@ var App = (function() {
       '<td>' + esc(p.tech1 || '') + '</td>' +
       '<td>' + esc(p.tech2 || '') + '</td>' +
       '<td>' + esc(p.tech3 || '') + '</td>' +
-      // 得点は確定済みだけ出す（採点途中の値は一覧に出さない。ユーザー要望 2026-09-30）
-      '<td class="score' + (p.confirmed ? ' confirmed' : '') + '">' + (p.confirmed ? (p.score || 0) : '') + '</td>' +
+      // 得点は一巡目・二巡目・合計の 3 列（ユーザー要望 2026-10-05）。確定済みの値だけ出す
+      // （採点途中の値は一覧に出さない。2026-09-30）。中身は fillScoreCells で入れる
+      '<td class="score r1"></td><td class="score r2"></td><td class="score total"></td>' +
       // 備考は残り幅を吸収する列。折り返し可
       '<td class="note">' + esc(p.note || '') + '</td>';
     tr.addEventListener('click', function() {
@@ -2200,7 +2201,36 @@ var App = (function() {
       saveCurrentState();
       selectPlayer(idx);
     });
+    fillScoreCells(tr, p);
     return tr;
+  }
+
+  // 一覧の行の一巡目・二巡目・合計。どの巡目の行でも、同じ選手（sourcePlayerId でつながる
+  // 一巡目の行と二巡目の行）の確定済みの得点を出す。確定していない巡目は空欄、合計は確定した分の和
+  // （どちらも未確定なら空欄）。順位と同じ「確定だけ反映」の基準。
+  function scorePair(p) {
+    var r1 = null, r2 = null;
+    if (Courts.roundOf(p) === 2) {
+      r2 = p;
+      if (p.sourcePlayerId) r1 = players.filter(function(q) { return q && q.id === p.sourcePlayerId; })[0] || null;
+    } else {
+      r1 = p;
+      r2 = players.filter(function(q) { return q && q.sourcePlayerId === p.id && Courts.roundOf(q) === 2; })[0] || null;
+    }
+    var s1 = (r1 && r1.confirmed === true) ? Number(r1.score) || 0 : null;
+    var s2 = (r2 && r2.confirmed === true) ? Number(r2.score) || 0 : null;
+    var total = (s1 === null && s2 === null) ? null : (s1 || 0) + (s2 || 0);
+    return { r1: s1, r2: s2, total: total };
+  }
+
+  function fillScoreCells(tr, p) {
+    var sp = scorePair(p);
+    var cells = { r1: tr.querySelector('td.score.r1'), r2: tr.querySelector('td.score.r2'), total: tr.querySelector('td.score.total') };
+    Object.keys(cells).forEach(function(k) {
+      if (!cells[k]) return;
+      cells[k].textContent = sp[k] === null ? '' : String(sp[k]);
+      cells[k].classList.toggle('confirmed', sp[k] !== null);
+    });
   }
 
   // 選手データ自体が入れ替わったとき用（開いていれば一覧を作り直す）
@@ -2244,8 +2274,7 @@ var App = (function() {
     var p = visiblePlayers[index];
     if (!p || p.confirmed !== true) return;   // 確定前の途中の値は一覧に出さない
     var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
-    var cell = row ? row.querySelector('td.score') : null;
-    if (cell) cell.textContent = score;
+    if (row) fillScoreCells(row, p);   // score は p.score に入っている（一巡目・二巡目・合計を出し直す）
   }
 
   function updatePlayerListConfirmed(index, on) {
@@ -2253,13 +2282,8 @@ var App = (function() {
     var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
     if (row) {
       row.classList.toggle('done', on);
-      var cell = row.querySelector('td.score');
-      if (cell) {
-        cell.classList.toggle('confirmed', on);
-        // 確定したら得点を出し、取り消したら消す
-        var p = visiblePlayers[index];
-        cell.textContent = on ? String((p && p.score) || 0) : '';
-      }
+      // 確定したら得点を出し、取り消したら消す（一巡目・二巡目・合計の 3 列）
+      fillScoreCells(row, visiblePlayers[index]);
     }
   }
 
