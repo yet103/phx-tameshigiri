@@ -2146,6 +2146,9 @@ var App = (function() {
 
   function renderPlayerList() {
     playerListBody.innerHTML = '';
+    // その時点の順位（一般男子・一般女子・新人枠）。順位の集計と同じ規則（確定済みだけ。
+    // status の無い旧データは全行）で、一覧を描くたびに 1 回だけ計算する（ユーザー要望 2026-10-05）
+    rankCache = EventStatus.rankMap(players, { countAll: !!currentEvent && typeof currentEvent.status !== 'string' });
     // 男子の部・女子の部の帯で分ける（並びは visiblePlayers のまま。性別が切り替わる所に帯を入れる）
     var lastSex = null;
     var rounds = {};
@@ -2159,7 +2162,7 @@ var App = (function() {
         var band = document.createElement('tr');
         band.className = 'player-list-band';
         var td = document.createElement('td');
-        td.colSpan = 11;   // 順番・ゼッケン・選手名・級位段位・技1〜3・一巡目・二巡目・合計・備考
+        td.colSpan = 10;   // 順番・ゼッケン・選手名・級位段位・一巡目・二巡目・合計・順位・新人枠・備考
         td.textContent = sex;
         band.appendChild(td);
         playerListBody.appendChild(band);
@@ -2187,12 +2190,11 @@ var App = (function() {
       '<td class="name">' + esc(p.name || '') + '</td>' +
       // 級位・段位は空なら空セル（ゼッケンと違い「—」は出さない）
       '<td>' + esc(Courts.rankLabel(p.rank)) + '</td>' +
-      '<td>' + esc(p.tech1 || '') + '</td>' +
-      '<td>' + esc(p.tech2 || '') + '</td>' +
-      '<td>' + esc(p.tech3 || '') + '</td>' +
       // 得点は一巡目・二巡目・合計の 3 列（ユーザー要望 2026-10-05）。確定済みの値だけ出す
       // （採点途中の値は一覧に出さない。2026-09-30）。中身は fillScoreCells で入れる
       '<td class="score r1"></td><td class="score r2"></td><td class="score total"></td>' +
+      // その時点の順位（男子なら一般男子、女子なら一般女子）と新人枠の順位。技 1〜3 の列はやめた（2026-10-05）
+      '<td class="rank division"></td><td class="rank newface"></td>' +
       // 備考は残り幅を吸収する列。折り返し可
       '<td class="note">' + esc(p.note || '') + '</td>';
     tr.addEventListener('click', function() {
@@ -2223,8 +2225,25 @@ var App = (function() {
     return { r1: s1, r2: s2, total: total };
   }
 
+  var rankCache = null;   // renderPlayerList が計算した EventStatus.rankMap の結果
+
+  // 行の選手の順位（{ division, newFace } か null）。playerTotals と同じ鍵（一巡目の行の id）で引き、
+  // 無ければ性別＋氏名で引く（CSV 由来で sourcePlayerId の無い二巡目の行）。
+  function rankOf(p) {
+    if (!rankCache) return null;
+    var id = Courts.roundOf(p) === 2 ? p.sourcePlayerId : p.id;
+    var e = id ? rankCache.byKey['id:' + id] : null;
+    if (!e) e = rankCache.byNameSex[(p.isFemale === true ? '女' : '男') + '|' + String(p.name || '').trim()];
+    return e || null;
+  }
+
   function fillScoreCells(tr, p) {
     var sp = scorePair(p);
+    // 順位は確定した得点が 1 つでもある選手だけ出す（未確定だけの選手は 0 点扱いで最下位に並ぶため、出さない）
+    var rk = sp.total === null ? null : rankOf(p);
+    var dv = tr.querySelector('td.rank.division'), nf = tr.querySelector('td.rank.newface');
+    if (dv) dv.textContent = rk && rk.division ? rk.division + '位' : '';
+    if (nf) nf.textContent = rk && rk.newFace ? rk.newFace + '位' : '';
     var cells = { r1: tr.querySelector('td.score.r1'), r2: tr.querySelector('td.score.r2'), total: tr.querySelector('td.score.total') };
     Object.keys(cells).forEach(function(k) {
       if (!cells[k]) return;
@@ -2273,17 +2292,19 @@ var App = (function() {
     if (!isPlayerListOpen()) return;
     var p = visiblePlayers[index];
     if (!p || p.confirmed !== true) return;   // 確定前の途中の値は一覧に出さない
-    var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
-    if (row) fillScoreCells(row, p);   // score は p.score に入っている（一巡目・二巡目・合計を出し直す）
+    // 得点が変わると他の選手の順位も動くので、一覧ごと描き直す（表は小さい）
+    renderPlayerList();
+    updatePlayerList();
   }
 
   function updatePlayerListConfirmed(index, on) {
     if (!isPlayerListOpen()) return;
     var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
     if (row) {
-      row.classList.toggle('done', on);
-      // 確定したら得点を出し、取り消したら消す（一巡目・二巡目・合計の 3 列）
-      fillScoreCells(row, visiblePlayers[index]);
+      // 確定・取り消しで得点と順位が動くので、一覧ごと描き直す（一巡目・二巡目・合計・順位）
+      renderPlayerList();
+      updatePlayerList();
+      return;
     }
   }
 

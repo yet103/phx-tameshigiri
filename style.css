@@ -577,6 +577,9 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 /* 一巡目・二巡目・合計の 3 列（2026-10-05）。合計だけ一回り大きく、数字は右寄せ */
 .player-list-table td.score { text-align: right; white-space: nowrap; }
 .player-list-table td.score.total { font-size: 1.1em; }
+/* その時点の順位（男子・女子・新人枠）。確定した得点のある選手だけ出る */
+.player-list-table th.rank, .player-list-table td.rank { white-space: nowrap; text-align: right; }
+.player-list-table td.rank { color: var(--gold-light); }
 /* 備考の列は残り幅を吸収し、長ければ折り返す */
 .player-list-table th.note, .player-list-table td.note {
   width: auto;

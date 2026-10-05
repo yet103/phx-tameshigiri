@@ -5765,6 +5765,33 @@
       [EventStatus.best4Standings([]), EventStatus.best4Standings(null)],
       [{ final: false, remaining: 0, rows: [] }, { final: false, remaining: 0, rows: [] }]);
 
+    // rankMap（採点画面の選手一覧の順位・新人枠。順位の集計と同じ規則）
+    var rmPlayers = [
+      { id: 'm1', name: '男A', order: 'A-男子-1-1', score: 30, confirmed: true, isNewFace: true },
+      { id: 'm2', name: '男B', order: 'A-男子-1-2', score: 30, confirmed: true },
+      { id: 'm3', name: '男C', order: 'A-男子-1-3', score: 10, confirmed: false },
+      { id: 'f1', name: '女A', order: 'A-女子-1-1', score: 20, confirmed: true, isFemale: true, isNewFace: true },
+      { id: 'm1r2', name: '男A', order: 'A-男子-2-1', score: 5, confirmed: true, sourcePlayerId: 'm1' },
+      { id: 'x2', name: '男D', order: 'B-男子-2-1', score: 50, confirmed: true }   // sourcePlayerId 無し（CSV 由来）
+    ];
+    var rm = EventStatus.rankMap(rmPlayers, {});
+    assert('rankMap: 一般男子は合計で順位（男D 50 が 1 位、男A 35 が 2 位、男B 30 が 3 位、未確定の男C は 0 点で最下位）',
+      [rm.byKey['id:m1'].division, rm.byKey['id:m2'].division, rm.byKey['id:m3'].division], [2, 3, 4]);
+    assert('rankMap: 新人枠は男女混合で、新人でなければ null',
+      [rm.byKey['id:m1'].newFace, rm.byKey['id:f1'].newFace, rm.byKey['id:m2'].newFace], [1, 2, null]);
+    assert('rankMap: 女子は一般女子の順位', rm.byKey['id:f1'].division, 1);
+    assert('rankMap: sourcePlayerId の無い二巡目の行は性別＋氏名で引ける（男D 50 が男子 1 位）',
+      [rm.byNameSex['男|男D'].division, rm.byKey['id:m1'].division], [1, 2]);
+    assert('rankMap: 同点は同順位（男B と男C が 30 なら 2, 2）',
+      (function() { var r = EventStatus.rankMap([
+        { id: 'a', name: '甲', order: 'A-男子-1-1', score: 40, confirmed: true },
+        { id: 'b', name: '乙', order: 'A-男子-1-2', score: 30, confirmed: true },
+        { id: 'c', name: '丙', order: 'A-男子-1-3', score: 30, confirmed: true },
+        { id: 'd', name: '丁', order: 'A-男子-1-4', score: 10, confirmed: true }], {});
+        return [r.byKey['id:a'].division, r.byKey['id:b'].division, r.byKey['id:c'].division, r.byKey['id:d'].division]; })(),
+      [1, 2, 2, 4]);
+    assert('rankMap: 空・null でも落ちない', [Object.keys(EventStatus.rankMap([], {}).byKey).length, Object.keys(EventStatus.rankMap(null, {}).byKey).length], [0, 0]);
+
     var FG = [
       { order: 'A-男子-1-1', name: '男子01', finalist: true },
       { order: 'A-男子-2-6', name: ' 男子05 ', finalist: true },

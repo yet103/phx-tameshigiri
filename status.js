@@ -407,6 +407,28 @@
       });
   }
 
+  // 採点画面の選手一覧の「順位」「新人枠」の列（ユーザー要望 2026-10-05）。順位の集計（server の
+  // computeRanking）と同じ規則で、一般男子（新人を含む）・一般女子・新人枠の順位を選手ごとに出す。
+  // 採点の鍵の端末は順位の API を呼べないので、画面側がこれで計算する。
+  //   opts.countAll … playerTotals と同じ（status の無い旧データは全行を数える）
+  // 戻り値: { byKey: { <playerTotals の key>: { division, newFace } }, byNameSex: { '男|氏名': 同じ } }
+  //   division … 男子なら一般男子、女子なら一般女子の順位（同点同順位。0 点も順位に入る）
+  //   newFace  … 新人枠の順位（新人でなければ null）
+  function rankMap(players, opts) {
+    var totals = playerTotals(players, opts);
+    var byKey = Object.create(null);
+    var byNameSex = Object.create(null);
+    function put(t, field) {
+      var e = byKey[t.key] || (byKey[t.key] = { division: null, newFace: null });
+      e[field] = t.rank;
+      byNameSex[(t.isFemale ? '女' : '男') + '|' + t.name] = e;
+    }
+    rankByTotal(totals.filter(function(t) { return t.isFemale !== true; })).forEach(function(t) { put(t, 'division'); });
+    rankByTotal(totals.filter(function(t) { return t.isFemale === true; })).forEach(function(t) { put(t, 'division'); });
+    rankByTotal(totals.filter(function(t) { return t.isNewFace === true; })).forEach(function(t) { put(t, 'newFace'); });
+    return { byKey: byKey, byNameSex: byNameSex };
+  }
+
   // ベスト4（結果の見せ場）。一般男子（新人を含む）の合計（一巡目＋確定済みの二巡目）の上位
   // BEST4_COUNT 名。最後の位が同点なら全員。合計 0 点以下は含めない（最終組の選考と同じ規則）。
   // 最終組（一巡目上位 4 名。順番の演出）とは別の概念で、一致しないことがある。
@@ -594,6 +616,7 @@
     BEST4_PROVISIONAL_LABEL: BEST4_PROVISIONAL_LABEL,
     playerTotals: playerTotals,
     best4Standings: best4Standings,
+    rankMap: rankMap,
     pickFinalists: pickFinalists,
     round1Sources: round1Sources,
     finalistDiff: finalistDiff,
