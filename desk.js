@@ -4,15 +4,17 @@
 // 構造はスマホ運営の admin.js と同じ（registerTab / applyRoute / renderSeq /
 // ctx.isStale / 控え / reloadEvent / トースト / 共通ダイアログ）。違うのはハッシュと見た目だけ。
 //
-// ハッシュ体系: #events / #setup/<id> / #techniques/<id> / #players/<id> / #match/<id> / #round2/<id> / #results/<id>
+// ハッシュ体系: #setup/<id> / #techniques/<id> / #players/<id> / #match/<id> / #round2/<id> / #results/<id>
+// 大会一覧はトップ（index.html#list）に一本化した（設計書 2026-10-05-event-list-on-home-design.md）。
+// 大会の無いハッシュで開いたら控えかトップへ転送する（goHome）。
 // 選択中の大会は localStorage の tmg_desk_last に控える（スマホ運営の tmg_admin_last、
 // 採点画面の tmg_last とは分ける。別の端末で別の大会を見ていることがある）。
 var Desk = (function() {
   var LAST_KEY = 'tmg_desk_last';
   // when: その状態のときだけ左メニューに出す（省略時は常に出す）。二巡目の形登録は
   // 「二巡目準備（形の登録）」のときだけ（ユーザー要望 2026-09-30）。
+  var HOME_LIST_URL = 'index.html#list';   // 左メニューの先頭「← 大会一覧」と、大会の無いときの転送先
   var NAV = [
-    { tab: 'events',     id: 'navEvents',     label: '大会一覧' },
     { tab: 'setup',      id: 'navSetup',      label: '基本情報' },
     { tab: 'techniques', id: 'navTechniques', label: '技得点表' },
     { tab: 'players',    id: 'navPlayers',    label: '選手登録' },
@@ -45,7 +47,7 @@ var Desk = (function() {
   var defs = {};
   var activeDef = null;    // いま描いている区画（DOM から外す前に destroy を呼ぶ）
   var main = null, head = null, nav = null;
-  var currentTab = 'events';
+  var currentTab = '';
   var selectedEventId = null;
   var currentEvent = null;   // 最後に読んだ大会（上部の見出しと段階表示が使う）
   var currentEventLoadedId = null;   // currentEvent がどの大会IDで読んだものか（左メニューの出し分けに使う）
@@ -94,7 +96,7 @@ var Desk = (function() {
   }
 
   function buildHash(tab, eventId) {
-    if (tab === 'events' || !eventId) return '#' + tab;
+    if (!eventId) return '#' + tab;
     return '#' + tab + '/' + encodeURIComponent(eventId);
   }
 
@@ -104,7 +106,7 @@ var Desk = (function() {
       if (!raw) return null;
       var v = JSON.parse(raw);
       if (!v || TABS.indexOf(v.tab) === -1) return null;
-      if (v.tab !== 'events' && !v.eventId) return null;
+      if (!v.eventId) return null;
       return { tab: v.tab, eventId: v.eventId || '' };
     } catch (e) {
       return null;
@@ -138,6 +140,11 @@ var Desk = (function() {
     }
   }
 
+  // トップの大会一覧へ（大会が無い・消えたとき）。履歴に積まない
+  function goHome() {
+    location.replace(HOME_LIST_URL);
+  }
+
   // ユーザー操作を経ない自動の戻し用。履歴に積まない
   // （戻るボタンで #setup → #events → #setup … と往復してしまう）。
   function redirect(tab, eventId) {
@@ -157,34 +164,25 @@ var Desk = (function() {
     renderSeq++;
     var route = parseHash(location.hash);
     if (!route) {
-      // ハッシュが無いときは前回の続きから。それも無ければ大会一覧。
-      var last = loadLast() || { tab: 'events', eventId: '' };
-      redirect(last.tab, last.eventId);
+      // ハッシュが無いときは前回の続きから。それも無ければトップの大会一覧へ
+      var last = loadLast();
+      if (last) redirect(last.tab, last.eventId);
+      else goHome();
       return;
     }
-    if (route.tab !== 'events' && !route.eventId) {
-      toast('先に大会を選んでください');
-      redirect('events');
+    if (!route.eventId) {
+      Storage.setPendingToast('先に大会を選んでください');
+      goHome();
       return;
     }
 
     currentTab = route.tab;
-    selectedEventId = route.eventId || null;
-    if (currentTab === 'events') {
-      currentEvent = null;
-      saveLast();
-    }
+    selectedEventId = route.eventId;
     // 別の大会へ移るときは、読み終わるまで前の大会の状態で左メニューを出し分けない
     if (currentEventLoadedId !== selectedEventId) currentEvent = null;
     renderNav();
 
     var seq = ++renderSeq;
-    if (currentTab === 'events') {
-      renderHead(null);
-      renderTab(seq, { eventId: null, event: null, players: null, techniques: null });
-      return;
-    }
-
     main.innerHTML = '';
     var loading = document.createElement('p');
     loading.className = 'desk-empty';
@@ -200,7 +198,7 @@ var Desk = (function() {
       } else {
         alert('大会データを取得できませんでした。通信を確認してください。');
       }
-      redirect('events');
+      goHome();
       return;
     }
     var ev = evResult.event;
@@ -215,7 +213,7 @@ var Desk = (function() {
 
   // 現在の大会を読み直して、いま開いている区画を描き直す
   async function reloadEvent() {
-    if (currentTab === 'events' || !selectedEventId) return;
+    if (!selectedEventId) return;
     var seq = ++renderSeq;
     var evResult = await Api.loadEventResult(selectedEventId);
     if (seq !== renderSeq) return;
@@ -223,7 +221,7 @@ var Desk = (function() {
       if (evResult.status === 404) {
         alert('この大会は削除されています');
         clearLast();
-        redirect('events');
+        goHome();
       } else {
         alert('大会データを取得できませんでした。通信を確認してください。');
       }
@@ -407,7 +405,7 @@ var Desk = (function() {
       if (fresh.status === 404) {
         alert('この大会は削除されています');
         clearLast();
-        redirect('events');
+        goHome();
       } else {
         alert('大会データを取得できませんでした。通信を確認してください。');
       }
@@ -514,27 +512,26 @@ var Desk = (function() {
 
   function renderNav() {
     nav.innerHTML = '';
+    // 先頭はトップの大会一覧へのリンク（運営画面に一覧は無い。設計書 2026-10-05-event-list-on-home-design.md §3）
+    var home = document.createElement('a');
+    home.className = 'desk-nav-link';
+    home.id = 'navEvents';
+    home.href = HOME_LIST_URL;
+    home.textContent = '← 大会一覧';
+    nav.appendChild(home);
+    var sep = document.createElement('div');
+    sep.className = 'desk-nav-sep';
+    nav.appendChild(sep);
     var st = currentEvent ? EventStatus.of(currentEvent) : null;
-    NAV.forEach(function(item, i) {
+    NAV.forEach(function(item) {
       // 状態で出し分ける項目。いま開いている区画なら（段階が変わった直後でも）残す
       if (item.when && item.tab !== currentTab && !(st && item.when(st))) return;
-      if (i === 1) {
-        var sep = document.createElement('div');
-        sep.className = 'desk-nav-sep';
-        nav.appendChild(sep);
-      }
       var b = document.createElement('button');
       b.type = 'button';
       b.className = (item.tab === currentTab) ? 'on' : '';
       b.id = item.id;
       b.textContent = item.label;
-      // 大会を開くまでは大会一覧しか使えない（どの大会を描くのか決まらない）
-      if (item.tab !== 'events' && !selectedEventId) {
-        b.disabled = true;
-        b.title = '大会一覧から大会を開いてください';
-      } else {
-        b.addEventListener('click', function() { navigate(item.tab, selectedEventId); });
-      }
+      b.addEventListener('click', function() { navigate(item.tab, selectedEventId); });
       nav.appendChild(b);
     });
   }

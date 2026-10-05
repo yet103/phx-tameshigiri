@@ -3,17 +3,20 @@
 // admin-results.js）が Admin.registerTab で登録する。このモジュールは
 // 「どのタブを、どの大会で描くか」だけを持ち、画面の中身は知らない。
 //
-// ハッシュ体系: #events / #players/<大会ID> / #round/<大会ID> / #results/<大会ID>
+// ハッシュ体系: #players/<大会ID> / #round/<大会ID> / #results/<大会ID>
+// 大会一覧はトップ（index.html#list）に一本化した（設計書 2026-10-05-event-list-on-home-design.md）。
+// 大会の無いハッシュで開いたら控えかトップへ転送する（goHome）。
 // 採点画面の Route（#event/<id>/<court>）とは別体系で、ここで完結させる。
 // 選択中の大会は localStorage の tmg_admin_last に控える（採点画面の tmg_last とは分ける。
 // 運営者のスマホとコートのタブレットは別端末で、混ぜる理由がない）。
 var Admin = (function() {
   var LAST_KEY = 'tmg_admin_last';
-  var TABS = ['events', 'players', 'round', 'results'];
+  var TABS = ['players', 'round', 'results'];
+  var HOME_LIST_URL = 'index.html#list';
 
   var defs = {};
   var content = null;
-  var currentTab = 'events';
+  var currentTab = '';
   var selectedEventId = null;
   var toastTimer = null;
 
@@ -52,7 +55,7 @@ var Admin = (function() {
   }
 
   function buildHash(tab, eventId) {
-    if (tab === 'events' || !eventId) return '#' + tab;
+    if (!eventId) return '#' + tab;
     return '#' + tab + '/' + encodeURIComponent(eventId);
   }
 
@@ -62,7 +65,7 @@ var Admin = (function() {
       if (!raw) return null;
       var v = JSON.parse(raw);
       if (!v || TABS.indexOf(v.tab) === -1) return null;
-      if (v.tab !== 'events' && !v.eventId) return null;
+      if (!v.eventId) return null;
       return { tab: v.tab, eventId: v.eventId || '' };
     } catch (e) {
       return null;
@@ -97,6 +100,11 @@ var Admin = (function() {
   }
 
   // ユーザー操作を経ない自動の戻し用。
+  // トップの大会一覧へ（大会が無い・消えたとき）。履歴に積まない
+  function goHome() {
+    location.replace(HOME_LIST_URL);
+  }
+
   // 自動の戻しは履歴に積まない（戻るボタンで #round → #events → #round … と往復してしまう）。
   function redirect(tab, eventId) {
     var id = (eventId === undefined || eventId === null) ? selectedEventId : eventId;
@@ -114,28 +122,23 @@ var Admin = (function() {
     renderSeq++;
     var route = parseHash(location.hash);
     if (!route) {
-      // ハッシュが無いときは前回の続きから。それも無ければ大会一覧。
-      var last = loadLast() || { tab: 'events', eventId: '' };
-      redirect(last.tab, last.eventId);
+      // ハッシュが無いときは前回の続きから。それも無ければトップの大会一覧へ
+      var last = loadLast();
+      if (last) redirect(last.tab, last.eventId);
+      else goHome();
       return;
     }
-    if (route.tab !== 'events' && !route.eventId) {
-      toast('先に大会を選んでください');
-      redirect('events');
+    if (!route.eventId) {
+      Storage.setPendingToast('先に大会を選んでください');
+      goHome();
       return;
     }
 
     currentTab = route.tab;
-    selectedEventId = route.eventId || null;
-    if (currentTab === 'events') saveLast();
+    selectedEventId = route.eventId;
     highlightTabs();
 
     var seq = ++renderSeq;
-    if (currentTab === 'events') {
-      setTitle('PHX試し斬り 運営');
-      renderTab(seq, { eventId: null, event: null, players: null, techniques: null });
-      return;
-    }
 
     content.innerHTML = '';
     var loading = document.createElement('p');
@@ -152,7 +155,7 @@ var Admin = (function() {
       } else {
         alert('大会データを取得できませんでした。通信を確認してください。');
       }
-      redirect('events');
+      goHome();
       return;
     }
     var ev = evResult.event;
@@ -166,7 +169,7 @@ var Admin = (function() {
 
   // 現在の大会を読み直して、いま開いているタブを描き直す
   async function reloadEvent() {
-    if (currentTab === 'events' || !selectedEventId) return;
+    if (!selectedEventId) return;
     var seq = ++renderSeq;
     var evResult = await Api.loadEventResult(selectedEventId);
     if (seq !== renderSeq) return;
@@ -174,7 +177,7 @@ var Admin = (function() {
       if (evResult.status === 404) {
         alert('この大会は削除されています');
         clearLast();
-        redirect('events');
+        goHome();
       } else {
         alert('大会データを取得できませんでした。通信を確認してください。');
       }
@@ -515,7 +518,7 @@ var Admin = (function() {
       if (evResult.status === 404) {
         alert('この大会は削除されています');
         clearLast();
-        redirect('events');
+        goHome();
       } else {
         alert('大会データを取得できませんでした。通信を確認してください。');
       }
@@ -538,7 +541,7 @@ var Admin = (function() {
     if (ev.test === true) {
       var testNote = document.createElement('p');
       testNote.className = 'field-note';
-      testNote.textContent = 'テスト大会です（トップの「作成済みの大会」では既定で隠れます）。';
+      testNote.textContent = 'テスト大会です（トップの「大会一覧」では既定で隠れます）。';
       body.appendChild(testNote);
     }
     if (locked) {

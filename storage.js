@@ -59,23 +59,24 @@ var Storage = (function() {
   //   #round/<id>（スマホ） ⇔ #match/<id>（PC）
   //   #round2/<id>（PC の二巡目の形登録） → スマホでは #round/<id>（形登録は試合進行タブにある）
   //   #setup/<id> #techniques/<id>（PC にしか無い） → スマホでは #players/<id>
-  //   知らない区画・大会IDの無い区画・空 → #events
+  //   知らない区画・大会IDの無い区画・空 → ''（ハッシュ無し。運営画面は控えかトップの大会一覧へ。
+  //   大会一覧はトップに一本化した。設計書 2026-10-05-event-list-on-home-design.md）
   // 大会IDはエンコードされたまま持ち回る（デコードして組み直すと二重エンコードになる）。
   function mapHash(hash, mode) {
     var raw = String(hash == null ? '' : hash).replace(/^#/, '');
-    if (!raw) return '#events';
+    if (!raw) return '';
     var parts = raw.split('/');
     var tab = parts[0];
     var id = parts[1] || '';
-    if (tab === 'events') return '#events';
-    if (!id) return '#events';
+    if (tab === 'events') return '';
+    if (!id) return '';
     if (mode === 'pc') {
       if (tab === 'round') tab = 'match';
-      if (['setup', 'techniques', 'players', 'match', 'round2', 'results'].indexOf(tab) === -1) return '#events';
+      if (['setup', 'techniques', 'players', 'match', 'round2', 'results'].indexOf(tab) === -1) return '';
     } else {
       if (tab === 'match' || tab === 'round2') tab = 'round';
       if (tab === 'setup' || tab === 'techniques') tab = 'players';
-      if (['players', 'round', 'results'].indexOf(tab) === -1) return '#events';
+      if (['players', 'round', 'results'].indexOf(tab) === -1) return '';
     }
     return '#' + tab + '/' + id;
   }

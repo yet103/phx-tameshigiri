@@ -48,7 +48,7 @@
     <p>アドレスをそのまま開く（末尾に何も付けない）と <span class="term">トップページ</span>（<code>index.html</code>）が出ます。入口は 2 つだけです。</p>
     <ul>
       <li><span class="ui">＋ 大会を新規作成</span> … テンプレート・コピー・完全新規から選んで大会を作ります（§1「大会を作る」）。</li>
-      <li><span class="ui">▶ 作成済みの大会</span> … いまある大会の一覧です。行を押すと、その大会の運営画面が直接開きます。</li>
+      <li><span class="ui">▶ 大会一覧</span> … いまある大会の一覧です。行を押すと、その大会の運営画面が直接開きます。行の右の <span class="ui">⋯</span> から コピー・ファイルに保存・アーカイブ・削除ができます（運営画面に大会一覧はありません）。</li>
     </ul>
     <p>一覧は <span class="term">採点中 → 準備中・巡目終了 → 最終結果</span> の順に並び、5 件まで出ます。残りは <span class="ui">すべて見る</span> で開きます。アーカイブ済みの大会は下の <span class="ui">▸ アーカイブ（n 件）</span> に畳まれます。<span class="ui">システムテスト用</span> のテンプレートで作った大会は既定で隠れていて、<span class="ui">テストも表示</span> にチェックを入れると <span class="ui">テスト</span> の印付きで出ます。</p>
     <p>入口の下の小さなリンクから <span class="ui">採点画面</span>・<span class="ui">順位表示</span>・<span class="ui">ヘルプ</span> へ行けます。コート端末の方はここから採点画面へ入ってください。アプリの説明と 7 段階の流れは <span class="ui">▸ このアプリについて</span> に畳まれています。</p>
@@ -172,7 +172,7 @@
     <ul>
       <li><span class="ui">前回の大会をコピー</span> … 直近に触った大会（テスト大会とアーカイブ済みを除く）をそのままコピーします。毎回の大会はこれがいちばん速いです。</li>
       <li><span class="ui">テンプレートから</span> … 下の 3 種類から選びます。</li>
-      <li><span class="ui">作成済みの大会からコピー</span> … 元にする大会を選んでコピーします（アーカイブ済みも選べます）。</li>
+      <li><span class="ui">大会一覧からコピー</span> … 元にする大会を選んでコピーします（アーカイブ済みも選べます）。</li>
       <li><span class="ui">完全新規</span> … 名前・日付・会場だけの空の大会です。技と配点は雛形から入ります。</li>
     </ul>
     <p>どれを選んでも、次の画面で <span class="ui">大会名</span>・<span class="ui">日付</span>（今日が入っています）・<span class="ui">会場</span> を入れて <span class="ui">作成</span> を押します。作ったあとは、その大会の <span class="ui">選手登録</span> が開きます。</p>
@@ -183,27 +183,14 @@
       <li><span class="ui">大会用</span> … 技と配点は雛形のまま。コートは <span class="term">A・B</span>。<span class="ui">ゼッケン番号を必須にする</span> が入った状態。選手は 0 名。本番の大会を一から作るとき。</li>
       <li><span class="ui">システムテスト用</span> … <span class="ui">大会用</span> に加えて、ダミーの選手 20 名（男子01〜10・女子01〜10、ゼッケン 1〜20、A と B に交互、技も入っている）。初めての人が練習する・新しい端末で通しの確認をするとき。</li>
     </ul>
-    <div class="note"><span class="ui">システムテスト用</span> で作った大会には <span class="ui">テスト</span> の印が付き、トップの <span class="ui">作成済みの大会</span> では既定で隠れます（<span class="ui">テストも表示</span> で出ます）。運営画面の大会一覧と採点画面の選択肢には、いつでも出ます。練習が終わったら消してください。</div>
+    <div class="note"><span class="ui">システムテスト用</span> で作った大会には <span class="ui">テスト</span> の印が付き、トップの <span class="ui">大会一覧</span> では既定で隠れます（<span class="ui">テストも表示</span> で出ます）。採点画面の選択肢には、いつでも出ます。練習が終わったら消してください。</div>
 
     <p>運営画面には <span class="term">PC 用</span>（<code>desk.html</code>）と <span class="term">スマホ用</span>（<code>admin.html</code>）があります。中身は同じ大会で、ヘッダーの <span class="ui">🖥</span> / <span class="ui">📱</span> でいつでも行き来できます。当日の受付や名簿の打ち込みは PC 用が向いています。</p>
-    <p><span class="term">PC 用（<code>desk.html</code>）</span>:</p>
-    <ol>
-      <li>左の区画で <span class="ui">大会一覧</span> を選ぶ。</li>
-      <li>右上の <span class="ui">＋ 新規作成</span> を押す。</li>
-      <li><span class="ui">大会名</span>・<span class="ui">日付</span>・<span class="ui">会場</span> を入れて <span class="ui">作成</span>。<span class="ui">選手登録</span> の区画が開きます。</li>
-    </ol>
-    <p><span class="term">スマホ用（<code>admin.html</code>）</span>:</p>
-    <ol>
-      <li>タブ（画面の下）で <span class="ui">大会</span> を選ぶ。</li>
-      <li>右上の <span class="ui">＋ 新規大会</span> を押す。</li>
-      <li>シートで <span class="ui">大会名</span>・<span class="ui">日付</span>・<span class="ui">会場</span> を入れる。</li>
-      <li><span class="ui">作成</span> を押す。一覧に大会が増えます。</li>
-    </ol>
+    <p>大会を作るのはトップの <span class="ui">＋ 大会を新規作成</span> だけです（前回の大会をコピー／テンプレート／大会一覧からコピー／完全新規）。作ると、その大会の運営画面の <span class="ui">選手登録</span> が開きます。運営画面に「新規作成」はありません。大会を切り替えるときは、PC 用は左の区画の <span class="ui">← 大会一覧</span>、スマホ用は ⋯ → <span class="ui">🏠 トップ</span> でトップの大会一覧へ戻って選びます。</p>
     <div class="note">このマニュアルの画面写真はスマホ用のものです。PC 用は同じ内容を広い画面に並べたもので、ボタンの名前もほぼ同じです。</div>
 
     <h3>去年の大会をコピーして作る</h3>
-    <p>トップページの <span class="ui">＋ 大会を新規作成</span> → <span class="ui">作成済みの大会からコピー</span> でも同じことができます。運営画面からやる場合は次のとおりです。</p>
-    <p>PC 用の <span class="ui">大会一覧</span> で、元にする大会の行の <span class="ui">⋯</span> → <span class="ui">📄 コピーして作成</span> を押します。</p>
+    <p>トップの <span class="ui">大会一覧</span> で、元にする大会の行の <span class="ui">⋯</span> → <span class="ui">📄 コピーして作成</span> を押します（トップの <span class="ui">＋ 大会を新規作成</span> → <span class="ui">大会一覧からコピー</span> と同じ画面が、その大会を選んだ状態で開きます）。</p>
     <ul>
       <li><span class="ui">大会名</span>（「元の名前（コピー）」が入っています）・<span class="ui">日付</span>（今日）・<span class="ui">会場</span> を直します。</li>
       <li><span class="ui">選手も複製する（得点は消す）</span> にチェックを入れると、元の大会の<span class="term">一巡目の選手だけ</span>が、名前・コート・性別・新人・技（二巡目の形の申請があればそれも）をそのままに、得点 0 で入ります。二巡目の行は複製しません。</li>
@@ -222,9 +209,9 @@
     <p>同じ画面の <span class="ui">ゼッケン番号を必須にする</span> / <span class="ui">級位・段位を必須にする</span> は、一巡目にその項目が空の選手がいる間だけ <span class="ui">試合開始 ▶</span> で止めるための設定です（§2 の「当日の流れ」）。登録そのものは空のままできます。</p>
 
     <h3>終わった大会を片づける（アーカイブ）</h3>
-    <p><span class="ui">最終結果</span> まで進んだ大会は <span class="ui">アーカイブ</span> にできます。<span class="ui">試合進行</span> の工程表の下の <span class="ui">アーカイブ ▶</span>、または大会一覧の行の <span class="ui">⋯</span> → <span class="ui">📥 アーカイブ</span> です。</p>
+    <p><span class="ui">最終結果</span> まで進んだ大会は <span class="ui">アーカイブ</span> にできます。<span class="ui">試合進行</span> の工程表の下の <span class="ui">アーカイブ ▶</span>、またはトップの大会一覧の行の <span class="ui">⋯</span> → <span class="ui">📥 アーカイブ</span> です。</p>
     <ul>
-      <li>大会一覧では、下の <span class="ui">▸ アーカイブ（n 件）</span> に畳まれます。当日の大会と混ざりません。</li>
+      <li>トップの大会一覧では、下の <span class="ui">▸ アーカイブ（n 件）</span> に畳まれます。当日の大会と混ざりません。</li>
       <li>採点画面の大会の選択肢から消えます。押し間違えて去年の大会に採点してしまう事故を防ぐためです。</li>
       <li>見るだけはできます。共有リンクと発表モードもそのまま開けます。</li>
       <li>戻すときは <span class="ui">試合進行</span> の <span class="ui">◀ 最終結果 に戻す</span> です。</li>
@@ -232,7 +219,7 @@
 
     <figure class="shot-mobile">
       <img src="help/img/admin_events.png" loading="lazy" alt="運営画面の大会タブ。見出しの右に「📂 大会ファイルを取り込む」「＋ 新規大会」の2つのボタンがあり、大会ごとの行の右端に「⋯」がある。">
-      <figcaption>大会タブ。1件ごとに日付と人数が出ます。右の <span class="ui">⋯</span> から <span class="ui">💾 ファイルに保存</span> と <span class="ui">🗑 削除</span> を選べます。見出しの <span class="ui">📂 大会ファイルを取り込む</span> はほかのサーバーで作った大会の取り込みです（トップの <span class="ui">📂 ファイルから取り込む</span> と同じ）。アーカイブ済みの大会があるときは、一覧の末尾に <span class="ui">アーカイブ（n 件）</span> の見出しでまとまって出ます。</figcaption>
+      <figcaption>（以前の画面）運営画面にあった大会タブ。いまは大会の一覧・新規作成・取り込みは<span class="term">トップの <span class="ui">大会一覧</span> に一本化</span>され、運営画面は大会を開いてから入る画面です。一覧の行の右の <span class="ui">⋯</span> から <span class="ui">📄 コピーして作成</span>・<span class="ui">💾 ファイルに保存</span>・<span class="ui">📥 アーカイブ</span>（最終結果の大会だけ）・<span class="ui">🗑 削除</span> を選べます。アーカイブ済みの大会は一覧の末尾の <span class="ui">▸ アーカイブ（n 件）</span> に畳まれます。</figcaption>
     </figure>
 
     <figure class="shot-mobile">
@@ -243,8 +230,8 @@
     <h3>別のサーバーや PC から取り込む</h3>
     <p>ほかのサーバーで作った大会を、そのまま持ってこられます。大会情報・技の配点・選手（採点済みの得点も）・採点履歴が一緒に入ります。</p>
     <ol>
-      <li>持ち出す側の運営画面で、大会タブの行の <span class="ui">⋯</span> → <span class="ui">💾 ファイルに保存</span> を押す。<code>tameshigiri_日付_大会名.json</code> が保存されます。</li>
-      <li>取り込む側で、トップの <span class="ui">📂 ファイルから取り込む</span> を押し、そのファイルを選ぶ（運営画面の大会タブの見出しの <span class="ui">📂 大会ファイルを取り込む</span> からでも同じです）。</li>
+      <li>持ち出す側で、トップの大会一覧の行の <span class="ui">⋯</span> → <span class="ui">💾 ファイルに保存</span>（または PC 運営の <span class="ui">基本情報</span> の <span class="ui">💾 ファイルに保存</span>、スマホ運営の ⋯ → <span class="ui">💾 大会をファイルに保存</span>）を押す。<code>tameshigiri_日付_大会名.json</code> が保存されます。</li>
+      <li>取り込む側で、トップの <span class="ui">📂 ファイルから取り込む</span> を押し、そのファイルを選ぶ。</li>
       <li><span class="msg">大会を取り込みました（n 名）</span> と出て、選手登録タブが開きます。</li>
     </ol>
     <div class="note">取り込みは<span class="term">いつも新しい大会として追加</span>されます。同じ名前の大会があっても上書きされません。同じ名前と日付の大会が既にあるときは <span class="msg">同じ名前と日付の大会が既にあります。別の大会として追加しますか？</span> と確認が出ます。共有リンクと配信用ボードのアドレスは持ち込まれないので、取り込んだ側で作り直してください（§4）。選手だけを足す CSV（選手登録の <span class="ui">📄 選手を CSV から取り込む</span>）とは別の機能です。大会ファイル（.json）は選手登録では読めません。</div>
@@ -842,7 +829,7 @@
     <h3>大会をファイルに保存する</h3>
     <p>大会1件を丸ごと1つのファイルに書き出せます。大会が終わったあとの控えや、別のサーバーへの持ち出しに使います。</p>
     <ol>
-      <li>運営画面の <span class="ui">大会一覧</span>（PC 用）または大会タブ（スマホ用）で、その大会の行の <span class="ui">⋯</span> を押す。</li>
+      <li>トップの <span class="ui">大会一覧</span> で、その大会の行の <span class="ui">⋯</span> を押す。</li>
       <li><span class="ui">💾 ファイルに保存</span> を押す。<code>tameshigiri_日付_大会名.json</code> がダウンロードされます。</li>
     </ol>
     <p>大会を選んでいるときは、右上の <span class="ui">⋯</span> → <span class="ui">💾 大会をファイルに保存</span> からも同じことができます。</p>
@@ -948,11 +935,11 @@
       <li>書き込めるのは、名前が <span class="term">「テスト用」で始まる大会だけ</span>です（大会の作成・選手の登録・採点・状態の進行・削除。予行演習用）。</li>
       <li>運営の画面（運営・技得点表・招待・キーの発行）は開けません。</li>
     </ul>
-    <p>大会名を「テスト用」で始まる名前に変えて保存するときは、運営画面（基本情報）が「AI が書き込める大会になります」と確認します。大会一覧には <span class="ui">AI 書込可</span> の印が付きます。</p>
+    <p>大会名を「テスト用」で始まる名前に変えて保存するときは、運営画面（基本情報）が「AI が書き込める大会になります」と確認します。トップの大会一覧には <span class="ui">AI 書込可</span> の印が付きます。</p>
 
     <h3>発行と取り消し（運営画面・PC 用）</h3>
     <ol>
-      <li>運営画面の <span class="ui">大会一覧</span> の下の <span class="ui">AI 用キー</span> で <span class="ui">🔑 発行する</span> を押します（ラベル・期限。期限は 30 日が標準で、最大 90 日）。</li>
+      <li>PC 運営の <span class="ui">基本情報</span> の末尾の <span class="ui">AI 用キー</span> で <span class="ui">🔑 発行する</span> を押します（ラベル・期限。期限は 30 日が標準で、最大 90 日）。</li>
       <li>キーは<span class="term">発行したときの 1 回だけ</span>表示されます。<span class="ui">キーをコピー</span> で写します。</li>
       <li><span class="term">自分の PC のターミナル</span>（Claude Code の外）で、画面に出ているコマンド（<code>set-key.ps1</code>）を実行し、キーを貼り付けます。キーは Windows の資格情報マネージャーに保存され、AI を動かす MCP サーバーだけが読みます。</li>
       <li>一覧の <span class="ui">取り消す</span> で、いつでも使えなくできます。最後に使われた時刻と回数も一覧で分かります。</li>

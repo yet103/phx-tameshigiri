@@ -216,7 +216,7 @@ var Home = (function() {
   // 1 段目で選ぶ「経路」。2 段目のフォームの中身がこれで変わる。
   //   'copy-prev'  前回の大会をコピー（Home.pickPrevious が選んだ 1 件）
   //   'template'   テンプレートから（newTemplate に practice / tournament / systest）
-  //   'copy-pick'  作成済みの大会からコピー（2 段目のセレクトで選ぶ）
+  //   'copy-pick'  大会一覧からコピー（2 段目のセレクトで選ぶ）
   //   'blank'      完全新規
   var newRoute = '';
   var newTemplate = '';
@@ -224,12 +224,27 @@ var Home = (function() {
 
   var TEMPLATE_ORDER = ['practice', 'tournament', 'systest'];
 
+  // 一覧の行の ⋯「📄 コピーして作成」から来たとき、#new を開いた直後にその大会のコピーの 2 段目を出す
+  var pendingCopySource = '';
+
   // #new に入るたびに 1 段目から始める（前に開いたときの選択を引きずらない）。
   function openNew() {
     newRoute = '';
     newTemplate = '';
     copySource = '';
+    if (pendingCopySource) {
+      newRoute = 'copy-pick';
+      copySource = pendingCopySource;
+      pendingCopySource = '';
+    }
     renderNew();
+  }
+
+  // 一覧の行から「コピーして作成」（設計書 2026-10-05-event-list-on-home-design.md §2）
+  function openNewCopy(id) {
+    pendingCopySource = id;
+    if (paneFor(location.hash) === 'new') openNew();
+    else location.hash = '#new';
   }
 
   function renderNew() {
@@ -257,7 +272,7 @@ var Home = (function() {
     return b;
   }
 
-  // 1 段目。「前回の大会をコピー」と「作成済みの大会からコピー」は一覧が要るので、
+  // 1 段目。「前回の大会をコピー」と「大会一覧からコピー」は一覧が要るので、
   // 4 枚とも取れてからまとめて描く（先に 2 枚だけ出すと並びが崩れる）。
   async function renderNewStep1(box) {
     var loading = document.createElement('p');
@@ -297,7 +312,7 @@ var Home = (function() {
       function() { newRoute = 'template'; renderNew(); }));
 
     if (copyableEvents(events).length > 0) {
-      cards.appendChild(newCard('作成済みの大会からコピー',
+      cards.appendChild(newCard('大会一覧からコピー',
         '元にする大会を選びます（アーカイブ済みも選べます）。',
         function() { newRoute = 'copy-pick'; copySource = ''; renderNew(); }));
     }
@@ -359,7 +374,7 @@ var Home = (function() {
     return found.length ? found[0] : null;
   }
 
-  // 「作成済みの大会からコピー」の候補。テスト大会（test）は本物でないのでコピー元にしない。
+  // 「大会一覧からコピー」の候補。テスト大会（test）は本物でないのでコピー元にしない。
   function copyableEvents(events) {
     return (events || []).filter(function(ev) { return ev && ev.test !== true; });
   }
@@ -401,7 +416,7 @@ var Home = (function() {
     form.className = 'home-form';
     box.appendChild(form);
 
-    // コピー元のセレクト（「作成済みの大会からコピー」だけ）。
+    // コピー元のセレクト（「大会一覧からコピー」だけ）。
     // 並びは一覧と同じにせず、更新の新しい順にする（探しやすさを優先）。
     var selSrc = null;
     if (newRoute === 'copy-pick') {
@@ -417,6 +432,7 @@ var Home = (function() {
           (ev.playerCount || 0) + '名）';
         selSrc.appendChild(o);
       });
+      if (copySource && findEvent(copySource)) selSrc.value = copySource;   // 一覧の ⋯ から来たとき
       copySource = selSrc.value;
     }
 
@@ -513,7 +529,7 @@ var Home = (function() {
       return 'テンプレート「' + (spec ? spec.name : newTemplate) + '」から作る';
     }
     if (newRoute === 'copy-prev') return '前回の大会をコピーして作る';
-    if (newRoute === 'copy-pick') return '作成済みの大会からコピーして作る';
+    if (newRoute === 'copy-pick') return '大会一覧からコピーして作る';
     return '完全新規で作る';
   }
 
@@ -529,16 +545,19 @@ var Home = (function() {
     return '技と配点は雛形（技得点表の「雛形」）から入ります。';
   }
 
-  // --- 作成済みの大会（#list）---
+  // --- 大会一覧（#list。運営画面の一覧はここに一本化。設計書 2026-10-05-event-list-on-home-design.md）---
   // eventsSeq / eventsCache は上の節（#new）で宣言。#list と #new のどちらも
   // 一覧を使うので、世代は 1 つで足りる。
 
   var showTest = false;     // 「テストも表示」のチェック
   var listExpanded = false; // 「すべて見る」を押したか
-  var LIST_LIMIT = 5;       // 畳む前に出す件数（設計書「作成済みの大会」）
+  var LIST_LIMIT = 5;       // 畳む前に出す件数（設計書「作成済みの大会」。いまの名前は大会一覧）
 
   async function loadEvents() {
     listExpanded = false;   // #list を開き直したら「すべて見る」の展開を引きずらない
+    // 運営画面が大会なしで開かれて戻ってきたときの一言（Storage.setPendingToast。設計書 2026-10-05-event-list-on-home-design.md §3）
+    var pending = Storage.takePendingToast();
+    if (pending) showListNote(pending);
     var seq = ++eventsSeq;
     var box = document.getElementById('homeEventList');
     box.textContent = '読み込み中…';
@@ -621,9 +640,127 @@ var Home = (function() {
     }
   }
 
-  // 行はリンクにする（中クリックで別タブに開ける。行き先はモードで変わるので
-  // data-event-id を持たせ、updateAdminLinks が href だけ作り直す）。
+  // 行の ⋯ に出す操作（純粋関数。test.html が見る）。アーカイブは最終結果のときだけ
+  // （遷移表にない組み合わせはサーバーが拒む）。
+  function rowActions(ev) {
+    var list = ['copy', 'save'];
+    if (EventStatus.of(ev) === 'final') list.push('archive');
+    list.push('delete');
+    return list;
+  }
+
+  // 一覧の上の 1 行の知らせ（トップには toast が無い）。3 秒で消える
+  var listNoteTimer = null;
+  function showListNote(text) {
+    var note = document.getElementById('homeListNote');
+    if (!note) return;
+    note.textContent = text;
+    note.hidden = false;
+    if (listNoteTimer) clearTimeout(listNoteTimer);
+    listNoteTimer = setTimeout(function() { note.hidden = true; }, 3000);
+  }
+
+  // ⋯ の操作（運営画面の大会一覧から移したもの。文言は desk-events.js と同じ）
+  async function onSaveFile(ev) {
+    var json = await Api.exportBundle(ev.id);
+    if (typeof json !== 'string') {
+      alert(json && json.error
+        ? '大会をファイルに保存できませんでした。\n' + json.error
+        : '大会をファイルに保存できませんでした。通信を確認してください。');
+      return;
+    }
+    Storage.downloadText(Storage.bundleFilename(ev.name, ev.date), json, 'application/json;charset=utf-8');
+    showListNote('ファイルに保存しました');
+  }
+
+  async function onDelete(ev) {
+    if (!confirm('大会「' + (ev.name || '(名称未設定)') + '」を削除します。\n' +
+        '選手データも一緒に消えます。よろしいですか？')) {
+      return;
+    }
+    var ok = await Api.deleteEvent(ev.id);
+    if (!ok) {
+      alert('大会の削除に失敗しました。');
+      return;
+    }
+    showListNote('大会を削除しました');
+    loadEvents().catch(function(e) { console.error(e); });
+  }
+
+  async function onArchive(ev) {
+    if (!confirm(Courts.statusConfirmMessage('final', 'archived', null))) return;
+    // 画面が見ていた状態（final）を送る。他の端末が動かしていたらサーバーが 409 stale で断る
+    var res = await Api.changeStatus(ev.id, 'archived', { from: 'final' });
+    if (!res) {
+      alert('アーカイブできませんでした。通信を確認してください。');
+      return;
+    }
+    if (!res.ok) {
+      alert(res.reason === 'stale'
+        ? '他の端末で状態が変わっていました。一覧を読み直します。'
+        : res.error);
+    } else {
+      showListNote('アーカイブしました');
+    }
+    loadEvents().catch(function(e) { console.error(e); });   // 成否にかかわらず読み直す
+  }
+
+  var outsideClickBound = false;
+  function bindOutsideClickOnce() {
+    if (outsideClickBound) return;
+    outsideClickBound = true;
+    document.addEventListener('click', function(e) {
+      var open = document.querySelectorAll('details.home-menu[open]');
+      for (var i = 0; i < open.length; i++) {
+        if (!open[i].contains(e.target)) open[i].open = false;
+      }
+    });
+  }
+
+  function menuItem(menu, label, onClick) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.addEventListener('click', function() {
+      menu.open = false;
+      onClick();
+    });
+    return b;
+  }
+
+  function buildRowMenu(ev) {
+    bindOutsideClickOnce();
+    var menu = document.createElement('details');
+    menu.className = 'home-menu';
+    var sum = document.createElement('summary');
+    sum.textContent = '⋯';
+    sum.setAttribute('aria-label', (ev.name || '(名称未設定)') + ' の操作');
+    menu.appendChild(sum);
+    var body = document.createElement('div');
+    body.className = 'home-menu-body';
+    menu.appendChild(body);
+    var labels = { copy: '📄 コピーして作成', save: '💾 ファイルに保存', archive: '📥 アーカイブ', 'delete': '🗑 削除' };
+    var handlers = {
+      copy: function() { openNewCopy(ev.id); },
+      save: function() { onSaveFile(ev).catch(function(e) { console.error(e); }); },
+      archive: function() { onArchive(ev).catch(function(e) { console.error(e); }); },
+      'delete': function() { onDelete(ev).catch(function(e) { console.error(e); }); }
+    };
+    rowActions(ev).forEach(function(key) { body.appendChild(menuItem(menu, labels[key], handlers[key])); });
+    return menu;
+  }
+
+  // 1 行 = 本体（リンク）＋ 右端の ⋯。本体はリンクにする（中クリックで別タブに開ける。
+  // 行き先はモードで変わるので data-event-id を持たせ、updateAdminLinks が href だけ作り直す）。
   function eventRow(ev) {
+    var row = document.createElement('div');
+    row.className = 'home-event-row';
+    row.appendChild(eventLink(ev));
+    row.appendChild(buildRowMenu(ev));
+    return row;
+  }
+
+  function eventLink(ev) {
     var status = EventStatus.of(ev);
 
     var a = document.createElement('a');
@@ -652,6 +789,13 @@ var Home = (function() {
       tb.className = 'home-badge test';
       tb.textContent = 'テスト';
       a.appendChild(tb);
+    }
+    // 名前が「テスト用」で始まる大会は AI 用キーの AI が書き込める（サーバーの isSandboxName と同じ判定）
+    if (String(ev.name || '').trim().indexOf('テスト用') === 0) {
+      var ai = document.createElement('span');
+      ai.className = 'home-badge test';
+      ai.textContent = 'AI 書込可';
+      a.appendChild(ai);
     }
     return a;
   }
@@ -720,6 +864,8 @@ var Home = (function() {
     sortForHome: sortForHome,
     pickPrevious: pickPrevious,
     templateSpec: templateSpec,
-    importHref: importHref
+    importHref: importHref,
+    rowActions: rowActions,
+    openNewCopy: openNewCopy
   };
 })();

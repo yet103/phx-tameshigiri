@@ -29,7 +29,7 @@
   </header>
 
   <!-- 3 つの区画を 1 ページに置き、ハッシュで出し分ける（home.js の applyRoute）。
-       ハッシュ無し＝入口、#new＝大会を新規作成、#list＝作成済みの大会。
+       ハッシュ無し＝入口、#new＝大会を新規作成、#list＝大会一覧（運営画面の一覧はここに一本化。設計書 2026-10-05-event-list-on-home-design.md）。
        #event/… は採点画面へ転送されるので、ここには来ない。 -->
   <main class="home-main" id="homeMain">
 
@@ -41,7 +41,7 @@
           <span class="home-entry-sub">テンプレート・コピー・完全新規</span>
         </a>
         <a class="home-entry" href="#list">
-          <span class="home-entry-main">▶ 作成済みの大会</span>
+          <span class="home-entry-main">▶ 大会一覧</span>
           <span class="home-entry-sub">選んで開始・続きから</span>
           <span class="home-entry-note" id="homeEntryMode"></span>
         </a>
@@ -78,15 +78,16 @@
       </details>
     </section>
 
-    <!-- 作成済みの大会（#list） -->
+    <!-- 大会一覧（#list） -->
     <section class="home-pane" id="paneList" hidden>
       <div class="home-pane-head">
         <a class="home-back" href="#">← 戻る</a>
-        <h2>作成済みの大会</h2>
+        <h2>大会一覧</h2>
       </div>
       <label class="home-check">
         <input type="checkbox" id="chkShowTest"> テストも表示
       </label>
+      <p class="home-note" id="homeListNote" hidden></p>
       <div class="home-event-list" id="homeEventList">読み込み中…</div>
     </section>
 

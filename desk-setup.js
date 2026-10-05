@@ -53,13 +53,25 @@
     var h2 = document.createElement('h2');
     h2.textContent = '基本情報';
     head.appendChild(h2);
+    var spacer = document.createElement('div');
+    spacer.className = 'spacer';
+    head.appendChild(spacer);
+    // 大会ファイルに保存（運営画面の大会一覧から移した。設計書 2026-10-05-event-list-on-home-design.md §3）
+    var btnSave = document.createElement('button');
+    btnSave.type = 'button';
+    btnSave.className = 'desk-btn';
+    btnSave.id = 'btnSetupSaveFile';
+    btnSave.textContent = '💾 ファイルに保存';
+    btnSave.title = 'この大会を 1 つのファイル（.json）に書き出します。別のサーバーの「📂 ファイルから取り込む」で読めます';
+    btnSave.addEventListener('click', function() { onSaveFile(ctx).catch(function(e) { console.error(e); }); });
+    head.appendChild(btnSave);
     container.appendChild(head);
 
     // テスト大会の印。変える UI は出さない（test を立てるのはテンプレート API だけ）。
     if (ctx.event && ctx.event.test === true) {
       var testNote = document.createElement('p');
       testNote.className = 'desk-note';
-      testNote.textContent = 'テスト大会です（トップの「作成済みの大会」では既定で隠れます）。';
+      testNote.textContent = 'テスト大会です（トップの「大会一覧」では既定で隠れます）。';
       container.appendChild(testNote);
     }
 
@@ -294,6 +306,31 @@
 
     renderChips();
     renderCourtTable();
+
+    // AI 用キー（大会に依らず、このサーバー全体の設定。運営画面の大会一覧から移した）
+    if (window.DeskInvites) {
+      var aiHost = document.createElement('div');
+      aiHost.className = 'desk-setup-aikeys';
+      container.appendChild(aiHost);
+      DeskInvites.mountAiKeys(aiHost, ctx);
+    }
+  }
+
+  // この大会をファイルに保存（desk-events.js にあったものを移した）。待っている間に区画や大会を
+  // 切り替えられていたら、古い画面の toast を出さない（ctx.isStale）。
+  async function onSaveFile(ctx) {
+    var ev = ctx.event;
+    var json = await Api.exportBundle(ctx.eventId);
+    if (ctx.isStale()) return;
+    // json: 成功時は文字列、サーバーがエラーを返したときは {error}、通信失敗は null
+    if (typeof json !== 'string') {
+      alert(json && json.error
+        ? '大会をファイルに保存できませんでした。\n' + json.error
+        : '大会をファイルに保存できませんでした。通信を確認してください。');
+      return;
+    }
+    Storage.downloadText(Storage.bundleFilename(ev.name, ev.date), json, 'application/json;charset=utf-8');
+    Desk.toast('ファイルに保存しました');
   }
 
   Desk.registerTab('setup', { render: render });

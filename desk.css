@@ -86,6 +86,11 @@ a { color: var(--accent); }
 .desk-nav button.on { background: var(--card-bg); color: var(--accent); font-weight: bold; border-left-color: var(--accent); }
 .desk-nav button:disabled { opacity: .45; cursor: not-allowed; }
 .desk-nav-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+.desk-nav-link {
+  display: block; min-height: 40px; line-height: 40px; padding: 0 12px;
+  color: var(--text-muted); text-decoration: none; border-left: 3px solid transparent;
+}
+.desk-nav-link:hover { background: var(--card-bg); color: var(--text); }
 .desk-main { padding: 16px 20px 40px; min-width: 0; }
 
 /* ===== 見出し・注記 ===== */

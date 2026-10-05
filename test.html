@@ -6872,12 +6872,16 @@
     var modeSaved = null;
     try { modeSaved = localStorage.getItem('tmg_mode'); } catch (e) {}
 
-    assert('mapHash: #events はどちらのモードでも #events',
-      [Storage.mapHash('#events', 'pc'), Storage.mapHash('#events', 'mobile')], ['#events', '#events']);
-    assert('mapHash: 空のハッシュは #events', Storage.mapHash('', 'pc'), '#events');
-    assert('mapHash: null でも #events', Storage.mapHash(null, 'pc'), '#events');
+    // 大会一覧はトップに一本化したので、運営画面に #events は無い（設計書 2026-10-05-event-list-on-home-design.md §5）
+    assert('mapHash: #events はどちらのモードでもハッシュ無し',
+      [Storage.mapHash('#events', 'pc'), Storage.mapHash('#events', 'mobile')], ['', '']);
+    assert('mapHash: 空のハッシュはハッシュ無し', Storage.mapHash('', 'pc'), '');
+    assert('mapHash: null でもハッシュ無し', Storage.mapHash(null, 'pc'), '');
     assert('mapHash: 先頭の # は無くてもよい', Storage.mapHash('players/e1', 'pc'), '#players/e1');
-    assert('mapHash: 大会IDの無い区画は #events に落とす', Storage.mapHash('#players', 'pc'), '#events');
+    assert('mapHash: 大会IDの無い区画はハッシュ無しに落とす', Storage.mapHash('#players', 'pc'), '');
+    assert('Home.rowActions: 一覧の行の ⋯。アーカイブは最終結果のときだけ',
+      [Home.rowActions({ status: 'draft' }), Home.rowActions({ status: 'final' }), Home.rowActions({ status: 'archived' })],
+      [['copy', 'save', 'delete'], ['copy', 'save', 'archive', 'delete'], ['copy', 'save', 'delete']]);
     assert('mapHash: #players はどちらでもそのまま',
       [Storage.mapHash('#players/e1', 'pc'), Storage.mapHash('#players/e1', 'mobile')],
       ['#players/e1', '#players/e1']);
@@ -6893,13 +6897,13 @@
       Storage.mapHash('#setup/e1', 'mobile'), '#players/e1');
     assert('mapHash: PC にしか無い #techniques はスマホでは #players',
       Storage.mapHash('#techniques/e1', 'mobile'), '#players/e1');
-    assert('mapHash: 知らない区画は #events', Storage.mapHash('#zzz/e1', 'pc'), '#events');
+    assert('mapHash: 知らない区画はハッシュ無し', Storage.mapHash('#zzz/e1', 'pc'), '');
     assert('mapHash: 大会IDのエンコードはそのまま保つ',
       Storage.mapHash('#players/' + encodeURIComponent('a b'), 'pc'), '#players/a%20b');
 
     assert('modeHref: pc は desk.html', Storage.modeHref('#round/e1', 'pc'), 'desk.html#match/e1');
     assert('modeHref: mobile は admin.html', Storage.modeHref('#match/e1', 'mobile'), 'admin.html#round/e1');
-    assert('modeHref: 知らないモードはスマホ扱い', Storage.modeHref('#events', 'zzz'), 'admin.html#events');
+    assert('modeHref: 知らないモードはスマホ扱い', Storage.modeHref('#players/e1', 'zzz'), 'admin.html#players/e1');
 
     Storage.saveMode('pc');
     assert('loadMode: 控えた値を返す', Storage.loadMode(), 'pc');
@@ -6920,8 +6924,8 @@
     // 控えが無いときの既定は画面幅で決まる（テストの窓幅に依るので値は固定しない）。
     // 大事なのは「ボタンの表示に使う currentMode」と「リンクの行き先 adminHref」が食い違わないこと。
     assert('currentMode: adminHref と同じモードを指す',
-      Storage.adminHref('#events'),
-      (Storage.currentMode() === 'pc' ? 'desk.html' : 'admin.html') + '#events');
+      Storage.adminHref('#players/e1'),
+      (Storage.currentMode() === 'pc' ? 'desk.html' : 'admin.html') + '#players/e1');
     try {
       if (modeSaved === null) localStorage.removeItem('tmg_mode');
       else localStorage.setItem('tmg_mode', modeSaved);
