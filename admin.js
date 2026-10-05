@@ -776,6 +776,10 @@ var Admin = (function() {
       });
     }
 
+    // トップから取り込んで飛んできたときの完了文言（Storage.setPendingToast。設計書 2026-10-05 §3.2）
+    var pending = Storage.takePendingToast();
+    if (pending) toast(pending);
+
     window.addEventListener('hashchange', function() { applyRoute().catch(function(e) { console.error(e); }); });
     applyRoute().catch(function(e) { console.error(e); });
   }

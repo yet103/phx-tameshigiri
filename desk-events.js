@@ -19,7 +19,7 @@
     var btnImport = document.createElement('button');
     btnImport.type = 'button';
     btnImport.className = 'desk-btn';
-    btnImport.textContent = '📂 取り込む';
+    btnImport.textContent = '📂 大会ファイルを取り込む';
     btnImport.addEventListener('click', function() {
       // 選択〜取り込み完了まで二重送信を防ぐ
       btnImport.disabled = true;
@@ -407,48 +407,12 @@
   // --- 取り込み ---
   // 検証（format / version）は Storage.checkBundle。スマホ運営（admin-events.js）と同じ流れ。
 
+  // 大会ファイルの取り込み。中身は bundle-import.js（トップ・スマホ運営と共用）。
+  // ここでは完了の文言と遷移だけ。区画を離れていたら（ctx.isStale）共通部品が null を返す。
   async function importBundleText(text, ctx) {
-    var bundle;
-    try {
-      bundle = JSON.parse(text);
-    } catch (e) {
-      alert('ファイルを読めませんでした。');
-      return;
-    }
-    var chk = Storage.checkBundle(bundle);
-    if (!chk.ok) { alert(chk.error); return; }
-
-    var name = (bundle.event && bundle.event.name) || '';
-    var date = (bundle.event && bundle.event.date) || '';
-
-    // 取り込みは常に新しい大会として追加される。同名・同日があれば先に断りを入れる。
-    var existing = await Api.listEvents();
-    if (ctx.isStale()) return;
-    if (Array.isArray(existing)) {
-      var dup = existing.filter(function(e) {
-        return String(e.name || '').trim() === String(name).trim() &&
-               String(e.date || '') === String(date);
-      });
-      if (dup.length > 0 &&
-          !confirm('同じ名前と日付の大会が既にあります。\n別の大会として追加しますか？')) {
-        return;
-      }
-    }
-
-    var result = await Api.importBundle(bundle);
-    if (ctx.isStale()) return;
-    if (!result) {
-      alert('取り込みに失敗しました。通信を確認してください。');
-      return;
-    }
-    if (!result.success) {
-      alert('取り込みに失敗しました。\n' + (result.error || ''));
-      return;
-    }
-    // ゼッケンの重複・範囲外は取り込みを弾かず「未設定」に落とす（サーバー側）ので、
-    // その件数があれば結果の文言に足す（設計書「選手の追加項目」レビュー修正）。
-    var bundleBibMsg = Courts.bibDroppedMessage(result.bibDropped);
-    Desk.toast('大会を取り込みました（' + (result.playerCount || 0) + '名）' + (bundleBibMsg ? '。' + bundleBibMsg : ''));
+    var result = await BundleImport.run(text, { isStale: ctx.isStale });
+    if (!result) return;
+    Desk.toast(BundleImport.message(result));
     Desk.navigate('players', result.id);
   }
 
