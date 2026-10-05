@@ -633,6 +633,28 @@ body.scoring-wide .court-list-arrow { display: none; }
 .player-list-table tr.current-player td.score {
   color: var(--accent-text);
 }
+/* 試技順を入れ替える掴み手（⋮⋮）の列。運営の端末だけ（app.js の canReorder。2026-10-05）。
+   指で掴めるよう掴み手の上ではスクロールにしない（touch-action: none）。長押しのメニュー・文字の選択も出さない */
+.player-list-table th.grip, .player-list-table td.grip { width: 22px; min-width: 22px; padding: 0; }
+.player-list-table .drag-handle {
+  display: flex; align-items: center; justify-content: center; min-height: 22px;
+  color: var(--gold-deep); font-weight: bold; letter-spacing: -1px;
+  cursor: grab; touch-action: none;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+[data-theme="dark"] .player-list-table .drag-handle { color: var(--gold); }
+.player-list-table tr.current-player .drag-handle { color: var(--accent-text); }
+.player-list-table .drag-handle.disabled { cursor: not-allowed; opacity: .3; }
+/* ドラッグ中の行は指に付いて動く（transform は app.js）。落とす位置に金の線、帯をまたぐ所では朱の枠 */
+.player-list-table tr.dragging { position: relative; z-index: 2; }
+/* 掴んだ行は半透明にして、下の行と落とす位置の線が透けて見えるように */
+.player-list-table tr.dragging td { background: var(--row-selected); color: var(--text); opacity: .6; }
+.player-list-table tr.dragging.drop-invalid td { outline: 2px solid var(--vermilion); outline-offset: -2px; }
+.player-list-table tr.drop-before td { box-shadow: inset 0 3px 0 var(--gold); }
+.player-list-table tr.drop-after td { box-shadow: inset 0 -3px 0 var(--gold); }
+body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+/* 保存の通信中は一覧を触れなくする */
+.player-list-section.reorder-saving .player-list-body { pointer-events: none; opacity: .6; }
 
 /* ===== 保存状態の表示 ===== */
 .save-status {

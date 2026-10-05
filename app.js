@@ -42,6 +42,9 @@ var App = (function() {
   // 運営（Basic・開発）と、セッションを読めなかったときは null（今までどおりの画面）。
   var scorerSession = null;
   var SCORER_HINT_KEY = 'tmg_scorer_hint_seen';   // ブックマークの案内を読んだ印
+  // 一覧の行をドラッグして試技順を入れ替えられるか（ユーザー要望 2026-10-05）。運営（role admin: Basic・開発）だけ。
+  // 採点の鍵の端末と、セッションを読めなかったときは出さない（サーバーも reorder は運営だけ。server/authz.js）。
+  var canReorder = false;
 
   // --- DOM参照 ---
   var courtLabel       = document.getElementById('courtLabel');
@@ -80,6 +83,7 @@ var App = (function() {
     // 読めない（通信失敗・古いサーバー）ときは今までどおりの画面（守りの本体はサーバーの判定表）。
     var session = await Api.getSession();
     if (session && session.ok && Scope.isScorer(session)) enterScorerMode(session);
+    canReorder = !!(session && session.ok && session.role === 'admin');
     // 送れなかった採点の履歴（確定・取り消しなど）を、送れるようになったら送る（起動時・online・定期）。
     // 採点の送信が通ったときにも送る（onEntrySaved）。
     HistoryOutbox.init();
@@ -2167,11 +2171,20 @@ var App = (function() {
     }
   }
 
-  // 一覧の見出し行（10 列）
+  // 一覧の見出し行（10 列。運営の端末では左端に掴み手の列を足して 11 列）
   var PLAYER_LIST_HEAD =
-    '<tr><th>順番</th><th>ゼッケン</th><th>選手名</th><th>級位・段位</th>' +
+    '<th>順番</th><th>ゼッケン</th><th>選手名</th><th>級位・段位</th>' +
     '<th>一巡目</th><th>二巡目</th><th>合計</th>' +
-    '<th class="rank">順位</th><th class="rank">新人枠</th><th class="note">備考</th></tr>';
+    '<th class="rank">順位</th><th class="rank">新人枠</th><th class="note">備考</th>';
+
+  function playerListHead() {
+    return '<tr>' + (canReorder ? '<th class="grip" title="⋮⋮ をドラッグして試技順を入れ替えます"></th>' : '') +
+      PLAYER_LIST_HEAD + '</tr>';
+  }
+
+  function playerListColumns() {
+    return canReorder ? 11 : 10;
+  }
 
   // 狭い窓でそのコートの区画を開いているか（採点中のコートは既定で開き、他は既定で閉じる）
   function isCourtListOpen(section) {
@@ -2180,6 +2193,9 @@ var App = (function() {
   }
 
   function renderPlayerList() {
+    // ドラッグ中は描き直さない（掴んだ行が DOM から外れる）。離したあとに描く（endListDrag）
+    if (listDrag) { listRenderPending = true; return; }
+    listRenderPending = false;
     playerListCourts.innerHTML = '';
     if (listOpenCourt !== currentCourt) { listOpen = {}; listOpenCourt = currentCourt; }
     // その時点の順位（一般男子・一般女子・新人枠）。順位の集計と同じ規則（確定済みだけ。
@@ -2227,7 +2243,7 @@ var App = (function() {
     wrap.className = 'player-list-body';
     var table = document.createElement('table');
     table.className = 'player-list-table';
-    table.innerHTML = '<thead>' + PLAYER_LIST_HEAD + '</thead>';
+    table.innerHTML = '<thead>' + playerListHead() + '</thead>';
     var tbody = document.createElement('tbody');
     table.appendChild(tbody);
     wrap.appendChild(table);
@@ -2246,7 +2262,7 @@ var App = (function() {
         var band = document.createElement('tr');
         band.className = 'player-list-band';
         var td = document.createElement('td');
-        td.colSpan = 10;   // 順番・ゼッケン・選手名・級位段位・一巡目・二巡目・合計・順位・新人枠・備考
+        td.colSpan = playerListColumns();   // （掴み手・）順番・ゼッケン・選手名・級位段位・一巡目・二巡目・合計・順位・新人枠・備考
         td.textContent = sex;
         band.appendChild(td);
         tbody.appendChild(band);
@@ -2272,7 +2288,10 @@ var App = (function() {
     var isFinale = p.finalist === true && Courts.roundOf(p) === 2;
     if (isFinale && currentStatus() === 'round2') tr.classList.add('finale');
     var hasBib = (typeof p.bib === 'number');
+    tr.dataset.playerId = p.id || '';
     tr.innerHTML =
+      // 運営の端末だけ、左端に試技順を入れ替える掴み手（⋮⋮。中身は下の gripHandle）
+      (canReorder ? '<td class="grip"></td>' : '') +
       // 順番は「A-男子-2-1」と、詰めたとき（.compact）用の番号だけ「1」の両方を入れ、CSS で出し分ける
       // （コート・性別・巡目は見出しと帯にある）
       '<td class="order"><span class="order-text">' + esc(p.order || '') + '</span>' +
@@ -2291,8 +2310,10 @@ var App = (function() {
       '<td class="rank division"></td><td class="rank newface"></td>' +
       // 備考は残り幅を吸収する列。折り返し可
       '<td class="note" title="' + escAttr(p.note || '') + '"><div class="clip">' + esc(p.note || '') + '</div></td>';
+    if (canReorder) tr.querySelector('td.grip').appendChild(gripHandle(p));
     if (section.current) {
       tr.addEventListener('click', function() {
+        if (listClickBlocked()) return;   // 並べ替えの直後・保存の通信中は選手を切り替えない
         var idx = parseInt(this.dataset.index, 10);
         if (idx !== currentIndex && !confirmLeave()) return;
         saveCurrentState();
@@ -2300,11 +2321,277 @@ var App = (function() {
       });
     } else if (!section.readOnly) {
       tr.addEventListener('click', function() {
+        if (listClickBlocked()) return;
         changeCourt(section.court, p.id);
       });
     }
     fillScoreCells(tr, p);
     return tr;
+  }
+
+  // --- 一覧の行のドラッグで試技順を入れ替える（ユーザー要望 2026-10-05） ---
+  // 運営の端末（canReorder）だけ。行の左端の掴み手（⋮⋮）を押さえて上下に動かし、離した所へ入れる。
+  // 指（iPad Safari）でも動くよう Pointer Events で作る（HTML5 のドラッグ＆ドロップは iPad Safari で動かない）。
+  // マウスも同じ経路。掴み手は押した瞬間に掴む（CSS の touch-action: none で画面のスクロールにしない）。
+  // 掴み手以外のタップは今までどおり選手の切り替え。ドラッグを離した直後のクリックは捨てる（listClickBlocked）。
+  // 入れ替えられるのは同じ帯（コート×性別×巡目。Courts.sameReorderGroup）の中だけ。帯をまたぐ所・行の無い所で
+  // 離したら元に戻す（PC 運営の選手登録の表と同じ。最終組の行も同じ組の中なら入れ替えられる。ただし二巡目 進行中は
+  // 一覧が最終組を末尾に寄せて出すので、最終組と他の行の間はまたがせない。Courts.canDropInList）。
+  // 離したら POST …/players/reorder で保存し、サーバーが振り直した番号で一覧を作り直す（採点中の選手は id で保つ）。
+  var listDrag = null;           // ドラッグ中の状態（null なら掴んでいない）
+  var listRenderPending = false; // ドラッグ中に一覧の描き直しを頼まれた（離したあとに描く）
+  var reorderBusy = false;       // 保存の通信中（一覧を触れなくする）
+  var suppressClickUntil = 0;    // ドラッグを離した直後のクリック（行の切り替え）を捨てる期限
+  var DRAG_MOVE_PX = 4;          // これだけ動いたらドラッグとみなす（それ未満は掴み手のタップで、何もしない）
+  var AUTO_SCROLL_EDGE = 28;     // 一覧の枠の上下端からこの距離に指があれば、枠を送る
+
+  function listClickBlocked() {
+    return reorderBusy || !!listDrag || Date.now() < suppressClickUntil;
+  }
+
+  // 掴み手。組を持たない行（order の形が崩れた行）と、最終結果を確定済みの大会では薄くして掴めない
+  function gripHandle(p) {
+    var h = document.createElement('span');
+    h.className = 'drag-handle';
+    h.textContent = '⋮⋮';
+    var blocked = '';
+    if (EventStatus.isLocked(currentStatus())) blocked = '最終結果を確定済みのため入れ替えできません';
+    else if (Courts.reorderGroupKey(p) === null) blocked = '番号の形式が崩れた行のため入れ替えできません';
+    if (blocked) {
+      h.classList.add('disabled');
+      h.title = blocked;
+    } else {
+      h.title = 'ドラッグで試技順を入れ替えます（同じ部・巡目の中だけ）';
+      h.addEventListener('pointerdown', onGripPointerDown);
+    }
+    // 掴み手のタップでは選手を切り替えない
+    h.addEventListener('click', function(e) { e.stopPropagation(); });
+    return h;
+  }
+
+  function rowPlayer(tr) {
+    return (tr && tr.dataset && tr.dataset.playerId) ? findPlayer(tr.dataset.playerId) : null;
+  }
+
+  function onGripPointerDown(e) {
+    if (reorderBusy || listDrag || !currentEvent) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    var h = e.currentTarget;
+    var tr = h.closest('tr');
+    var box = tr ? tr.closest('.player-list-body') : null;
+    if (!tr || !box || !rowPlayer(tr)) return;
+    e.preventDefault();      // 文字の選択・長押しのメニューを出さない
+    e.stopPropagation();
+    try { h.setPointerCapture(e.pointerId); } catch (err) { /* 無視 */ }
+    var rect = tr.getBoundingClientRect();
+    listDrag = {
+      handle: h, tr: tr, tbody: tr.parentNode, box: box, pointerId: e.pointerId,
+      startY: e.clientY, lastY: e.clientY, lastX: e.clientX, startScroll: box.scrollTop,
+      rowTop: rect.top, rowHeight: rect.height,
+      moved: false, target: null, after: false, invalid: false, timer: null
+    };
+    h.addEventListener('pointermove', onGripPointerMove);
+    h.addEventListener('pointerup', onGripPointerUp);
+    h.addEventListener('pointercancel', onGripPointerCancel);
+    h.addEventListener('lostpointercapture', onGripPointerCancel);
+  }
+
+  function onGripPointerMove(e) {
+    var d = listDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    e.preventDefault();
+    d.lastY = e.clientY;
+    d.lastX = e.clientX;
+    if (!d.moved) {
+      if (Math.abs(e.clientY - d.startY) < DRAG_MOVE_PX) return;
+      d.moved = true;
+      d.tr.classList.add('dragging');
+      document.body.classList.add('list-dragging');
+      d.timer = setInterval(autoScrollList, 30);   // 枠の上下端に指を置いている間、枠を送る
+    }
+    trackListDrag();
+  }
+
+  // 掴んだ行を指に付けて動かし、落とす位置（行の前／後）に線を出す
+  function trackListDrag() {
+    var d = listDrag;
+    if (!d || !d.moved) return;
+    var scrolled = d.box.scrollTop - d.startScroll;
+    d.tr.style.transform = 'translateY(' + (d.lastY - d.startY + scrolled) + 'px)';
+    setListDropMark(listDropTarget(d, scrolled));
+  }
+
+  // 指の高さにある落とし先。{ tr, after, invalid }。
+  //   掴んだ行の元の位置（空いて見える所）… tr なし・invalid 偽（離しても何もしない）
+  //   帯の行・別の組の行・表の外（他のコートの列も）… tr なし・invalid 真（帯をまたぐ。離したら元に戻す）
+  function listDropTarget(d, scrolled) {
+    var boxRect = d.box.getBoundingClientRect();
+    var head = d.box.querySelector('thead');
+    var top = boxRect.top + (head ? head.getBoundingClientRect().height : 0);
+    var y = d.lastY;
+    var ownTop = d.rowTop - scrolled;
+    if (y >= ownTop && y < ownTop + d.rowHeight) return { tr: null, after: false, invalid: false };
+    if (y < top || y > boxRect.bottom || d.lastX < boxRect.left || d.lastX > boxRect.right) {
+      return { tr: null, after: false, invalid: true };
+    }
+    var moving = rowPlayer(d.tr);
+    var rows = d.tbody.children;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (r === d.tr) continue;
+      var rect = r.getBoundingClientRect();
+      if (y < rect.top || y >= rect.bottom) continue;
+      var q = rowPlayer(r);   // 帯の行（男子の部・女子の部）は選手が無い
+      if (!q || !Courts.canDropInList(moving, q, currentStatus())) return { tr: null, after: false, invalid: true };
+      return { tr: r, after: y > rect.top + rect.height / 2, invalid: false };
+    }
+    return { tr: null, after: false, invalid: true };
+  }
+
+  function setListDropMark(hit) {
+    var d = listDrag;
+    if (d.target && d.target !== hit.tr) d.target.classList.remove('drop-before', 'drop-after');
+    d.target = hit.tr;
+    d.after = hit.after;
+    d.invalid = hit.invalid;
+    if (d.target) {
+      d.target.classList.toggle('drop-before', !d.after);
+      d.target.classList.toggle('drop-after', d.after);
+    }
+    d.tr.classList.toggle('drop-invalid', d.invalid);
+  }
+
+  function autoScrollList() {
+    var d = listDrag;
+    if (!d || !d.moved) return;
+    var rect = d.box.getBoundingClientRect();
+    var head = d.box.querySelector('thead');
+    var top = rect.top + (head ? head.getBoundingClientRect().height : 0);
+    var step = 0;
+    if (d.lastY < top + AUTO_SCROLL_EDGE) step = -8;
+    else if (d.lastY > rect.bottom - AUTO_SCROLL_EDGE) step = 8;
+    if (!step) return;
+    var before = d.box.scrollTop;
+    d.box.scrollTop += step;
+    if (d.box.scrollTop !== before) trackListDrag();
+  }
+
+  function onGripPointerUp(e) {
+    var d = listDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    var drop = (d.moved && d.target) ? { moving: d.tr, target: d.target, after: d.after } : null;
+    endListDrag();
+    if (drop) dropListRow(drop.moving, drop.target, drop.after);
+    else flushListRender();
+  }
+
+  // 指が画面から外れた・OS に取られた（pointercancel / lostpointercapture）。元に戻す
+  function onGripPointerCancel(e) {
+    var d = listDrag;
+    if (!d || (e && typeof e.pointerId === 'number' && e.pointerId !== d.pointerId)) return;
+    endListDrag();
+    flushListRender();
+  }
+
+  // 掴んでいた行の見た目を戻す（並びを変えるのは dropListRow）
+  function endListDrag() {
+    var d = listDrag;
+    if (!d) return;
+    listDrag = null;
+    if (d.timer) clearInterval(d.timer);
+    d.handle.removeEventListener('pointermove', onGripPointerMove);
+    d.handle.removeEventListener('pointerup', onGripPointerUp);
+    d.handle.removeEventListener('pointercancel', onGripPointerCancel);
+    d.handle.removeEventListener('lostpointercapture', onGripPointerCancel);
+    try { d.handle.releasePointerCapture(d.pointerId); } catch (err) { /* 無視 */ }
+    d.tr.classList.remove('dragging', 'drop-invalid');
+    d.tr.style.transform = '';
+    if (d.target) d.target.classList.remove('drop-before', 'drop-after');
+    document.body.classList.remove('list-dragging');
+    if (d.moved) suppressClickUntil = Date.now() + 400;
+  }
+
+  // ドラッグ中に後回しにした一覧の描き直し
+  function flushListRender() {
+    if (!listRenderPending) return;
+    renderPlayerList();
+    updatePlayerList();
+  }
+
+  // 離したあと。先に行を動かして見せ、組の全員の新しい並び（Courts.reorderIds）を保存する。
+  // 成功したらサーバーが振り直した番号を当てて作り直し、失敗したら元の並びに描き直して理由を出す。
+  async function dropListRow(moving, target, after) {
+    var mp = rowPlayer(moving), tp = rowPlayer(target);
+    if (!currentEvent || !mp || !tp || !Courts.canDropInList(mp, tp, currentStatus())) { flushListRender(); return; }
+    var tbody = moving.parentNode;
+    var shown = [];
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr[data-player-id]'), function(r) {
+      var q = rowPlayer(r);
+      if (q && Courts.sameReorderGroup(mp, q)) shown.push(q.id);
+    });
+    var group = Courts.reorderGroup(players, mp).map(function(q) { return q.id; });
+    var ids = Courts.reorderIds(group, shown, mp.id, tp.id, after);
+    if (!ids) { flushListRender(); return; }   // 並びが変わらない（自分のすぐ上下に落とした）
+    var key = Courts.orderKey(mp);
+    var eventId = currentEvent.id;   // await をまたぐので大会をここで固定する
+    tbody.insertBefore(moving, after ? target.nextSibling : target);
+    reorderBusy = true;
+    playerListSection.classList.add('reorder-saving');
+    var res = null;
+    try {
+      res = await Api.reorderPlayers(eventId, {
+        court: key.court, isFemale: key.sex === 1, round: key.round, ids: ids
+      });
+    } finally {
+      reorderBusy = false;
+      playerListSection.classList.remove('reorder-saving');
+    }
+    if (!currentEvent || currentEvent.id !== eventId) return;   // 通信中に大会を切り替えた（一覧は描き直し済み）
+    if (res && res.ok) {
+      applyReorderedOrders(res.players);
+      return;
+    }
+    renderPlayerList();   // 元の並びに戻す
+    updatePlayerList();
+    alert(reorderFailMessage(res));
+    refreshFromServer();  // 別の端末で行が足された・消された、状態が進んだ、などを取り込む
+  }
+
+  function reorderFailMessage(res) {
+    if (res && res.reason === 'locked') {
+      return 'この大会は最終結果を確定済みのため、試技順を入れ替えられません。';
+    }
+    if (res && res.reason === 'reorder_mismatch') {
+      return res.error || '並べ替える選手が現在の登録と一致しません。読み直したので、もう一度入れ替えてください。';
+    }
+    if (res && (res.status === 401 || res.status === 403)) {
+      return '試技順を入れ替えられませんでした。入れ替えは運営の端末でだけできます。';
+    }
+    return '試技順を保存できませんでした。\n通信を確認してください。';
+  }
+
+  // 並べ替えの応答（大会の選手全体）の番号（order）だけを手元の選手に当て、採点中の選手を id で保ったまま
+  // 巡回の対象（visiblePlayers）と一覧を作り直す（並びが変わるので currentIndex は id から引き直す）。
+  // 得点などは触らない（編集中の採点を壊さない）。他の変更は続く refreshFromServer で取り込む。
+  function applyReorderedOrders(serverPlayers) {
+    (serverPlayers || []).forEach(function(sp) {
+      var lp = (sp && sp.id) ? findPlayer(sp.id) : null;
+      if (lp && typeof sp.order === 'string') lp.order = sp.order;
+    });
+    var cur = visiblePlayers[currentIndex] || null;
+    visiblePlayers = courtPlayers(currentCourt);
+    currentIndex = -1;
+    for (var i = 0; cur && i < visiblePlayers.length; i++) {
+      if (visiblePlayers[i].id === cur.id) { currentIndex = i; break; }
+    }
+    if (cur && currentIndex === -1) {   // 並べ替えでコートや巡目は変わらないので、ここへは来ないはず
+      applyCourtFilter(cur.id);
+      return;
+    }
+    renderPlayerList();
+    updatePlayerList();
+    if (cur) updatePlayerLabels(visiblePlayers[currentIndex]);   // 「3番」などの番号
+    refreshFromServer();
   }
 
   // 一覧の行の一巡目・二巡目・合計。どの巡目の行でも、同じ選手（sourcePlayerId でつながる

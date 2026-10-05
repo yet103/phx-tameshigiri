@@ -138,6 +138,63 @@ var Courts = (function() {
     return rows;
   }
 
+  // ---- 採点画面の一覧のドラッグで試技順を入れ替える（ユーザー要望 2026-10-05） ----
+  // 並べ替えの組はサーバーの POST …/players/reorder と同じ「order の コート×性別×巡目」
+  // （最終組の印 finalist は区別しない。PC 運営の選手登録の帯と同じ）。
+  // order が「コート-性別-巡目-番号」の形でない行（CSV 由来の空の order など）は組を持たない（null。掴めない）。
+  function reorderGroupKey(p) {
+    var k = orderKey(p);
+    if (k.sex === 2 || k.court === UNASSIGNED) return null;
+    return k.court + '|' + k.sex + '|' + k.round;
+  }
+
+  // 2 つの行が同じ組か（帯をまたぐドロップの判定。またぐなら落とさずに元へ戻す）
+  function sameReorderGroup(a, b) {
+    var x = reorderGroupKey(a);
+    return x !== null && x === reorderGroupKey(b);
+  }
+
+  // 採点画面の一覧で a を b の位置へ落とせるか。同じ組に加えて、二巡目 進行中（status 'round2'）は
+  // 最終組の行と他の行の間をまたがせない（一覧は最終組を末尾に寄せて出す＝listForStatus ので、
+  // またいで落とすと番号が飛び飛びになり、落とした所にも出ない）。最終組の中・他の行の中なら入れ替えられる。
+  function canDropInList(a, b, status) {
+    if (!sameReorderGroup(a, b)) return false;
+    if (status === 'round2' && roundOf(a) === 2 && (a.finalist === true) !== (b.finalist === true)) return false;
+    return true;
+  }
+
+  // p と同じ組の全員を今の No. 順で（サーバーに送る ids はこの全員でなければならない）
+  function reorderGroup(players, p) {
+    var key = reorderGroupKey(p);
+    if (key === null) return [];
+    return (players || []).filter(function(q) { return reorderGroupKey(q) === key; }).sort(compareOrder);
+  }
+
+  // 落とした位置から、サーバーに送る新しい並び（ids）を作る。
+  //   groupIds … 組の全員の id（今の No. 順。reorderGroup）
+  //   shownIds … 一覧のその帯に出ている行の id（出ている順）。大会の状態の絞り込み（最終組 進行中は
+  //              最終組だけ等）で組の一部しか出ていないこともある
+  //   movingId を targetId の前（after が偽）か後（after が真）へ動かす
+  // 出ていない行は今の位置（枠）のまま、出ている行だけをその枠の中で並べ替える。
+  // 戻り値: 新しい ids（groupIds と同じ集合）。並びが変わらない（自分のすぐ上下に落とした）・
+  //         moving / target が出ていない・同じ行のときは null
+  function reorderIds(groupIds, shownIds, movingId, targetId, after) {
+    var group = (groupIds || []).slice();
+    var shown = (shownIds || []).filter(function(id) { return group.indexOf(id) !== -1; });
+    if (movingId === targetId) return null;
+    var from = shown.indexOf(movingId);
+    if (from === -1 || shown.indexOf(targetId) === -1) return null;
+    var moved = shown.slice();
+    moved.splice(from, 1);
+    var to = moved.indexOf(targetId);
+    moved.splice(after ? to + 1 : to, 0, movingId);
+    if (moved.join('\n') === shown.join('\n')) return null;
+    // 出ている行の枠（groupIds の中の位置）に、新しい並びを順に入れる
+    var k = 0;
+    var ids = group.map(function(id) { return shown.indexOf(id) === -1 ? id : moved[k++]; });
+    return ids.join('\n') === group.join('\n') ? null : ids;
+  }
+
   // ---- 選手タブの絞り込み・並べ替え（admin-players.js から使う純粋関数） ----
 
   // 名前検索の正規化。前後の空白と全角・半角スペースを取り除き、大文字小文字を同一視する
@@ -1127,6 +1184,11 @@ var Courts = (function() {
     compareOrder: compareOrder,
     listForStatus: listForStatus,
     listLayout: listLayout,
+    reorderGroupKey: reorderGroupKey,
+    sameReorderGroup: sameReorderGroup,
+    canDropInList: canDropInList,
+    reorderGroup: reorderGroup,
+    reorderIds: reorderIds,
     orderKey: orderKey,
     normalizeName: normalizeName,
     hasNoTech: hasNoTech,

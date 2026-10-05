@@ -3513,6 +3513,43 @@
     assert('Courts.listLayout: 広い窓では窓幅・コート数によらず常に横並び（縦積みはやめた）',
       [Courts.listLayout(1920, 2), Courts.listLayout(1280, 2), Courts.listLayout(1100, 2), Courts.listLayout(1280, 3), Courts.listLayout(1100, 1), Courts.listLayout(1280, 0)],
       ['row', 'row', 'row', 'row', 'row', 'row']);
+    // 採点画面の一覧のドラッグで試技順を入れ替える（2026-10-05）
+    var roP = [
+      { id: 'm1', order: 'A-男子-1-1' }, { id: 'm2', order: 'A-男子-1-2' }, { id: 'm3', order: 'A-男子-1-3' },
+      { id: 'm10', order: 'A-男子-1-10' }, { id: 'w1', order: 'A-女子-1-1' }, { id: 'b1', order: 'B-男子-1-1' },
+      { id: 'r21', order: 'A-男子-2-1' }, { id: 'r2f', order: 'A-男子-2-2', finalist: true }, { id: 'x', order: '' }
+    ];
+    assert('Courts.sameReorderGroup: 同じコート×性別×巡目だけ同じ組（最終組の印は区別しない）',
+      [Courts.sameReorderGroup(roP[0], roP[3]), Courts.sameReorderGroup(roP[0], roP[4]), Courts.sameReorderGroup(roP[0], roP[5]),
+       Courts.sameReorderGroup(roP[0], roP[6]), Courts.sameReorderGroup(roP[6], roP[7]), Courts.sameReorderGroup(roP[8], roP[8])],
+      [true, false, false, false, true, false]);
+    assert('Courts.canDropInList: 二巡目 進行中だけ最終組と他の行の間をまたがせない（最終組の中・他の行の中は可）',
+      [Courts.canDropInList(roP[6], roP[7], 'round2'), Courts.canDropInList(roP[6], roP[7], 'round2_done'),
+       Courts.canDropInList(roP[7], { order: 'A-男子-2-3', finalist: true }, 'round2'),
+       Courts.canDropInList(roP[0], roP[1], 'round2'), Courts.canDropInList(roP[0], roP[4], 'round1')],
+      [false, true, true, true, false]);
+    assert('Courts.reorderGroupKey: 形の崩れた order・空の order は組を持たない（掴めない）',
+      [Courts.reorderGroupKey(roP[0]), Courts.reorderGroupKey(roP[4]), Courts.reorderGroupKey(roP[8]),
+       Courts.reorderGroupKey({ order: 'A-男子-1' }), Courts.reorderGroupKey(null)],
+      ['A|0|1', 'A|1|1', null, null, null]);
+    assert('Courts.reorderGroup: 同じ組の全員を No. 順に（1-10 は 1-3 の後）',
+      [lfIds(Courts.reorderGroup(roP, roP[3])), lfIds(Courts.reorderGroup(roP, roP[7])), Courts.reorderGroup(roP, roP[8])],
+      [['m1', 'm2', 'm3', 'm10'], ['r21', 'r2f'], []]);
+    var roG = ['m1', 'm2', 'm3', 'm10'];
+    assert('Courts.reorderIds: 2 行目を 4 行目の後へ・前へ、1 行目の前へ',
+      [Courts.reorderIds(roG, roG, 'm2', 'm10', true), Courts.reorderIds(roG, roG, 'm2', 'm10', false),
+       Courts.reorderIds(roG, roG, 'm3', 'm1', false)],
+      [['m1', 'm3', 'm10', 'm2'], ['m1', 'm3', 'm2', 'm10'], ['m3', 'm1', 'm2', 'm10']]);
+    assert('Courts.reorderIds: 並びが変わらない（すぐ上下・自分）・帯に無い行は null',
+      [Courts.reorderIds(roG, roG, 'm2', 'm3', false), Courts.reorderIds(roG, roG, 'm2', 'm1', true),
+       Courts.reorderIds(roG, roG, 'm2', 'm2', true), Courts.reorderIds(roG, roG, 'm2', 'w1', true),
+       Courts.reorderIds(roG, roG, 'w1', 'm2', true)],
+      [null, null, null, null, null]);
+    assert('Courts.reorderIds: 帯に一部しか出ていなければ、出ていない行は今の位置のまま',
+      [Courts.reorderIds(['a', 'b', 'c', 'd', 'e'], ['b', 'd', 'e'], 'e', 'b', false),
+       Courts.reorderIds(['a', 'b', 'c', 'd'], ['d', 'a', 'b'], 'a', 'd', false),
+       Courts.reorderIds(['a', 'b', 'c', 'd'], ['d', 'a', 'b'], 'd', 'a', false)],
+      [['a', 'e', 'c', 'b', 'd'], ['a', 'd', 'c', 'b'], null]);
     assert('Scope.formatExpiry: 日本時間で出す（UTC の 14:59 は 23:59）',
       [Scope.formatExpiry('2026-10-12T14:59:59.999Z'), Scope.formatExpiry('2026-10-12T14:59:59.999Z', true),
        Scope.formatExpiry('2026-10-12T15:00:00.000Z'), Scope.formatExpiry('壊れた値'), Scope.formatExpiry(null)],

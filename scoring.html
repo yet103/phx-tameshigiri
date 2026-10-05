@@ -64,6 +64,9 @@
     body.scoring-wide .player-list-table.compact td.grade .clip { max-width: 3.5em; }
     body.scoring-wide .player-list-table.compact td.note .clip { max-width: 4em; }
     body.scoring-wide .player-list-table.compact .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 試技順の掴み手（⋮⋮。運営の端末だけ）は詰めても 14px で残す */
+    body.scoring-wide .player-list-table.compact th.grip,
+    body.scoring-wide .player-list-table.compact td.grip { width: 14px; min-width: 14px; padding: 0; }
     .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--gold); flex-wrap:wrap; }
     .event-bar select { padding:4px 8px; }
     /* 指で押す前提のタップ目標（style.css のバー類と同じ 44px） */
