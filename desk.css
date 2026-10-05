@@ -101,6 +101,10 @@ a { color: var(--accent); }
 .desk-empty { color: var(--text-muted); padding: 20px 0; }
 .desk-note, .desk-warn { padding: 8px 10px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; background: var(--card-bg); }
 .desk-note { border: 1px solid var(--border); color: var(--text-muted); }
+/* 注記の右端にボタンを置く形（試合進行の進み具合の「↻ 最新に更新」） */
+.desk-note-row { display: flex; align-items: center; gap: 12px; }
+.desk-note-row > span { flex: 1 1 auto; }
+.desk-note-row > .desk-btn { flex: 0 0 auto; }
 .desk-warn { border: 1px solid var(--warn); color: var(--warn); }
 
 /* ===== 表 ===== */

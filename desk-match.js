@@ -556,12 +556,21 @@
     var folded = (st === 'round2_done' || st === 'final' || st === 'archived');
 
     if (!folded) {
+      // 進み具合の注記。読み直すボタンをその場に置く（見出しの「↻ 最新に更新」はスクロールで隠れる。ユーザー要望 2026-10-05）
       var note = document.createElement('p');
-      note.className = 'desk-note';
+      note.className = 'desk-note desk-note-row';
       note.id = 'matchCourtsNote';
-      note.textContent = roundLabel + 'の進み具合です。' +
-        '「確定」の件数と「いま採点中」は自動では変わりません。' +
-        '「↻ 最新に更新」を押すと読み直します。';
+      var noteText = document.createElement('span');
+      noteText.textContent = roundLabel + 'の進み具合です。' +
+        '「確定」の件数と「いま採点中」は自動では変わりません。右の「↻ 最新に更新」で読み直します。';
+      var btnRefresh = document.createElement('button');
+      btnRefresh.type = 'button';
+      btnRefresh.className = 'desk-btn';
+      btnRefresh.id = 'btnMatchCourtsReload';
+      btnRefresh.textContent = '↻ 最新に更新';
+      btnRefresh.addEventListener('click', function() { Desk.reloadEvent(); });
+      note.appendChild(noteText);
+      note.appendChild(btnRefresh);
       wrap.appendChild(note);
     }
 
