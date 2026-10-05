@@ -152,7 +152,7 @@
     btnCsv.type = 'button';
     btnCsv.className = 'desk-btn';
     btnCsv.id = 'btnDeskPlayersCsv';
-    btnCsv.textContent = '📄 CSV を取り込む';
+    btnCsv.textContent = '📄 選手を CSV から取り込む';
     btnCsv.disabled = locked;
     if (locked) btnCsv.title = 'この大会は最終結果を確定済みです';
     btnCsv.addEventListener('click', function() {
@@ -889,6 +889,16 @@
       if (view.bar) view.bar.innerHTML = '';
       wrap.appendChild(emptyMessage('選手がいません。'));
       return;
+    }
+    // 選手が 0 名で編集できるときだけ、どの取り込みを使うかの案内（設計書 2026-10-05 §4）。
+    // 大会ごと持ち込むファイル（.json）はここでは読めない（大会一覧の 📂）。
+    if (players.length === 0 && !draft) {
+      var hint = document.createElement('p');
+      hint.className = 'desk-note';
+      hint.id = 'playersImportHint';
+      hint.textContent = '大会ごと持ち込むファイル（.json）は「大会一覧」の 📂 大会ファイルを取り込む、' +
+        '選手だけの CSV はここの 📄 選手を CSV から取り込む から。';
+      wrap.appendChild(hint);
     }
     var table = document.createElement('table');
     table.className = 'desk-table desk-players-table';

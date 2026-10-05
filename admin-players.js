@@ -108,6 +108,16 @@
     head.appendChild(btnMenu);
     container.appendChild(head);
 
+    // 選手が 0 名で編集できるときだけ、どの取り込みを使うかの案内（設計書 2026-10-05 §4）
+    if (ctx.players.length === 0 && !locked) {
+      var hint = document.createElement('p');
+      hint.className = 'field-note';
+      hint.id = 'playersImportHint';
+      hint.textContent = '大会ごと持ち込むファイル（.json）は「大会」タブの 📂 大会ファイルを取り込む、' +
+        '選手だけの CSV はここの ⋯ → 📄 選手を CSV から取り込む から。';
+      container.appendChild(hint);
+    }
+
     // 二巡目準備の段階は、やることが「形を直す」なので試合進行タブへ誘導する。
     if (EventStatus.of(ctx.event) === 'round1_done') {
       var guide = document.createElement('p');
@@ -1153,7 +1163,7 @@
       btnCsv = document.createElement('button');
       btnCsv.type = 'button';
       btnCsv.className = 'menu-item';
-      btnCsv.textContent = '📄 CSVインポート';
+      btnCsv.textContent = '📄 選手を CSV から取り込む';
       body.appendChild(btnCsv);
     }
 
