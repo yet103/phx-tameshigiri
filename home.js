@@ -656,6 +656,31 @@ var Home = (function() {
     return a;
   }
 
+  // --- 📂 ファイルから取り込む（設計書 2026-10-05-home-import-entry-design.md §2.2）---
+
+  // 取り込んだ大会の選手登録の URL（新規作成の完了と同じ行き先。PC／スマホのモードに従う）
+  function importHref(id) {
+    return Storage.adminHref('#players/' + encodeURIComponent(id));
+  }
+
+  // 押した瞬間にファイル選択を開く。選択中にハッシュが変わっても取り込みは続ける
+  // （対象はサーバーで区画に依らない。途中で捨てると「選んだのに何も起きない」になる）。
+  // 完了の文言はトップでは出せないので sessionStorage に置き、運営画面が起動時に出す。
+  function onImportClick() {
+    var btn = document.getElementById('btnHomeImport');
+    btn.disabled = true;
+    Storage.pickJsonFile(async function(text) {
+      try {
+        var result = await BundleImport.run(text);
+        if (!result) return;
+        Storage.setPendingToast(BundleImport.message(result));
+        location.href = importHref(result.id);
+      } catch (e) {
+        console.error(e);
+      }
+    }, function() { btn.disabled = false; });
+  }
+
   // --- 起動 ---
 
   function init() {
@@ -668,6 +693,7 @@ var Home = (function() {
       applyTheme(next);
     });
     document.getElementById('btnMode').addEventListener('click', onModeClick);
+    document.getElementById('btnHomeImport').addEventListener('click', onImportClick);
     applyMode();
     renderFlow();
     // 「テストも表示」。取れている一覧があれば描き直すだけで済ませる
@@ -693,6 +719,7 @@ var Home = (function() {
     redirectIfScoring: redirectIfScoring,
     sortForHome: sortForHome,
     pickPrevious: pickPrevious,
-    templateSpec: templateSpec
+    templateSpec: templateSpec,
+    importHref: importHref
   };
 })();

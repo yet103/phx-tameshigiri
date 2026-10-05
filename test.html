@@ -6512,6 +6512,22 @@
     assert('templateSpec: プロトタイプの名前を拾わない',
       Home.templateSpec('constructor'), null);
 
+    // トップの入口（設計書 2026-10-05 §2）。index.html は静的なので中身を取って見る
+    await (async function() {
+      var html = await fetch('index.html').then(function(r) { return r.text(); });
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var entries = doc.querySelectorAll('#paneHome .home-entries .home-entry');
+      assert('index.html: 入口は 3 つ', entries.length, 3);
+      var third = entries[2];
+      assert('index.html: 3 つ目はボタンで「📂 ファイルから取り込む」',
+        [third.tagName, third.id, third.querySelector('.home-entry-main').textContent],
+        ['BUTTON', 'btnHomeImport', '📂 ファイルから取り込む']);
+      assert('index.html: bundle-import.js と courts.js を読む',
+        [!!doc.querySelector('script[src="bundle-import.js"]'), !!doc.querySelector('script[src="courts.js"]')], [true, true]);
+    })();
+    assert('Home.importHref: 取り込んだ大会の選手登録へ（いまのモード）',
+      Home.importHref('ab c'), Storage.adminHref('#players/ab%20c'));
+
     var h2r = document.createElement('h2');
     h2r.textContent = 'route.js';
     results.appendChild(h2r);

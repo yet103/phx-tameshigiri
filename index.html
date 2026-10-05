@@ -15,6 +15,8 @@
   <script src="status.js"></script>
   <script src="api.js"></script>
   <script src="storage.js"></script>
+  <script src="courts.js"></script>
+  <script src="bundle-import.js"></script>
   <script src="home.js"></script>
   <script>Home.redirectIfScoring();</script>
 </head>
@@ -43,6 +45,12 @@
           <span class="home-entry-sub">選んで開始・続きから</span>
           <span class="home-entry-note" id="homeEntryMode"></span>
         </a>
+        <!-- 3 つ目は補助の入口（設計書 2026-10-05-home-import-entry-design.md §2）。
+             押した瞬間にファイル選択が開く（home.js の onImportClick）。区画は増やさない。 -->
+        <button type="button" class="home-entry secondary" id="btnHomeImport">
+          <span class="home-entry-main">📂 ファイルから取り込む</span>
+          <span class="home-entry-sub">「💾 ファイルに保存」で書き出した大会ファイル（.json）を新しい大会として追加</span>
+        </button>
       </nav>
 
       <p class="home-links">コート端末の方は

@@ -69,6 +69,10 @@ body { max-width: var(--page-max-width); margin: 0; }
 .home-entry.primary .home-entry-sub { color: var(--accent-text); opacity: 0.8; }
 .home-entry-note { display: block; margin-top: 4px; font-size: 11px; color: var(--text-muted); }
 .home-entry.primary .home-entry-note { color: var(--accent-text); opacity: 0.8; }
+/* 3 つ目（📂 ファイルから取り込む）。年に数回の操作なので主文を小さく、補助の入口に見せる */
+.home-entry.secondary { min-height: 0; padding: 10px 16px; font: inherit; text-align: left; cursor: pointer; width: 100%; }
+.home-entry.secondary .home-entry-main { font-size: 16px; }
+.home-entry.secondary:disabled { opacity: 0.6; cursor: default; }
 
 /* 小さなリンクの行 */
 .home-links { margin-top: 14px; font-size: 13px; color: var(--text-muted); }
@@ -187,6 +191,7 @@ body { max-width: var(--page-max-width); margin: 0; }
 /* 2 列に置けるだけの幅があるときだけ入口とカードを並べる */
 @media (min-width: 620px) {
   .home-entries { grid-template-columns: 1fr 1fr; }
+  .home-entry.secondary { grid-column: 1 / -1; }
   .home-cards { grid-template-columns: 1fr 1fr; }
   .home-pane-head { flex-direction: row; align-items: baseline; gap: 12px; }
   .home-pane-head h2 { flex: 1; margin: 0; }
