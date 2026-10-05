@@ -107,6 +107,30 @@ var Courts = (function() {
     return x.no - y.no;
   }
 
+  // 採点画面のコートの選手一覧の並び（採点中のコートの巡回の対象 visiblePlayers と、
+  // 他のコートの一覧で同じ規則。ユーザー要望 2026-10-05: 一覧をコートごとに）。
+  // 試技順（男子の部→女子の部、No. 順）に並べてから、大会の状態で絞る。
+  //   進行中（一巡目・二巡目・最終組）… その巡目だけ
+  //     二巡目 進行中 … 最終組（一巡目上位 4 名）の行を末尾に寄せる（採点はまだできない。一覧で薄く出す）。
+  //                     生成した順ですでに末尾のはずだが、差分追加などで崩れても末尾に来るよう印の有無で安定に並べ直す。
+  //     最終組 進行中 … 最終組の行だけ
+  //   進行中でない（status が空・準備中・終了など）… 全巡目（見直し・確認のため）
+  // EventStatus（status.js）は呼び出し時に参照する。
+  function listForStatus(players, court, status) {
+    var list = filter(players, court).sort(compareOrder);
+    var round = status ? EventStatus.scoringRound(status) : null;
+    if (!round) return list;
+    var rows = list.filter(function(p) { return roundOf(p) === round; });
+    if (status === 'round2_final') {
+      return rows.filter(function(p) { return p.finalist === true; });
+    }
+    if (status === 'round2') {
+      return rows.filter(function(p) { return p.finalist !== true; })
+        .concat(rows.filter(function(p) { return p.finalist === true; }));
+    }
+    return rows;
+  }
+
   // ---- 選手タブの絞り込み・並べ替え（admin-players.js から使う純粋関数） ----
 
   // 名前検索の正規化。前後の空白と全角・半角スペースを取り除き、大文字小文字を同一視する
@@ -1094,6 +1118,7 @@ var Courts = (function() {
     roundOf: roundOf,
     isScored: isScored,
     compareOrder: compareOrder,
+    listForStatus: listForStatus,
     orderKey: orderKey,
     normalizeName: normalizeName,
     hasNoTech: hasNoTech,

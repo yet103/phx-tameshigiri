@@ -13,7 +13,14 @@ var App = (function() {
   var gridEdited = false;
   var noticeRow = null;      // 復元不能を知らせる行（DOM）。置き換え確定時に取り除く
   var selectedRow = -1;      // 選択中の技の行（0始まり）。技が無ければ -1
-  var PLAYER_LIST_KEY = 'tmg_player_list_open';
+  // 選手一覧はコートごとの区画（ユーザー要望 2026-10-05）。広い窓（1100px 以上）では採点の右に
+  // コートの列を横に並べ、狭い窓では採点の下に縦に積んでコートごとに折りたたむ。
+  var WIDE_QUERY = '(min-width: 1100px)';
+  var wideMedia = null;      // matchMedia(WIDE_QUERY)。使えない端末では null（常に狭い窓の扱い）
+  // 狭い窓で利用者が開閉したコート（court → true / false）。既定は採点中のコートだけ開く。
+  // 採点中のコートが変わったら忘れる（新しいコートだけ開いた状態に戻す）。
+  var listOpen = {};
+  var listOpenCourt = null;  // listOpen を記録したときの採点中のコート
   var timerSec = 300;     // タイマー残り秒数
   var timerRunning = false;
   var timerInterval = null;
@@ -48,7 +55,7 @@ var App = (function() {
   var totalScoreBox    = document.getElementById('totalScoreBox');
   var timerDisplay     = document.getElementById('timerDisplay');
   var playerListSection = document.getElementById('playerListSection');
-  var playerListBody   = document.getElementById('playerListBody');
+  var playerListCourts = document.getElementById('playerListCourts');
   var courtSelect      = document.getElementById('courtSelect');
   var totalAdjustInput = document.getElementById('totalAdjustInput');
   var noteInput        = document.getElementById('noteInput');
@@ -61,7 +68,7 @@ var App = (function() {
   // --- 初期化 ---
   async function init() {
     applyTheme(Storage.loadTheme());
-    initPlayerListOpen();
+    initListLayout();
     // 送信キューは何よりも先に起動する。
     // ここから下の API 呼び出しがどう転んでも、前回未送信の採点が
     // 復旧され、online イベントの購読も済んでいる状態にするため。
@@ -441,7 +448,6 @@ var App = (function() {
     document.getElementById('btnAllSuccess').addEventListener('click', setAllSuccess);
     document.getElementById('btnAllFail').addEventListener('click', setAllFail);
 
-    document.getElementById('btnPlayerListToggle').addEventListener('click', togglePlayerList);
     btnConfirm.addEventListener('click', onConfirm);
     document.getElementById('btnConfirmNext').addEventListener('click', onConfirmNext);
     totalAdjustInput.addEventListener('change', onTotalAdjustChange);
@@ -455,12 +461,7 @@ var App = (function() {
       currentCourt = '';   // 大会が変われば担当コートも選び直す
       onEventSelect(this.value, '', prevCourt);
     });
-    courtSelect.addEventListener('change', function() {
-      if (!confirmLeave()) { this.value = currentCourt; return; }
-      currentCourt = this.value;
-      applyCourtFilter();
-      if (currentEvent) Route.set(currentEvent.id, currentCourt);
-    });
+    courtSelect.addEventListener('change', function() { changeCourt(this.value); });
     document.getElementById('btnRetrySave').addEventListener('click', function() {
       Outbox.flushNow();
     });
@@ -521,12 +522,34 @@ var App = (function() {
     courtSelect.disabled = !!scorerSession && courtSelect.options.length <= 1;
   }
 
-  // 絞り込みを適用して画面を作り直す
-  function applyCourtFilter() {
-    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt).sort(Courts.compareOrder));   // 試技順（男子の部→女子の部、No. 順）に並べてから状態で絞る（候補を末尾に寄せる処理を保つ）
+  // 採点中のコートを切り替える（コートの選択欄の change と、他のコートの一覧の行のクリック）。
+  // 未確定の選手から離れるときの確認（confirmLeave）は今までどおり。playerId を渡すと、
+  // 切り替えた先でその選手を開く（無ければ先頭）。戻り値: 切り替えたら true。
+  function changeCourt(court, playerId) {
+    if (!confirmLeave()) { courtSelect.value = currentCourt; return false; }
+    saveCurrentState();   // 一覧の行で選手を移るときと同じく、離れる前に今の選手を送る（未編集なら何もしない）
+    currentCourt = court;
+    courtSelect.value = court;
+    applyCourtFilter(playerId);
+    if (currentEvent) Route.set(currentEvent.id, currentCourt);
+    return true;
+  }
+
+  // コートの一覧の並び（試技順に並べてから大会の状態で絞る。Courts.listForStatus）
+  function courtPlayers(court) {
+    return Courts.listForStatus(players, court, currentEvent ? currentStatus() : null);
+  }
+
+  // 絞り込みを適用して画面を作り直す。preferId（省略可）の選手がいればその選手を、無ければ先頭を開く
+  function applyCourtFilter(preferId) {
+    visiblePlayers = courtPlayers(currentCourt);
     currentIndex = -1;
     if (visiblePlayers.length > 0) {
-      selectPlayer(0);
+      var start = 0;
+      for (var i = 0; preferId && i < visiblePlayers.length; i++) {
+        if (visiblePlayers[i].id === preferId) { start = i; break; }
+      }
+      selectPlayer(start);
     } else {
       applyDeferredTechniques();
       gridEdited = false;
@@ -663,27 +686,8 @@ var App = (function() {
     for (var i = 0; i < inputs.length; i++) inputs[i].disabled = frozen;
   }
 
-  // 表示する選手。進行中ならその巡目だけに絞る（コートの絞り込みと併用）。
-  // 進行中でなければ全巡目を出す（見直し・確認のため）。
-  // 最終組（一巡目上位 4 名）は先頭コートの二巡目の末尾で斬る（設計書 2026-09-28）ので、
-  //   二巡目 進行中 … 全員を出し、最終組の行を末尾に寄せる（採点はできない。一覧で薄く出す）。
-  //                   生成した順ですでに末尾のはずだが、差分追加などで崩れても末尾に来るよう
-  //                   印の有無で安定に並べ直す。
-  //   最終組 進行中 … 最終組の行だけを出す。
-  function filterForStatus(list) {
-    var st = currentEvent ? currentStatus() : null;
-    var round = st ? EventStatus.scoringRound(st) : null;
-    if (!round) return list;
-    var rows = list.filter(function(p) { return Courts.roundOf(p) === round; });
-    if (st === 'round2_final') {
-      return rows.filter(function(p) { return p.finalist === true; });
-    }
-    if (st === 'round2') {
-      return rows.filter(function(p) { return p.finalist !== true; })
-        .concat(rows.filter(function(p) { return p.finalist === true; }));
-    }
-    return rows;
-  }
+  // 表示する選手の絞り込み（進行中ならその巡目だけ、最終組の扱い）は Courts.listForStatus に移した
+  // （他のコートの一覧でも同じ規則を使うため。2026-10-05）。
 
   // --- 大会管理 ---
   // 大会の選択肢。archived は出さず、採点できる大会（進行中）を先頭にまとめる。
@@ -985,7 +989,7 @@ var App = (function() {
     var keepRev = (gridEdited && current) ? EventStatus.revOf(current) : null;
     adoptEvent(loaded);
     refreshCourtList();
-    visiblePlayers = filterForStatus(Courts.filter(players, currentCourt).sort(Courts.compareOrder));   // 試技順（男子の部→女子の部、No. 順）に並べてから状態で絞る（候補を末尾に寄せる処理を保つ）
+    visiblePlayers = courtPlayers(currentCourt);
     var idx = -1;
     for (var i = 0; i < visiblePlayers.length; i++) {
       if (visiblePlayers[i].id === currentId) { idx = i; break; }
@@ -2113,50 +2117,105 @@ var App = (function() {
   // CSV エクスポート・成績表（HTML）の保存は運営画面へ移した（試合進行の ⋯ と結果確認。2026-09-29）。
   // コート端末は目の前の選手の採点だけを受け持つ。
 
-  // --- 選手一覧（ページ下部・開閉） ---
-  // 初期状態: 端末の記憶があればそれ、無ければ画面幅 768px 以上で開く
-  function initPlayerListOpen() {
-    var open = window.innerWidth >= 768;
-    try {
-      var saved = localStorage.getItem(PLAYER_LIST_KEY);
-      if (saved === '1') open = true;
-      else if (saved === '0') open = false;
-    } catch (e) {}
-    setPlayerListOpen(open, false);
-  }
-
-  function setPlayerListOpen(open, remember) {
-    playerListSection.classList.toggle('closed', !open);
-    var btn = document.getElementById('btnPlayerListToggle');
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    btn.querySelector('.player-list-arrow').textContent = open ? '▾' : '▸';
-    if (remember) {
-      try { localStorage.setItem(PLAYER_LIST_KEY, open ? '1' : '0'); } catch (e) {}
+  // --- 選手一覧（コートごとの区画。ユーザー要望 2026-10-05） ---
+  // 広い窓（WIDE_QUERY）: body.scoring-wide で採点の右にコートの列を横に並べる（常に開いている）。
+  // 狭い窓: 採点の下にコートの区画を縦に積み、採点中のコートだけ開く。他のコートは見出しを押すと開く。
+  // 以前の「▾ 選手一覧」の開閉（localStorage の tmg_player_list_open）はやめた。
+  // 採点中のコートの一覧は visiblePlayers（巡回の対象）そのもの、他のコートは courtPlayers で同じ規則で作る。
+  function initListLayout() {
+    if (window.matchMedia) {
+      wideMedia = window.matchMedia(WIDE_QUERY);
+      var onChange = function() {
+        applyListLayout();
+        updatePlayerList();   // 列の高さが変わるので、採点中の行を見える所へ
+      };
+      if (wideMedia.addEventListener) wideMedia.addEventListener('change', onChange);
+      else if (wideMedia.addListener) wideMedia.addListener(onChange);
     }
-    if (open) renderPlayerList();
+    applyListLayout();
   }
 
-  function isPlayerListOpen() {
-    return !playerListSection.classList.contains('closed');
+  function isWideLayout() {
+    return !!(wideMedia && wideMedia.matches);
   }
 
-  function togglePlayerList() {
-    setPlayerListOpen(!isPlayerListOpen(), true);
+  function applyListLayout() {
+    document.body.classList.toggle('scoring-wide', isWideLayout());
+  }
+
+  // 一覧の見出し行（10 列）
+  var PLAYER_LIST_HEAD =
+    '<tr><th>順番</th><th>ゼッケン</th><th>選手名</th><th>級位・段位</th>' +
+    '<th>一巡目</th><th>二巡目</th><th>合計</th>' +
+    '<th class="rank">順位</th><th class="rank">新人枠</th><th class="note">備考</th></tr>';
+
+  // 狭い窓でそのコートの区画を開いているか（採点中のコートは既定で開き、他は既定で閉じる）
+  function isCourtListOpen(section) {
+    if (section.court in listOpen) return listOpen[section.court];
+    return section.current;
   }
 
   function renderPlayerList() {
-    playerListBody.innerHTML = '';
+    playerListCourts.innerHTML = '';
+    if (listOpenCourt !== currentCourt) { listOpen = {}; listOpenCourt = currentCourt; }
     // その時点の順位（一般男子・一般女子・新人枠）。順位の集計と同じ規則（確定済みだけ。
-    // status の無い旧データは全行）で、一覧を描くたびに 1 回だけ計算する（ユーザー要望 2026-10-05）
+    // status の無い旧データは全行）で、一覧を描くたびに 1 回だけ計算する（全コート共通。ユーザー要望 2026-10-05）
     rankCache = EventStatus.rankMap(players, { countAll: !!currentEvent && typeof currentEvent.status !== 'string' });
-    // 男子の部・女子の部の帯で分ける（並びは visiblePlayers のまま。性別が切り替わる所に帯を入れる）
+    var sections = currentEvent ? Scope.listSections(currentEvent, scorerSession, currentCourt) : [];
+    playerListSection.hidden = sections.length === 0;
+    sections.forEach(function(s) {
+      playerListCourts.appendChild(buildCourtList(s, s.current ? visiblePlayers : courtPlayers(s.court)));
+    });
+  }
+
+  // コート 1 つ分の区画（見出し＋表）
+  function buildCourtList(section, list) {
+    var box = document.createElement('div');
+    box.className = 'court-list' + (section.current ? ' current' : '') + (section.readOnly ? ' read-only' : '');
+    box.dataset.court = section.court;
+    var open = isCourtListOpen(section);
+    box.classList.toggle('collapsed', !open);
+
+    var head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'court-list-head';
+    head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    head.innerHTML =
+      '<span class="court-list-arrow">' + (open ? '▾' : '▸') + '</span>' +
+      '<span class="court-list-name">' + esc(courtOptionLabel(section.court)) + '</span>' +
+      (section.current ? '<span class="court-list-tag">採点中</span>' : '') +
+      (section.readOnly ? '<span class="court-list-tag view-only">見るだけ</span>' : '') +
+      '<span class="court-list-count">' + list.length + ' 名</span>';
+    // 広い窓では全コートが常に開いている（見出しは押しても何もしない）
+    head.addEventListener('click', function() {
+      if (isWideLayout()) return;
+      var next = box.classList.contains('collapsed');
+      listOpen[section.court] = next;
+      box.classList.toggle('collapsed', !next);
+      head.setAttribute('aria-expanded', next ? 'true' : 'false');
+      head.querySelector('.court-list-arrow').textContent = next ? '▾' : '▸';
+      if (next && section.current) scrollPlayerListTo(box.querySelector('tr.current-player'));
+    });
+    box.appendChild(head);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'player-list-body';
+    var table = document.createElement('table');
+    table.className = 'player-list-table';
+    table.innerHTML = '<thead>' + PLAYER_LIST_HEAD + '</thead>';
+    var tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    box.appendChild(wrap);
+
+    // 男子の部・女子の部の帯で分ける（並びは list のまま。性別が切り替わる所に帯を入れる）
     var lastSex = null;
     var rounds = {};
-    visiblePlayers.forEach(function(p) { rounds[Courts.roundOf(p)] = true; });
+    list.forEach(function(p) { rounds[Courts.roundOf(p)] = true; });
     var manyRounds = Object.keys(rounds).length > 1;   // 複数の巡目が並ぶ状態（準備中・形登録・最終結果など）
-    for (var i = 0; i < visiblePlayers.length; i++) {
-      var r = Courts.roundOf(visiblePlayers[i]);
-      var sex = (visiblePlayers[i].isFemale === true ? '女子の部' : '男子の部') +
+    for (var i = 0; i < list.length; i++) {
+      var r = Courts.roundOf(list[i]);
+      var sex = (list[i].isFemale === true ? '女子の部' : '男子の部') +
         (manyRounds ? ('　' + (r === 1 ? '一巡目' : r === 2 ? '二巡目' : r + '巡目')) : '');
       if (sex !== lastSex) {
         var band = document.createElement('tr');
@@ -2165,18 +2224,23 @@ var App = (function() {
         td.colSpan = 10;   // 順番・ゼッケン・選手名・級位段位・一巡目・二巡目・合計・順位・新人枠・備考
         td.textContent = sex;
         band.appendChild(td);
-        playerListBody.appendChild(band);
+        tbody.appendChild(band);
         lastSex = sex;
       }
-      playerListBody.appendChild(buildPlayerListRow(i));
+      tbody.appendChild(buildPlayerListRow(list[i], i, section));
     }
+    return box;
   }
 
-  function buildPlayerListRow(index) {
-    var p = visiblePlayers[index];
+  // 一覧の行。採点中のコートの行は data-index（visiblePlayers の添字）で、押すとその選手に切り替わる。
+  // 他のコートの行は押すと採点中のコートをそのコートに切り替えてその選手を開く（changeCourt）。
+  // 見るだけのコート（採点専用の端末の範囲外）の行は押しても何もしない。
+  function buildPlayerListRow(p, index, section) {
     var tr = document.createElement('tr');
-    tr.dataset.index = index;
-    if (index === currentIndex) tr.classList.add('current-player');
+    if (section.current) {
+      tr.dataset.index = index;
+      if (index === currentIndex) tr.classList.add('current-player');
+    }
     if (p.confirmed) tr.classList.add('done');   // 確定済みの行はグレー（ユーザー要望）
     // 最終組（一巡目上位 4 名）の行は番号の右に「最終組」の印。二巡目 進行中はまだ採点できないので
     // 薄く出す（tr.finale。設計書 2026-09-28）。
@@ -2197,12 +2261,18 @@ var App = (function() {
       '<td class="rank division"></td><td class="rank newface"></td>' +
       // 備考は残り幅を吸収する列。折り返し可
       '<td class="note">' + esc(p.note || '') + '</td>';
-    tr.addEventListener('click', function() {
-      var idx = parseInt(this.dataset.index, 10);
-      if (idx !== currentIndex && !confirmLeave()) return;
-      saveCurrentState();
-      selectPlayer(idx);
-    });
+    if (section.current) {
+      tr.addEventListener('click', function() {
+        var idx = parseInt(this.dataset.index, 10);
+        if (idx !== currentIndex && !confirmLeave()) return;
+        saveCurrentState();
+        selectPlayer(idx);
+      });
+    } else if (!section.readOnly) {
+      tr.addEventListener('click', function() {
+        changeCourt(section.court, p.id);
+      });
+    }
     fillScoreCells(tr, p);
     return tr;
   }
@@ -2252,29 +2322,35 @@ var App = (function() {
     });
   }
 
-  // 選手データ自体が入れ替わったとき用（開いていれば一覧を作り直す）
+  // 選手データ自体が入れ替わったとき用（一覧を作り直す）
   function refreshPlayerList() {
-    if (!isPlayerListOpen()) return;
     renderPlayerList();
   }
 
+  // 採点中のコートの区画の tbody（無ければ null）。強調・自動スクロールはこの区画にだけ効かせる
+  function currentListBody() {
+    return playerListCourts.querySelector('.court-list.current tbody');
+  }
+
   function updatePlayerList() {
-    if (!isPlayerListOpen()) return;
-    var rows = playerListBody.querySelectorAll('tr');
+    var body = currentListBody();
+    if (!body) return;
+    var rows = body.querySelectorAll('tr[data-index]');
     for (var i = 0; i < rows.length; i++) {
       var idx = parseInt(rows[i].dataset.index, 10);
       rows[i].classList.toggle('current-player', idx === currentIndex);
     }
     // 現在の選手行を表示領域内にスクロール
-    scrollPlayerListTo(playerListBody.querySelector('tr.current-player'));
+    scrollPlayerListTo(body.querySelector('tr.current-player'));
   }
 
   // 一覧の枠（.player-list-body）の中だけをスクロールさせる。
-  // 一覧はページ下部のフローに置いたので、scrollIntoView を使うとページ全体が動き、
-  // スマホでは「次の選手」ボタンが画面の外へ逃げてしまう。
+  // 一覧はページのフローに置いたので、scrollIntoView を使うとページ全体が動き、
+  // スマホでは「次の選手」ボタンが画面の外へ逃げてしまう。閉じた区画（高さ 0）では何もしない。
   function scrollPlayerListTo(row) {
-    var box = document.getElementById('playerListBody-wrap');
-    if (!box || !row) return;
+    if (!row) return;
+    var box = row.closest('.player-list-body');
+    if (!box || box.clientHeight === 0) return;
     var boxRect = box.getBoundingClientRect();
     var rowRect = row.getBoundingClientRect();
     // 見出し行は position:sticky で枠の上端に居座るので、その分だけ下を使う
@@ -2289,29 +2365,23 @@ var App = (function() {
   }
 
   function updatePlayerListScore(index, score) {
-    if (!isPlayerListOpen()) return;
     var p = visiblePlayers[index];
     if (!p || p.confirmed !== true) return;   // 確定前の途中の値は一覧に出さない
-    // 得点が変わると他の選手の順位も動くので、一覧ごと描き直す（表は小さい）
+    // 得点が変わると他の選手（他のコートも）の順位も動くので、一覧ごと描き直す（表は小さい）
     renderPlayerList();
     updatePlayerList();
   }
 
   function updatePlayerListConfirmed(index, on) {
-    if (!isPlayerListOpen()) return;
-    var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
-    if (row) {
-      // 確定・取り消しで得点と順位が動くので、一覧ごと描き直す（一巡目・二巡目・合計・順位）
-      renderPlayerList();
-      updatePlayerList();
-      return;
-    }
+    // 確定・取り消しで得点と順位が動くので、一覧ごと描き直す（一巡目・二巡目・合計・順位。他のコートの順位も）
+    renderPlayerList();
+    updatePlayerList();
   }
 
   // 備考を変えたとき（手入力・文例）に一覧の備考セルを書き換える
   function updatePlayerListNote(index, note) {
-    if (!isPlayerListOpen()) return;
-    var row = playerListBody.querySelector('tr[data-index="' + index + '"]');
+    var body = currentListBody();
+    var row = body ? body.querySelector('tr[data-index="' + index + '"]') : null;
     var cell = row ? row.querySelector('td.note') : null;
     if (cell) cell.textContent = note || '';
   }

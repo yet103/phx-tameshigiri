@@ -3478,6 +3478,38 @@
        Scope.routeChanged({ eventId: 'e2', court: 'A' }, { eventId: 'e1', court: 'A' }),
        Scope.routeChanged(null, { eventId: 'e1', court: 'A' }), Scope.routeChanged(null, null)],
       [false, true, true, false]);
+    // 採点画面のコートごとの選手一覧（ユーザー要望 2026-10-05）
+    function lsShape(list) { return list.map(function(s) { return [s.court, s.current, s.readOnly]; }); }
+    assert('Scope.listSections: 運営は全コート（未分類も）を押せる。採点中のコートに印',
+      lsShape(Scope.listSections(ivEv, ivAdmin, 'B')), [['A', false, false], ['B', true, false], ['未分類', false, false]]);
+    assert('Scope.listSections: セッションが読めない（null）ときも運営と同じ',
+      lsShape(Scope.listSections(ivEv, null, 'A')), [['A', true, false], ['B', false, false], ['未分類', false, false]]);
+    assert('Scope.listSections: 1 コートの鍵は他のコート（未分類も）が見るだけ',
+      lsShape(Scope.listSections(ivEv, ivA, 'A')), [['A', true, false], ['B', false, true], ['未分類', false, true]]);
+    assert('Scope.listSections: 全コートの鍵は未分類だけ見るだけ',
+      lsShape(Scope.listSections(ivEv, ivAll, 'B')), [['A', false, false], ['B', true, false], ['未分類', false, true]]);
+    assert('Scope.listSections: 名簿に無い採点中のコート（URL のコート指定）は末尾に足す',
+      [lsShape(Scope.listSections({ id: 'e1', players: [] }, ivA, 'A')), lsShape(Scope.listSections(ivEv, ivAdmin, 'C'))],
+      [[['A', true, false]], [['A', false, false], ['B', false, false], ['未分類', false, false], ['C', true, false]]]);
+    assert('Scope.listSections: 採点専用で鍵の大会でない大会・大会なしは空',
+      [Scope.listSections({ id: 'e2', players: ivEv.players }, ivA, 'A'), Scope.listSections(null, ivAdmin, '')], [[], []]);
+    var lfP = [
+      { id: 'a2', order: 'A-男子-1-2' }, { id: 'b1', order: 'B-男子-1-1' }, { id: 'aw1', order: 'A-女子-1-1' },
+      { id: 'a1', order: 'A-男子-1-1' }, { id: 'a10', order: 'A-男子-1-10' },
+      { id: 'r2f', order: 'A-男子-2-1', finalist: true }, { id: 'r2a', order: 'A-男子-2-2' }, { id: 'r2b', order: 'B-男子-2-1' }
+    ];
+    function lfIds(list) { return list.map(function(p) { return p.id; }); }
+    assert('Courts.listForStatus: 進行中でなければそのコートの全巡目を試技順（男子→女子、No. 順）',
+      [lfIds(Courts.listForStatus(lfP, 'A', null)), lfIds(Courts.listForStatus(lfP, 'A', 'draft'))],
+      [['a1', 'a2', 'a10', 'aw1', 'r2f', 'r2a'], ['a1', 'a2', 'a10', 'aw1', 'r2f', 'r2a']]);
+    assert('Courts.listForStatus: 一巡目 進行中はその巡目だけ・他のコートは混ぜない',
+      [lfIds(Courts.listForStatus(lfP, 'A', 'round1')), lfIds(Courts.listForStatus(lfP, 'B', 'round1'))],
+      [['a1', 'a2', 'a10', 'aw1'], ['b1']]);
+    assert('Courts.listForStatus: 二巡目 進行中は最終組を末尾に、最終組 進行中は最終組だけ',
+      [lfIds(Courts.listForStatus(lfP, 'A', 'round2')), lfIds(Courts.listForStatus(lfP, 'A', 'round2_final')),
+       lfIds(Courts.listForStatus(lfP, 'B', 'round2_final'))],
+      [['r2a', 'r2f'], ['r2f'], []]);
+    assert('Courts.listForStatus: 元の配列は並べ替えない', lfIds(lfP).slice(0, 2), ['a2', 'b1']);
     assert('Scope.formatExpiry: 日本時間で出す（UTC の 14:59 は 23:59）',
       [Scope.formatExpiry('2026-10-12T14:59:59.999Z'), Scope.formatExpiry('2026-10-12T14:59:59.999Z', true),
        Scope.formatExpiry('2026-10-12T15:00:00.000Z'), Scope.formatExpiry('壊れた値'), Scope.formatExpiry(null)],

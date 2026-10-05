@@ -531,17 +531,26 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
   .tech-table .col-label-short { display: inline; }
 }
 
-/* ===== 選手一覧（ページ下部・開閉） =====
+/* ===== 選手一覧（コートごとの区画。ユーザー要望 2026-10-05） =====
    上下の余白を詰め、備考以外の列は文字が収まる幅（width:1% + nowrap）。
-   備考の列が残り幅を吸収する（ユーザー要望）。 */
+   備考の列が残り幅を吸収する（ユーザー要望）。
+   狭い窓では採点の下にコートの区画（.court-list ＝ 見出し＋表）を縦に積み、採点中のコートだけ開く
+   （.collapsed は狭い窓だけ効く）。広い窓（body.scoring-wide）の横並びは scoring.html の style にある。 */
 /* 採点の区画（ツールバーまで）と選手一覧の間を空けて、別のブロックに見せる（ユーザー要望） */
 .player-list-section { border-top: 2px solid var(--border); margin-top: 20px; }
-.player-list-toggle {
+.court-list-head {
   display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
   padding: 0 12px; text-align: left; font-weight: bold; font-size: 14px;
   background: var(--bg-header); color: var(--text); border-radius: 0;
 }
-.player-list-section.closed .player-list-body { display: none; }
+.court-list + .court-list .court-list-head { border-top: 1px solid var(--border); }
+.court-list-tag {
+  display: inline-block; padding: 0 6px; border: 1px solid currentColor; border-radius: 3px;
+  font-size: 12px; font-weight: normal; line-height: 1.6;
+}
+.court-list-count { margin-left: auto; font-size: 12px; font-weight: normal; }
+body:not(.scoring-wide) .court-list.collapsed .player-list-body { display: none; }
+body.scoring-wide .court-list-arrow { display: none; }
 .player-list-body { overflow: auto; max-height: 50vh; }
 .player-list-table {
   width: 100%;
@@ -599,6 +608,9 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
    反転した文字色が勝つ（薄いまま読めなくなることはない）。 */
 .player-list-table td.no-bib { color: var(--text-muted); }
 .player-list-table tr:hover td { opacity: 0.75; }
+/* 見るだけのコート（採点専用の端末の範囲外）の行は押せない */
+.court-list.read-only .player-list-table td { cursor: default; }
+.court-list.read-only .player-list-table tr:hover td { opacity: 1; }
 /* 確定済みの行はグレー。選択中の行（下の .current-player）のほうが後にあるので勝つ */
 .player-list-table tr.done td { background: var(--cell-disabled); color: var(--text-muted); }
 /* 決戦（暫定ベスト4）の行。二巡目 進行中はまだ採点できないので薄く（app.js の tr.finale）。
@@ -699,7 +711,11 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 /* 合計は帯の上に乗るので、ライトで沈む --score-color / --score-confirmed の代わりに
    --gold-light を使う（確定済みかどうかは下の採点表・確定ボタンでも分かる）。 */
 .total-score, .total-score.confirmed { color: var(--gold-light); }
-.player-list-toggle { background: var(--band-bg); color: var(--gold-light); }
+.court-list-head { background: var(--band-bg); color: var(--gold-light); }
+.court-list + .court-list .court-list-head { border-top-color: var(--gold-deep); }
+/* 採点中のコートの札は金地に黒（どのコートを採点しているか、横並びでも一目で分かるように） */
+.court-list-tag:not(.view-only) { background: var(--gold-light); color: var(--band-bg); border-color: var(--gold-light); }
+.court-list-tag.view-only, .court-list-count { color: var(--band-muted); }
 .player-list-section { border-top-color: var(--gold); }
 .ranking-section h3 { font-family: var(--mincho); }
 .note-preset-sheet { border-top-color: var(--gold); }

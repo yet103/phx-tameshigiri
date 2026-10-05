@@ -56,6 +56,25 @@ var Scope = (function() {
     return list.length === 0 || list.indexOf(court) !== -1;
   }
 
+  // 採点画面のコートごとの選手一覧の区画（ユーザー要望 2026-10-05）。
+  // 戻り値: [{ court, current, readOnly }]（並びは Courts.listFrom と同じ。未分類は末尾）
+  //   current  … 採点中のコート（currentCourt）。名簿にまだ無いコート（URL のコート指定を残した場合）も末尾に足す
+  //   readOnly … 行を押してもそのコートに切り替えられない（見るだけ）。採点中のコート以外で、
+  //              鍵の範囲外のコート（1 コートの鍵の他のコート、全コートの鍵の未分類）
+  // 運営（Basic・開発）と、セッションを読めなかったとき（session が null）は全部押せる。
+  // 採点専用で、event が鍵の大会でなければ空（範囲外の大会の一覧は出さない）。
+  // 選手のいないコートは出さない（サーバーが範囲外のコートの選手を返さない場合も、ここで出なくなる）。
+  function listSections(event, session, currentCourt) {
+    var players = (event && Array.isArray(event.players)) ? event.players : [];
+    if (isScorer(session) && event && event.id && event.id !== session.scope.eventId) return [];
+    var courts = Courts.listFrom(players);
+    if (currentCourt && courts.indexOf(currentCourt) === -1) courts.push(currentCourt);
+    return courts.map(function(c) {
+      var current = c === currentCourt;
+      return { court: c, current: current, readOnly: !current && !courtAllowed(c, event, session) };
+    });
+  }
+
   // 復帰した選択（Route.restore の結果。null もある）を鍵の範囲に収める。
   // 戻り値: { eventId, court }（court は '' もある＝画面が先頭のコートを選ぶ）。
   //   運営 … route をそのまま返す（null は null）
@@ -147,6 +166,7 @@ var Scope = (function() {
     filterEvents: filterEvents,
     allowedCourts: allowedCourts,
     courtAllowed: courtAllowed,
+    listSections: listSections,
     clampRoute: clampRoute,
     routeChanged: routeChanged,
     formatExpiry: formatExpiry,

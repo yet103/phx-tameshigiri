@@ -16,7 +16,7 @@
     /* 左右の余白は全ブロック共通（--gutter）。帯（黒地）は body の幅いっぱいに敷き、中身の左右端を
        20px でそろえる。表・補正段・操作区画・選手一覧も同じ 20px の内側に置く（端がそろい、詰まりすぎない）。 */
     :root { --gutter: var(--page-gutter); }
-    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .timer-bar, .player-list-toggle {
+    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .timer-bar, .court-list-head {
       padding-left: var(--gutter); padding-right: var(--gutter);
     }
     .score-table-wrap { padding-left: var(--gutter); padding-right: var(--gutter); }
@@ -27,6 +27,23 @@
     .player-list-table { font-size: 12px; }
     .player-list-table th, .player-list-table td { padding: 2px 4px; }
     .player-list-table th.note, .player-list-table td.note { min-width: 5em; }
+    /* 広い窓（1100px 以上。app.js の WIDE_QUERY が body.scoring-wide を付ける）: 採点の区画は今の 660px のまま左に置き、
+       右にコートごとの選手一覧の列を横に並べる（ユーザー要望 2026-10-05）。一覧の欄は窓の高さに貼り付け、
+       各列の表は列の中で縦にスクロールする。列が収まらなければ一覧の欄が横にスクロールする。 */
+    body.scoring-wide { max-width: none; display: flex; align-items: flex-start; }
+    body.scoring-wide .scoring-main { flex: 0 0 var(--page-max-width); width: var(--page-max-width); min-width: 0; }
+    body.scoring-wide .player-list-section {
+      flex: 1 1 auto; min-width: 0; margin-top: 0; border-top: none;
+      position: sticky; top: 0; height: 100vh; overflow-x: auto; overflow-y: hidden;
+    }
+    body.scoring-wide .player-list-courts { display: flex; height: 100%; }
+    body.scoring-wide .court-list {
+      flex: 1 0 440px; max-width: 640px; min-height: 0;
+      display: flex; flex-direction: column; border-left: 2px solid var(--gold);
+    }
+    body.scoring-wide .court-list + .court-list .court-list-head { border-top: none; }
+    body.scoring-wide .court-list-head { padding-left: 12px; padding-right: 12px; cursor: default; }
+    body.scoring-wide .court-list .player-list-body { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0 8px 8px; }
     .event-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--gold); flex-wrap:wrap; }
     .event-bar select { padding:4px 8px; }
     /* 指で押す前提のタップ目標（style.css のバー類と同じ 44px） */
@@ -41,6 +58,10 @@
   </style>
 </head>
 <body data-theme="light">
+
+  <!-- 採点の区画（ページナビから操作区画まで）。広い窓（1100px 以上、body.scoring-wide）では
+       この区画を左に 660px で置き、右にコートごとの選手一覧の列を並べる（ユーザー要望 2026-10-05） -->
+  <div class="scoring-main">
 
   <!-- ページナビ -->
   <!-- admin-only は採点の鍵で登録した端末（採点専用モード、body.scorer-mode）では隠す（設計書 2026-10-03 6.4） -->
@@ -155,30 +176,13 @@
   <!-- CSV エクスポート・成績表（HTML）の保存は運営画面の結果確認にある（CSV は 2026-09-30 に試合進行の ⋯ から移した）。
        大会全体を出力する運営の操作なので、コート端末（この画面）には置かない（2026-09-29 のユーザー判断） -->
 
-  <!-- 選手一覧（ページ下部に常設。見出しで開閉） -->
-  <section class="player-list-section" id="playerListSection">
-    <button type="button" class="player-list-toggle" id="btnPlayerListToggle" aria-expanded="true">
-      <span class="player-list-arrow">▾</span> 選手一覧
-    </button>
-    <div class="player-list-body" id="playerListBody-wrap">
-      <table class="player-list-table" id="playerListTable">
-        <thead>
-          <tr>
-            <th>順番</th>
-            <th>ゼッケン</th>
-            <th>選手名</th>
-            <th>級位・段位</th>
-            <th>一巡目</th>
-            <th>二巡目</th>
-            <th>合計</th>
-            <th class="rank">順位</th>
-            <th class="rank">新人枠</th>
-            <th class="note">備考</th>
-          </tr>
-        </thead>
-        <tbody id="playerListBody"></tbody>
-      </table>
-    </div>
+  </div><!-- /.scoring-main -->
+
+  <!-- 選手一覧（コートごとの区画。ユーザー要望 2026-10-05）。app.js の renderPlayerList が
+       コートごとに「見出し＋表」（.court-list）を入れる。狭い窓では採点の下に縦に積み、採点中のコートだけ開く
+       （他のコートは見出しで開閉）。広い窓では採点の右に横に並べる（コートが多ければ横スクロール） -->
+  <section class="player-list-section" id="playerListSection" hidden>
+    <div class="player-list-courts" id="playerListCourts"></div>
   </section>
 
   <script src="data.js"></script>
