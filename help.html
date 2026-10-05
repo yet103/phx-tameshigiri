@@ -691,7 +691,7 @@
       <li><span class="term">順位に入るのは確定済みの得点だけ</span>です。採点画面で <span class="ui">確定</span> を押していない選手の得点は、順位・発表・共有・試合進行の表に出ません（2026-09-30 から）。</li>
       <li><span class="term">PC 用運営画面の「結果確認」</span> — <span class="ui">一般男子</span> <span class="ui">新人枠</span> <span class="ui">一般女子</span> の3部門が横に3列で並びます。<span class="ui">↻ 最新に更新</span> でサーバーの最新の順位を読み直します。</li>
       <li><span class="term">スマホ用運営画面の結果確認タブ</span> — 同じ内容が縦に並びます。<span class="ui">最新に更新</span> で読み直します。</li>
-      <li><span class="term">順位表示ページ</span>（<code>ranking.html</code>） — 大会を選んで <span class="ui">大会データを読み込む</span>。<span class="ui">HTMLダウンロード</span> で1枚の成績表として保存できます。</li>
+      <li><span class="term">順位表示ページ</span>（<code>ranking.html</code>） — 開くと進行中の大会の順位が自動で出て、10 秒ごとに更新されます。別の大会は上の選択で切り替えます（選ぶとすぐ読みます）。並びは採点画面の順位表と同じ横並び（一般男子・新人枠・一般女子）で、見出しの「〜巡目 済み/全員」「残り n 名」とベスト4 の列も同じです。<span class="ui">文字</span> のバーで表の大きさを変えられます（端末に覚えます）。<span class="ui">HTMLダウンロード</span> で1枚の成績表として保存できます。</li>
       <li><span class="term">ダッシュボード</span>（<code>dashboard.html</code>） — 本部の PC 向け。採点画面をコートごとに、PC 運営の試合進行と順位表示を 1 画面に並べます（PC 運営の試合進行の <span class="ui">📊 ダッシュボード</span>、またはトップの「ダッシュボード」から）。上の帯で大会を選び、<span class="ui">👁 閲覧専用</span>（既定。面の中は押せず、ホイールで中を動かせます）と <span class="ui">✎ 操作可能</span>（採点・確定・工程表のボタンがそのまま使えます）を切り替えます。縮小率（50〜100%）は端末に覚えます。面の間の仕切りをドラッグすると大きさを変えられ、ダブルクリックで元に戻ります（位置も端末に覚えます）。操作可能では、未確定のまま別の面を触っても警告は出ません。操作可能にするのは、そのコートの採点を本部で行うときだけにしてください（コートの端末とダッシュボードの両方で同じ選手を採点すると、後から確定した側がサーバーに断られて読み直しになります）。</li>
       <li><span class="term">運営画面の「結果確認」</span> — <span class="ui">CSV エクスポート</span>（スマホ用は <span class="ui">CSVエクスポート</span>）で全選手の内訳を <code>players.csv</code> に保存できます（PC・スマホとも。以前は試合進行の <span class="ui">⋯</span> にありました）。</li>
       <li><span class="term">運営画面の「結果確認」</span> — <span class="ui">成績表（HTML）を保存</span> で1枚の成績表を保存できます（PC・スマホとも）。採点画面には出力のボタンはありません。</li>
@@ -704,7 +704,7 @@
 
     <figure class="shot-mobile">
       <img src="help/img/ranking_page.png" loading="lazy" alt="順位表示ページ。大会を選ぶ欄と、「大会データを読み込む」「HTMLダウンロード」のボタン。">
-      <figcaption>順位表示ページ。大会を選んでから <span class="ui">大会データを読み込む</span> を押してください。押す前は「大会を選択すると順位が表示されます。」と出ます。</figcaption>
+      <figcaption>順位表示ページ（画像は以前のもの。いまは「大会データを読み込む」のボタンは無く、開くと進行中の大会が自動で出て、上の選択で切り替えます）。</figcaption>
     </figure>
     <p><a class="back-to-toc" href="#toc">▲ 目次へ</a></p>
   </section>

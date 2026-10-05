@@ -23,16 +23,17 @@
   <div class="container" style="padding-top:16px;">
     <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
       <h2 style="margin:0;">順位表示</h2>
-      <select id="rankEventSelect">
+      <select id="rankEventSelect" aria-label="大会">
         <option value="">-- 大会を選択 --</option>
       </select>
-      <button id="btnLoadFromEvent" class="btn-neutral">大会データを読み込む</button>
+      <label class="rank-zoom">文字 <input type="range" id="rankZoom" min="50" max="200" step="10" value="100"> <span id="rankZoomVal">100%</span></label>
       <button id="btnDownloadHtml" class="btn-neutral">HTMLダウンロード</button>
       <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
     </div>
 
-    <div class="ranking-container" id="rankingContainer">
-      <p style="color:var(--text-muted)">大会を選択すると順位が表示されます。</p>
+    <!-- 採点画面の順位表（.rank-panel-cols）と同じ横並びの配置。大会を選ぶと自動で読み直す（10 秒ごと） -->
+    <div class="ranking-container rank-panel-cols" id="rankingContainer">
+      <p style="color:var(--text-muted)">大会を選ぶと順位が出ます。</p>
     </div>
   </div>
 
@@ -43,7 +44,8 @@
     var body = document.body;
     var rankingContainer = document.getElementById('rankingContainer');
     var rankEventSelect = document.getElementById('rankEventSelect');
-    var btnLoadFromEvent = document.getElementById('btnLoadFromEvent');
+    var rankZoom = document.getElementById('rankZoom');
+    var rankZoomVal = document.getElementById('rankZoomVal');
 
     // 順位の集計はサーバーの computeRanking が唯一の実装。この画面は描くだけ。
     var CATEGORIES = [
@@ -64,7 +66,21 @@
       applyTheme(t);
     });
 
-    // 大会一覧を読み込む
+    // 文字の大きさ（ユーザー要望 2026-10-05）。CSS の zoom で表ごと拡大。端末に覚える
+    var ZOOM_KEY = 'tmg_ranking_zoom';
+    function applyZoom(z) {
+      z = Ranking.clampZoom(z);
+      rankingContainer.style.zoom = String(z / 100);
+      rankZoom.value = z;
+      rankZoomVal.textContent = z + '%';
+    }
+    try { applyZoom(localStorage.getItem(ZOOM_KEY)); } catch (e) { applyZoom(100); }
+    rankZoom.addEventListener('input', function() {
+      applyZoom(rankZoom.value);
+      try { localStorage.setItem(ZOOM_KEY, String(Ranking.clampZoom(rankZoom.value))); } catch (e) {}
+    });
+
+    // 大会一覧を読み込む。ハッシュ（#event/<id>）があればその大会、無ければ進行中の大会を自動で出す
     (async function() {
       var events = await Api.listEvents();
       if (!events) {
@@ -77,7 +93,12 @@
         opt.textContent = ev.name + ' (' + ev.date + ')';
         rankEventSelect.appendChild(opt);
       });
-      applyHash();   // #event/<id> で開いたら（ダッシュボードの面）その大会を自動で読む
+      if (Ranking.parseHash(location.hash)) {
+        applyHash();   // #event/<id> で開いたら（ダッシュボードの面）その大会
+      } else {
+        var cur = Ranking.pickCurrent(events);
+        if (cur) selectEvent(cur.id);
+      }
     })();
 
     // --- URL のハッシュで大会を指定して開く（設計書 2026-10-05-dashboard-design.md §3） ---
@@ -128,16 +149,14 @@
     }
     window.addEventListener('hashchange', applyHash);
 
-    // 大会データを読み込む（ボタン）。ハッシュの大会と違う大会を手で読んだら自動更新は止める
-    btnLoadFromEvent.addEventListener('click', function() {
-      var eventId = rankEventSelect.value;
-      if (!eventId) {
-        alert('大会を選択してください。');
-        return;
-      }
-      if (eventId !== autoEventId) stopAuto();
-      loadAndRender(eventId, false);
-    });
+    // 大会を選ぶ（セレクトの change・起動時の進行中の大会）。ハッシュも合わせ、自動更新を始める
+    function selectEvent(id) {
+      var hash = id ? '#event/' + encodeURIComponent(id) : '';
+      if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
+      if (!id) { stopAuto(); showNote('大会を選ぶと順位が出ます。'); return; }
+      if (id !== autoEventId) startAuto(id);
+    }
+    rankEventSelect.addEventListener('change', function() { selectEvent(rankEventSelect.value); });
 
     function renderRankings(data) {
       rankingContainer.innerHTML = '';
@@ -154,11 +173,14 @@
           Storage.esc(ev.date || '') + '　' + Storage.esc(ev.venue || '') + '</p>';
         rankingContainer.appendChild(heading);
       }
+      if (heading) heading.classList.add('rank-panel-heading');
       CATEGORIES.forEach(function(c) {
-        rankingContainer.appendChild(
-          buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || [],
-            data.progress && data.progress[c.key],
-            (c.key === 'male' && data.best4Chance) ? data.best4Chance : null));
+        var sec = buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || [],
+          data.progress && data.progress[c.key],
+          (c.key === 'male' && data.best4Chance) ? data.best4Chance : null);
+        sec.classList.add('rank-panel-col');
+        sec.dataset.category = c.key;
+        rankingContainer.appendChild(sec);
       });
     }
 
@@ -168,29 +190,31 @@
     function buildRankTable(title, rows, progress, chance) {
       var div = document.createElement('div');
       div.className = 'ranking-section';
+      // 見出しは採点画面の順位表と同じ部品（.rank-panel-progress）。HTML ダウンロードでは class が効かないので
+      // 色だけ style でも指定する
+      var sub = function(text) {
+        return ' <span class="rank-panel-progress" style="font-weight:normal;font-size:13px;color:#888">' + Storage.esc(text) + '</span>';
+      };
       var head = '<h3>' + Storage.esc(title) +
-        (progress && progress.label
-          ? ' <span style="font-weight:normal;font-size:13px;color:#666">' + Storage.esc(progress.label) + '</span>'
-          : '') +
-        (chance && typeof chance.remaining === 'number'
-          ? ' <span style="font-weight:normal;font-size:13px;color:#666">残り ' + chance.remaining + ' 名</span>'
-          : '') + '</h3>';
+        (progress && progress.label ? sub(progress.label) : '') +
+        (chance && typeof chance.remaining === 'number' ? sub('残り ' + chance.remaining + ' 名') : '') + '</h3>';
       var withChance = !!(chance && Array.isArray(chance.male));
       if (rows.length === 0) {
-        div.innerHTML = head + '<p style="color:#666">データなし</p>';
+        div.innerHTML = head + '<p class="rank-panel-none" style="color:#888">まだいません</p>';
         return div;
       }
       var trs = rows.map(function(r, i) {
         var c = withChance ? chance.male[i] : null;
-        return '<tr><td>' + Storage.esc(String(r.rank)) + '</td><td>' + Storage.esc(r.name) +
-               '</td><td>' + Storage.esc(String(r.score)) + '</td>' +
-               (withChance ? '<td style="font-size:12px;white-space:nowrap' + (c && c.flag === 'sure' ? ';font-weight:bold' : (c && c.flag === 'out' ? ';color:#888' : '')) + '"' +
+        return '<tr><td class="rank">' + Storage.esc(String(r.rank)) + '</td><td class="name">' + Storage.esc(r.name) +
+               '</td><td class="total">' + Storage.esc(String(r.score)) + '</td>' +
+               (withChance ? '<td class="chance ' + ((c && c.flag) || '') + '" style="font-size:12px;white-space:nowrap' +
+                 (c && c.flag === 'sure' ? ';font-weight:bold' : (c && c.flag === 'out' ? ';color:#888' : '')) + '"' +
                  (c && typeof c.max === 'number' ? ' title="最大 ' + c.max + ' 点"' : '') + '>' + Storage.esc((c && c.label) || '') + '</td>' : '') +
                '</tr>';
       }).join('');
       div.innerHTML = head +
-        '<table class="rank-table"><tr><th>順位</th><th>選手名</th><th>得点</th>' + (withChance ? '<th>ベスト4</th>' : '') + '</tr>' +
-        trs + '</table>';
+        '<table class="rank-table rank-panel-table"><thead><tr><th class="rank">順位</th><th class="name">名前</th><th class="total">合計</th>' +
+        (withChance ? '<th class="chance">ベスト4</th>' : '') + '</tr></thead><tbody>' + trs + '</tbody></table>';
       return div;
     }
 

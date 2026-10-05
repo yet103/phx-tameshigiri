@@ -438,18 +438,14 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 }
 
 /* ===== 順位テーブル（ranking.html） ===== */
-.ranking-container {
-  display: flex;
-  gap: 24px;
-  padding: 16px 12px;
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-.ranking-section h3 {
-  margin-bottom: 8px;
-  font-size: 16px;
-  color: var(--accent);
-}
+/* 順位表示ページ（ranking.html）。採点画面の順位表（.rank-panel-cols / .rank-panel-col / .rank-panel-table）と
+   同じ横並びの配置に（ユーザー要望 2026-10-05）。大会名の見出し（.rank-heading）は 3 列ぶち抜き */
+.ranking-container { padding: 12px 0; }
+.ranking-container .rank-heading { grid-column: 1 / -1; }
+.ranking-container .rank-heading h2 { margin: 0 0 2px; }
+.ranking-container .rank-heading p { margin: 0 0 4px; }
+.rank-zoom { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+.rank-zoom input { width: 110px; }
 .rank-table { border-collapse: collapse; }
 .rank-table th, .rank-table td {
   border: 1px solid var(--border);

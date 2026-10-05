@@ -7059,6 +7059,16 @@
           { tech1: '夢想返し', tech2: '胸尽くし', tech3: '', isFemale: true }), 32);
     })();
 
+    assert('Ranking.pickCurrent: 進行中（round1/round2）で更新が新しい大会。テスト大会は選ばない',
+      Ranking.pickCurrent([
+        { id: 'a', status: 'draft', updatedAt: '2026-10-05T09:00:00Z' },
+        { id: 'b', status: 'round1', updatedAt: '2026-10-05T08:00:00Z' },
+        { id: 'c', status: 'round2', updatedAt: '2026-10-05T07:00:00Z' },
+        { id: 't', status: 'round2', updatedAt: '2026-10-05T10:00:00Z', test: true }
+      ]).id, 'b');
+    assert('Ranking.pickCurrent: 進行中が無ければ null', [Ranking.pickCurrent([{ id: 'a', status: 'final' }]), Ranking.pickCurrent([]), Ranking.pickCurrent(null)], [null, null, null]);
+    assert('Ranking.clampZoom: 50〜200 の 10 刻み、他は 100', [Ranking.clampZoom('150'), Ranking.clampZoom(44), Ranking.clampZoom('x'), Ranking.clampZoom(300), Ranking.clampZoom(50)], [150, 100, 100, 100, 50]);
+
     // ---- bundle-import.js（トップ・PC 運営・スマホ運営で共用の取り込み処理。設計書 2026-10-05 §3） ----
     await (async function() {
       var biAlerts = [], biConfirms = [], biSent = [];
