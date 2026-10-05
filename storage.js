@@ -33,6 +33,28 @@ var Storage = (function() {
     try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
   }
 
+  // 1 回きりの通知（設計書 2026-10-05-home-import-entry-design.md §3.2）。
+  // トップは運営画面へ遷移してしまい toast を出せないので、文言を sessionStorage に置いてから
+  // 遷移し、desk.js / admin.js が起動時に takePendingToast で読んで消す。
+  // sessionStorage が使えない環境（プライベートモード等）では黙って何もしない。
+  var PENDING_TOAST_KEY = 'phx.pendingToast';
+
+  function setPendingToast(text) {
+    var s = String(text == null ? '' : text);
+    if (!s) return;
+    try { sessionStorage.setItem(PENDING_TOAST_KEY, s); } catch (e) {}
+  }
+
+  function takePendingToast() {
+    try {
+      var s = sessionStorage.getItem(PENDING_TOAST_KEY) || '';
+      if (s) sessionStorage.removeItem(PENDING_TOAST_KEY);
+      return s;
+    } catch (e) {
+      return '';
+    }
+  }
+
   // ハッシュをそのモードの語彙に読み替える（設計書「モードの切り替え」の対応表）。
   //   #round/<id>（スマホ） ⇔ #match/<id>（PC）
   //   #round2/<id>（PC の二巡目の形登録） → スマホでは #round/<id>（形登録は試合進行タブにある）
@@ -298,6 +320,8 @@ var Storage = (function() {
     saveTheme: saveTheme,
     loadMode: loadMode,
     saveMode: saveMode,
+    setPendingToast: setPendingToast,
+    takePendingToast: takePendingToast,
     mapHash: mapHash,
     modeHref: modeHref,
     currentMode: currentMode,

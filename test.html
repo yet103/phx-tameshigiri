@@ -18,6 +18,7 @@
 <script src="api.js"></script>
 <script src="storage.js"></script>
 <script src="courts.js"></script>
+<script src="bundle-import.js"></script>
 <script src="scope.js"></script>
 <script src="status.js"></script>
 <script src="route.js"></script>
@@ -6926,6 +6927,68 @@
     assert('checkBundle: version が違えば更新を促す',
       Storage.checkBundle({ format: 'phx-tameshigiri-event', version: 2 }),
       { ok: false, error: '対応していないファイル形式です（version: 2）\nこのアプリを更新してください。' });
+
+    // ---- bundle-import.js（トップ・PC 運営・スマホ運営で共用の取り込み処理。設計書 2026-10-05 §3） ----
+    await (async function() {
+      var biAlerts = [], biConfirms = [], biSent = [];
+      var biOrigList = Api.listEvents, biOrigImport = Api.importBundle;
+      var biConfirmAnswer = true;
+      var biHooks = {
+        alert: function(m) { biAlerts.push(String(m)); },
+        confirm: function(m) { biConfirms.push(String(m)); return biConfirmAnswer; }
+      };
+      var biGood = JSON.stringify({ format: 'phx-tameshigiri-event', version: 1,
+        event: { name: '大会X', date: '2026-10-05', players: [] } });
+      Api.listEvents = async function() { return [{ id: 'e9', name: '大会X', date: '2026-10-05' }]; };
+      Api.importBundle = async function(b) { biSent.push(b); return { success: true, id: 'new1', playerCount: 3, bibDropped: { duplicate: 1, outOfRange: 0 } }; };
+      try {
+        var r1 = await BundleImport.run('{', biHooks);
+        assert('BundleImport.run: JSON が壊れていれば alert して null', [r1, biAlerts], [null, ['ファイルを読めませんでした。']]);
+        biAlerts = [];
+        var r2 = await BundleImport.run('{"format":"x"}', biHooks);
+        assert('BundleImport.run: 形式が違えば checkBundle の文言で alert して null', [r2, biAlerts], [null, ['このアプリのエクスポートファイルではありません。']]);
+        biAlerts = []; biConfirmAnswer = false;
+        var r3 = await BundleImport.run(biGood, biHooks);
+        assert('BundleImport.run: 同名同日があり confirm で いいえ → 送らず null',
+          [r3, biConfirms, biSent.length], [null, ['同じ名前と日付の大会が既にあります。\n別の大会として追加しますか？'], 0]);
+        biConfirms = []; biConfirmAnswer = true;
+        var r4 = await BundleImport.run(biGood, biHooks);
+        assert('BundleImport.run: 成功 → { id, playerCount, bibDropped }',
+          [r4, biSent.length, biAlerts], [{ id: 'new1', playerCount: 3, bibDropped: { duplicate: 1, outOfRange: 0 } }, 1, []]);
+        var r5 = await BundleImport.run(biGood, { alert: biHooks.alert, confirm: biHooks.confirm, isStale: function() { return true; } });
+        assert('BundleImport.run: isStale が真なら黙って null（送らない）', [r5, biSent.length, biAlerts], [null, 1, []]);
+        biConfirms = [];
+        Api.listEvents = async function() { return null; };
+        var r6 = await BundleImport.run(biGood, biHooks);
+        assert('BundleImport.run: 一覧が取れなくても確認なしで送る', [r6 && r6.id, biConfirms], ['new1', []]);
+        Api.importBundle = async function() { return null; };
+        var r7 = await BundleImport.run(biGood, biHooks);
+        assert('BundleImport.run: 通信失敗 → alert して null', [r7, biAlerts], [null, ['取り込みに失敗しました。通信を確認してください。']]);
+        biAlerts = [];
+        Api.importBundle = async function() { return { success: false, error: '大会名が不正です' }; };
+        var r8 = await BundleImport.run(biGood, biHooks);
+        assert('BundleImport.run: サーバーが断れば error を添えて alert', [r8, biAlerts], [null, ['取り込みに失敗しました。\n大会名が不正です']]);
+      } finally {
+        Api.listEvents = biOrigList;
+        Api.importBundle = biOrigImport;
+      }
+      assert('BundleImport.message: 落ちたゼッケンが無ければ人数だけ',
+        BundleImport.message({ id: 'a', playerCount: 34, bibDropped: { duplicate: 0, outOfRange: 0 } }),
+        '大会を取り込みました（34 名）');
+      assert('BundleImport.message: 落ちたゼッケンがあれば文言を足す',
+        BundleImport.message({ id: 'a', playerCount: 2, bibDropped: { duplicate: 1, outOfRange: 0 } }),
+        '大会を取り込みました（2 名）。' + Courts.bibDroppedMessage({ duplicate: 1, outOfRange: 0 }));
+      assert('BundleImport.message: playerCount 無しは 0 名', BundleImport.message({ id: 'a' }), '大会を取り込みました（0 名）');
+    })();
+
+    // ---- 1 回きりの通知（トップから運営画面へ飛ぶときの完了文言。設計書 2026-10-05 §3.2） ----
+    try { sessionStorage.removeItem('phx.pendingToast'); } catch (e) {}
+    assert('takePendingToast: 何も無ければ空文字', Storage.takePendingToast(), '');
+    Storage.setPendingToast('大会を取り込みました（34 名）');
+    assert('takePendingToast: 置いた文言が 1 回だけ読める',
+      [Storage.takePendingToast(), Storage.takePendingToast()], ['大会を取り込みました（34 名）', '']);
+    Storage.setPendingToast('');
+    assert('setPendingToast: 空文字は置かない', Storage.takePendingToast(), '');
 
     await runApiTests();
     await runScoringAuditTests();
