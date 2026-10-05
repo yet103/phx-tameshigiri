@@ -388,65 +388,8 @@ function playerWithRev(p) {
   return Object.assign({}, p, { rev: EventStatus.revOf(p) });
 }
 
-// 最終組（一巡目上位 4 名。以前の呼び名は「決戦」）の表。最終組の行が無ければ null（設計書 2026-09-22）。
-// rows は試技順（候補の行の番号順。候補は先頭コートの男子の二巡目の末尾に並ぶ。設計書 2026-09-28）。r1 は一巡目の得点（sourcePlayerId で引く）、
-// r2 は斬った人だけ（未採点は null）、rank も斬った人だけの中での暫定順位
-// （合計降順・同点同順位。1, 1, 3）。
-// ○×の生データ（result）は返さない（共有リンクから無認証で読まれるため）。
-function computeFinale(event) {
-  const players = ((event && event.players) || []);
-  const lockedEvent = countsAllScores(event);   // 旧データ（status 無し）だけ全行を数える
-  const finalRows = EventStatus.finalists(players);
-  if (finalRows.length === 0) return null;
-
-  const byId = Object.create(null);
-  players.forEach(p => { if (p && typeof p.id === 'string') byId[p.id] = p; });
-  const numberOf = p => {
-    const parsed = parseOrder(p && p.order);
-    return parsed ? parsed.number : 0;
-  };
-
-  const rows = finalRows.slice()
-    .sort((a, b) => numberOf(a) - numberOf(b))
-    .map(p => {
-      const srcRow = (p.sourcePlayerId && Object.prototype.hasOwnProperty.call(byId, p.sourcePlayerId))
-        ? byId[p.sourcePlayerId] : null;
-      // 一巡目の得点も確定済みだけ（順位と同じ基準。QA 指摘 2026-09-30）
-      const r1 = (srcRow && (srcRow.confirmed === true || lockedEvent) && typeof srcRow.score === 'number') ? srcRow.score : 0;
-      // 斬った＝確定済み（採点途中の値は暫定順位に出さない。ユーザー要望 2026-09-30）
-      const scored = (p.confirmed === true || lockedEvent) && EventStatus.isScored(p);
-      const r2 = scored ? ((typeof p.score === 'number') ? p.score : 0) : null;
-      return {
-        name: String(p.name || '').trim(),
-        order: numberOf(p),
-        r1: r1,
-        r2: r2,
-        total: r1 + (r2 === null ? 0 : r2),
-        scored: scored,
-        rank: null
-      };
-    });
-
-  // 暫定順位は斬った人だけで付ける。rows の要素をそのまま並べ替えて書き込む。
-  const done = rows.filter(r => r.scored).sort((a, b) => b.total - a.total || a.order - b.order);
-  let current = 1;
-  let prevTotal = null;
-  done.forEach((r, i) => {
-    if (prevTotal !== null && r.total !== prevTotal) current = i + 1;
-    prevTotal = r.total;
-    r.rank = current;
-  });
-
-  return {
-    // 候補がいるコート（通常は A。既存大会で専用コート「決戦」に置いた行ならその名前）。
-    // 配信ボードはこのコートを映しているときに決戦の表を出す。
-    court: EventStatus.finaleCourt(players),
-    status: EventStatus.of(event),
-    rows: rows
-  };
-}
-
-// 順位の集計。順位ロジックの唯一の実装。
+// 順位の集計。順位ロジックは status.js の EventStatus.rankings（採点画面の順位表 Courts.rankPanel と
+// 同じ関数。一致を構造で保証する。設計書 2026-10-05 2.3）。
 // 一巡目の行ごとに合算する（一巡目＋二巡目。網羅検証 M1。設計書 2026-10-01 2.3）。
 // まとめ方は status.js の EventStatus.playerTotals（ベスト4 の best4Standings と共有。
 // 「順位の一般男子の上位 4 ＝ ベスト4」を同じまとめ方で保証する。設計書 2026-10-04 2.2）:
@@ -456,50 +399,27 @@ function computeFinale(event) {
 //     同じ氏名・同じ性別の一巡目の組に足す（無ければ氏名の組を作る）
 // 組の氏名・性別・新人は組の代表（一巡目の行。無ければ最初に入った行）から取る。
 // 得点降順、同点は同順位で次の順位は飛ぶ（1, 1, 3）。
-// ○×の生データ（result）や order・id は返さない（共有リンクから無認証で読まれるため）。
+// ○×の生データ（result）や order・id・key は返さない（共有リンクから無認証で読まれるため）。
+// event.status は共有ページが表示条件（ベスト4 を出すか）に使う（状態名は秘密ではない。設計書 2026-10-05 4.2）。
 function computeRanking(event) {
   const lockedEvent = countsAllScores(event);   // 旧データ（status 無し）だけ全行を数える
   const players = ((event && event.players) || []).filter(p => p && typeof p === 'object');
-  const totals = EventStatus.playerTotals(players, { countAll: lockedEvent });
-
-  const male = [];
-  const female = [];
-  const newFace = [];
-  totals.forEach(t => {
-    const entry = { name: t.name, score: t.total };
-    if (t.isFemale) female.push(entry);
-    else male.push(entry);
-    if (t.isNewFace) newFace.push(entry);
-  });
-
-  const rank = list => {
-    const entries = list.slice()
-      // 同点は氏名順で安定させる
-      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ja'));
-    let current = 1;
-    let prev = null;
-    return entries.map((e, i) => {
-      if (prev !== null && e.score !== prev) current = i + 1;
-      prev = e.score;
-      return { rank: current, name: e.name, score: e.score };
-    });
-  };
+  const r = EventStatus.rankings(players, { countAll: lockedEvent });
+  const strip = e => ({ rank: e.rank, name: e.name, score: e.score });
 
   return {
     event: {
       name: (event && event.name) || '',
       date: (event && event.date) || '',
       venue: (event && event.venue) || '',
-      updatedAt: (event && event.updatedAt) || ''
+      updatedAt: (event && event.updatedAt) || '',
+      status: EventStatus.of(event)
     },
     rankings: {
-      male: rank(male),
-      female: rank(female),
-      newFace: rank(newFace)
+      male: r.male.map(strip),
+      female: r.female.map(strip),
+      newFace: r.newFace.map(strip)
     },
-    // 最終組（一巡目上位 4 名。以前の呼び名は「決戦」）の表。最終組の行が無ければ null。
-    // 順位の集計（rankings）は変えない（一般男子／新人／一般女子）。
-    finale: computeFinale(event),
     // ベスト4（一般男子の合計の上位 4 名・同点は全員・0 点以下は除く）。二巡目の途中は
     // final: false（暫定ベスト4）で、remaining に二巡目が未確定の一般男子の人数。常にある。
     // rows は name・total・r1・r2・rank だけ（○× や order・id は返さない）。設計書 2026-10-04 2.6。
@@ -1328,9 +1248,7 @@ function sanitizePlayerForSave(p, id, bib, sourcePlayerId) {
     if (note) out.note = note;
   }
   if (p.confirmed === true) out.confirmed = true;
-  // 決戦（暫定ベスト4）の印。決戦の判定は行の印だけで行う（設計書 2026-09-28）ので、
-  // バンドルの取り込みや大会の保存し直しで落とすと決戦が消える。二巡目の行にだけ残す。
-  if (p.finalist === true && EventStatus.roundOf(p) === 2) out.finalist = true;
+  // 旧データの印（二巡目の行の決戦の印）は写さない（大会の保存・バンドル取り込み・CSV 取り込みで落とす。設計書 2026-10-05 D2）
   if (bib !== null && bib !== undefined) out.bib = bib;
   if (sourcePlayerId) out.sourcePlayerId = sourcePlayerId;
   // 二巡目の形の申請（設計書 2026-10-03 3.1）。技と同じ規則（trim・50 字）で洗い、一巡目の行で
@@ -1478,10 +1396,11 @@ app.post('/api/events', (req, res) => {
     // 書かずに推定のままにする（EventStatus.of が読み出しのたびに選手から推定する）。
     // ここで推定値を書き込んでしまうと、「status の無い大会」という区別が消え、
     // 以後は常にこの POST 時点の推定値に固定されてしまう。新規作成のときだけ draft。
+    // 旧データの状態名は今の状態名に直して書く（EventStatus.normalizeStatus。設計書 2026-10-05 2.2）。
     if (!exists) {
       event.status = 'draft';
-    } else if (prev && EventStatus.STATES.indexOf(prev.status) !== -1) {
-      event.status = prev.status;
+    } else if (prev && EventStatus.STATES.indexOf(EventStatus.normalizeStatus(prev.status)) !== -1) {
+      event.status = EventStatus.normalizeStatus(prev.status);
     }
     // test（テスト大会の印）も同じ理由でこの経路では変えない。body に入っていても無視し、
     // 既存の大会が test:true を持っていればそのまま引き継ぐ（テンプレート API だけが true にする）。
@@ -1594,7 +1513,7 @@ app.patch('/api/events/:id', (req, res) => {
       const requireBib = s.requireBib !== undefined ? s.requireBib === true : cur.requireBib === true;
       const requireRank = s.requireRank !== undefined ? s.requireRank === true : cur.requireRank === true;
       // finalCourt（2026-09-22 の決戦コートの名前）は廃止。届いても無視して保存しない
-      // （暫定ベスト4 は先頭コートの末尾に置く。設計書 2026-09-28）。既存の大会に残っている
+      // （設計書 2026-09-28）。既存の大会に残っている
       // finalCourt キーも、settings を送る PATCH で落ちる（どこからも読まないので害は無い）。
       event.settings = { requireBib: requireBib, requireRank: requireRank, courts: courts };
     }
@@ -1951,8 +1870,7 @@ app.post('/api/events/:id/status', (req, res) => {
         });
       }
       // 未採点の確認はクライアントが済ませているので force 扱いで呼ぶ（既に二巡目があれば
-      // 差分だけ追加される。誰も採点していなければ暫定ベスト4と番号を現在の一巡目の
-      // 得点から付け直す。レビュー指摘J）。
+      // 差分だけ追加される。誰も採点していなければ番号を現在の一巡目の得点から付け直す。レビュー指摘J）。
       const gen = generateRound2(event, true, true);
       if (!gen.ok) {
         return res.status(409).json({
@@ -1963,11 +1881,8 @@ app.post('/api/events/:id/status', (req, res) => {
       round2Info = {
         created: gen.created, skipped: gen.skipped, existingCount: gen.existingCount,
         untrackedCount: gen.untrackedCount, unassignedCount: gen.unassignedCount,
-        finalistCount: gen.finalistCount, reordered: !!gen.reordered,
-        fromRequest: gen.fromRequest,
-        // 二巡目に採点済みがあって差分追加になったとき、決戦の印は選び直されない。
-        // 今の一巡目の確定得点との差を返し、画面が警告する（網羅検証 S18）。
-        finalistDiff: EventStatus.finalistDiff(gen.players)
+        reordered: !!gen.reordered,
+        fromRequest: gen.fromRequest
       };
     }
 
@@ -1978,19 +1893,6 @@ app.post('/api/events/:id/status', (req, res) => {
         players.filter(p => EventStatus.roundOf(p) === 2).length === 0) {
       return res.status(409).json({ error: '二巡目が生成されていません', reason: 'no_round2' });
     }
-    // 最終組の行が無ければ最終組は始められない（最終組が 0 名の大会）
-    if (from === 'round2' && to === 'round2_final' && !EventStatus.hasFinalists(event.players)) {
-      return res.status(409).json({ error: '最終組の選手がいません', reason: 'no_finale' });
-    }
-    // 最終組の行があるのに二巡目を終了しようとしたら止める（先に「最終組を開始」を押す）。
-    // 最終組の行が無い大会（この機能より前に作られた大会）は round2 → round2_done を素通しする
-    // （既存データの移行）。
-    if (from === 'round2' && to === 'round2_done' && EventStatus.hasFinalists(event.players)) {
-      return res.status(409).json({
-        error: '最終組がまだです。先に「最終組を開始」を押してください', reason: 'finale_pending'
-      });
-    }
-
     event.status = to;
     event.updatedAt = new Date().toISOString();
     // 状態が変わったら live は空にする。前の状態で映していた選手を配信ボードが
@@ -2000,8 +1902,7 @@ app.post('/api/events/:id/status', (req, res) => {
     appendHistory(req.params.id, {
       action: 'status_change',
       detail: EventStatus.LABELS[from] + ' → ' + EventStatus.LABELS[to] +
-        (round2Info ? '（二巡目 ' + round2Info.created + ' 名を生成。最終組 ' +
-                      round2Info.finalistCount + ' 名）' : '')
+        (round2Info ? '（二巡目 ' + round2Info.created + ' 名を生成）' : '')
     }, req.principal);
     res.json({ success: true, status: to, round2: round2Info });
   } catch (err) {
@@ -2519,7 +2420,7 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
 // ids の順に order の番号を 1, 2, 3 … と振り直す（欠番も詰まる）。他の項目は変えない。
 // ids はその組の行の id の集合と完全に一致していなければならない（不足・余分があれば
 // 400 reorder_mismatch。画面が古いまま一部の行だけ送ってくると、送られなかった行と番号が
-// 重なってしまうため）。組は order の コート・性別・巡目 で決める（finalist の印は区別しない）。
+// 重なってしまうため）。組は order の コート・性別・巡目 で決める。
 // 採点済みの行を含んでも並べ替えは許す（得点は行に付いているので、番号が変わっても壊れない）。
 // 二巡目の行は sourcePlayerId で一巡目に紐づくが、order は伝播しない（PATCH の bib 等の伝播とは別）。
 app.post('/api/events/:id/players/reorder', (req, res) => {
@@ -2736,12 +2637,14 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
           player: playerWithRev(player)
         });
       }
-      // status を持たない旧データの大会は検査しない（M6 の移行前の互換）
-      if (typeof event.status === 'string' && !force && !EventStatus.isRowScorable(event.status, player)) {
+      // status を持たない旧データの大会は検査しない（M6 の移行前の互換）。
+      // 旧データの状態名は今の状態名に読み替えて判定する（設計書 2026-10-05 2.2）。
+      const rowStatus = EventStatus.normalizeStatus(event.status);
+      if (typeof event.status === 'string' && !force && !EventStatus.isRowScorable(rowStatus, player)) {
         return res.status(409).json({
           error: 'この選手は今の状態では採点できません',
           reason: 'not_scorable',
-          status: event.status,
+          status: rowStatus,
           player: playerWithRev(player)
         });
       }
@@ -2875,8 +2778,7 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
     //   bib / rank / rental … 従来どおり
     //   name / isNewFace / isFemale … 網羅検証 M1（以前は写さず、氏名で合算する順位が 2 行に割れた）。
     //     二巡目の行ではこの 3 つを直せない（上の linked）ので、一巡目で直したものがそのまま写る。
-    //     性別を写すとき、決戦の印の無い行は order の性別も組み直す（番号はその組の最大+1）。
-    //     決戦の行は order を変えない（候補は先頭コートの男子の末尾に置く約束のため）。
+    //     性別を写すとき、order の性別も組み直す（番号はその組の最大+1）。
     // player が一巡目行でなければ linkedRows は空なので何もしない。
     //   tech1〜3 … 二巡目の形（申請）を直した・申請の無い選手の一巡目の形を直した（設計書 2026-10-03
     //     3.3.1。EventStatus.round2SyncTarget。採点済みの行への書き写しは上の 409 scored を越えた force のときだけ）
@@ -2905,7 +2807,7 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       if (femaleChanges) {
         p.isFemale = player.isFemale === true;
         const parsed = parseOrder(p.order || '');
-        if (parsed && p.finalist !== true) {
+        if (parsed) {
           const gender = p.isFemale ? '女子' : '男子';
           if (parsed.gender !== gender) {
             const others = event.players.filter(q => q !== p);
@@ -3001,7 +2903,7 @@ app.delete('/api/events/:id/players/:playerId', (req, res) => {
 // 照合の前に各セルの空白（半角・全角）と先頭の BOM、見出しの末尾の空セル（Excel が付ける）を落とし、
 // 技の列は「技1」「技①」を同じものとして扱う（「技 1」は空白を落として「技1」）。
 //   簡易形式 … CSV_SIMPLE_COLS の先頭から 2 列以上（1 列目は「選手名」も可）。順番はサーバが採番
-//   従来形式 … 9 列 / 12 列（9＋ゼッケン等）/ 15 列（9＋補正点等）/ 18 列 / 20 列（18＋決戦・一巡目の行）
+//   従来形式 … 9 列 / 12 列（9＋ゼッケン等）/ 15 列（9＋補正点等）/ 18 列 / 20 列（18＋決戦の列・一巡目の行）
 //             / 23 列（20＋二巡目 技 1〜3。設計書 2026-10-03 3.6）
 // 簡易形式の 11〜13 列目は二巡目の形の申請（二巡目技①②③）。
 const CSV_SIMPLE_COLS = ['名前', 'コート', '性別', '技①', '技②', '技③', '新人', 'ゼッケン', '級位段位', 'レンタル',
@@ -3009,7 +2911,8 @@ const CSV_SIMPLE_COLS = ['名前', 'コート', '性別', '技①', '技②', '�
 const CSV_STD_BASE = ['選手名', '順番', '技 1', '技 2', '技 3', '得点', '新人', '女子', '結果'];
 const CSV_STD_ADJ = ['補正点1', '補正点2', '補正点3', '全体補正', '備考', '確定'];
 const CSV_EXTRA = ['ゼッケン', '級位段位', 'レンタル'];
-// 決戦の印と、二巡目の行が指す一巡目の行（その行の order）。書き出し→置換で往復させる。
+// 決戦の列（互換のため列名だけ残す。書き出しは空、読み込みは無視。設計書 2026-10-05 D2）と、
+// 二巡目の行が指す一巡目の行（その行の order。書き出し→置換で往復させる）。
 const CSV_ROUNDTRIP = ['決戦', '一巡目の行'];
 // 二巡目の形の申請（一巡目の行の r2tech1〜3。二巡目の行は常に空）。既存の列の位置を変えないよう末尾に足す。
 const CSV_R2TECH = ['二巡目 技 1', '二巡目 技 2', '二巡目 技 3'];
@@ -3133,8 +3036,8 @@ app.post('/api/events/:id/import', (req, res) => {
       });
     }
 
-    // 二巡目の行がある大会を、決戦の印と一巡目とのつながりを持たない形式で置き換えると、
-    // 決戦が消えて二巡目の行が追跡できなくなる。追記でも、9 列などの形式では二巡目の行が
+    // 二巡目の行がある大会を、一巡目とのつながりを持たない形式で置き換えると、
+    // 二巡目の行が追跡できなくなる。追記でも、9 列などの形式では二巡目の行が
     // 一巡目とのつながり無しに増えうる（通し試験の所見 C）。置換・追記とも、往復できる 23 列
     // （以前の 20 列も可）の形式だけ許す（force でも越えない）。20 列で置き換えると二巡目の形の申請は
     // 空になるが、二巡目の行の形（実際の形）は 3〜5 列目で往復する（設計書 2026-10-03 3.6.2）。
@@ -3215,6 +3118,7 @@ app.post('/api/events/:id/import', (req, res) => {
       // 従来形式。列の意味は見出しで決まる（行ごとに列数を見ない。崩れた CSV で挙動を揺らさない）。
       // 選手名,順番,技 1,技 2,技 3,得点,新人,女子,結果[,補正点1,補正点2,補正点3,全体補正,備考,確定]
       //   [,ゼッケン,級位段位,レンタル][,決戦,一巡目の行][,二巡目 技 1,二巡目 技 2,二巡目 技 3]
+      //   （決戦の列は互換のため列名だけ残す。19 列目は読み飛ばす）
       const rows = [];
       dataLines.forEach(row => {
         const raw = {
@@ -3240,7 +3144,6 @@ app.post('/api/events/:id/import', (req, res) => {
           raw.rank = String(row[fmt.extraBase + 1] || '').trim().slice(0, 20);
           raw.rental = truthy(row[fmt.extraBase + 2]);
         }
-        if (fmt.roundtrip) raw.finalist = mark(row[18]);
         // 23 列: 21〜23 列目は二巡目の形の申請（二巡目の行の値は sanitizePlayerForSave が捨てる）
         if (fmt.r2) {
           raw.r2tech1 = String(row[20] || '');
@@ -3305,8 +3208,9 @@ app.post('/api/events/:id/import', (req, res) => {
 });
 
 // GET /api/events/:id/export : 大会の選手データをCSVエクスポート
-// 23 列の拡張形式（CSV_EXPORT_HEADER）。決戦の印と「一巡目の行」（sourcePlayerId が指す行の order）を
-// 出すので、書き出し→置換取り込みで決戦と一巡目とのつながりが往復する（網羅検証 M5）。
+// 23 列の拡張形式（CSV_EXPORT_HEADER）。「一巡目の行」（sourcePlayerId が指す行の order）を
+// 出すので、書き出し→置換取り込みで一巡目とのつながりが往復する（網羅検証 M5）。
+// 19 列目（決戦の列）は互換のため列名だけ残し、常に空（設計書 2026-10-05 D2）。
 // 末尾の 3 列は一巡目の行の二巡目の形の申請（申請が無ければ空。二巡目の行は常に空。設計書 2026-10-03 3.6.1）。
 app.get('/api/events/:id/export', (req, res) => {
   try {
@@ -3347,7 +3251,7 @@ app.get('/api/events/:id/export', (req, res) => {
         Number.isInteger(p.bib) ? p.bib : '',
         p.rank || '',
         p.rental === true ? '○' : '',
-        (p.finalist === true && EventStatus.roundOf(p) === 2) ? '○' : '',
+        '',
         src ? (src.order || '') : '',
         r2 ? r2[0] : '',
         r2 ? r2[1] : '',
@@ -3615,7 +3519,8 @@ function bundleFilename(name, date) {
 }
 
 // エクスポートに出す選手の項目。ここに無いキーは出さない。
-// adjust / totalAdjust / note / confirmed / sourcePlayerId / bib / finalist は持っている選手にだけ付ける。
+// adjust / totalAdjust / note / confirmed / sourcePlayerId / bib は持っている選手にだけ付ける
+// （旧データの二巡目の行の決戦の印は出さない。設計書 2026-10-05 D2）。
 // rank / rental は設計書の既定値（''・false）どおり常に出す（isNewFace 等と同じ扱い）。
 function pickBundlePlayer(p) {
   const src = (p && typeof p === 'object') ? p : {};
@@ -3637,8 +3542,6 @@ function pickBundlePlayer(p) {
   if (Number.isInteger(src.totalAdjust)) out.totalAdjust = src.totalAdjust;
   if (typeof src.note === 'string' && src.note !== '') out.note = src.note;
   if (src.confirmed === true) out.confirmed = true;
-  // 決戦（暫定ベスト4）の印（取り込み側は sanitizePlayerForSave が同じ条件で残す）
-  if (src.finalist === true && EventStatus.roundOf(src) === 2) out.finalist = true;
   if (isValidId(src.sourcePlayerId)) out.sourcePlayerId = src.sourcePlayerId;
   if (Number.isInteger(src.bib)) out.bib = src.bib;
   // 二巡目の形の申請（一巡目の行で申請があるときだけ。note と同じく「あるときだけ」。設計書 2026-10-03 3.7）。
@@ -3697,9 +3600,10 @@ app.get('/api/events/:id/bundle', (req, res) => {
     // 書き出さない＝取り込み側は従来どおり選手から推定する。EventStatus.of の推定値を書いて
     // しまうと、取り込み先が「status を持つ大会」に変わり、以後推定し直さなくなってしまう
     // （POST /api/events が推定値を書き込まない理由と同じ）。
-    // final/archived を含め生の値をそのまま書く（取り込み側でロックが効くようにするため）。
-    if (EventStatus.STATES.indexOf(event.status) !== -1) {
-      bundle.event.status = event.status;
+    // final/archived を含めそのまま書く（取り込み側でロックが効くようにするため）。旧データの状態名は
+    // 今の状態名に直して書く（EventStatus.normalizeStatus。設計書 2026-10-05 2.2）。
+    if (EventStatus.STATES.indexOf(EventStatus.normalizeStatus(event.status)) !== -1) {
+      bundle.event.status = EventStatus.normalizeStatus(event.status);
     }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     // RFC 5987 の attr-char は英数字と一部の記号だけで、' ( ) * は含まれない。
@@ -3831,13 +3735,14 @@ app.post('/api/events/import', (req, res) => {
     }
     // status（大会の状態）。STATES にある値ならそのまま採用する（final/archived を含む。
     // 取り込み後もロックが効くようにするため）。無い・不正なバンドル（古いバンドル）は
-    // 付けない＝従来どおり EventStatus.of が選手から推定する。
-    if (EventStatus.STATES.indexOf(src.status) !== -1) {
-      event.status = src.status;
+    // 付けない＝従来どおり EventStatus.of が選手から推定する。旧データの状態名は
+    // 今の状態名に直して保存する（EventStatus.normalizeStatus。設計書 2026-10-05 2.2）。
+    if (EventStatus.STATES.indexOf(EventStatus.normalizeStatus(src.status)) !== -1) {
+      event.status = EventStatus.normalizeStatus(src.status);
     }
 
     // 履歴はオブジェクトの要素だけ通す。キーが '__proto__' でもプロトタイプを汚さないよう
-    // setOwn で写す（computeRanking が氏名の辞書に Object.create(null) を使うのと同じ理由）。
+    // setOwn で写す（EventStatus.playerTotals が氏名の辞書に Object.create(null) を使うのと同じ理由）。
     // なお履歴の playerId は選手 ID の振り直しに追従しない（参照用の記録であり、
     // 付け替えると元の履歴の意味が変わってしまうため）。
     const entries = rawHistory
@@ -3881,14 +3786,9 @@ app.post('/api/events/import', (req, res) => {
 // この関数は同期のまま維持すること（server/index.js 冒頭の【不変条件】）。
 
 // 二巡目の並びに使う一巡目の得点。確定済みの得点だけ（未確定は 0 扱い＝先頭側。網羅検証 S1）。
-// 順位・暫定ベスト4 の選考と同じ基準にそろえる（採点途中の値で並びを決めない）。
+// 順位と同じ基準にそろえる（採点途中の値で並びを決めない）。
 function scoreOf(p) {
   return EventStatus.confirmedScoreOf(p);
-}
-
-// 暫定ベスト4 の選考は status.js の EventStatus.pickFinalists（finalistDiff と同じ判定。網羅検証 S18）。
-function pickFinalists(src) {
-  return EventStatus.pickFinalists(src);
 }
 
 // 同点のときの一巡目の試技順。order を文字列で比べると 'A-男子-1-10' が 'A-男子-1-2' より前に来るので、
@@ -3905,7 +3805,7 @@ function compareRound1Order(a, b) {
   return x.number - y.number;
 }
 
-// 決戦以外の並び: 女子が先、その中で一巡目の確定得点が低い順、同点は一巡目の試技順。
+// 二巡目の並び: 女子が先、その中で一巡目の確定得点が低い順、同点は一巡目の試技順。
 // 番号はコート×性別ごとに振るので、実際に効くのは「その組の中で低い順」。
 function compareForRound2(a, b) {
   const fa = a.isFemale === true ? 0 : 1;
@@ -3915,17 +3815,11 @@ function compareForRound2(a, b) {
   return compareRound1Order(a, b);
 }
 
-// 決戦の並び: 一巡目の確定得点が低い順、同点は一巡目の試技順（設計書の決定）。
-function compareByScoreAsc(a, b) {
-  if (scoreOf(a) !== scoreOf(b)) return scoreOf(a) - scoreOf(b);
-  return compareRound1Order(a, b);
-}
-
 // 一巡目の行から二巡目の行を1つ作る。
 // ゼッケン・級位段位・真剣レンタルは同じ選手を指すので複製する（設計書「選手の追加項目」）。
 // 技は二巡目の形の申請（r2tech1〜3）があればそれ、無ければ一巡目の複製（EventStatus.round2TechsOf。
 // 設計書 2026-10-03 3.4。当日の変更は形登録で直す）。得点・結果は複製しない。
-function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
+function buildRound2Row(players, newRows, p, court, isFemale) {
   const gender = isFemale ? '女子' : '男子';
   const n = nextOrderNumber(players.concat(newRows), court, gender, 2);
   const techs = EventStatus.round2TechsOf(p);
@@ -3945,16 +3839,13 @@ function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
     rental: p.rental === true
   };
   if (Number.isInteger(p.bib)) row.bib = p.bib;
-  // コートを手で変えても決戦の印は残す（設計書「データ」）。
-  if (finalist) row.finalist = true;
   return row;
 }
 
 // 二巡目の行を生成する（純粋関数）。
-// 並べ替えは 決戦以外→女子先→一巡目の確定得点の昇順→同点は一巡目の試技順（番号は数値で）、
-// 決戦は確定得点の昇順→同点は一巡目の試技順（網羅検証 S1。未確定の得点は 0 扱い）。
-// 採番は コート×性別ごとに1から。決戦の候補は先頭のコート（EventStatus.firstCourt）の
-// 男子に、通常の行を採番し終えてから続き番号で置く（A-男子-2-(k+1)〜。設計書 2026-09-28）。
+// 全員を自分のコートに置き、女子先→一巡目の確定得点の昇順→同点は一巡目の試技順（番号は数値で）に並べる
+// （網羅検証 S1。未確定の得点は 0 扱い）。採番は コート×性別ごとに1から。
+// 一巡目上位を特定のコートの末尾に回す仕組みは 2026-10-05 にやめた（設計書 2026-10-05 4.3）。
 // 一巡目の行は一切変更せず、新規行を末尾に追記するだけにする。
 // source は order が解析できる一巡目の行だけ（parseOrder できない選手は
 // コートが決まらないので二巡目を作れない。'未分類' を製造すると isValidCourt と
@@ -3970,7 +3861,7 @@ function buildRound2Row(players, newRows, p, court, isFemale, finalist) {
 // round1 → round1_done の遷移（サーバーが自動で呼ぶ）だけ true で呼ぶ。
 // 戻り値:
 //   { ok: true, players, created, skipped, existingCount, untrackedCount, unassignedCount,
-//     finalistCount, fromRequest, reordered }
+//     fromRequest, reordered }
 //   { ok: false, code: 400 | 409, body: { error, reason?, … } }
 function generateRound2(event, force, allowReorder) {
   const players = Array.isArray(event.players) ? event.players : [];
@@ -4003,10 +3894,10 @@ function generateRound2(event, force, allowReorder) {
   }
 
   // 二巡目の行が1つも採点されておらず、すべて sourcePlayerId で一巡目の行を
-  // 追跡できるなら、一巡目の得点を戻して直したあとの「二巡目を終了」で暫定ベスト4が
-  // 入れ替わらない不具合を防ぐため、行の入れ物（id・技・ゼッケン・級位段位・レンタル）を
-  // 保ったまま、暫定ベスト4の印とコート内の番号だけを現在の一巡目の得点から付け直す
-  // （レビュー指摘J）。採点済みの行が1つでもあれば、この分岐には入らず従来どおり
+  // 追跡できるなら、一巡目の得点を戻して直したあとの「一巡目を終了」で二巡目の並びが
+  // 古い得点のまま残らないよう、行の入れ物（id・技・ゼッケン・級位段位・レンタル）を
+  // 保ったまま、コート内の番号だけを現在の一巡目の得点から付け直す
+  // （レビュー指摘J。設計書 2026-10-05 D9）。採点済みの行が1つでもあれば、この分岐には入らず従来どおり
   // 差分追加だけを行う（採点結果を勝手に組み替えない）。
   const base = players.filter(p => !(p && EventStatus.roundOf(p) === 2));
   if (allowReorder && force && existing.length > 0 && untrackedCount === 0 &&
@@ -4018,25 +3909,11 @@ function generateRound2(event, force, allowReorder) {
   const generated = Object.create(null);
   existing.forEach(p => { if (p && p.sourcePlayerId) generated[p.sourcePlayerId] = true; });
   const targets = src.filter(p => p && !generated[p.id]);
+  const ordered = targets.slice().sort(compareForRound2);
 
-  // 暫定ベスト4 は src 全体（一巡目の全員）から選ぶ。差分追加でも母集団を変えない。
-  const finalistIds = pickFinalists(src);
-  const plain = targets.filter(p => !finalistIds[p.id]).sort(compareForRound2);
-  const finals = targets.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
-
-  // 候補の行は、一巡目に選手のいるコートの昇順の先頭（通常は A）に置く。
-  // settings.courts だけにあるコート（選手 0 名。practice 雛形の「稽古」など）は使わない
-  // （誰もいないコートに候補だけが置かれ、端末を用意していないコートで決戦をすることになるため）。
-  // そのため firstCourt に settings.courts は渡さない。
-  // plain を先に採番するので、候補はそのコートの男子の二巡目の続き番号になる
-  // （nextOrderNumber は最大+1）。
-  const finaleCourt = EventStatus.firstCourt(src);
   const newRows = [];
-  plain.forEach(p => {
-    newRows.push(buildRound2Row(players, newRows, p, courtOf(p), p.isFemale === true, false));
-  });
-  finals.forEach(p => {
-    newRows.push(buildRound2Row(players, newRows, p, finaleCourt, false, true));
+  ordered.forEach(p => {
+    newRows.push(buildRound2Row(players, newRows, p, courtOf(p), p.isFemale === true));
   });
 
   return {
@@ -4047,7 +3924,6 @@ function generateRound2(event, force, allowReorder) {
     existingCount: existing.length,
     untrackedCount: untrackedCount,
     unassignedCount: unassignedCount,
-    finalistCount: finals.length,
     // 申請の形（r2tech1〜3）で作った行の数（設計書 2026-10-03 3.4。トーストに出す）
     fromRequest: targets.filter(EventStatus.hasRound2Techs).length,
     reordered: false
@@ -4055,7 +3931,7 @@ function generateRound2(event, force, allowReorder) {
 }
 
 // generateRound2 の「誰も採点していない二巡目を作り直す」分岐（レビュー指摘J）。
-// src（現在の一巡目の得点）から暫定ベスト4とコート内の番号を付け直し、既存の二巡目行
+// src（現在の一巡目の得点）からコート内の番号を付け直し、既存の二巡目行
 // （sourcePlayerId で対応が取れるもの）は id・技・ゼッケン・級位段位・レンタルを保ったまま
 // 並べ直す。対応する既存行が無い src（前回の生成より後に増えた一巡目の選手）は新規に作る。
 // 対応する src が無くなった既存行（一巡目から削除された選手）は落とす。
@@ -4063,16 +3939,12 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
   const bySource = Object.create(null);
   existing.forEach(p => { if (p && p.sourcePlayerId) bySource[p.sourcePlayerId] = p; });
 
-  const finalistIds = pickFinalists(src);
-  const plain = src.filter(p => !finalistIds[p.id]).sort(compareForRound2);
-  const finals = src.filter(p => !!finalistIds[p.id]).sort(compareByScoreAsc);
-  // generateRound2 と同じく、候補は一巡目に選手のいるコートの先頭（settings.courts だけの
-  // コートは使わない）の男子の通常の行の後ろ（続き番号）に置く。
-  const finaleCourt = EventStatus.firstCourt(src);
+  // generateRound2 と同じ並び（全員を自分のコートに。女子先→一巡目の確定得点の昇順→同点は試技順）
+  const ordered = src.slice().sort(compareForRound2);
 
   const newRows = [];
   let reused = 0;
-  function place(p, court, isFemale, finalist) {
+  function place(p, court, isFemale) {
     const old = bySource[p.id];
     let row;
     if (old) {
@@ -4099,13 +3971,11 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
       // 版も引き継ぐ（同じ行の入れ物のまま並びだけ変えるので、採点画面の控えと食い違わせない）
       if (EventStatus.revOf(old) > 0) row.rev = EventStatus.revOf(old);
     } else {
-      row = buildRound2Row(base, newRows, p, court, isFemale, false);
+      row = buildRound2Row(base, newRows, p, court, isFemale);
     }
-    if (finalist) row.finalist = true;
     newRows.push(row);
   }
-  plain.forEach(p => place(p, courtOf(p), p.isFemale === true, false));
-  finals.forEach(p => place(p, finaleCourt, false, true));
+  ordered.forEach(p => place(p, courtOf(p), p.isFemale === true));
 
   return {
     ok: true,
@@ -4115,7 +3985,6 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
     existingCount: existing.length,
     untrackedCount: 0,
     unassignedCount: unassignedCount,
-    finalistCount: finals.length,
     // 作り直しでは既存の行の技を保つが、申請の同期（2.4）で申請と一致しているので src の申請で数える
     fromRequest: src.filter(EventStatus.hasRound2Techs).length,
     reordered: true
@@ -4155,11 +4024,8 @@ app.post('/api/events/:id/rounds/2/generate', (req, res) => {
       existingCount: result.existingCount,
       untrackedCount: result.untrackedCount,
       unassignedCount: result.unassignedCount,
-      finalistCount: result.finalistCount,
       fromRequest: result.fromRequest,
-      reordered: !!result.reordered,
-      // 差分追加では決戦の印を選び直さないので、今の一巡目の確定得点との差を返す（網羅検証 S18）
-      finalistDiff: EventStatus.finalistDiff(result.players)
+      reordered: !!result.reordered
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

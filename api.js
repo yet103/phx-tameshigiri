@@ -189,24 +189,23 @@ var Api = (function() {
     //   409 reason: 'stale' を返す（網羅検証 S19）。opts.force は従来どおり。
     // 戻り値: { ok: true, status: 新しい状態, round2: 生成の結果 | null }
     //       | { ok: false, status: HTTPステータス, reason, error, existingCount, untrackedCount,
-    //           unassignedCount, currentStatus, finalistDiff }（400 / 404 / 409）
+    //           unassignedCount, currentStatus }（400 / 404 / 409）
     //         currentStatus は本文の status（stale / locked のときの今の状態。無ければ null）。
     //         ok:false の status は HTTP ステータスなので、本文の status はこの別名で返す。
-    //         finalistDiff は本文にあればそのまま（無ければ null）
     //       | null（通信そのものの失敗）
-    // 409 の reason は 'stale' | 'transition' | 'empty' | 'no_round2' | 'no_finale' |
-    //   'finale_pending' | 'generate_failed' | 'exists'（round1 → round1_done で追跡できない
+    // 409 の reason は 'stale' | 'transition' | 'empty' | 'no_round2' |
+    //   'generate_failed' | 'exists'（round1 → round1_done で追跡できない
     //   二巡目の行がある。opts.force: true で再送すると越えられる。レビュー指摘A）。
-    //   画面はこれで「読み直す」「先に最終組を開始する」「force で確認して進む」などの
+    //   to が状態の一覧に無い（旧い画面が送る旧い状態名など）は 400。
+    //   画面はこれで「読み直す」「force で確認して進む」などの
     //   次の行動を出し分けるので、error だけでなく reason も返す（他の API と違って
     //   ok:false に理由を載せるのはこのため）。
     // round2 は round1 → round1_done のときだけ入る
-    //   { created, skipped, existingCount, untrackedCount, unassignedCount, finalistCount,
-    //     fromRequest, reordered, finalistDiff }。サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
+    //   { created, skipped, existingCount, untrackedCount, unassignedCount,
+    //     fromRequest, reordered }。サーバーが遷移の中で二巡目を生成する（設計書 2026-09-22）。
     //   fromRequest は二巡目の形の申請（一巡目の行の r2tech1〜3）の形で作った行の数
     //   （設計書 2026-10-03 3.4。画面のトーストに出す）。
-    //   finalistDiff は EventStatus.finalistDiff の戻り値（選考の差。網羅検証 S18）。
-    //   reordered: true は、誰も採点していなかったため最終組と番号を現在の
+    //   reordered: true は、誰も採点していなかったため二巡目の番号を現在の
     //   一巡目の得点から付け直したことを表す（レビュー指摘J）。
     // opts.force: true を渡すと、追跡できない二巡目の行があっても確認済みとして進める。
     try {
@@ -228,8 +227,7 @@ var Api = (function() {
           existingCount: (errJson && errJson.existingCount) || 0,
           untrackedCount: (errJson && errJson.untrackedCount) || 0,
           unassignedCount: (errJson && errJson.unassignedCount) || 0,
-          currentStatus: (errJson && typeof errJson.status === 'string') ? errJson.status : null,
-          finalistDiff: (errJson && errJson.finalistDiff) || null
+          currentStatus: (errJson && typeof errJson.status === 'string') ? errJson.status : null
         };
       }
       var json = await res.json();
@@ -587,8 +585,8 @@ var Api = (function() {
     // POST /api/events/:eventId/rounds/2/generate
     // 戻り値:
     //   { success: true, created, skipped, existingCount, untrackedCount, unassignedCount,
-    //     finalistCount, reordered }
-    //     reordered: true は、誰も採点していなかったため最終組と番号を現在の
+    //     fromRequest, reordered }
+    //     reordered: true は、誰も採点していなかったため二巡目の番号を現在の
     //       一巡目の得点から付け直したことを表す（レビュー指摘J）
     //     created: 新規に作った二巡目行数
     //     skipped: source（order が解析できる一巡目）のうち既に二巡目行を生成済みだった人数
@@ -597,9 +595,7 @@ var Api = (function() {
     //     untrackedCount: 既存の二巡目行のうち sourcePlayerId を持たない件数
     //                     （CSVインポート由来。force すると重複生成される）
     //     unassignedCount: order が解析できず二巡目を作れなかった一巡目選手の人数
-    //     finalistCount: 最終組（一巡目上位 4 名。以前の呼び名は決戦）に入った人数（設計書 2026-09-22）
-    //     finalistDiff: 選考の差（EventStatus.finalistDiff の戻り値。差分追加では最終組の印を
-    //                   選び直さないので、画面が Courts.finalistDiffMessage で警告する。網羅検証 S18）
+    //     fromRequest: 二巡目の形の申請の形で作った行の数（設計書 2026-10-03 3.4）
     //   | { blocked: true, reason: 'unscored' | 'exists' | 'status' | 'locked', error,
     //       unscoredCount, existingCount, untrackedCount, unassignedCount }
     //       （該当しない件数は 0。error はサーバーの文言で、'status' / 'locked' のときは
@@ -836,17 +832,17 @@ var Api = (function() {
   // --- Ranking / Share ---
   async function loadRanking(eventId) {
     // GET /api/events/:eventId/ranking
-    // 戻り値: { event: { name, date, venue, updatedAt },
+    // 戻り値: { event: { name, date, venue, updatedAt, status },
     //          rankings: { male: [{ rank, name, score }], female: [...], newFace: [...] },
-    //          finale: { court, status, rows: [{ name, order, r1, r2, total, scored, rank }] }
-    //                  | null（最終組＝一巡目上位 4 名の表。以前の呼び名は決戦。最終組の行が
-    //                    無ければ null。設計書 2026-09-22）,
     //          best4: { final, remaining, rows: [{ name, total, r1, r2, rank }] } }
     //                  （ベスト4＝一般男子の合計の上位 4 名・同点は全員・0 点以下は除く。
     //                    final: false の間は暫定ベスト4 で、remaining は二巡目が未確定の一般男子の人数。
     //                    r2 は二巡目を終えた人だけ、まだなら null。EventStatus.best4Standings と同じ。
-    //                    設計書 2026-10-04-finale-after-round2-design.md 2.6）
+    //                    設計書 2026-10-04 2.6）
     //       | null（400/404/通信失敗）
+    //   event.status は大会の状態（EventStatus.of。旧データの状態名は今の状態名に読み替えた値）。
+    //   共有ページが表示条件（ベスト4 を出すか）に使う。rankings は EventStatus.rankings と同じ規則
+    //   （key・counted は返さない。設計書 2026-10-05 2.3・4.2）。
     //   共有リンク越しの GET /api/links/:token/ranking（fetchSharedRanking）も同じ形。
     try {
       var res = await fetch('/api/events/' + eventId + '/ranking');
@@ -889,7 +885,7 @@ var Api = (function() {
 
   async function loadSharedRanking(token) {
     // GET /api/links/:token/ranking（無認証）
-    // 戻り値: loadRanking と同じ { event, rankings } | null
+    // 戻り値: loadRanking と同じ { event: { …, status }, rankings, best4 } | null
     var r = await fetchSharedRanking(token);
     return r.ok ? r.data : null;
   }

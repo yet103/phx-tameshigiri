@@ -107,40 +107,22 @@ var Courts = (function() {
     return x.no - y.no;
   }
 
-  // 広い窓（1100px 以上）での採点画面の一覧の並べ方（2026-10-05）。窓幅・コート数によらず常に横並び 'row'
-  // （採点｜A｜B｜…。ユーザー要望「PC は A コート B コート横並べて」）。列は残り幅を等分し、狭ければ一覧を詰める
-  // （app.js の fitListTables）。縦積み（右の列に A の上に B）は試したがやめた。
-  function listLayout(windowWidth, courtCount) {
-    return 'row';
-  }
-
   // 採点画面のコートの選手一覧の並び（採点中のコートの巡回の対象 visiblePlayers と、
   // 他のコートの一覧で同じ規則。ユーザー要望 2026-10-05: 一覧をコートごとに）。
   // 試技順（男子の部→女子の部、No. 順）に並べてから、大会の状態で絞る。
-  //   進行中（一巡目・二巡目・最終組）… その巡目だけ
-  //     二巡目 進行中 … 最終組（一巡目上位 4 名）の行を末尾に寄せる（採点はまだできない。一覧で薄く出す）。
-  //                     生成した順ですでに末尾のはずだが、差分追加などで崩れても末尾に来るよう印の有無で安定に並べ直す。
-  //     最終組 進行中 … 最終組の行だけ
+  //   進行中（一巡目・二巡目）… その巡目だけ（試技順のまま。旧データの行の印は見ない）
   //   進行中でない（status が空・準備中・終了など）… 全巡目（見直し・確認のため）
   // EventStatus（status.js）は呼び出し時に参照する。
   function listForStatus(players, court, status) {
     var list = filter(players, court).sort(compareOrder);
     var round = status ? EventStatus.scoringRound(status) : null;
     if (!round) return list;
-    var rows = list.filter(function(p) { return roundOf(p) === round; });
-    if (status === 'round2_final') {
-      return rows.filter(function(p) { return p.finalist === true; });
-    }
-    if (status === 'round2') {
-      return rows.filter(function(p) { return p.finalist !== true; })
-        .concat(rows.filter(function(p) { return p.finalist === true; }));
-    }
-    return rows;
+    return list.filter(function(p) { return roundOf(p) === round; });
   }
 
   // ---- 採点画面の一覧のドラッグで試技順を入れ替える（ユーザー要望 2026-10-05） ----
   // 並べ替えの組はサーバーの POST …/players/reorder と同じ「order の コート×性別×巡目」
-  // （最終組の印 finalist は区別しない。PC 運営の選手登録の帯と同じ）。
+  // （PC 運営の選手登録の帯と同じ）。
   // order が「コート-性別-巡目-番号」の形でない行（CSV 由来の空の order など）は組を持たない（null。掴めない）。
   function reorderGroupKey(p) {
     var k = orderKey(p);
@@ -154,13 +136,11 @@ var Courts = (function() {
     return x !== null && x === reorderGroupKey(b);
   }
 
-  // 採点画面の一覧で a を b の位置へ落とせるか。同じ組に加えて、二巡目 進行中（status 'round2'）は
-  // 最終組の行と他の行の間をまたがせない（一覧は最終組を末尾に寄せて出す＝listForStatus ので、
-  // またいで落とすと番号が飛び飛びになり、落とした所にも出ない）。最終組の中・他の行の中なら入れ替えられる。
+  // 採点画面の一覧で a を b の位置へ落とせるか。sameReorderGroup と同じ（組の中なら自由。
+  // 2026-10-05 から二巡目にも組の中の区切りは無い）。status は受けるが使わない
+  // （app.js の呼び出しを変えずに済ませる）。
   function canDropInList(a, b, status) {
-    if (!sameReorderGroup(a, b)) return false;
-    if (status === 'round2' && roundOf(a) === 2 && (a.finalist === true) !== (b.finalist === true)) return false;
-    return true;
+    return sameReorderGroup(a, b);
   }
 
   // p と同じ組の全員を今の No. 順で（サーバーに送る ids はこの全員でなければならない）
@@ -172,8 +152,8 @@ var Courts = (function() {
 
   // 落とした位置から、サーバーに送る新しい並び（ids）を作る。
   //   groupIds … 組の全員の id（今の No. 順。reorderGroup）
-  //   shownIds … 一覧のその帯に出ている行の id（出ている順）。大会の状態の絞り込み（最終組 進行中は
-  //              最終組だけ等）で組の一部しか出ていないこともある
+  //   shownIds … 一覧のその帯に出ている行の id（出ている順）。大会の状態の絞り込み（進行中はその巡目だけ）
+  //              で組の一部しか出ていないこともある
   //   movingId を targetId の前（after が偽）か後（after が真）へ動かす
   // 出ていない行は今の位置（枠）のまま、出ている行だけをその枠の中で並べ替える。
   // 戻り値: 新しい ids（groupIds と同じ集合）。並びが変わらない（自分のすぐ上下に落とした）・
@@ -370,37 +350,13 @@ var Courts = (function() {
       .sort(function(a, b) { return compareOrder(a.player, b.player); });
   }
 
-  // 最終組（一巡目上位 4 名。以前の呼び名は「決戦」）の行を試技順（番号順）に並べて返す。
-  // 誰が最終組かの判定は status.js（サーバーと共有）にあり、ここは並べるだけ。
-  function finalists(players) {
-    return EventStatus.finalists(players).slice().sort(compareOrder);
-  }
-
   // 級位・段位の表示用（「二段」「三段」を「弐段」「参段」に読み替える。EventStatus.normalizeRank）
   function rankLabel(rank) {
     return EventStatus.normalizeRank(rank);
   }
 
-  // 最終組がいるコートの名前（無ければ ''）。判定は status.js に一本化してあるので、
-  // ここは呼び直すだけ（courts.js を主に使う画面から使えるようにするための入口）。
-  function finaleCourt(players) {
-    return EventStatus.finaleCourt(players);
-  }
-
-  // ---- 最終組とベスト4 の 1 行（設計書 2026-10-04-finale-after-round2-design.md 2.5） ----
+  // ---- ベスト4 の 1 行（設計書 2026-10-04 2.5） ----
   // PC・スマホの試合進行が同じ文言を出すための純粋関数。
-
-  // 最終組の 1 行。名前は試技順（finalists の順）、trim、空なら「(名称未設定)」。
-  // 0 名なら最終組がいない理由（選考は一般男子の一巡目の確定得点が 0 点より上の人。EventStatus.pickFinalists）。
-  function finalGroupLineText(players) {
-    var fin = finalists(players || []);
-    if (fin.length === 0) {
-      return EventStatus.FINALIST_LABEL + 'はいません（一般男子に一巡目の確定得点が 1 点以上の人がいない）';
-    }
-    return EventStatus.FINALIST_LABEL + '（' + EventStatus.FINALIST_DESC + '・' + finaleCourt(players) +
-      ' コートの最後）: ' +
-      fin.map(function(p) { return String(p.name || '').trim() || '(名称未設定)'; }).join('・');
-  }
 
   // 暫定ベスト4／ベスト4 の 1 行。best4 は EventStatus.best4Standings の戻り値（ranking API の best4 も同じ形）。
   // 確定前は「暫定ベスト4（合計）: 名前（n点）・…　残り n 名」、確定後は「ベスト4（合計）: …」。
@@ -419,6 +375,33 @@ var Courts = (function() {
     }
     var rest = best4.final ? '' : '　残り ' + (Number(best4.remaining) || 0) + ' 名';
     return head + body + rest;
+  }
+
+  // ---- 採点画面の順位表（設計書 2026-10-05 2.3・5.4） ----
+  // 部門の並びと見出し。結果確認（DeskResults.CATEGORIES / AdminResults / ranking.html）と同じ。
+  var RANK_CATEGORIES = [
+    { key: 'male', title: '一般男子' },
+    { key: 'newFace', title: '新人枠' },
+    { key: 'female', title: '一般女子' }
+  ];
+
+  // 採点画面の順位表の材料（純粋関数）。順位は EventStatus.rankings（順位の集計 computeRanking と同じ関数）。
+  //   opts.countAll … playerTotals と同じ（status の無い旧データは全行を数える）
+  // 戻り値: [{ key: 'male', title: '一般男子', rows: [{ key, rank, name, score }] }, 新人枠, 一般女子]
+  //   rows … その部門のうち counted（確定した得点のある組）だけ。順位は全員で付けたものをそのまま使う
+  //          （間を詰めない。確定した得点の無い人は合計 0 で末尾に並ぶだけなので、外しても上の人の順位は
+  //          結果確認と同じ）。
+  function rankPanel(players, opts) {
+    var r = EventStatus.rankings(Array.isArray(players) ? players : [], opts);
+    return RANK_CATEGORIES.map(function(c) {
+      return {
+        key: c.key,
+        title: c.title,
+        rows: (r[c.key] || []).filter(function(e) { return e.counted; }).map(function(e) {
+          return { key: e.key, rank: e.rank, name: e.name, score: e.score };
+        })
+      };
+    });
   }
 
   // 二巡目生成 API の 409 応答（reason: 'unscored' | 'exists'）を確認文言にする。
@@ -514,19 +497,10 @@ var Courts = (function() {
 
   function stageCountText(status, players) {
     var list = players || [];
-    // 最終組 進行中は最終組の行だけを数える（他のコートはもう斬り終わっている）。
-    // scoringRound('round2_final') は 2 を返すので、必ずこの分岐を先に置くこと。
-    if (status === 'round2_final') {
-      var fin = EventStatus.finalists(list);
-      return EventStatus.FINALIST_LABEL + ' 確定 ' + fin.filter(isConfirmed).length + ' / ' + fin.length;
-    }
     var r = EventStatus.scoringRound(status);
     if (r) {
-      // 二巡目 進行中は最終組の行を除いて数える（最終組の行は「最終組を開始」の後に斬るので、
-      // 入れると「確定 n / N」がいつまでも埋まらない。網羅検証 S12）。
-      var rows = list.filter(function(p) {
-        return roundOf(p) === r && !(status === 'round2' && p && p.finalist === true);
-      });
+      // 進行中はその巡目の全行（2026-10-05 から二巡目も除く行は無い）
+      var rows = list.filter(function(p) { return roundOf(p) === r; });
       return '確定 ' + rows.filter(isConfirmed).length + ' / ' + rows.length;
     }
     if (status === 'draft') {
@@ -718,17 +692,6 @@ var Courts = (function() {
     if (from === 'round1_done' && to === 'final') {
       return unconfirmedWarning(list, [1]) + '二巡目を行わずに最終結果にします。\nよろしいですか？';
     }
-    if (from === 'round2' && to === 'round2_final') {
-      // 最終組でない選手が全員斬り終わっているかを数える
-      var others = round(2).filter(function(p) { return p.finalist !== true; });
-      return countPhrase(EventStatus.FINALIST_LABEL + '以外の未確定', others.filter(function(p) { return !isConfirmed(p); }).length) +
-        '\n' + EventStatus.NEXT_LABELS.round2 + 'しますか？';
-    }
-    if (from === 'round2_final' && to === 'round2_done') {
-      return countPhrase(EventStatus.FINALIST_LABEL + 'の未確定',
-        EventStatus.finalists(list).filter(function(p) { return !isConfirmed(p); }).length) +
-        '\n' + EventStatus.NEXT_LABELS.round2_final + 'しますか？';
-    }
     if (from === 'round2' && to === 'round2_done') {
       return countPhrase('二巡目の未確定', round(2).filter(function(p) { return !isConfirmed(p); }).length) +
         '\n二巡目を終了しますか？';
@@ -829,28 +792,6 @@ var Courts = (function() {
       if (!resolveTechnique(techniques, n, isFemale)) out.push(n);
     });
     return out;
-  }
-
-  // 選考の差（EventStatus.finalistDiff の戻り値）の警告文（網羅検証 S18）。差が無ければ ''。
-  // 試合進行（PC・スマホ）と遷移の応答の両方で使う。名前は先頭 BLOCKER_NAME_LIMIT 名まで。
-  function finalistDiffMessage(diff) {
-    if (!diff || !diff.changed) return '';
-    function names(list) {
-      var all = list || [];
-      var s = all.slice(0, BLOCKER_NAME_LIMIT).map(function(r) { return r.name + '（' + r.score + '点）'; }).join('、');
-      if (all.length > BLOCKER_NAME_LIMIT) s += '…ほか ' + (all.length - BLOCKER_NAME_LIMIT) + ' 名';
-      return s;
-    }
-    var hasStatus = typeof EventStatus !== 'undefined';
-    var label = hasStatus ? EventStatus.FINALIST_LABEL : '最終組';
-    var desc = hasStatus ? EventStatus.FINALIST_DESC : '一巡目上位 4 名';
-    var lines = ['⚠ ' + label + '（' + desc + '）が、今の一巡目の確定得点で選び直した結果と違います。'];
-    if (diff.missing && diff.missing.length > 0) lines.push('入るべき選手: ' + names(diff.missing));
-    if (diff.extra && diff.extra.length > 0) lines.push('外れるべき選手: ' + names(diff.extra));
-    lines.push(diff.round2Scored
-      ? '二巡目に採点済みの選手がいるため、自動では選び直しません。' + label + 'の選手を確認してください。'
-      : '「戻す」で一巡目に戻して一巡目を終了し直すと選び直せます。');
-    return lines.join('\n');
   }
 
   // startBlockers の結果を alert の文言にする（改行で連ねる）。空配列なら空文字。
@@ -1183,7 +1124,6 @@ var Courts = (function() {
     isScored: isScored,
     compareOrder: compareOrder,
     listForStatus: listForStatus,
-    listLayout: listLayout,
     reorderGroupKey: reorderGroupKey,
     sameReorderGroup: sameReorderGroup,
     canDropInList: canDropInList,
@@ -1201,11 +1141,10 @@ var Courts = (function() {
     progressRound: progressRound,
     courtProgress: courtProgress,
     livePlayerName: livePlayerName,
-    finalists: finalists,
     rankLabel: rankLabel,
-    finaleCourt: finaleCourt,
-    finalGroupLineText: finalGroupLineText,
     best4LineText: best4LineText,
+    RANK_CATEGORIES: RANK_CATEGORIES,
+    rankPanel: rankPanel,
     techCopyTargets: techCopyTargets,
     nextRoundConflictMessage: nextRoundConflictMessage,
     nextRoundResultMessage: nextRoundResultMessage,
@@ -1223,7 +1162,6 @@ var Courts = (function() {
     round2ChangeConfirmMessage: round2ChangeConfirmMessage,
     replacePlayerFields: replacePlayerFields,
     unknownTechs: unknownTechs,
-    finalistDiffMessage: finalistDiffMessage,
     blockerMessage: blockerMessage,
     bibDroppedMessage: bibDroppedMessage,
     parsePasteRows: parsePasteRows,
