@@ -881,6 +881,26 @@ var Courts = (function() {
     return any ? name + '（' + total + '）' : name;
   }
 
+  // 技の満点（配点のある太刀の合計）
+  function fullScoreOf(t) {
+    var s = (t && Array.isArray(t.strikes)) ? t.strikes : [];
+    var sum = 0;
+    for (var i = 0; i < s.length; i++) { if (typeof s[i] === 'number' && isFinite(s[i])) sum += s[i]; }
+    return sum;
+  }
+
+  // 選手の行の 3 技が全部成功したときの得点（EventStatus.best4Chances の maxExtraOf 用。技は性別で解決）
+  function maxExtraOf(techniques, p) {
+    var sum = 0;
+    ['tech1', 'tech2', 'tech3'].forEach(function(k) {
+      var name = (p && typeof p[k] === 'string') ? p[k].trim() : '';
+      if (!name) return;
+      var t = resolveTechnique(techniques, name, p.isFemale === true);
+      if (t) sum += fullScoreOf(t);
+    });
+    return sum;
+  }
+
   function techniqueOptions(techniques, isFemale, rental) {
     var suffix = isFemale ? '(女)' : '(男)';
     var otherSuffix = isFemale ? '(男)' : '(女)';
@@ -1180,6 +1200,8 @@ var Courts = (function() {
     resolveTechnique: resolveTechnique,
     techniqueOptions: techniqueOptions,
     techniqueLabel: techniqueLabel,
+    fullScoreOf: fullScoreOf,
+    maxExtraOf: maxExtraOf,
     isDrawnTechnique: isDrawnTechnique,
     duplicateForms: duplicateForms
   };

@@ -665,6 +665,12 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .rank-panel-table tr.current td.rank { color: var(--row-current-text); }
 .rank-panel-table td.name { font-weight: bold; white-space: normal; overflow-wrap: anywhere; }
 .rank-panel-table td.total { font-weight: bold; color: var(--score-confirmed); }
+/* ベスト4 に残れる可能性（一般男子の列。◎ 確定・○ 可能性あり・✕ 圏外） */
+.rank-panel-table th.chance, .rank-panel-table td.chance { font-size: 12px; white-space: nowrap; text-align: left; }
+.rank-panel-table td.chance.sure { color: var(--gold-deep); font-weight: bold; }
+[data-theme="dark"] .rank-panel-table td.chance.sure { color: var(--gold-light); }
+.rank-panel-table td.chance.possible { color: var(--text); }
+.rank-panel-table td.chance.out { color: var(--text-muted); }
 /* 見出しの右の「〜巡目 済み/全員」 */
 .rank-panel-progress { margin-left: 8px; font-size: 12px; font-weight: normal; color: var(--text-muted); white-space: nowrap; }
 /* 今開いている選手の行（一覧の .current-player と同じ色。D7） */

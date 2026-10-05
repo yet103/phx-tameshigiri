@@ -7023,6 +7023,42 @@
     assert('techniqueLabel: 配点が無ければ技名だけ。null でも落ちない',
       [Courts.techniqueLabel({ name: 'x', strikes: [] }), Courts.techniqueLabel({ name: 'y' }), Courts.techniqueLabel(null)], ['x', 'y', '']);
 
+    // ---- EventStatus.best4Chances（ベスト4 に残れる可能性。ユーザー要望 2026-10-05） ----
+    (function() {
+      // 一巡目: a 50, b 40, c 30, d 20, e 10（全員確定）。二巡目: a・b は確定（+10）、c・d・e は未確定（満点 30）
+      var ps = [
+        { id: 'a', name: 'a', order: 'A-男子-1-1', score: 50, confirmed: true },
+        { id: 'b', name: 'b', order: 'A-男子-1-2', score: 40, confirmed: true },
+        { id: 'c', name: 'c', order: 'A-男子-1-3', score: 30, confirmed: true },
+        { id: 'd', name: 'd', order: 'A-男子-1-4', score: 20, confirmed: true },
+        { id: 'e', name: 'e', order: 'A-男子-1-5', score: 10, confirmed: true },
+        { id: 'f', name: 'f', order: 'A-女子-1-1', isFemale: true, score: 99, confirmed: true },
+        { id: 'a2', name: 'a', order: 'A-男子-2-1', sourcePlayerId: 'a', score: 10, confirmed: true },
+        { id: 'b2', name: 'b', order: 'A-男子-2-2', sourcePlayerId: 'b', score: 10, confirmed: true },
+        { id: 'c2', name: 'c', order: 'A-男子-2-3', sourcePlayerId: 'c' },
+        { id: 'd2', name: 'd', order: 'A-男子-2-4', sourcePlayerId: 'd' },
+        { id: 'e2', name: 'e', order: 'A-男子-2-5', sourcePlayerId: 'e' }
+      ];
+      var ch = EventStatus.best4Chances(ps, { maxExtraOf: function() { return 30; } });
+      // cur: a 60, b 50, c 30, d 20, e 10。max: a 60, b 50, c 60, d 50, e 40
+      // a: cur 60 を上回れる相手なし → sure。b: 50 を上回れるのは a, c → sure。c: 30 を上回れる a, b, d, e（4 人）→ 可能性（cur_j > 60 は無し）
+      // d: 20 を上回れるのは a, b, c, e（4 人）。max 50 を既に上回るのは a（60）→ possible。e: max 40 を上回るのは a, b → possible
+      assert('best4Chances: 確定・可能性の判定',
+        [ch.byKey['id:a'].flag, ch.byKey['id:b'].flag, ch.byKey['id:c'].flag, ch.byKey['id:d'].flag, ch.byKey['id:e'].flag],
+        ['sure', 'sure', 'possible', 'possible', 'possible']);
+      assert('best4Chances: cur / max / pending / 残り', [ch.byKey['id:c'].cur, ch.byKey['id:c'].max, ch.byKey['id:c'].pending, ch.byKey['id:a'].pending, ch.remaining],
+        [30, 60, true, false, 3]);
+      var ch2 = EventStatus.best4Chances(ps, { maxExtraOf: function() { return 5; } });
+      // max: c 35, d 25, e 15。e の max 15 を既に上回るのは a 60, b 50, c 30, d 20 の 4 人 → out
+      // d: cur 20 を上回れるのは a 60, b 50, c 35 の 3 人だけ（e の max 15 は届かない）→ 4 位以内が確定
+      assert('best4Chances: 満点を足しても届かなければ圏外', [ch2.byKey['id:e'].flag, ch2.byKey['id:e'].label, ch2.byKey['id:d'].flag], ['out', '✕ 圏外', 'sure']);
+      assert('best4Chances: 女子は対象外', ch.byKey['id:f'], undefined);
+      assert('best4Chances: 二巡目の行が無ければ null', EventStatus.best4Chances(ps.slice(0, 6), {}), null);
+      assert('Courts.maxExtraOf: 3 技の満点の合計（性別で解決）',
+        Courts.maxExtraOf([{ name: '夢想返し', strikes: [13, 5, null, null] }, { name: '胸尽くし(男)', strikes: [11, 1, null, null] }, { name: '胸尽くし(女)', strikes: [13, 1, null, null] }],
+          { tech1: '夢想返し', tech2: '胸尽くし', tech3: '', isFemale: true }), 32);
+    })();
+
     // ---- bundle-import.js（トップ・PC 運営・スマホ運営で共用の取り込み処理。設計書 2026-10-05 §3） ----
     await (async function() {
       var biAlerts = [], biConfirms = [], biSent = [];

@@ -348,6 +348,49 @@
     };
   }
 
+  // ベスト4 に残れる可能性（一般男子。二巡目の順位表に出す。ユーザー要望 2026-10-05）。
+  //   opts.maxExtraOf(player) … 未確定の二巡目の行が全部成功したときに加わる最大の得点（技の満点の合計）。
+  //                            技の解決は呼ぶ側（画面は Courts.maxExtraOf、サーバーは自前の resolveTechnique）
+  //   opts.countAll … playerTotals と同じ
+  // 一般男子それぞれについて cur（確定済みの合計）と max（cur ＋ 未確定の二巡目の満点）を出し、
+  //   sure     … 自分の cur を上回れる相手（max_j > cur_i）が 3 人以下 → 何があってもベスト4（同点は同順位で全員入る）
+  //   possible … 自分の max を既に上回っている相手（cur_j > max_i）が 3 人以下 → 残れる可能性あり
+  //   out      … それ以外 → 圏外
+  // 二巡目の行が 1 つも無ければ null（一巡目の間は出さない）。
+  // 戻り値: { remaining, byKey: { <playerTotals の key>: { cur, max, flag, pending } } }
+  var BEST4_FLAGS = { sure: '◎ 確定', possible: '○ 可能性あり', out: '✕ 圏外' };
+  function best4Chances(players, opts) {
+    var list = (players || []).filter(function(p) { return p && typeof p === 'object'; });
+    if (!list.some(function(p) { return roundOf(p) !== 1; })) return null;
+    var maxExtraOf = (opts && typeof opts.maxExtraOf === 'function') ? opts.maxExtraOf : function() { return 0; };
+    var totals = playerTotals(list, opts).filter(function(t) { return t.isFemale !== true; });
+    // 未確定の二巡目の行の満点を組（key）ごとに足す
+    var extra = Object.create(null);
+    list.forEach(function(p) {
+      if (roundOf(p) === 1 || p.confirmed === true) return;
+      var key = (typeof p.sourcePlayerId === 'string' && p.sourcePlayerId) ? 'id:' + p.sourcePlayerId : null;
+      if (!key) return;
+      var v = Number(maxExtraOf(p)) || 0;
+      extra[key] = (extra[key] || 0) + (v > 0 ? v : 0);
+    });
+    var rows = totals.map(function(t) {
+      var pending = t.r2Rows > 0 && !t.r2Done;
+      return { key: t.key, cur: t.total, max: t.total + (pending ? (extra[t.key] || 0) : 0), pending: pending };
+    });
+    var byKey = Object.create(null);
+    rows.forEach(function(r) {
+      var canBeat = 0, alreadyAbove = 0;
+      rows.forEach(function(o) {
+        if (o === r) return;
+        if (o.max > r.cur) canBeat++;
+        if (o.cur > r.max) alreadyAbove++;
+      });
+      var flag = canBeat <= BEST4_COUNT - 1 ? 'sure' : (alreadyAbove <= BEST4_COUNT - 1 ? 'possible' : 'out');
+      byKey[r.key] = { cur: r.cur, max: r.max, pending: r.pending, flag: flag, label: BEST4_FLAGS[flag] };
+    });
+    return { remaining: rows.filter(function(r) { return r.pending; }).length, byKey: byKey };
+  }
+
   // 「次へ進む」の行き先。next と同じ（players は受けるが使わない。呼び出し側を変えずに済ませる。
   // 設計書 2026-10-05 2.1）。
   function nextStep(status, players) {
@@ -493,6 +536,8 @@
     best4Standings: best4Standings,
     rankings: rankings,
     roundProgress: roundProgress,
+    best4Chances: best4Chances,
+    BEST4_FLAGS: BEST4_FLAGS,
     isScoringOpen: isScoringOpen,
     scoringRound: scoringRound,
     isLocked: isLocked,

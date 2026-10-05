@@ -157,28 +157,39 @@
       CATEGORIES.forEach(function(c) {
         rankingContainer.appendChild(
           buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || [],
-            data.progress && data.progress[c.key]));
+            data.progress && data.progress[c.key],
+            (c.key === 'male' && data.best4Chance) ? data.best4Chance : null));
       });
     }
 
     // progress（省略可）: { label } 「一巡目 12/17」= その巡目で確定した人数／全員（サーバーの roundProgress）
-    function buildRankTable(title, rows, progress) {
+    // chance（省略可。一般男子だけ）: サーバーの best4Chance = { remaining, male: [ {flag,label,max} | null, ... ] }
+    // （rows と同じ並び）。あれば見出しに「残り n 名」、「ベスト4」の列（◎ 確定・○ 可能性あり・✕ 圏外）を出す
+    function buildRankTable(title, rows, progress, chance) {
       var div = document.createElement('div');
       div.className = 'ranking-section';
       var head = '<h3>' + Storage.esc(title) +
         (progress && progress.label
           ? ' <span style="font-weight:normal;font-size:13px;color:#666">' + Storage.esc(progress.label) + '</span>'
+          : '') +
+        (chance && typeof chance.remaining === 'number'
+          ? ' <span style="font-weight:normal;font-size:13px;color:#666">残り ' + chance.remaining + ' 名</span>'
           : '') + '</h3>';
+      var withChance = !!(chance && Array.isArray(chance.male));
       if (rows.length === 0) {
         div.innerHTML = head + '<p style="color:#666">データなし</p>';
         return div;
       }
-      var trs = rows.map(function(r) {
+      var trs = rows.map(function(r, i) {
+        var c = withChance ? chance.male[i] : null;
         return '<tr><td>' + Storage.esc(String(r.rank)) + '</td><td>' + Storage.esc(r.name) +
-               '</td><td>' + Storage.esc(String(r.score)) + '</td></tr>';
+               '</td><td>' + Storage.esc(String(r.score)) + '</td>' +
+               (withChance ? '<td style="font-size:12px;white-space:nowrap' + (c && c.flag === 'sure' ? ';font-weight:bold' : (c && c.flag === 'out' ? ';color:#888' : '')) + '"' +
+                 (c && typeof c.max === 'number' ? ' title="最大 ' + c.max + ' 点"' : '') + '>' + Storage.esc((c && c.label) || '') + '</td>' : '') +
+               '</tr>';
       }).join('');
       div.innerHTML = head +
-        '<table class="rank-table"><tr><th>順位</th><th>選手名</th><th>得点</th></tr>' +
+        '<table class="rank-table"><tr><th>順位</th><th>選手名</th><th>得点</th>' + (withChance ? '<th>ベスト4</th>' : '') + '</tr>' +
         trs + '</table>';
       return div;
     }

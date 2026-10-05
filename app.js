@@ -2598,6 +2598,11 @@ var App = (function() {
     var cats = Courts.rankPanel(players, { countAll: typeof currentEvent.status !== 'string' });
     // 見出しに「〜巡目 済み/全員」（何人中何人が確定したか。ユーザー要望 2026-10-05）
     var progress = EventStatus.roundProgress(players, currentStatus());
+    // ベスト4 に残れる可能性（一般男子だけ。二巡目の行ができてから。ユーザー要望 2026-10-05）
+    var chances = EventStatus.best4Chances(players, {
+      countAll: typeof currentEvent.status !== 'string',
+      maxExtraOf: function(p) { return Courts.maxExtraOf(activeTechniques, p); }
+    });
     var any = cats.some(function(c) { return c.rows.length > 0; });
     rankPanelCols.classList.toggle('empty', !any);
     if (!any) {
@@ -2621,6 +2626,14 @@ var App = (function() {
         prEl.title = pr.round + ' 巡目の行 ' + pr.total + ' 名のうち、確定済み ' + pr.done + ' 名';
         h.appendChild(prEl);
       }
+      var withChance = !!(chances && c.key === 'male');
+      if (withChance) {
+        var remEl = document.createElement('span');
+        remEl.className = 'rank-panel-progress';
+        remEl.textContent = '残り ' + chances.remaining + ' 名';
+        remEl.title = '二巡目がまだ確定していない一般男子の人数';
+        h.appendChild(remEl);
+      }
       col.appendChild(h);
       if (c.rows.length === 0) {
         var none = document.createElement('p');
@@ -2631,14 +2644,18 @@ var App = (function() {
         var table = document.createElement('table');
         table.className = 'rank-panel-table';
         table.innerHTML = '<thead><tr><th class="rank">順位</th><th class="name">名前</th>' +
-          '<th class="total">合計</th></tr></thead>';
+          '<th class="total">合計</th>' + (withChance ? '<th class="chance">ベスト4</th>' : '') + '</tr></thead>';
         var tbody = document.createElement('tbody');
         c.rows.forEach(function(r) {
           var tr = document.createElement('tr');
           tr.dataset.key = r.key || '';
+          var ch = withChance ? chances.byKey[r.key] : null;
           tr.innerHTML = '<td class="rank">' + (Number(r.rank) || 0) + '</td>' +
             '<td class="name">' + esc(r.name || '') + '</td>' +
-            '<td class="total">' + (Number(r.score) || 0) + '</td>';
+            '<td class="total">' + (Number(r.score) || 0) + '</td>' +
+            (withChance ? '<td class="chance ' + (ch ? ch.flag : '') + '" title="' +
+              (ch ? esc('最大 ' + ch.max + ' 点' + (ch.pending ? '（二巡目が全部成功したとき）' : '（確定）')) : '') + '">' +
+              (ch ? esc(ch.label) : '') + '</td>' : '');
           tbody.appendChild(tr);
         });
         table.appendChild(tbody);

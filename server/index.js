@@ -406,6 +406,24 @@ function computeRanking(event) {
   const players = ((event && event.players) || []).filter(p => p && typeof p === 'object');
   const r = EventStatus.rankings(players, { countAll: lockedEvent });
   const strip = e => ({ rank: e.rank, name: e.name, score: e.score });
+  // ベスト4 に残れる可能性（一般男子。二巡目の行ができてから。順位表示ページの列。ユーザー要望 2026-10-05）
+  const techList = (event && Array.isArray(event.techniques) && event.techniques.length > 0)
+    ? event.techniques : readTechniques().techniques;
+  const maxExtraOf = p => ['tech1', 'tech2', 'tech3'].reduce((sum, k) => {
+    const name = (p && typeof p[k] === 'string') ? p[k].trim() : '';
+    const t = name ? resolveTechnique(techList, name, p.isFemale === true) : null;
+    const strikes = (t && Array.isArray(t.strikes)) ? t.strikes : [];
+    return sum + strikes.reduce((a, v) => a + ((typeof v === 'number' && isFinite(v)) ? v : 0), 0);
+  }, 0);
+  const chances = EventStatus.best4Chances(players, { countAll: lockedEvent, maxExtraOf });
+  // 順位の行は rank/name/score だけ（共有リンクにも出る契約）。可能性は別の項目に、一般男子の行と同じ並びで持つ
+  const best4Chance = chances ? {
+    remaining: chances.remaining,
+    male: r.male.map(e => {
+      const c = chances.byKey[e.key];
+      return c ? { flag: c.flag, label: c.label, max: c.max } : null;
+    })
+  } : null;
 
   return {
     event: {
@@ -420,6 +438,9 @@ function computeRanking(event) {
       female: r.female.map(strip),
       newFace: r.newFace.map(strip)
     },
+    // ベスト4 に残れる可能性（一般男子。rankings.male と同じ並びの配列と、二巡目が未確定の人数。
+    // 二巡目の行が無ければ null。順位表示ページの列。ユーザー要望 2026-10-05）
+    best4Chance: best4Chance,
     // 部門ごとの「〜巡目 済み/全員」（{ round, done, total, label }。順位表示ページの見出し用。ユーザー要望 2026-10-05）
     progress: EventStatus.roundProgress(players, EventStatus.of(event)),
     // ベスト4（一般男子の合計の上位 4 名・同点は全員・0 点以下は除く）。二巡目の途中は
