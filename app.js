@@ -471,6 +471,11 @@ var App = (function() {
     document.addEventListener('visibilitychange', function() {
       if (document.visibilityState === 'visible') refreshFromServer();
     });
+    // 画面を見ている間は 10 秒ごとにも読み直す（他のコートの確定を一覧と順位表に反映する。ユーザー要望 2026-10-05）。
+    // refreshFromServer は編集中（gridEdited）の採点欄を作り直さず、ドラッグ中は一覧の描き直しを保留するので安全
+    setInterval(function() {
+      if (document.visibilityState === 'visible' && currentEvent && !listDrag) refreshFromServer();
+    }, AUTO_REFRESH_MS);
 
     // 未送信の採点があるときだけ離脱を警告する。
     // 認証切れのときは再読み込みが復旧手段なので、離脱確認で止めない
@@ -939,6 +944,7 @@ var App = (function() {
   // 表示中の選手をこの端末で編集している最中（gridEdited）は画面を作り直さない（入力を壊さない）。
   // 未送信の採点はキューが正なので adoptEvent（Outbox.applyPending）が上書きする。
   var refreshSeq = 0;
+  var AUTO_REFRESH_MS = 10000;   // 見ている間の自動の読み直しの間隔
 
   async function refreshFromServer() {
     if (!currentEvent) return;

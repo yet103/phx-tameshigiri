@@ -440,6 +440,8 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 /* ===== 順位テーブル（ranking.html） ===== */
 /* 順位表示ページ（ranking.html）。採点画面の順位表（.rank-panel-cols / .rank-panel-col / .rank-panel-table）と
    同じ横並びの配置に（ユーザー要望 2026-10-05）。大会名の見出し（.rank-heading）は 3 列ぶち抜き */
+/* 順位表示ページは幅を 660px に絞らない（3 つの表が横に並ぶように。ダッシュボードの面や PC で見る） */
+body.ranking-page { max-width: none; }
 .ranking-container { padding: 12px 0; gap: 16px; }
 .ranking-container .rank-heading { flex-basis: 100%; }
 .ranking-container .rank-heading h2 { margin: 0 0 2px; }
