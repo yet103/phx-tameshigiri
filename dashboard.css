@@ -1,0 +1,53 @@
+/* ダッシュボード（dashboard.html。設計書 2026-10-05-dashboard-design.md）。
+   色は theme.css の変数（暗いテーマは [data-theme="dark"] で変数が切り替わる）。
+   窓いっぱいに 上の帯 36px ＋ 面のグリッド（上段 3 : 下段 2）。本体はスクロールしない。 */
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* ===== 上の帯 ===== */
+.dash-bar {
+  flex: 0 0 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px;
+  background: var(--band-bg); color: var(--band-text); font-size: 13px;
+}
+.dash-title { font-family: var(--mincho); font-weight: bold; color: var(--gold-light); white-space: nowrap; }
+.dash-bar select { font-size: 13px; max-width: 260px; }
+.dash-bar .spacer { flex: 1; }
+.dash-modes { display: inline-flex; }
+.dash-modes button {
+  font-size: 12px; padding: 3px 8px; border: 1px solid var(--band-muted);
+  background: var(--band-bg-2); color: var(--band-text); cursor: pointer; white-space: nowrap;
+}
+.dash-modes button:first-child { border-radius: 4px 0 0 4px; }
+.dash-modes button:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
+.dash-modes button.on { background: var(--gold); color: #1b1b1b; border-color: var(--gold); }
+.dash-zoom { display: flex; align-items: center; gap: 6px; color: var(--band-muted); white-space: nowrap; }
+.dash-zoom input { width: 90px; }
+.dash-icon { background: none; border: 0; color: var(--band-text); font-size: 15px; cursor: pointer; padding: 0 2px; }
+.dash-link { color: var(--band-muted); text-decoration: none; white-space: nowrap; }
+.dash-link:hover { color: var(--gold-light); }
+
+/* ===== 面のグリッド ===== */
+.dash-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 3fr 2fr; gap: 8px; padding: 8px; }
+.dash-row { display: grid; gap: 8px; min-height: 0; }
+.dash-pane {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg); overflow: hidden;
+}
+.dash-pane-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 2px 8px; font-size: 12px;
+  background: var(--bg-header); border-bottom: 1px solid var(--border);
+}
+.dash-pane-head .name { font-weight: bold; }
+.dash-pane-head .tag { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.dash-pane-body { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.dash-pane-body iframe { border: 0; transform-origin: 0 0; display: block; background: var(--bg); }
+
+/* 閲覧専用の盾。操作可能（body.dash-edit）では消す */
+.pane-shield { position: absolute; inset: 0; cursor: default; }
+body.dash-edit .pane-shield { display: none; }
+
+.dash-empty { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 15px; }

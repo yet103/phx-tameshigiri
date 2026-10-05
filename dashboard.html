@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PHX試し斬り ダッシュボード</title>
+  <meta name="application-name" content="PHX試し斬り">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body data-theme="light">
+  <!-- 採点画面（コートごと）・PC 運営の試合進行・順位表示を iframe で 1 画面に（設計書 2026-10-05-dashboard-design.md）。
+       中身は dashboard.js が描く。URL は #event/<id>。 -->
+  <header class="dash-bar">
+    <span class="dash-title">ダッシュボード</span>
+    <select id="dashEvent" aria-label="大会"><option value="">-- 大会を選択 --</option></select>
+    <button type="button" class="dash-icon" id="dashReload" title="大会とコートを読み直す" aria-label="大会とコートを読み直す">↻</button>
+    <span class="dash-modes" role="group" aria-label="モード">
+      <button type="button" id="dashModeView" data-mode="view">👁 閲覧専用</button>
+      <button type="button" id="dashModeEdit" data-mode="edit">✎ 操作可能</button>
+    </span>
+    <label class="dash-zoom">縮小 <input type="range" id="dashZoom" min="50" max="100" step="5" value="75"> <span id="dashZoomVal">75%</span></label>
+    <span class="spacer"></span>
+    <button type="button" class="dash-icon" id="btnTheme" aria-label="テーマ切り替え">🌙</button>
+    <a href="index.html" class="dash-link">トップへ</a>
+  </header>
+  <main class="dash-grid" id="dashGrid"></main>
+
+  <script src="api.js"></script>
+  <script src="storage.js"></script>
+  <script src="courts.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
