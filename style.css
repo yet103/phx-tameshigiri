@@ -659,6 +659,9 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .rank-panel-table th { background: var(--bg-header); white-space: nowrap; font-weight: bold; }
 .rank-panel-table th.rank, .rank-panel-table td.rank,
 .rank-panel-table th.total, .rank-panel-table td.total { width: 1%; white-space: nowrap; text-align: right; }
+.rank-panel-table td.total { text-align: left; }   /* 点数は左寄せ（ユーザー要望 2026-10-06） */
+/* 女子の下に新人枠（男子の右に縦に積む） */
+.rank-panel-stack { display: flex; flex-direction: column; gap: 12px; flex: 0 0 auto; max-width: 100%; }
 /* 順位の数字は金。ライトの生成りの上では明るい金が沈むので濃い金（ダークは明るい金） */
 .rank-panel-table td.rank { color: var(--gold-deep); font-weight: bold; }
 [data-theme="dark"] .rank-panel-table td.rank { color: var(--gold-light); }

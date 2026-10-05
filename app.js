@@ -2618,6 +2618,7 @@ var App = (function() {
       rankPanelCols.appendChild(msg);
       return;
     }
+    var built = {};
     cats.forEach(function(c) {
       var col = document.createElement('section');
       col.className = 'rank-panel-col';
@@ -2661,7 +2662,7 @@ var App = (function() {
             '<td class="name">' + esc(r.name || '') + '</td>' +
             '<td class="total">' + (Number(r.score) || 0) +
               // まだ斬っていない人は「→最大」（二巡目が全部成功したときの合計）を添える（低い人に ○ が付く理由が分かるように）
-              (ch && ch.pending ? '<span class="rank-panel-max">→' + ch.max + '</span>' : '') + '</td>' +
+              (ch && ch.pending ? '<span class="rank-panel-max">→' + ch.max + '?</span>' : '') + '</td>' +
             (withChance ? '<td class="chance ' + (ch ? ch.flag : '') + '" title="' +
               (ch ? esc('最大 ' + ch.max + ' 点' + (ch.pending ? '（二巡目が全部成功したとき）' : '（確定）')) : '') + '">' +
               (ch ? esc(ch.label) : '') + '</td>' : '');
@@ -2670,15 +2671,22 @@ var App = (function() {
         table.appendChild(tbody);
         col.appendChild(table);
       }
-      rankPanelCols.appendChild(col);
+      built[c.key] = col;
     });
+    // 男子と女子を横に、新人枠は女子の下に（ユーザー要望 2026-10-06）
+    if (built.male) rankPanelCols.appendChild(built.male);
+    var stack = document.createElement('div');
+    stack.className = 'rank-panel-stack';
+    if (built.female) stack.appendChild(built.female);
+    if (built.newFace) stack.appendChild(built.newFace);
+    if (stack.childNodes.length) rankPanelCols.appendChild(stack);
     // 凡例（ベスト4 の列があるときだけ）
     if (chances) {
       var legend = document.createElement('p');
       legend.className = 'rank-panel-legend';
       legend.textContent = 'ベスト4: ' + ['sure', 'possible', 'out'].map(function(k) {
         return EventStatus.BEST4_FLAGS[k] + ' ' + EventStatus.BEST4_FLAG_TEXT[k];
-      }).join('　') + '　→n はまだ斬っていない人の最大（二巡目が全部成功したときの合計）';
+      }).join('　') + '　→n? はまだ斬っていない人の最大（二巡目が全部成功したときの合計）';
       rankPanelCols.appendChild(legend);
     }
     markRankPanelCurrent();

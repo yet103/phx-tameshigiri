@@ -359,7 +359,7 @@
   // 二巡目の行が 1 つも無ければ null（一巡目の間は出さない）。
   // 戻り値: { male, female, newFace }、各 { remaining, byKey: { <playerTotals の key>: { cur, max, flag, pending, label } } }
   //   label は記号だけ（◎ ○ ✕）。凡例の文言は BEST4_FLAG_TEXT
-  var BEST4_FLAGS = { sure: '◎', possible: '○', out: '✕' };
+  var BEST4_FLAGS = { sure: '確', possible: '可', out: '-' };   // 確定・可能性あり・圏外（ユーザー要望 2026-10-06）
   var BEST4_FLAG_TEXT = { sure: '確定（残りの全員が全部成功しても 4 位以内）', possible: '可能性あり（自分の残りが全部成功すれば 4 位以内）', out: '圏外' };
   function best4Chances(players, opts) {
     var list = (players || []).filter(function(p) { return p && typeof p === 'object'; });

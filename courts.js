@@ -379,10 +379,11 @@ var Courts = (function() {
 
   // ---- 採点画面の順位表（設計書 2026-10-05 2.3・5.4） ----
   // 部門の並びと見出し。結果確認（DeskResults.CATEGORIES / AdminResults / ranking.html）と同じ。
+  // 並びは 一般男子・一般女子・新人枠（画面では男子と女子を横に、新人枠を女子の下に。ユーザー要望 2026-10-06）
   var RANK_CATEGORIES = [
     { key: 'male', title: '一般男子' },
-    { key: 'newFace', title: '新人枠' },
-    { key: 'female', title: '一般女子' }
+    { key: 'female', title: '一般女子' },
+    { key: 'newFace', title: '新人枠' }
   ];
 
   // 採点画面の順位表の材料（純粋関数）。順位は EventStatus.rankings（順位の集計 computeRanking と同じ関数）。

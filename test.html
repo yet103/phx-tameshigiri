@@ -5815,18 +5815,18 @@
 
     // Courts.rankPanel（採点画面の順位表の材料。設計書 2026-10-05 2.3・5.4・D4）
     var rp = Courts.rankPanel(rmPlayers, { countAll: false });
-    assert('rankPanel: 部門の並びと見出しは 一般男子・新人枠・一般女子（Courts.RANK_CATEGORIES）',
+    assert('rankPanel: 部門の並びと見出しは 一般男子・一般女子・新人枠（Courts.RANK_CATEGORIES。2026-10-06）',
       [rp.map(function(c) { return [c.key, c.title]; }), Courts.RANK_CATEGORIES.map(function(c) { return [c.key, c.title]; })],
-      [[['male', '一般男子'], ['newFace', '新人枠'], ['female', '一般女子']],
-       [['male', '一般男子'], ['newFace', '新人枠'], ['female', '一般女子']]]);
+      [[['male', '一般男子'], ['female', '一般女子'], ['newFace', '新人枠']],
+       [['male', '一般男子'], ['female', '一般女子'], ['newFace', '新人枠']]]);
     assert('rankPanel: 確定した得点の無い人（counted 偽）は出さない・行は key・rank・name・score だけ',
       rp[0].rows,
       [{ key: 'name:男|男D', rank: 1, name: '男D', score: 50 },
        { key: 'id:m1', rank: 2, name: '男A', score: 35 },
        { key: 'id:m2', rank: 3, name: '男B', score: 30 }]);
-    assert('rankPanel: 新人枠・一般女子',
+    assert('rankPanel: 一般女子・新人枠',
       [rp[1].rows.map(function(e) { return [e.name, e.rank]; }), rp[2].rows.map(function(e) { return [e.name, e.rank]; })],
-      [[['男A', 1], ['女A', 2]], [['女A', 1]]]);
+      [[['女A', 1]], [['男A', 1], ['女A', 2]]]);
     // 確定 0 点の人と未確定の人が同点（0 点）でも、順位は詰めず rankings と同じ
     var rpZero = [
       { id: 'p1', name: 'か', order: 'A-男子-1-1', score: 20, confirmed: true },
@@ -5846,7 +5846,7 @@
       [Courts.rankPanel([], {}), Courts.rankPanel(null)].map(function(x) {
         return x.map(function(c) { return [c.key, c.rows.length]; });
       }),
-      [[['male', 0], ['newFace', 0], ['female', 0]], [['male', 0], ['newFace', 0], ['female', 0]]]);
+      [[['male', 0], ['female', 0], ['newFace', 0]], [['male', 0], ['female', 0], ['newFace', 0]]]);
 
     assert('best4LineText: 確定前は「暫定ベスト4（合計）」と残り人数',
       Courts.best4LineText({ final: false, remaining: 3, rows: [{ name: '甲', total: 120 }, { name: ' 乙 ', total: 98 }] }),
@@ -7052,7 +7052,7 @@
       var ch2 = EventStatus.best4Chances(ps, { maxExtraOf: function() { return 5; } }).male;
       // max: c 35, d 25, e 15。e の max 15 を既に上回るのは a 60, b 50, c 30, d 20 の 4 人 → out
       // d: cur 20 を上回れるのは a 60, b 50, c 35 の 3 人だけ（e の max 15 は届かない）→ 4 位以内が確定
-      assert('best4Chances: 満点を足しても届かなければ圏外。label は記号だけ', [ch2.byKey['id:e'].flag, ch2.byKey['id:e'].label, ch2.byKey['id:d'].flag], ['out', '✕', 'sure']);
+      assert('best4Chances: 満点を足しても届かなければ圏外。label は 1 字', [ch2.byKey['id:e'].flag, ch2.byKey['id:e'].label, ch2.byKey['id:d'].flag], ['out', '-', 'sure']);
       assert('best4Chances: 部門ごと（女子は女子の中で判定。一般男子には出ない）',
         [ch.byKey['id:f'], chAll.female.byKey['id:f'].flag, chAll.female.remaining, Object.keys(chAll.newFace.byKey).length],
         [undefined, 'sure', 0, 0]);
