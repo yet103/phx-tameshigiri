@@ -38,6 +38,7 @@
 
   <script src="api.js"></script>
   <script src="storage.js"></script>
+  <script src="ranking.js"></script>
   <script>
     var body = document.body;
     var rankingContainer = document.getElementById('rankingContainer');
@@ -76,21 +77,66 @@
         opt.textContent = ev.name + ' (' + ev.date + ')';
         rankEventSelect.appendChild(opt);
       });
+      applyHash();   // #event/<id> で開いたら（ダッシュボードの面）その大会を自動で読む
     })();
 
-    // 大会データを読み込む
-    btnLoadFromEvent.addEventListener('click', async function() {
+    // --- URL のハッシュで大会を指定して開く（設計書 2026-10-05-dashboard-design.md §3） ---
+    // ダッシュボードの面として iframe で開かれるので、alert は出さず画面内の 1 行にし、
+    // 10 秒ごとに読み直す（確定するたび順位が動く）。ハッシュ無しで開いたときは今までどおり
+    // ボタンで 1 回読むだけ（自動更新なし）。
+    var AUTO_REFRESH_MS = 10000;
+    var autoTimer = null;
+    var autoEventId = '';
+
+    function showNote(text) {
+      rankingContainer.innerHTML = '';
+      var p = document.createElement('p');
+      p.style.color = 'var(--text-muted)';
+      p.textContent = text;
+      rankingContainer.appendChild(p);
+    }
+
+    // 大会を読んで描く。quiet はハッシュ経由: alert の代わりに画面内の 1 行
+    async function loadAndRender(eventId, quiet) {
+      var data = await Api.loadRanking(eventId);
+      if (!data) {
+        if (quiet) showNote('順位を読み込めませんでした。' + (AUTO_REFRESH_MS / 1000) + ' 秒後にもう一度読みます。');
+        else alert('順位データの読み込みに失敗しました。');
+        return;
+      }
+      renderRankings(data);
+    }
+
+    function stopAuto() {
+      if (autoTimer) clearInterval(autoTimer);
+      autoTimer = null;
+      autoEventId = '';
+    }
+
+    function startAuto(eventId) {
+      stopAuto();
+      autoEventId = eventId;
+      rankEventSelect.value = eventId;
+      loadAndRender(eventId, true);
+      autoTimer = setInterval(function() { loadAndRender(autoEventId, true); }, AUTO_REFRESH_MS);
+    }
+
+    function applyHash() {
+      var id = Ranking.parseHash(location.hash);
+      if (!id) { stopAuto(); return; }
+      if (id !== autoEventId) startAuto(id);
+    }
+    window.addEventListener('hashchange', applyHash);
+
+    // 大会データを読み込む（ボタン）。ハッシュの大会と違う大会を手で読んだら自動更新は止める
+    btnLoadFromEvent.addEventListener('click', function() {
       var eventId = rankEventSelect.value;
       if (!eventId) {
         alert('大会を選択してください。');
         return;
       }
-      var data = await Api.loadRanking(eventId);
-      if (!data) {
-        alert('順位データの読み込みに失敗しました。');
-        return;
-      }
-      renderRankings(data);
+      if (eventId !== autoEventId) stopAuto();
+      loadAndRender(eventId, false);
     });
 
     function renderRankings(data) {

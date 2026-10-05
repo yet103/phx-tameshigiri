@@ -27,6 +27,8 @@
 <script src="techedit.js"></script>
 <script src="admin.js"></script>
 <script src="home.js"></script>
+<script src="ranking.js"></script>
+<script src="dashboard.js"></script>
 <script src="desk.js"></script>
 <script src="desk-match.js"></script>
 <script src="present.js"></script>
@@ -6943,6 +6945,32 @@
     assert('checkBundle: version が違えば更新を促す',
       Storage.checkBundle({ format: 'phx-tameshigiri-event', version: 2 }),
       { ok: false, error: '対応していないファイル形式です（version: 2）\nこのアプリを更新してください。' });
+
+    // ---- ranking.js のハッシュ（設計書 2026-10-05 dashboard §3） ----
+    assert('Ranking.parseHash: #event/<id> → id', Ranking.parseHash('#event/abc'), 'abc');
+    assert('Ranking.parseHash: エンコードを戻す', Ranking.parseHash('#event/a%20b'), 'a b');
+    assert('Ranking.parseHash: 無し・他のハッシュ・壊れたエンコードは空',
+      [Ranking.parseHash(''), Ranking.parseHash('#foo'), Ranking.parseHash('#event/'), Ranking.parseHash('#event/%E0%A4%A'), Ranking.parseHash(null)],
+      ['', '', '', '', '']);
+
+    // ---- dashboard.js（設計書 2026-10-05 dashboard §4） ----
+    assert('Dashboard.parseHash', [Dashboard.parseHash('#event/abc'), Dashboard.parseHash('#event/a%20b'), Dashboard.parseHash(''), Dashboard.parseHash('#foo'), Dashboard.parseHash('#event/%E0%A4%A')],
+      ['abc', 'a b', '', '', '']);
+    assert('Dashboard.panes: コートの採点 → 運営 → 順位の順。ID はエンコード',
+      Dashboard.panes('a b', ['A', 'B']).map(function(p) { return [p.kind, p.title, p.url]; }),
+      [['court', 'A コート', 'scoring.html#event/a%20b/A'], ['court', 'B コート', 'scoring.html#event/a%20b/B'],
+       ['desk', '運営', 'desk.html#match/a%20b'], ['rank', '順位', 'ranking.html#event/a%20b']]);
+    assert('Dashboard.panes: コート 0 なら運営と順位だけ',
+      Dashboard.panes('e1', []).map(function(p) { return p.kind; }), ['desk', 'rank']);
+    assert('Dashboard.panes: コート名もエンコード', Dashboard.panes('e1', ['第 1'])[0].url, 'scoring.html#event/e1/' + encodeURIComponent('第 1'));
+    assert('Dashboard.columnsFor', [Dashboard.columnsFor(0), Dashboard.columnsFor(2), Dashboard.columnsFor(3)], [1, 2, 3]);
+    assert('Dashboard.clampZoom: 範囲外・NaN は 75、5 刻みに丸める', [Dashboard.clampZoom('60'), Dashboard.clampZoom('120'), Dashboard.clampZoom('x'), Dashboard.clampZoom(73), Dashboard.clampZoom(50)], [60, 75, 75, 75, 50]);
+    assert('Dashboard.normalizeMode', [Dashboard.normalizeMode('edit'), Dashboard.normalizeMode('view'), Dashboard.normalizeMode('x'), Dashboard.normalizeMode(null)], ['edit', 'view', 'view', 'view']);
+    try { localStorage.removeItem('tmg_dashboard_zoom'); localStorage.removeItem('tmg_dashboard_mode'); } catch (e) {}
+    assert('Dashboard.loadZoom / loadMode: 控えが無ければ既定', [Dashboard.loadZoom(), Dashboard.loadMode()], [75, 'view']);
+    Dashboard.saveZoom(60); Dashboard.saveMode('edit');
+    assert('Dashboard.saveZoom / saveMode → load', [Dashboard.loadZoom(), Dashboard.loadMode()], [60, 'edit']);
+    try { localStorage.removeItem('tmg_dashboard_zoom'); localStorage.removeItem('tmg_dashboard_mode'); } catch (e) {}
 
     // ---- bundle-import.js（トップ・PC 運営・スマホ運営で共用の取り込み処理。設計書 2026-10-05 §3） ----
     await (async function() {

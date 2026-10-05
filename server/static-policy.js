@@ -27,6 +27,7 @@ const PROTECTED_FILES = new Set([
   'desk-players.js', 'desk-match.js', 'desk-round2.js', 'desk-results.js', 'techedit.js',
   'data.js', 'outbox.js', 'route.js', 'status.js', 'storage.js', 'techpicker.js',
   'bundle-import.js',
+  'ranking.js', 'dashboard.html', 'dashboard.js', 'dashboard.css',
   // 招待（設計書 2026-10-03 6.2〜6.4）。まだ無いファイルも先に分類しておく（無ければ 404）
   'desk-invites.js', 'scope.js', 'vendor/qrcode.js'
 ]);
