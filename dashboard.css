@@ -13,6 +13,11 @@ body {
   flex: 0 0 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px;
   background: var(--band-bg); color: var(--band-text); font-size: 13px;
 }
+.dash-home {
+  color: var(--band-text); text-decoration: none; white-space: nowrap; font-size: 13px;
+  padding: 3px 8px; border: 1px solid var(--band-muted); border-radius: 4px; background: var(--band-bg-2);
+}
+.dash-home:hover { border-color: var(--gold); color: var(--gold-light); }
 .dash-title { font-family: var(--mincho); font-weight: bold; color: var(--gold-light); white-space: nowrap; }
 .dash-bar select { font-size: 13px; max-width: 260px; }
 .dash-bar .spacer { flex: 1; }
@@ -27,8 +32,6 @@ body {
 .dash-zoom { display: flex; align-items: center; gap: 6px; color: var(--band-muted); white-space: nowrap; }
 .dash-zoom input { width: 90px; }
 .dash-icon { background: none; border: 0; color: var(--band-text); font-size: 15px; cursor: pointer; padding: 0 2px; }
-.dash-link { color: var(--band-muted); text-decoration: none; white-space: nowrap; }
-.dash-link:hover { color: var(--gold-light); }
 
 /* ===== 面のグリッド ===== */
 .dash-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 60fr 8px 40fr; padding: 8px; }
