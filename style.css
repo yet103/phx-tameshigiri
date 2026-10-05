@@ -535,8 +535,7 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
    上下の余白を詰め、備考以外の列は文字が収まる幅（width:1% + nowrap）。
    備考の列が残り幅を吸収する（ユーザー要望）。
    どの窓幅でも採点の下にコートの区画（.court-list ＝ 見出し＋表）を縦に積む（設計書 2026-10-05 5.2）。
-   狭い窓では採点中のコートだけ開き、他は見出しで開閉する（.collapsed）。広い窓（1100px 以上）では
-   全コートを開いたまま畳まない（app.js が .pinned を付ける。矢印は出さない）。 */
+   採点中のコートだけ開き、他は見出しで開閉する（.collapsed。どの窓幅でも同じ）。 */
 /* 採点の区画（ツールバーまで）と選手一覧の間を空けて、別のブロックに見せる（ユーザー要望） */
 .player-list-section { border-top: 2px solid var(--border); margin-top: 20px; }
 .court-list-head {
@@ -551,8 +550,6 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
 }
 .court-list-count { margin-left: auto; font-size: 12px; font-weight: normal; }
 .court-list.collapsed .player-list-body { display: none; }
-.court-list.pinned .court-list-arrow { display: none; }
-.court-list.pinned .court-list-head { cursor: default; }
 .player-list-body { overflow: auto; max-height: 50vh; }
 .player-list-table {
   width: 100%;

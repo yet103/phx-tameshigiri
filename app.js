@@ -13,11 +13,9 @@ var App = (function() {
   var gridEdited = false;
   var noticeRow = null;      // 復元不能を知らせる行（DOM）。置き換え確定時に取り除く
   var selectedRow = -1;      // 選択中の技の行（0始まり）。技が無ければ -1
-  // 選手一覧はコートごとの区画（ユーザー要望 2026-10-05）。広い窓（1100px 以上）では採点の右に
-  // コートの列を横に並べ、狭い窓では採点の下に縦に積んでコートごとに折りたたむ。
-  var WIDE_QUERY = '(min-width: 1100px)';
-  var wideMedia = null;      // matchMedia(WIDE_QUERY)。使えない端末では null（常に狭い窓の扱い）
-  // 狭い窓で利用者が開閉したコート（court → true / false）。既定は採点中のコートだけ開く。
+  // 選手一覧はコートごとの区画（ユーザー要望 2026-10-05）。採点の下に縦に積み、コートごとに折りたたむ。
+  // 利用者が開閉したコート（court → true / false）。既定は採点中のコートだけ開く（どの窓幅でも同じ。
+  // 2026-10-05 の「PC では全コートを開いたまま」はユーザー要望でやめた）。
   // 採点中のコートが変わったら忘れる（新しいコートだけ開いた状態に戻す）。
   var listOpen = {};
   var listOpenCourt = null;  // listOpen を記録したときの採点中のコート
@@ -71,7 +69,6 @@ var App = (function() {
   // --- 初期化 ---
   async function init() {
     applyTheme(Storage.loadTheme());
-    initListLayout();
     // 送信キューは何よりも先に起動する。
     // ここから下の API 呼び出しがどう転んでも、前回未送信の採点が
     // 復旧され、online イベントの購読も済んでいる状態にするため。
@@ -2073,28 +2070,11 @@ var App = (function() {
 
   // --- 選手一覧（コートごとの区画。ユーザー要望 2026-10-05） ---
   // どの窓幅でも採点の下にコートの区画を縦に並べる（ページ幅 --page-max-width の中。設計書 2026-10-05 5.2）。
-  // 広い窓（WIDE_QUERY。PC）: 全コートを開いたまま（見出しを押しても畳まない。区画に pinned）。
-  // 狭い窓（スマホ）: 採点中のコートだけ開く。他のコートは見出しを押すと開く。
+  // 採点中のコートだけ開き、他のコートは見出しを押すと開く（窓幅で変えない。ユーザー要望 2026-10-05 夜:
+  // PC で全コートを開いたままにするのはやめた。他のコートへは上のコート選択か見出しで）。
   // 以前の「▾ 選手一覧」の開閉（localStorage の tmg_player_list_open）はやめた。
   // 採点中のコートの一覧は visiblePlayers（巡回の対象）そのもの、他のコートは courtPlayers で同じ規則で作る。
   // 一覧の下に順位表（renderRankPanel）。
-  function initListLayout() {
-    if (!window.matchMedia) return;
-    wideMedia = window.matchMedia(WIDE_QUERY);
-    // 1100px をまたいだら開閉の既定が変わるので描き直す
-    var onChange = function() {
-      if (!currentEvent) return;
-      renderPlayerList();
-      updatePlayerList();   // 開いた区画の採点中の行を見える所へ
-    };
-    if (wideMedia.addEventListener) wideMedia.addEventListener('change', onChange);
-    else if (wideMedia.addListener) wideMedia.addListener(onChange);
-  }
-
-  // 広い窓（PC）か。開閉の既定を決めるためだけに使う（配置はどの幅でも縦並び）
-  function isWideLayout() {
-    return !!(wideMedia && wideMedia.matches);
-  }
 
   // 一覧の見出し行（7 列。運営の端末では左端に掴み手の列を足して 8 列）。
   // 合計・順位・新人枠の列はやめ、順位は一覧の下の順位表に出す（設計書 2026-10-05 5.3）
@@ -2111,10 +2091,9 @@ var App = (function() {
     return canReorder ? 8 : 7;
   }
 
-  // そのコートの区画を開いているか。広い窓では常に開く。狭い窓では採点中のコートは既定で開き、
-  // 他は既定で閉じる（利用者が開閉したら listOpen に従う）
+  // そのコートの区画を開いているか。採点中のコートは既定で開き、他は既定で閉じる
+  // （利用者が開閉したら listOpen に従う）
   function isCourtListOpen(section) {
-    if (isWideLayout()) return true;
     if (section.court in listOpen) return listOpen[section.court];
     return section.current;
   }
@@ -2138,9 +2117,7 @@ var App = (function() {
   // コート 1 つ分の区画（見出し＋表）
   function buildCourtList(section, list) {
     var box = document.createElement('div');
-    var pinned = isWideLayout();   // 広い窓では畳めない（▾/▸ の矢印も出さない。CSS の .pinned）
-    box.className = 'court-list' + (section.current ? ' current' : '') + (section.readOnly ? ' read-only' : '') +
-      (pinned ? ' pinned' : '');
+    box.className = 'court-list' + (section.current ? ' current' : '') + (section.readOnly ? ' read-only' : '');
     box.dataset.court = section.court;
     var open = isCourtListOpen(section);
     box.classList.toggle('collapsed', !open);
@@ -2155,9 +2132,7 @@ var App = (function() {
       (section.current ? '<span class="court-list-tag">採点中</span>' : '') +
       (section.readOnly ? '<span class="court-list-tag view-only">見るだけ</span>' : '') +
       '<span class="court-list-count">' + list.length + ' 名</span>';
-    // 広い窓では全コートが常に開いている（見出しは押しても何もしない）
     head.addEventListener('click', function() {
-      if (isWideLayout()) return;
       var next = box.classList.contains('collapsed');
       listOpen[section.court] = next;
       box.classList.toggle('collapsed', !next);
