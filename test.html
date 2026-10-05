@@ -6881,7 +6881,7 @@
     assert('mapHash: 大会IDの無い区画はハッシュ無しに落とす', Storage.mapHash('#players', 'pc'), '');
     assert('Home.rowActions: 一覧の行の ⋯。アーカイブは最終結果のときだけ',
       [Home.rowActions({ status: 'draft' }), Home.rowActions({ status: 'final' }), Home.rowActions({ status: 'archived' })],
-      [['copy', 'save', 'delete'], ['copy', 'save', 'archive', 'delete'], ['copy', 'save', 'delete']]);
+      [['copy', 'copyReset', 'save', 'delete'], ['copy', 'copyReset', 'save', 'archive', 'delete'], ['copy', 'copyReset', 'save', 'delete']]);
     assert('mapHash: #players はどちらでもそのまま',
       [Storage.mapHash('#players/e1', 'pc'), Storage.mapHash('#players/e1', 'mobile')],
       ['#players/e1', '#players/e1']);

@@ -643,7 +643,7 @@ var Home = (function() {
   // 行の ⋯ に出す操作（純粋関数。test.html が見る）。アーカイブは最終結果のときだけ
   // （遷移表にない組み合わせはサーバーが拒む）。
   function rowActions(ev) {
-    var list = ['copy', 'save'];
+    var list = ['copy', 'copyReset', 'save'];
     if (EventStatus.of(ev) === 'final') list.push('archive');
     list.push('delete');
     return list;
@@ -671,6 +671,30 @@ var Home = (function() {
     }
     Storage.downloadText(Storage.bundleFilename(ev.name, ev.date), json, 'application/json;charset=utf-8');
     showListNote('ファイルに保存しました');
+  }
+
+  // 得点を消して複製（ユーザー要望 2026-10-05）。フォームを出さず、名前「…（コピー）」・日付は今日・会場は同じ・
+  // 選手も複製（得点は消える）で作り、できた大会の選手登録を開く。技と配点はサーバーが必ず複製する。
+  async function onCopyReset(ev) {
+    var srcName = ev.name || '(名称未設定)';
+    if (!confirm('大会「' + srcName + '」を複製します。\n' +
+        '選手（一巡目の行）と技・配点をそのまま写し、得点は消します。\n' +
+        '名前は「' + srcName + '（コピー）」、日付は今日になります（あとで基本情報で直せます）。')) {
+      return;
+    }
+    var result = await Api.copyEvent(ev.id, {
+      name: srcName + '（コピー）', date: Storage.todayLocal(), venue: ev.venue || '', withPlayers: true
+    });
+    if (!result) {
+      alert('複製できませんでした。通信を確認してください。');
+      return;
+    }
+    if (result.error) {
+      alert('複製できませんでした。\n' + result.error);
+      return;
+    }
+    Storage.setPendingToast('得点を消して複製しました（' + (result.playerCount || 0) + ' 名）');
+    location.href = Storage.adminHref('#players/' + encodeURIComponent(result.id));
   }
 
   async function onDelete(ev) {
@@ -739,9 +763,11 @@ var Home = (function() {
     var body = document.createElement('div');
     body.className = 'home-menu-body';
     menu.appendChild(body);
-    var labels = { copy: '📄 コピーして作成', save: '💾 ファイルに保存', archive: '📥 アーカイブ', 'delete': '🗑 削除' };
+    var labels = { copy: '📄 コピーして作成', copyReset: '📑 得点を消して複製', save: '💾 ファイルに保存',
+      archive: '📥 アーカイブ', 'delete': '🗑 削除' };
     var handlers = {
       copy: function() { openNewCopy(ev.id); },
+      copyReset: function() { onCopyReset(ev).catch(function(e) { console.error(e); }); },
       save: function() { onSaveFile(ev).catch(function(e) { console.error(e); }); },
       archive: function() { onArchive(ev).catch(function(e) { console.error(e); }); },
       'delete': function() { onDelete(ev).catch(function(e) { console.error(e); }); }
