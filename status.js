@@ -348,22 +348,31 @@
     };
   }
 
-  // ベスト4 に残れる可能性（一般男子。二巡目の順位表に出す。ユーザー要望 2026-10-05）。
+  // ベスト4 に残れる可能性（部門ごと: 一般男子・一般女子・新人枠。二巡目の順位表に出す。ユーザー要望 2026-10-05）。
   //   opts.maxExtraOf(player) … 未確定の二巡目の行が全部成功したときに加わる最大の得点（技の満点の合計）。
   //                            技の解決は呼ぶ側（画面は Courts.maxExtraOf、サーバーは自前の resolveTechnique）
   //   opts.countAll … playerTotals と同じ
-  // 一般男子それぞれについて cur（確定済みの合計）と max（cur ＋ 未確定の二巡目の満点）を出し、
+  // 部門の中でそれぞれについて cur（確定済みの合計）と max（cur ＋ 未確定の二巡目の満点）を出し、
   //   sure     … 自分の cur を上回れる相手（max_j > cur_i）が 3 人以下 → 何があってもベスト4（同点は同順位で全員入る）
   //   possible … 自分の max を既に上回っている相手（cur_j > max_i）が 3 人以下 → 残れる可能性あり
   //   out      … それ以外 → 圏外
   // 二巡目の行が 1 つも無ければ null（一巡目の間は出さない）。
-  // 戻り値: { remaining, byKey: { <playerTotals の key>: { cur, max, flag, pending } } }
-  var BEST4_FLAGS = { sure: '◎ 確定', possible: '○ 可能性あり', out: '✕ 圏外' };
+  // 戻り値: { male, female, newFace }、各 { remaining, byKey: { <playerTotals の key>: { cur, max, flag, pending, label } } }
+  //   label は記号だけ（◎ ○ ✕）。凡例の文言は BEST4_FLAG_TEXT
+  var BEST4_FLAGS = { sure: '◎', possible: '○', out: '✕' };
+  var BEST4_FLAG_TEXT = { sure: '確定（残りの全員が全部成功しても 4 位以内）', possible: '可能性あり（自分の残りが全部成功すれば 4 位以内）', out: '圏外' };
   function best4Chances(players, opts) {
     var list = (players || []).filter(function(p) { return p && typeof p === 'object'; });
     if (!list.some(function(p) { return roundOf(p) !== 1; })) return null;
+    var all = playerTotals(list, opts);
+    return {
+      male: best4ChancesOf(list, all.filter(function(t) { return t.isFemale !== true; }), opts),
+      female: best4ChancesOf(list, all.filter(function(t) { return t.isFemale === true; }), opts),
+      newFace: best4ChancesOf(list, all.filter(function(t) { return t.isNewFace === true; }), opts)
+    };
+  }
+  function best4ChancesOf(list, totals, opts) {
     var maxExtraOf = (opts && typeof opts.maxExtraOf === 'function') ? opts.maxExtraOf : function() { return 0; };
-    var totals = playerTotals(list, opts).filter(function(t) { return t.isFemale !== true; });
     // 未確定の二巡目の行の満点を組（key）ごとに足す
     var extra = Object.create(null);
     list.forEach(function(p) {
@@ -538,6 +547,7 @@
     roundProgress: roundProgress,
     best4Chances: best4Chances,
     BEST4_FLAGS: BEST4_FLAGS,
+    BEST4_FLAG_TEXT: BEST4_FLAG_TEXT,
     isScoringOpen: isScoringOpen,
     scoringRound: scoringRound,
     isLocked: isLocked,

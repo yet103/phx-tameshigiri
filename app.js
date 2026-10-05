@@ -2598,7 +2598,7 @@ var App = (function() {
     var cats = Courts.rankPanel(players, { countAll: typeof currentEvent.status !== 'string' });
     // 見出しに「〜巡目 済み/全員」（何人中何人が確定したか。ユーザー要望 2026-10-05）
     var progress = EventStatus.roundProgress(players, currentStatus());
-    // ベスト4 に残れる可能性（一般男子だけ。二巡目の行ができてから。ユーザー要望 2026-10-05）
+    // ベスト4 に残れる可能性（部門ごと。二巡目の行ができてから。記号だけで、凡例は下。ユーザー要望 2026-10-05）
     var chances = EventStatus.best4Chances(players, {
       countAll: typeof currentEvent.status !== 'string',
       maxExtraOf: function(p) { return Courts.maxExtraOf(activeTechniques, p); }
@@ -2626,12 +2626,13 @@ var App = (function() {
         prEl.title = pr.round + ' 巡目の行 ' + pr.total + ' 名のうち、確定済み ' + pr.done + ' 名';
         h.appendChild(prEl);
       }
-      var withChance = !!(chances && c.key === 'male');
+      var catChances = chances ? chances[c.key] : null;
+      var withChance = !!catChances;
       if (withChance) {
         var remEl = document.createElement('span');
         remEl.className = 'rank-panel-progress';
-        remEl.textContent = '残り ' + chances.remaining + ' 名';
-        remEl.title = '二巡目がまだ確定していない一般男子の人数';
+        remEl.textContent = '残り ' + catChances.remaining + ' 名';
+        remEl.title = '二巡目がまだ確定していない人数';
         h.appendChild(remEl);
       }
       col.appendChild(h);
@@ -2649,10 +2650,12 @@ var App = (function() {
         c.rows.forEach(function(r) {
           var tr = document.createElement('tr');
           tr.dataset.key = r.key || '';
-          var ch = withChance ? chances.byKey[r.key] : null;
+          var ch = withChance ? catChances.byKey[r.key] : null;
           tr.innerHTML = '<td class="rank">' + (Number(r.rank) || 0) + '</td>' +
             '<td class="name">' + esc(r.name || '') + '</td>' +
-            '<td class="total">' + (Number(r.score) || 0) + '</td>' +
+            '<td class="total">' + (Number(r.score) || 0) +
+              // まだ斬っていない人は「→最大」（二巡目が全部成功したときの合計）を添える（低い人に ○ が付く理由が分かるように）
+              (ch && ch.pending ? '<span class="rank-panel-max">→' + ch.max + '</span>' : '') + '</td>' +
             (withChance ? '<td class="chance ' + (ch ? ch.flag : '') + '" title="' +
               (ch ? esc('最大 ' + ch.max + ' 点' + (ch.pending ? '（二巡目が全部成功したとき）' : '（確定）')) : '') + '">' +
               (ch ? esc(ch.label) : '') + '</td>' : '');
@@ -2663,6 +2666,15 @@ var App = (function() {
       }
       rankPanelCols.appendChild(col);
     });
+    // 凡例（ベスト4 の列があるときだけ）
+    if (chances) {
+      var legend = document.createElement('p');
+      legend.className = 'rank-panel-legend';
+      legend.textContent = 'ベスト4: ' + ['sure', 'possible', 'out'].map(function(k) {
+        return EventStatus.BEST4_FLAGS[k] + ' ' + EventStatus.BEST4_FLAG_TEXT[k];
+      }).join('　') + '　→n はまだ斬っていない人の最大（二巡目が全部成功したときの合計）';
+      rankPanelCols.appendChild(legend);
+    }
     markRankPanelCurrent();
   }
 

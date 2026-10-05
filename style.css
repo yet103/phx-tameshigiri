@@ -666,7 +666,9 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .rank-panel-table td.name { font-weight: bold; white-space: normal; overflow-wrap: anywhere; }
 .rank-panel-table td.total { font-weight: bold; color: var(--score-confirmed); }
 /* ベスト4 に残れる可能性（一般男子の列。◎ 確定・○ 可能性あり・✕ 圏外） */
-.rank-panel-table th.chance, .rank-panel-table td.chance { font-size: 12px; white-space: nowrap; text-align: left; }
+.rank-panel-table th.chance, .rank-panel-table td.chance { font-size: 13px; white-space: nowrap; text-align: center; width: 1%; }
+.rank-panel-legend { grid-column: 1 / -1; margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }
+.rank-panel-max { margin-left: 2px; font-size: 11px; font-weight: normal; color: var(--text-muted); }
 .rank-panel-table td.chance.sure { color: var(--gold-deep); font-weight: bold; }
 [data-theme="dark"] .rank-panel-table td.chance.sure { color: var(--gold-light); }
 .rank-panel-table td.chance.possible { color: var(--text); }

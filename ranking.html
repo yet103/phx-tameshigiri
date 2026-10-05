@@ -177,16 +177,24 @@
       CATEGORIES.forEach(function(c) {
         var sec = buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || [],
           data.progress && data.progress[c.key],
-          (c.key === 'male' && data.best4Chance) ? data.best4Chance : null);
+          data.best4Chance ? { remaining: data.best4Chance.remaining && data.best4Chance.remaining[c.key], rows: data.best4Chance[c.key] } : null);
         sec.classList.add('rank-panel-col');
         sec.dataset.category = c.key;
         rankingContainer.appendChild(sec);
       });
+      // 凡例（ベスト4 の列があるときだけ）
+      if (data.best4Chance && Array.isArray(data.best4Chance.legend)) {
+        var legend = document.createElement('p');
+        legend.className = 'rank-panel-legend';
+        legend.style.cssText = 'grid-column:1/-1;font-size:12px;color:#888;margin:4px 0 0';
+        legend.textContent = 'ベスト4: ' + data.best4Chance.legend.join('　') + '　→n はまだ斬っていない人の最大（二巡目が全部成功したときの合計）';
+        rankingContainer.appendChild(legend);
+      }
     }
 
     // progress（省略可）: { label } 「一巡目 12/17」= その巡目で確定した人数／全員（サーバーの roundProgress）
-    // chance（省略可。一般男子だけ）: サーバーの best4Chance = { remaining, male: [ {flag,label,max} | null, ... ] }
-    // （rows と同じ並び）。あれば見出しに「残り n 名」、「ベスト4」の列（◎ 確定・○ 可能性あり・✕ 圏外）を出す
+    // chance（省略可）: { remaining, rows: [ {flag,label,max} | null, ... ] }（rows と同じ並び。サーバーの best4Chance の部門分）。
+    // あれば見出しに「残り n 名」、「ベスト4」の列（◎ ○ ✕ の記号。凡例は表の下）を出す
     function buildRankTable(title, rows, progress, chance) {
       var div = document.createElement('div');
       div.className = 'ranking-section';
@@ -198,16 +206,17 @@
       var head = '<h3>' + Storage.esc(title) +
         (progress && progress.label ? sub(progress.label) : '') +
         (chance && typeof chance.remaining === 'number' ? sub('残り ' + chance.remaining + ' 名') : '') + '</h3>';
-      var withChance = !!(chance && Array.isArray(chance.male));
+      var withChance = !!(chance && Array.isArray(chance.rows));
       if (rows.length === 0) {
         div.innerHTML = head + '<p class="rank-panel-none" style="color:#888">まだいません</p>';
         return div;
       }
       var trs = rows.map(function(r, i) {
-        var c = withChance ? chance.male[i] : null;
+        var c = withChance ? chance.rows[i] : null;
         return '<tr><td class="rank">' + Storage.esc(String(r.rank)) + '</td><td class="name">' + Storage.esc(r.name) +
-               '</td><td class="total">' + Storage.esc(String(r.score)) + '</td>' +
-               (withChance ? '<td class="chance ' + ((c && c.flag) || '') + '" style="font-size:12px;white-space:nowrap' +
+               '</td><td class="total">' + Storage.esc(String(r.score)) +
+               (c && c.pending ? '<span class="rank-panel-max" style="margin-left:2px;font-size:11px;font-weight:normal;color:#888">→' + Storage.esc(String(c.max)) + '</span>' : '') + '</td>' +
+               (withChance ? '<td class="chance ' + ((c && c.flag) || '') + '" style="text-align:center;white-space:nowrap' +
                  (c && c.flag === 'sure' ? ';font-weight:bold' : (c && c.flag === 'out' ? ';color:#888' : '')) + '"' +
                  (c && typeof c.max === 'number' ? ' title="最大 ' + c.max + ' 点"' : '') + '>' + Storage.esc((c && c.label) || '') + '</td>' : '') +
                '</tr>';

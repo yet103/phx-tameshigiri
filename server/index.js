@@ -416,13 +416,17 @@ function computeRanking(event) {
     return sum + strikes.reduce((a, v) => a + ((typeof v === 'number' && isFinite(v)) ? v : 0), 0);
   }, 0);
   const chances = EventStatus.best4Chances(players, { countAll: lockedEvent, maxExtraOf });
-  // 順位の行は rank/name/score だけ（共有リンクにも出る契約）。可能性は別の項目に、一般男子の行と同じ並びで持つ
+  // 順位の行は rank/name/score だけ（共有リンクにも出る契約）。可能性は別の項目に、各部門の行と同じ並びで持つ
+  const chanceRows = key => r[key].map(e => {
+    const c = chances[key].byKey[e.key];
+    return c ? { flag: c.flag, label: c.label, max: c.max, pending: c.pending } : null;
+  });
   const best4Chance = chances ? {
-    remaining: chances.remaining,
-    male: r.male.map(e => {
-      const c = chances.byKey[e.key];
-      return c ? { flag: c.flag, label: c.label, max: c.max } : null;
-    })
+    remaining: { male: chances.male.remaining, female: chances.female.remaining, newFace: chances.newFace.remaining },
+    male: chanceRows('male'),
+    female: chanceRows('female'),
+    newFace: chanceRows('newFace'),
+    legend: ['sure', 'possible', 'out'].map(k => EventStatus.BEST4_FLAGS[k] + ' ' + EventStatus.BEST4_FLAG_TEXT[k])
   } : null;
 
   return {
@@ -438,7 +442,7 @@ function computeRanking(event) {
       female: r.female.map(strip),
       newFace: r.newFace.map(strip)
     },
-    // ベスト4 に残れる可能性（一般男子。rankings.male と同じ並びの配列と、二巡目が未確定の人数。
+    // ベスト4 に残れる可能性（部門ごと。rankings の各配列と同じ並びの配列、二巡目が未確定の人数、凡例。
     // 二巡目の行が無ければ null。順位表示ページの列。ユーザー要望 2026-10-05）
     best4Chance: best4Chance,
     // 部門ごとの「〜巡目 済み/全員」（{ round, done, total, label }。順位表示ページの見出し用。ユーザー要望 2026-10-05）

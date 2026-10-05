@@ -7039,7 +7039,8 @@
         { id: 'd2', name: 'd', order: 'A-男子-2-4', sourcePlayerId: 'd' },
         { id: 'e2', name: 'e', order: 'A-男子-2-5', sourcePlayerId: 'e' }
       ];
-      var ch = EventStatus.best4Chances(ps, { maxExtraOf: function() { return 30; } });
+      var chAll = EventStatus.best4Chances(ps, { maxExtraOf: function() { return 30; } });
+      var ch = chAll.male;
       // cur: a 60, b 50, c 30, d 20, e 10。max: a 60, b 50, c 60, d 50, e 40
       // a: cur 60 を上回れる相手なし → sure。b: 50 を上回れるのは a, c → sure。c: 30 を上回れる a, b, d, e（4 人）→ 可能性（cur_j > 60 は無し）
       // d: 20 を上回れるのは a, b, c, e（4 人）。max 50 を既に上回るのは a（60）→ possible。e: max 40 を上回るのは a, b → possible
@@ -7048,11 +7049,13 @@
         ['sure', 'sure', 'possible', 'possible', 'possible']);
       assert('best4Chances: cur / max / pending / 残り', [ch.byKey['id:c'].cur, ch.byKey['id:c'].max, ch.byKey['id:c'].pending, ch.byKey['id:a'].pending, ch.remaining],
         [30, 60, true, false, 3]);
-      var ch2 = EventStatus.best4Chances(ps, { maxExtraOf: function() { return 5; } });
+      var ch2 = EventStatus.best4Chances(ps, { maxExtraOf: function() { return 5; } }).male;
       // max: c 35, d 25, e 15。e の max 15 を既に上回るのは a 60, b 50, c 30, d 20 の 4 人 → out
       // d: cur 20 を上回れるのは a 60, b 50, c 35 の 3 人だけ（e の max 15 は届かない）→ 4 位以内が確定
-      assert('best4Chances: 満点を足しても届かなければ圏外', [ch2.byKey['id:e'].flag, ch2.byKey['id:e'].label, ch2.byKey['id:d'].flag], ['out', '✕ 圏外', 'sure']);
-      assert('best4Chances: 女子は対象外', ch.byKey['id:f'], undefined);
+      assert('best4Chances: 満点を足しても届かなければ圏外。label は記号だけ', [ch2.byKey['id:e'].flag, ch2.byKey['id:e'].label, ch2.byKey['id:d'].flag], ['out', '✕', 'sure']);
+      assert('best4Chances: 部門ごと（女子は女子の中で判定。一般男子には出ない）',
+        [ch.byKey['id:f'], chAll.female.byKey['id:f'].flag, chAll.female.remaining, Object.keys(chAll.newFace.byKey).length],
+        [undefined, 'sure', 0, 0]);
       assert('best4Chances: 二巡目の行が無ければ null', EventStatus.best4Chances(ps.slice(0, 6), {}), null);
       assert('Courts.maxExtraOf: 3 技の満点の合計（性別で解決）',
         Courts.maxExtraOf([{ name: '夢想返し', strikes: [13, 5, null, null] }, { name: '胸尽くし(男)', strikes: [11, 1, null, null] }, { name: '胸尽くし(女)', strikes: [13, 1, null, null] }],
