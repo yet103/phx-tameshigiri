@@ -6738,6 +6738,12 @@
     ];
     assert('revealOrder: 下位から順に開く', Present.revealOrder(revRows), [2, 1, 0]);
     assert('revealOrder: 同順位もまとめず1人ずつ', Present.revealOrder(revRows).length, revRows.length);
+    // 一覧は上から 1 位の順のまま、開いた行は下（下位）から積み上がる（ユーザー要望 2026-10-06）
+    assert('revealedSet: step 0 は誰も開いていない', Present.revealedSet([2, 1, 0], 0), {});
+    assert('revealedSet: step 1 は最下位（添字 2）だけ', Present.revealedSet([2, 1, 0], 1), { 2: true });
+    assert('revealedSet: step 2 は下 2 人', Present.revealedSet([2, 1, 0], 2), { 1: true, 2: true });
+    assert('revealedSet: step が長さを超えても全員まで', Present.revealedSet([2, 1, 0], 9), { 0: true, 1: true, 2: true });
+    assert('revealedSet: order が null・step が負でも空', [Present.revealedSet(null, 3), Present.revealedSet([0], -1)], [{}, {}]);
     assert('revealOrder: 最後に開くのは1位の行',
       revRows[Present.revealOrder(revRows)[revRows.length - 1]].rank, 1);
 

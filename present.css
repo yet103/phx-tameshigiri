@@ -1,10 +1,13 @@
 /* 大画面用。常に暗い配色なので body に data-theme="dark" を固定し、theme.css の変数を使う */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
+  /* 発表ページは見出しも一覧もボタンもみな明朝（ユーザー要望 2026-10-06）。
+     同梱の しっぽり明朝 B1 は Bold だけなので、太字でない行も同じ字形で出る。 */
+  font-family: var(--mincho);
   background: var(--bg);
   color: var(--text);
 }
+button { font-family: inherit; }
 .present-root { display: flex; flex-direction: column; height: 100vh; }
 .present-bar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -46,8 +49,7 @@ body {
 
 /* ===== 大会トーン（ポスター準拠） ===== */
 .present-bar { background: var(--band-bg); border-bottom: 1px solid var(--gold); }
-.present-title { font-family: var(--mincho); letter-spacing: .06em; color: var(--gold-light); border-bottom: 1px solid var(--gold); padding-bottom: 6px; }
-.present-list li.top { font-family: var(--mincho); }
+.present-title { letter-spacing: .06em; color: var(--gold-light); border-bottom: 1px solid var(--gold); padding-bottom: 6px; }
 .present-rank { color: var(--gold-light); }
 
 /* ===== ベスト4 発表（4 位から 1 組ずつ。出し終えた組は上に積み、最新の組を強調） ===== */

@@ -1,6 +1,6 @@
 // present.html 専用のスクリプト（大画面用・発表モード）。
 // - 掲示モード（board）: 60秒ごとに自動更新しながら3部門を順に表示する。
-// - 発表モード（reveal）: 部門を選んで、下位から1人ずつタップで順位を開けていく。
+// - 発表モード（reveal）: 部門を選んで、上から 1 位の順に並べた一覧を下位から1人ずつタップで開けていく。
 // - ベスト4 モード（best4）: 合計の一般男子上位 4 名（ranking API の best4）を 4 位 → 1 位の順に
 //   タップで出すカウントダウン（設計書 2026-10-04-finale-after-round2 4 章）。
 var Present = (function() {
@@ -100,6 +100,16 @@ var Present = (function() {
     var n = (rows || []).length;
     for (var i = n - 1; i >= 0; i--) out.push(i);
     return out;
+  }
+
+  // 開き終えた行（rankings 配列への添字）の集合。order の先頭 step 件が開いている。
+  // 一覧は上から 1 位の順に並べたまま、開いた行だけ名前と点を見せる（ユーザー要望 2026-10-06）。
+  function revealedSet(order, step) {
+    var set = {};
+    var list = order || [];
+    var n = Math.min(Math.max(Number(step) || 0, 0), list.length);
+    for (var pos = 0; pos < n; pos++) set[list[pos]] = true;
+    return set;
   }
 
   // ベスト4 の行（サーバーが計算した合計の上位。順位の昇順＝1 位が先頭）。無ければ空。
@@ -440,16 +450,18 @@ var Present = (function() {
       return;
     }
 
+    // 並びは掲示と同じ上から 1 位の順。開くのは下（下位）からなので、開いた行は下から積み上がる
+    var opened = revealedSet(order, step);
     var ul = document.createElement('ul');
     ul.className = 'present-list';
-    for (var pos = 0; pos < order.length; pos++) {
-      var row = rows[order[pos]];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
       if (!row) continue;
-      var opened = pos < step;
+      var isOpen = !!opened[i];
       var li = document.createElement('li');
       var cls = '';
       if (row.rank <= 3) cls = 'top';
-      if (!opened) cls = (cls ? cls + ' ' : '') + 'veil';
+      if (!isOpen) cls = (cls ? cls + ' ' : '') + 'veil';
       if (cls) li.className = cls;
 
       var rankEl = document.createElement('span');
@@ -459,12 +471,12 @@ var Present = (function() {
 
       var nameEl = document.createElement('span');
       nameEl.className = 'present-name';
-      nameEl.textContent = opened ? row.name : '？？？？';
+      nameEl.textContent = isOpen ? row.name : '？？？？';
       li.appendChild(nameEl);
 
       var scoreEl = document.createElement('span');
       scoreEl.className = 'present-score';
-      scoreEl.textContent = opened ? row.score : '—';
+      scoreEl.textContent = isOpen ? row.score : '—';
       li.appendChild(scoreEl);
 
       ul.appendChild(li);
@@ -678,6 +690,7 @@ var Present = (function() {
 
   return {
     revealOrder: revealOrder,
+    revealedSet: revealedSet,
     best4Rows: best4Rows,
     best4Groups: best4Groups,
     defaultMode: defaultMode
