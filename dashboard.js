@@ -538,12 +538,25 @@ var Dashboard = (function() {
   }
 
   // 面と仕切りの位置を当てる。面の要素は動かさず style だけ変える（iframe を読み直さない）。
-  // 仕切りは本数が変わるので作り直す
+  // 仕切りは並びの形（gutterSig）が変わったときだけ作り直す。仕切りを掴んで動かしている間は形が変わらないので
+  // 同じ要素の位置だけ当て直す（作り直すと掴んでいる仕切りが DOM から外れて pointerup が届かず、保存されない）
+  var gutterEls = [], gutterSig = '';
   function applyPositions() {
     var grid = document.getElementById('dashGrid');
-    var old = grid.querySelectorAll('.dash-gutter');
-    for (var i = 0; i < old.length; i++) grid.removeChild(old[i]);
     var vr = visibleRows();
+    var sig = JSON.stringify(vr);
+    if (sig !== gutterSig) {
+      gutterEls.forEach(function(g) { if (g.parentNode) g.parentNode.removeChild(g); });
+      gutterEls = [];
+      gutterSig = sig;
+    }
+    var gi = 0;   // 何本目の仕切りか（作る順番は毎回同じ）
+    function gutter(kind, key, n, index, stackKeys) {
+      var g = gutterEls[gi];
+      if (!g) { g = buildGutter(kind, key, n, index, stackKeys); gutterEls.push(g); grid.appendChild(g); }
+      gi++;
+      return g;
+    }
     var shown = Object.create(null);
     vr.forEach(function(x) { x.cells.forEach(function(cell) { cell.keys.forEach(function(k) { shown[k] = true; }); }); });
     Object.keys(paneEls).forEach(function(k) { paneEls[k].classList.toggle('hidden', !shown[k]); });
@@ -559,12 +572,11 @@ var Dashboard = (function() {
       x.cells.forEach(function(cell, i) {
         var left = calcPos(cols[i].x, n - 1, i), width = calcSize(cols[i].w, n - 1);
         if (i > 0) {
-          var gv = buildGutter('v', key, n, i - 1);
+          var gv = gutter('v', key, n, i - 1);
           gv.style.left = calcPos(cols[i].x, n - 1, i - 1);
           gv.style.width = GUTTER_PX + 'px';
           gv.style.top = rowTop;
           gv.style.height = rowH;
-          grid.appendChild(gv);
         }
         var s = cell.keys.length, skey = stackKey(x.r, cell.c, s);
         var hs = colGeometry(colsFor(layout, skey, s));
@@ -575,22 +587,20 @@ var Dashboard = (function() {
           el.style.top = s === 1 ? rowTop : calcPos(hs[q].x, s - 1, q, rowH, rowTop);
           el.style.height = s === 1 ? rowH : calcSize(hs[q].w, s - 1, rowH);
           if (q > 0) {
-            var gs = buildGutter('s', skey, s, q - 1, cell.keys);
+            var gs = gutter('s', skey, s, q - 1, cell.keys);
             gs.style.left = left;
             gs.style.width = width;
             gs.style.top = calcPos(hs[q].x, s - 1, q - 1, rowH, rowTop);
             gs.style.height = GUTTER_PX + 'px';
-            grid.appendChild(gs);
           }
         });
       });
       if (j < m - 1) {
-        var gh = buildGutter('h', 'rows' + m, m, j);
+        var gh = gutter('h', 'rows' + m, m, j);
         gh.style.left = '0';
         gh.style.width = '100%';
         gh.style.top = calcPos(g.y + g.h, geo.gutters, j);
         gh.style.height = GUTTER_PX + 'px';
-        grid.appendChild(gh);
       }
     });
     renderPanesMenu();
@@ -704,6 +714,8 @@ var Dashboard = (function() {
     grid.innerHTML = '';
     paneEls = Object.create(null);
     paneList = [];
+    gutterEls = [];
+    gutterSig = '';
     var menu = document.getElementById('dashPanesMenu');
     if (menu) menu.classList.toggle('hidden', !eventId);
     if (!eventId) {
