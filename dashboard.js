@@ -1,7 +1,8 @@
 // ダッシュボード（設計書 2026-10-05-dashboard-design.md、面の閉じる・入れ替えは 2026-10-06-dashboard-panes-design.md）。
 // 採点画面（コートごと）・PC 運営の試合進行・順位表示を iframe で 1 画面に並べる。閲覧専用（盾がクリックを止め、
 // ホイールだけ中へ渡す）と操作可能（盾なし）の 2 モード。各 iframe は等倍で読み込み、transform: scale で縮める。
-// 面は「段」の並び（何段でも）で持ち、DOM の順番ではなく絶対配置で並べる（閉じる・入れ替えで iframe を読み直さないため）。
+// 面の並びは「段 → 列 → 列の中に縦に積んだ面」の 3 層（段はいくつでも、列の中に何面でも積める）で持ち、
+// DOM の順番ではなく絶対配置で並べる（閉じる・入れ替えで iframe を読み直さないため）。
 // 依存: Api（listEvents / loadEvent）、Storage（テーマ）、Courts（listFrom / UNASSIGNED）。
 var Dashboard = (function() {
   var ZOOM_KEY = 'tmg_dashboard_zoom';
@@ -9,15 +10,17 @@ var Dashboard = (function() {
   var ZOOM_DEFAULT = 75, ZOOM_MIN = 50, ZOOM_MAX = 100, ZOOM_STEP = 5;
   // 面の仕切り（ユーザー要望 2026-10-05: 枠をリサイズでき、位置を端末に保存）。
   // layout = { row: 2 段のときの上段の高さ %（以前からの控え）,
-  //            cols: { top1: [%], top2: [%,%], bottom: [%,%], bottom3: [%,%,%], row2_2: [%,%] … }（段ごとの面の幅。キーは rowKey()）,
-  //            rows: { rows2: [%,%], rows3: [%,%,%] … }（段の数ごとの段の高さ） }（各配列の合計 100）
+  //            cols: { top<n> | bottom | bottom<n> | row<段>_<n>: [%...]（段ごとの列の幅）,
+  //                    stk<段>_<列>_<n>: [%...]（列の中に積んだ面の高さ） },
+  //            rows: { rows<段の数>: [%...]（段の高さ） } }（各配列の合計 100。キーは rowKey() / stackKey()）
   var LAYOUT_KEY = 'tmg_dashboard_layout';
   var ROW_DEFAULT = 60, PANE_MIN = 15, GUTTER_PX = 8, MAX_ROWS = 6;
-  // 面の並びと閉じた面（ユーザー要望 2026-10-06）。panes = { rows: [[鍵, …], …], hidden: [鍵, …] }
-  // （以前の { top, bottom } も読める）
+  // 面の並びと閉じた面（ユーザー要望 2026-10-06）。
+  // panes = { rows: [段, …], hidden: [鍵, …] }、段 = [列, …]、列 = [鍵, …]（上から順に縦に積む）
+  // （以前の { top, bottom } と、列が鍵の文字列だけの控えも読める）
   var PANES_KEY = 'tmg_dashboard_panes';
   var DRAG_START_PX = 6;   // 見出しを掴んでこれだけ動いたら入れ替えのドラッグ開始（クリックと区別）
-  var EDGE_RATIO = 0.25;   // 放す先の面の端この割合の帯なら「隣に差し込む／上下に新しい段」、真ん中なら「入れ替え」
+  var EDGE_RATIO = 0.25;   // 放す先の面の端この割合の帯なら「隣に差し込む／上下に積む」、真ん中なら「入れ替え」
 
   // --- 純粋関数（test.html が見る） ---
 
@@ -66,20 +69,28 @@ var Dashboard = (function() {
     });
     return out;
   }
-  function pruneRows(rows) { return rows.filter(function(r) { return r.length > 0; }); }
-  function copyArr(arr) {
-    return { rows: arr.rows.map(function(r) { return r.slice(); }), hidden: arr.hidden.slice() };
+  // 空の列・空の段を消す
+  function pruneRows(rows) {
+    return rows.map(function(row) { return row.filter(function(cell) { return cell.length > 0; }); })
+      .filter(function(row) { return row.length > 0; });
   }
-  // 控えから読んだ生の値を正す（鍵の実在は見ない。それは arrangePanes）。以前の { top, bottom } は 2 段として読む
+  function copyArr(arr) {
+    return { rows: arr.rows.map(function(row) { return row.map(function(cell) { return cell.slice(); }); }), hidden: arr.hidden.slice() };
+  }
+  // 控えから読んだ生の値を正す（鍵の実在は見ない。それは arrangePanes）。
+  // 以前の { top, bottom } は 2 段として、列が鍵の文字列だけなら 1 面の列として読む
   function normalizePanes(raw) {
     var s = (raw && typeof raw === 'object') ? raw : {};
     var seen = Object.create(null);
     var src = Array.isArray(s.rows) ? s.rows : [s.top, s.bottom];
-    var rows = src.map(function(r) { return cleanKeys(r, seen); });
+    var rows = src.map(function(row) {
+      if (!Array.isArray(row)) return [];
+      return row.map(function(cell) { return cleanKeys(Array.isArray(cell) ? cell : [cell], seen); });
+    });
     return { rows: pruneRows(rows), hidden: cleanKeys(s.hidden, Object.create(null)) };
   }
-  // 控えの並びを今の大会の面（keys）に合わせる。無い鍵は落とし、控えに無い鍵は既定の段（defaultRows[i]）の末尾に
-  // 足す（その段が無ければ段ごと足す）。どの既定にも無い鍵は最後の段へ。hidden は今ある鍵だけ残す。空の段は消す
+  // 控えの並びを今の大会の面（keys）に合わせる。無い鍵は落とし、控えに無い鍵は既定の段（defaultRows[i]。鍵の配列）の
+  // 末尾に 1 面の列として足す（その段が無ければ段ごと足す）。どの既定にも無い鍵は最後の段へ。hidden は今ある鍵だけ残す
   function arrangePanes(keys, defaultRows, saved) {
     var have = Object.create(null);
     (keys || []).forEach(function(k) { have[k] = true; });
@@ -90,87 +101,108 @@ var Dashboard = (function() {
       (arr || []).forEach(function(k) { if (have[k] && !seen[k]) { seen[k] = true; out.push(k); } });
       return out;
     }
-    var rows = s.rows.map(pick);
+    function cellsOf(list) { return list.map(function(k) { return [k]; }); }
+    var rows = s.rows.map(function(row) { return row.map(pick); });
     (defaultRows || []).forEach(function(def, i) {
       var extra = pick(def);
       if (!extra.length) return;
-      if (rows[i]) rows[i] = rows[i].concat(extra);
-      else rows.push(extra);
+      if (rows[i]) rows[i] = rows[i].concat(cellsOf(extra));
+      else rows.push(cellsOf(extra));
     });
     var rest = pick(keys || []);
     if (rest.length) {
-      if (rows.length) rows[rows.length - 1] = rows[rows.length - 1].concat(rest);
-      else rows.push(rest);
+      if (rows.length) rows[rows.length - 1] = rows[rows.length - 1].concat(cellsOf(rest));
+      else rows.push(cellsOf(rest));
     }
     return { rows: pruneRows(rows), hidden: s.hidden.filter(function(k) { return have[k]; }) };
   }
-  // 鍵の場所 { r: 段, i: 段の中の位置 }。無ければ null
+  // 鍵の場所 { r: 段, c: 列, i: 列の中の位置 }。無ければ null
   function findPane(rows, key) {
     for (var r = 0; r < rows.length; r++) {
-      var i = rows[r].indexOf(key);
-      if (i >= 0) return { r: r, i: i };
+      for (var c = 0; c < rows[r].length; c++) {
+        var i = rows[r][c].indexOf(key);
+        if (i >= 0) return { r: r, c: c, i: i };
+      }
     }
     return null;
   }
+  // 鍵を抜く（空の列・段はまだ消さない。段・列の番号を保つため）
   function withoutKey(rows, key) {
-    return rows.map(function(r) { return r.filter(function(k) { return k !== key; }); });
+    return rows.map(function(row) { return row.map(function(cell) { return cell.filter(function(k) { return k !== key; }); }); });
   }
-  // 面 a と b の場所を入れ替える（同じ段でも別の段でも）。片方が無ければそのまま
+  function allKeys(arr) {
+    var out = [];
+    arr.rows.forEach(function(row) { row.forEach(function(cell) { out = out.concat(cell); }); });
+    return out;
+  }
+  // 面 a と b の場所を入れ替える（どこにあっても）。片方が無ければそのまま
   function swapPanes(arr, a, b) {
     var out = copyArr(arr);
     var pa = findPane(out.rows, a), pb = findPane(out.rows, b);
     if (!pa || !pb || a === b) return out;
-    out.rows[pa.r][pa.i] = b;
-    out.rows[pb.r][pb.i] = a;
+    out.rows[pa.r][pa.c][pa.i] = b;
+    out.rows[pb.r][pb.c][pb.i] = a;
     return out;
   }
-  // 面 key を段 rowIndex の refKey の前（side 'before'）か後ろ（'after'）に差し込む（元の段からは抜く）。
-  // refKey が無ければ段の末尾。key と refKey が同じ・key が無い・段が無ければそのまま。空になった段は消す
+  // 面 key を、段 rowIndex の refKey がある列の左（side 'before'）か右（'after'）に、1 面の列として差し込む
+  // （元の場所からは抜く）。refKey が無ければ段の右端。key と refKey が同じ・key が無い・段が無ければそのまま
   function insertPane(arr, key, rowIndex, refKey, side) {
     var out = copyArr(arr);
     if (key === refKey || !findPane(out.rows, key) || !out.rows[rowIndex]) return out;
     out.rows = withoutKey(out.rows, key);
-    var list = out.rows[rowIndex];
-    var i = refKey ? list.indexOf(refKey) : -1;
-    if (i < 0) list.push(key);
-    else list.splice(side === 'after' ? i + 1 : i, 0, key);
+    var row = out.rows[rowIndex];
+    var ci = -1;
+    if (refKey) row.forEach(function(cell, c) { if (cell.indexOf(refKey) >= 0) ci = c; });
+    if (ci < 0) row.push([key]);
+    else row.splice(side === 'after' ? ci + 1 : ci, 0, [key]);
     out.rows = pruneRows(out.rows);
     return out;
   }
-  // 面 key だけの新しい段を、段 rowIndex の上（where 'above'）か下（'below'）に作る（元の段からは抜く）。
-  // 段の数が MAX_ROWS を超えるならそのまま。空になった段は消す（一人だけの段を自分の上に動かしても変わらない）
+  // 面 key を refKey と同じ列の、refKey のすぐ上（where 'above'）か下（'below'）に積む（元の場所からは抜く）
+  function stackPane(arr, key, refKey, where) {
+    var out = copyArr(arr);
+    if (key === refKey || !findPane(out.rows, key) || !findPane(out.rows, refKey)) return out;
+    out.rows = withoutKey(out.rows, key);
+    var f = findPane(out.rows, refKey);
+    out.rows[f.r][f.c].splice(where === 'below' ? f.i + 1 : f.i, 0, key);
+    out.rows = pruneRows(out.rows);
+    return out;
+  }
+  // 面 key だけの新しい段を、段 rowIndex の上（where 'above'）か下（'below'）に作る（元の場所からは抜く）。
+  // 段の数が MAX_ROWS を超えるならそのまま。空になった段は消える（一人だけの段を自分の上に動かしても変わらない）
   function newRowPane(arr, key, rowIndex, where) {
     var out = copyArr(arr);
     if (!findPane(out.rows, key)) return out;
     var rows = withoutKey(out.rows, key);
     var idx = Math.min(rows.length, Math.max(0, (where === 'below') ? rowIndex + 1 : rowIndex));
-    rows.splice(idx, 0, [key]);
+    rows.splice(idx, 0, [[key]]);
     rows = pruneRows(rows);
     if (rows.length > MAX_ROWS) return out;
     out.rows = rows;
     return out;
   }
-  // 全部を 1 段に横一列（段の順に並べる）
+  // 全部を 1 段に横一列（今の順。積んだ面もばらす）
   function oneRow(arr) {
-    var all = [];
-    arr.rows.forEach(function(r) { all = all.concat(r); });
-    return { rows: all.length ? [all] : [], hidden: arr.hidden.slice() };
+    var all = allKeys(arr);
+    return { rows: all.length ? [all.map(function(k) { return [k]; })] : [], hidden: arr.hidden.slice() };
   }
-  // 全部を 1 面ずつの段に縦一列（MAX_ROWS を超える分は最後の段にまとめる）
+  // 全部を 1 面ずつの段に縦一列（MAX_ROWS を超える分は最後の段に横に並べる）
   function oneColumn(arr) {
-    var all = oneRow(arr).rows[0] || [];
-    var rows = all.slice(0, MAX_ROWS - 1).map(function(k) { return [k]; });
-    if (all.length >= MAX_ROWS) rows.push(all.slice(MAX_ROWS - 1));
+    var all = allKeys(arr);
+    var rows = all.slice(0, MAX_ROWS - 1).map(function(k) { return [[k]]; });
+    if (all.length >= MAX_ROWS) rows.push(all.slice(MAX_ROWS - 1).map(function(k) { return [k]; }));
     return { rows: rows, hidden: arr.hidden.slice() };
   }
-  // 幅の控えのキー（段の番号と面の数）。0 段目は top<n>、1 段目は 2 面なら以前からの 'bottom' 他は bottom<n>、
+  // 列の幅の控えのキー（段の番号と列の数）。0 段目は top<n>、1 段目は 2 列なら以前からの 'bottom' 他は bottom<n>、
   // それ以降は row<段>_<n>
   function rowKey(rowIndex, n) {
     if (rowIndex === 0) return 'top' + n;
     if (rowIndex === 1) return n === 2 ? 'bottom' : 'bottom' + n;
     return 'row' + rowIndex + '_' + n;
   }
-  // 段の縦の位置（%）。counts は表示中の各段の面の数（空の段は含めない）。段の間に横の仕切りが counts.length-1 本
+  // 列の中に積んだ面の高さの控えのキー
+  function stackKey(rowIndex, cellIndex, n) { return 'stk' + rowIndex + '_' + cellIndex + '_' + n; }
+  // 段の縦の位置（%）。counts は表示中の各段の列の数（空の段は含めない）。段の間に横の仕切りが counts.length-1 本
   function rowGeometry(layout, counts) {
     var m = (counts || []).length;
     var hs = m > 0 ? rowsFor(layout, m) : [];
@@ -180,7 +212,7 @@ var Dashboard = (function() {
       gutters: Math.max(0, m - 1)
     };
   }
-  // 段の中の横の位置（%）。cols（合計 100）から各面の x と w
+  // 並びの位置（%）。cols（合計 100）から各要素の x と w（縦に積んだ面にも使う）
   function colGeometry(cols) {
     var x = 0;
     return cols.map(function(w) {
@@ -222,9 +254,9 @@ var Dashboard = (function() {
     if (row !== null) out.row = row;
     var cols = (raw.cols && typeof raw.cols === 'object') ? raw.cols : {};
     Object.keys(cols).forEach(function(key) {
-      var m = key.match(/^(?:top(\d+)|bottom(\d*)|row\d+_(\d+))$/);
+      var m = key.match(/^(?:top(\d+)|bottom(\d*)|row\d+_(\d+)|stk\d+_\d+_(\d+))$/);
       if (!m) return;
-      var n = m[1] ? parseInt(m[1], 10) : (m[3] ? parseInt(m[3], 10) : (m[2] ? parseInt(m[2], 10) : 2));
+      var n = m[1] ? parseInt(m[1], 10) : m[3] ? parseInt(m[3], 10) : m[4] ? parseInt(m[4], 10) : (m[2] ? parseInt(m[2], 10) : 2);
       if (n < 1 || n > 12) return;
       if (validCols(cols[key], n)) out.cols[key] = roundCols(cols[key]);
     });
@@ -238,7 +270,7 @@ var Dashboard = (function() {
     });
     return out;
   }
-  // 段の列の幅（%）。控えに無い・合わない数なら等分
+  // 段の列の幅（%）／列に積んだ面の高さ（%）。控えに無い・合わない数なら等分
   function colsFor(layout, key, n) {
     var arr = layout && layout.cols && layout.cols[key];
     return validCols(arr, n) ? arr.slice() : equalCols(n);
@@ -294,7 +326,7 @@ var Dashboard = (function() {
   var arr = { rows: [], hidden: [] };            // 面の並びと閉じた面（今の大会の鍵に合わせたもの）
   var paneList = [];                             // 今の大会の面（panes() に key を足したもの。nocourt の案内も含む）
   var paneEls = Object.create(null);             // 鍵 → 面の要素（大会を選んだときに 1 回だけ作る）
-  var defaultRows = [];                          // 「並びを元に戻す」の既定
+  var defaultRows = [];                          // 「並びを元に戻す」の既定（段ごとの鍵の配列）
 
   function applyTheme(theme) {
     document.body.setAttribute('data-theme', theme);
@@ -334,7 +366,7 @@ var Dashboard = (function() {
     box.setAttribute('data-key', p.key);
     var head = document.createElement('div');
     head.className = 'dash-pane-head';
-    head.title = 'ドラッグして場所を変えます（別の面の真ん中で入れ替え、左右の端でその隣、上下の端でその上下の段、画面の上端・下端で一番上・下の段）';
+    head.title = 'ドラッグして場所を変えます（別の面の真ん中で入れ替え、左右の端でその隣の列、上下の端でその面の上下に積む、画面の上端・下端で一番上・下の段）';
     var name = document.createElement('span');
     name.className = 'name';
     name.textContent = p.title;
@@ -383,9 +415,9 @@ var Dashboard = (function() {
 
   // 面の移動: 見出しを掴んで DRAG_START_PX 動いたらドラッグ。放す先は
   //   - 別の面の真ん中 → その面と入れ替え（swapPanes。金の枠）
-  //   - 別の面の左右 EDGE_RATIO の帯 → その面の左／右に差し込む（insertPane。その側に金の帯）
-  //   - 別の面の上下 EDGE_RATIO の帯 → その面の段の上／下に新しい段（newRowPane。その側に金の帯）
-  //   - 画面の上端・下端の帯（ドラッグ中だけ出る .dash-drop-row）→ 一番上／一番下の段
+  //   - 別の面の左右 EDGE_RATIO の帯 → その面の列の左／右に新しい列（insertPane。その側に金の帯）
+  //   - 別の面の上下 EDGE_RATIO の帯 → その面と同じ列の上／下に積む（stackPane。その側に金の帯）
+  //   - 画面の上端・下端の帯（ドラッグ中だけ出る .dash-drop-row）→ 一番上／一番下の新しい段（newRowPane）
   // 仕切りと同じく、ドラッグ中は body.dash-dragging で iframe の pointer-events を切る（elementFromPoint で面が拾える）
   var DROP_CLASSES = ['dash-drop-target', 'dash-drop-before', 'dash-drop-after', 'dash-drop-above', 'dash-drop-below', 'dash-drop-row-on'];
   function enablePaneDrag(box, head, key) {
@@ -457,7 +489,7 @@ var Dashboard = (function() {
       var next;
       if (t.act === 'swap') next = swapPanes(arr, key, t.ref);
       else if (t.act === 'edge') next = newRowPane(arr, key, t.where === 'top' ? 0 : arr.rows.length - 1, t.where === 'top' ? 'above' : 'below');
-      else if (t.act === 'above' || t.act === 'below') next = newRowPane(arr, key, rowOf(t.ref), t.act);
+      else if (t.act === 'above' || t.act === 'below') next = stackPane(arr, key, t.ref, t.act);
       else next = insertPane(arr, key, rowOf(t.ref), t.ref, t.act);
       arr = next;
       savePanes(arr);
@@ -470,13 +502,19 @@ var Dashboard = (function() {
     var f = findPane(arr.rows, key);
     return f ? f.r : 0;
   }
-  // 表示中の段（閉じた面と、要素の無い鍵は除く。空になった段は飛ばす）: [{ r: 段の番号, keys }]
+  // 表示中の並び（閉じた面と、要素の無い鍵は除く。空になった列・段は飛ばす）:
+  // [{ r: 段の番号, cells: [{ c: 列の番号, keys }] }]
   function visibleRows() {
     var hidden = Object.create(null);
     arr.hidden.forEach(function(k) { hidden[k] = true; });
-    return arr.rows.map(function(keys, r) {
-      return { r: r, keys: keys.filter(function(k) { return !hidden[k] && paneEls[k]; }) };
-    }).filter(function(x) { return x.keys.length > 0; });
+    return arr.rows.map(function(row, r) {
+      return {
+        r: r,
+        cells: row.map(function(cell, c) {
+          return { c: c, keys: cell.filter(function(k) { return !hidden[k] && paneEls[k]; }) };
+        }).filter(function(x) { return x.keys.length > 0; })
+      };
+    }).filter(function(x) { return x.cells.length > 0; });
   }
 
   function hidePane(key) {
@@ -490,12 +528,13 @@ var Dashboard = (function() {
     applyPositions();
   }
 
-  // calc() で位置を入れる。全体から仕切りの分（px）を引いた残りに割合を掛け、手前の仕切りの分を足す
-  function calcPos(pct, gutterCount, before) {
-    return 'calc((100% - ' + (gutterCount * GUTTER_PX) + 'px) * ' + (pct / 100) + ' + ' + (before * GUTTER_PX) + 'px)';
+  // calc() で位置を入れる。全体（base。既定は 100%）から仕切りの分（px）を引いた残りに割合を掛け、手前の仕切りの分を足す
+  function calcPos(pct, gutterCount, before, base, offset) {
+    return 'calc(' + (offset ? offset + ' + ' : '') + '(' + (base || '100%') + ' - ' + (gutterCount * GUTTER_PX) + 'px) * ' +
+      (pct / 100) + ' + ' + (before * GUTTER_PX) + 'px)';
   }
-  function calcSize(pct, gutterCount) {
-    return 'calc((100% - ' + (gutterCount * GUTTER_PX) + 'px) * ' + (pct / 100) + ')';
+  function calcSize(pct, gutterCount, base) {
+    return 'calc((' + (base || '100%') + ' - ' + (gutterCount * GUTTER_PX) + 'px) * ' + (pct / 100) + ')';
   }
 
   // 面と仕切りの位置を当てる。面の要素は動かさず style だけ変える（iframe を読み直さない）。
@@ -506,31 +545,44 @@ var Dashboard = (function() {
     for (var i = 0; i < old.length; i++) grid.removeChild(old[i]);
     var vr = visibleRows();
     var shown = Object.create(null);
-    vr.forEach(function(x) { x.keys.forEach(function(k) { shown[k] = true; }); });
+    vr.forEach(function(x) { x.cells.forEach(function(cell) { cell.keys.forEach(function(k) { shown[k] = true; }); }); });
     Object.keys(paneEls).forEach(function(k) { paneEls[k].classList.toggle('hidden', !shown[k]); });
     var allClosed = document.getElementById('dashAllClosed');
     if (allClosed) allClosed.classList.toggle('hidden', vr.length > 0);
 
-    var geo = rowGeometry(layout, vr.map(function(x) { return x.keys.length; }));
+    var geo = rowGeometry(layout, vr.map(function(x) { return x.cells.length; }));
     var m = vr.length;
     vr.forEach(function(x, j) {
-      var g = geo.rows[j], n = x.keys.length, key = rowKey(x.r, n);
+      var g = geo.rows[j], n = x.cells.length, key = rowKey(x.r, n);
       var cols = colGeometry(colsFor(layout, key, n));
-      var top = calcPos(g.y, geo.gutters, j), height = calcSize(g.h, geo.gutters);
-      x.keys.forEach(function(k, i) {
-        var el = paneEls[k];
-        el.style.left = calcPos(cols[i].x, n - 1, i);
-        el.style.width = calcSize(cols[i].w, n - 1);
-        el.style.top = top;
-        el.style.height = height;
+      var rowTop = calcPos(g.y, geo.gutters, j), rowH = calcSize(g.h, geo.gutters);
+      x.cells.forEach(function(cell, i) {
+        var left = calcPos(cols[i].x, n - 1, i), width = calcSize(cols[i].w, n - 1);
         if (i > 0) {
           var gv = buildGutter('v', key, n, i - 1);
           gv.style.left = calcPos(cols[i].x, n - 1, i - 1);
           gv.style.width = GUTTER_PX + 'px';
-          gv.style.top = top;
-          gv.style.height = height;
+          gv.style.top = rowTop;
+          gv.style.height = rowH;
           grid.appendChild(gv);
         }
+        var s = cell.keys.length, skey = stackKey(x.r, cell.c, s);
+        var hs = colGeometry(colsFor(layout, skey, s));
+        cell.keys.forEach(function(k, q) {
+          var el = paneEls[k];
+          el.style.left = left;
+          el.style.width = width;
+          el.style.top = s === 1 ? rowTop : calcPos(hs[q].x, s - 1, q, rowH, rowTop);
+          el.style.height = s === 1 ? rowH : calcSize(hs[q].w, s - 1, rowH);
+          if (q > 0) {
+            var gs = buildGutter('s', skey, s, q - 1, cell.keys);
+            gs.style.left = left;
+            gs.style.width = width;
+            gs.style.top = calcPos(hs[q].x, s - 1, q - 1, rowH, rowTop);
+            gs.style.height = GUTTER_PX + 'px';
+            grid.appendChild(gs);
+          }
+        });
       });
       if (j < m - 1) {
         var gh = buildGutter('h', 'rows' + m, m, j);
@@ -545,33 +597,39 @@ var Dashboard = (function() {
   }
 
   // 仕切り。pointerdown で掴み、pointermove で layout を更新して当て直し、pointerup で保存。
-  // 'v' は段の中の面の幅（layout.cols[key]）、'h' は段の高さ（layout.rows[key]。key は rows<段の数>）。
+  //   'v' … 段の中の列の幅（layout.cols[key]）、'h' … 段の高さ（layout.rows[key]。key は rows<段の数>）、
+  //   's' … 列に積んだ面の高さ（layout.cols[key]。key は stk…。stackKeys はその列の鍵で、動かせる長さを測るのに使う）
   // iframe がポインターを飲まないよう、ドラッグ中は body.dash-dragging で iframe の pointer-events を切る。
   // ダブルクリックでその仕切りを既定に戻す。
-  function buildGutter(kind, key, n, index) {
+  function buildGutter(kind, key, n, index, stackKeys) {
     var g = document.createElement('div');
-    g.className = 'dash-gutter dash-gutter-' + kind;
+    g.className = 'dash-gutter dash-gutter-' + (kind === 'v' ? 'v' : 'h');
     g.setAttribute('role', 'separator');
-    g.setAttribute('aria-orientation', kind === 'h' ? 'horizontal' : 'vertical');
+    g.setAttribute('aria-orientation', kind === 'v' ? 'vertical' : 'horizontal');
     g.title = 'ドラッグで大きさを変えます。ダブルクリックで元に戻します';
     var start = null;
+    function trackLength() {
+      if (kind === 's') {
+        var first = paneEls[stackKeys[0]].getBoundingClientRect();
+        var last = paneEls[stackKeys[stackKeys.length - 1]].getBoundingClientRect();
+        return (last.bottom - first.top) - GUTTER_PX * (n - 1);
+      }
+      var rect = document.getElementById('dashGrid').getBoundingClientRect();
+      return (kind === 'h' ? rect.height : rect.width) - GUTTER_PX * (n - 1);
+    }
     g.addEventListener('pointerdown', function(e) {
       if (e.button !== 0) return;
-      var rect = document.getElementById('dashGrid').getBoundingClientRect();
-      var track = (kind === 'h' ? rect.height : rect.width) - GUTTER_PX * (n - 1);
-      start = { x: e.clientX, y: e.clientY, track: track,
+      start = { x: e.clientX, y: e.clientY, track: trackLength(),
                 vals: kind === 'h' ? rowsFor(layout, n) : colsFor(layout, key, n) };
       g.setPointerCapture(e.pointerId);
       document.body.classList.add('dash-dragging');
       e.preventDefault();
     });
     g.addEventListener('pointermove', function(e) {
-      if (!start) return;
-      if (kind === 'h') {
-        layout.rows[key] = dragCols(start.vals, index, (e.clientY - start.y) / start.track * 100);
-      } else {
-        layout.cols[key] = dragCols(start.vals, index, (e.clientX - start.x) / start.track * 100);
-      }
+      if (!start || start.track <= 0) return;
+      var delta = (kind === 'v' ? (e.clientX - start.x) : (e.clientY - start.y)) / start.track * 100;
+      if (kind === 'h') layout.rows[key] = dragCols(start.vals, index, delta);
+      else layout.cols[key] = dragCols(start.vals, index, delta);
       applyPositions();
     });
     function finish() {
@@ -600,19 +658,17 @@ var Dashboard = (function() {
     arr.hidden.forEach(function(k) { hidden[k] = true; });
     var byKey = Object.create(null);
     paneList.forEach(function(p) { byKey[p.key] = p; });
-    arr.rows.forEach(function(row) {
-      row.forEach(function(k) {
-        var p = byKey[k];
-        if (!p || k === 'nocourt') return;
-        var label = document.createElement('label');
-        var cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = !hidden[k];
-        cb.addEventListener('change', function() { if (cb.checked) showPane(k); else hidePane(k); });
-        label.appendChild(cb);
-        label.appendChild(document.createTextNode(p.title));
-        list.appendChild(label);
-      });
+    allKeys(arr).forEach(function(k) {
+      var p = byKey[k];
+      if (!p || k === 'nocourt') return;
+      var label = document.createElement('label');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !hidden[k];
+      cb.addEventListener('change', function() { if (cb.checked) showPane(k); else hidePane(k); });
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(p.title));
+      list.appendChild(label);
     });
     var sep = document.createElement('div');
     sep.className = 'sep';
@@ -626,12 +682,14 @@ var Dashboard = (function() {
       b.addEventListener('click', onClick);
       list.appendChild(b);
     }
-    var count = arr.rows.reduce(function(s, r) { return s + r.length; }, 0);
+    var count = allKeys(arr).length;
+    var isOneRow = arr.rows.length === 1 && arr.rows[0].every(function(cell) { return cell.length === 1; });
+    var isOneColumn = arr.rows.length === Math.min(count, MAX_ROWS) && arr.rows.every(function(row) { return row.length === 1 && row[0].length === 1; });
     button('すべて表示', '', arr.hidden.length === 0, function() { arr.hidden = []; savePanes(arr); applyPositions(); });
-    button('横一列に並べる', '全部の面を 1 つの段に横一列に並べます', arr.rows.length <= 1, function() {
+    button('横一列に並べる', '全部の面を 1 つの段に横一列に並べます', isOneRow || count === 0, function() {
       arr = oneRow(arr); savePanes(arr); applyPositions();
     });
-    button('縦一列に並べる', '全部の面を 1 面ずつの段に縦に並べます', arr.rows.length >= Math.min(count, MAX_ROWS), function() {
+    button('縦一列に並べる', '全部の面を 1 面ずつの段に縦に並べます', isOneColumn || count === 0, function() {
       arr = oneColumn(arr); savePanes(arr); applyPositions();
     });
     button('並びを元に戻す', '既定の 2 段（上にコート、下に運営と順位）に戻し、閉じた面も出します', false, function() {
@@ -781,10 +839,13 @@ var Dashboard = (function() {
     arrangePanes: arrangePanes,
     swapPanes: swapPanes,
     insertPane: insertPane,
+    stackPane: stackPane,
     newRowPane: newRowPane,
     oneRow: oneRow,
     oneColumn: oneColumn,
+    allKeys: allKeys,
     rowKey: rowKey,
+    stackKey: stackKey,
     rowGeometry: rowGeometry,
     colGeometry: colGeometry,
     loadPanes: loadPanes,

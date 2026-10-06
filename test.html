@@ -7028,6 +7028,8 @@
     assert('Dashboard.normalizeLayout: 妥当な値はそのまま（row は 15〜85 に丸める）',
       [Dashboard.normalizeLayout({ row: 5 }).row, Dashboard.normalizeLayout({ row: 95 }).row, Dashboard.normalizeLayout({ row: 42.26, cols: { top3: [20, 30, 50], bottom: [30, 70], row2_2: [40, 60] } })],
       [15, 85, { row: 42.3, cols: { top3: [20, 30, 50], bottom: [30, 70], row2_2: [40, 60] }, rows: {} }]);
+    assert('Dashboard.normalizeLayout: 列に積んだ面の高さ（stk<段>_<列>_<n>）も受ける',
+      Dashboard.normalizeLayout({ cols: { stk0_2_2: [40, 60], stk1_0_3: [20, 30, 50], stk0_0_2: [10, 90] } }).cols, { stk0_2_2: [40, 60], stk1_0_3: [20, 30, 50] });
     assert('Dashboard.normalizeLayout: bottom1 / bottom3 も受ける（top だけの裸のキーは落とす）',
       Dashboard.normalizeLayout({ cols: { bottom3: [20, 30, 50], bottom1: [100], top: [100], top0: [100] } }).cols,
       { bottom3: [20, 30, 50], bottom1: [100] });
@@ -7047,56 +7049,70 @@
     assert('Dashboard.saveLayout → loadLayout（壊れた列・段は落ちる）', Dashboard.loadLayout(), { row: 70, cols: { bottom: [40, 60] }, rows: { rows2: [20, 80] } });
     try { localStorage.removeItem('tmg_dashboard_layout'); } catch (e) {}
 
-    // ---- dashboard.js 面を閉じる・再表示・入れ替え・段（設計書 2026-10-06 dashboard-panes） ----
+    // ---- dashboard.js 面を閉じる・再表示・入れ替え・段と列（設計書 2026-10-06 dashboard-panes） ----
+    // 並びは 段 → 列 → 列の中に積んだ面。rows: [[['court:A'], ['court:B']], [['desk'], ['rank']]] が既定の 2 段
     assert('Dashboard.paneKey: コートは court:<名>、他は kind', Dashboard.panes('e1', ['A', '第 1']).map(Dashboard.paneKey), ['court:A', 'court:第 1', 'desk', 'rank']);
     var DEF = [['court:A', 'court:B'], ['desk', 'rank']];
-    assert('Dashboard.arrangePanes: 控えが無ければ既定の段',
-      Dashboard.arrangePanes(['court:A', 'court:B', 'desk', 'rank'], DEF, null), { rows: DEF, hidden: [] });
-    assert('Dashboard.arrangePanes: 控えの段を使い、無い鍵は落とし、控えに無い鍵は既定の段の末尾。hidden も今ある鍵だけ',
+    var DEF_ROWS = [[['court:A'], ['court:B']], [['desk'], ['rank']]];
+    assert('Dashboard.arrangePanes: 控えが無ければ既定の段（1 面ずつの列）',
+      Dashboard.arrangePanes(['court:A', 'court:B', 'desk', 'rank'], DEF, null), { rows: DEF_ROWS, hidden: [] });
+    assert('Dashboard.arrangePanes: 控えの並びを使い、無い鍵は落とし、控えに無い鍵は既定の段の末尾に 1 面の列で。hidden も今ある鍵だけ',
       Dashboard.arrangePanes(['court:A', 'court:B', 'desk', 'rank'], DEF,
-        { rows: [['rank', 'court:C', 'court:A'], ['desk', 'court:A']], hidden: ['desk', 'court:C', 5] }),
-      { rows: [['rank', 'court:A', 'court:B'], ['desk']], hidden: ['desk'] });
-    assert('Dashboard.arrangePanes: 既定の段が控えに無ければ段ごと足す。以前の控え（top / bottom）も読める。空の段は消す',
+        { rows: [[['rank', 'court:C'], ['court:A']], [['desk', 'court:A']]], hidden: ['desk', 'court:C', 5] }),
+      { rows: [[['rank'], ['court:A'], ['court:B']], [['desk']]], hidden: ['desk'] });
+    assert('Dashboard.arrangePanes: 既定の段が控えに無ければ段ごと足す。以前の控え（top / bottom や列が文字列）も読める。空の列・段は消す',
       [Dashboard.arrangePanes(['court:A', 'desk', 'rank'], [['court:A'], ['desk', 'rank']], { rows: [['court:A', 'desk']] }),
-       Dashboard.arrangePanes(['court:A', 'desk', 'rank'], [['court:A'], ['desk', 'rank']], { top: ['court:A', 'desk', 'rank'], bottom: [], hidden: [] })],
-      [{ rows: [['court:A', 'desk'], ['rank']], hidden: [] }, { rows: [['court:A', 'desk', 'rank']], hidden: [] }]);
+       Dashboard.arrangePanes(['court:A', 'desk', 'rank'], [['court:A'], ['desk', 'rank']], { top: ['court:A', 'desk', 'rank'], bottom: [], hidden: [] }),
+       Dashboard.arrangePanes(['court:A', 'rank'], [['court:A'], ['rank']], { rows: [[['court:A'], ['zzz']], [['zzz']], [['rank']]] })],
+      [{ rows: [[['court:A'], ['desk']], [['rank']]], hidden: [] }, { rows: [[['court:A'], ['desk'], ['rank']]], hidden: [] }, { rows: [[['court:A']], [['rank']]], hidden: [] }]);
     assert('Dashboard.arrangePanes: 壊れた控えは既定。どの既定にも無い鍵は最後の段',
-      Dashboard.arrangePanes(['desk', 'rank', 'zzz'], [[], ['desk', 'rank']], 'x'), { rows: [['desk', 'rank', 'zzz']], hidden: [] });
+      Dashboard.arrangePanes(['desk', 'rank', 'zzz'], [[], ['desk', 'rank']], 'x'), { rows: [[['desk'], ['rank'], ['zzz']]], hidden: [] });
     (function() {
-      var a = { rows: [['court:A', 'court:B'], ['desk', 'rank']], hidden: ['rank'] };
-      assert('Dashboard.swapPanes: 同じ段', Dashboard.swapPanes(a, 'court:A', 'court:B').rows, [['court:B', 'court:A'], ['desk', 'rank']]);
+      var a = { rows: [[['court:A'], ['court:B']], [['desk'], ['rank']]], hidden: ['rank'] };
+      var stacked = { rows: [[['court:A'], ['court:B'], ['rank', 'desk']]], hidden: [] };   // A | B | 順位の下に運営
+      assert('Dashboard.swapPanes: 同じ段', Dashboard.swapPanes(a, 'court:A', 'court:B').rows, [[['court:B'], ['court:A']], [['desk'], ['rank']]]);
       var x = Dashboard.swapPanes(a, 'court:A', 'rank');
       assert('Dashboard.swapPanes: 別の段をまたいで。hidden はそのまま。元は変えない',
-        [x.rows, x.hidden, a.rows], [[['rank', 'court:B'], ['desk', 'court:A']], ['rank'], [['court:A', 'court:B'], ['desk', 'rank']]]);
-      assert('Dashboard.swapPanes: 無い鍵・同じ鍵はそのまま',
-        [Dashboard.swapPanes(a, 'court:A', 'nope'), Dashboard.swapPanes(a, 'desk', 'desk')], [a, a]);
-      assert('Dashboard.insertPane: 別の段の面の前に差し込む（元の段から抜ける）',
-        Dashboard.insertPane(a, 'rank', 0, 'court:B', 'before'), { rows: [['court:A', 'rank', 'court:B'], ['desk']], hidden: ['rank'] });
-      assert('Dashboard.insertPane: 後ろに差し込む・同じ段の中で動かす',
-        [Dashboard.insertPane(a, 'desk', 0, 'court:B', 'after').rows, Dashboard.insertPane(a, 'court:B', 0, 'court:A', 'before').rows],
-        [[['court:A', 'court:B', 'desk'], ['rank']], [['court:B', 'court:A'], ['desk', 'rank']]]);
-      assert('Dashboard.insertPane: refKey 無しは段の末尾。空になった段は消える',
-        Dashboard.insertPane({ rows: [['court:A'], ['desk'], ['rank']], hidden: [] }, 'desk', 2, null), { rows: [['court:A'], ['rank', 'desk']], hidden: [] });
+        [x.rows, x.hidden, a.rows], [[[['rank'], ['court:B']], [['desk'], ['court:A']]], ['rank'], DEF_ROWS]);
+      assert('Dashboard.swapPanes: 積んだ面とも入れ替えられる。無い鍵・同じ鍵はそのまま',
+        [Dashboard.swapPanes(stacked, 'court:A', 'desk').rows, Dashboard.swapPanes(a, 'court:A', 'nope'), Dashboard.swapPanes(a, 'desk', 'desk')],
+        [[[['desk'], ['court:B'], ['rank', 'court:A']]], a, a]);
+      assert('Dashboard.insertPane: 別の段の面の左に 1 面の列として差し込む（元の場所から抜ける）',
+        Dashboard.insertPane(a, 'rank', 0, 'court:B', 'before'), { rows: [[['court:A'], ['rank'], ['court:B']], [['desk']]], hidden: ['rank'] });
+      assert('Dashboard.insertPane: 右に差し込む・同じ段の中で動かす・積んだ列の隣にも',
+        [Dashboard.insertPane(a, 'desk', 0, 'court:B', 'after').rows, Dashboard.insertPane(a, 'court:B', 0, 'court:A', 'before').rows, Dashboard.insertPane(stacked, 'court:A', 0, 'desk', 'after').rows],
+        [[[['court:A'], ['court:B'], ['desk']], [['rank']]], [[['court:B'], ['court:A']], [['desk'], ['rank']]], [[['court:B'], ['rank', 'desk'], ['court:A']]]]);
+      assert('Dashboard.insertPane: refKey 無しは段の右端。空になった段は消える',
+        Dashboard.insertPane({ rows: [[['court:A']], [['desk']], [['rank']]], hidden: [] }, 'desk', 2, null), { rows: [[['court:A']], [['rank'], ['desk']]], hidden: [] });
       assert('Dashboard.insertPane: 同じ鍵・無い鍵・無い段はそのまま。元は変えない',
         [Dashboard.insertPane(a, 'desk', 0, 'desk', 'before'), Dashboard.insertPane(a, 'nope', 0, 'court:A', 'before'), Dashboard.insertPane(a, 'desk', 5, null), a.rows],
-        [a, a, a, [['court:A', 'court:B'], ['desk', 'rank']]]);
-      assert('Dashboard.newRowPane: その段の上／下に自分だけの段を作る（元の段から抜ける）',
-        [Dashboard.newRowPane(a, 'rank', 0, 'above').rows, Dashboard.newRowPane(a, 'court:A', 1, 'below').rows, Dashboard.newRowPane(a, 'desk', 1, 'above').rows, Dashboard.newRowPane(a, 'rank', 0, 'above').hidden],
-        [[['rank'], ['court:A', 'court:B'], ['desk']], [['court:B'], ['desk', 'rank'], ['court:A']], [['court:A', 'court:B'], ['desk'], ['rank']], ['rank']]);
+        [a, a, a, DEF_ROWS]);
+      assert('Dashboard.stackPane: 同じ列の下／上に積む（元の場所から抜ける。空の列・段は消える）',
+        [Dashboard.stackPane(Dashboard.insertPane(a, 'rank', 0, 'court:B', 'after'), 'desk', 'rank', 'below').rows,
+         Dashboard.stackPane(a, 'court:B', 'court:A', 'above').rows,
+         Dashboard.stackPane(stacked, 'court:B', 'desk', 'below').rows],
+        [[[['court:A'], ['court:B'], ['rank', 'desk']]], [[['court:B', 'court:A']], [['desk'], ['rank']]], [[['court:A'], ['rank', 'desk', 'court:B']]]]);
+      assert('Dashboard.stackPane: 同じ鍵・無い鍵はそのまま。積んだ面を同じ列で動かす',
+        [Dashboard.stackPane(a, 'desk', 'desk', 'below'), Dashboard.stackPane(a, 'nope', 'desk', 'below'), Dashboard.stackPane(a, 'desk', 'nope', 'below'), Dashboard.stackPane(stacked, 'desk', 'rank', 'above').rows],
+        [a, a, a, [[['court:A'], ['court:B'], ['desk', 'rank']]]]);
+      assert('Dashboard.newRowPane: その段の上／下に自分だけの段を作る（元の場所から抜ける）',
+        [Dashboard.newRowPane(a, 'rank', 0, 'above').rows, Dashboard.newRowPane(a, 'court:A', 1, 'below').rows, Dashboard.newRowPane(stacked, 'desk', 0, 'below').rows, Dashboard.newRowPane(a, 'rank', 0, 'above').hidden],
+        [[[['rank']], [['court:A'], ['court:B']], [['desk']]], [[['court:B']], [['desk'], ['rank']], [['court:A']]], [[['court:A'], ['court:B'], ['rank']], [['desk']]], ['rank']]);
       assert('Dashboard.newRowPane: 一人だけの段を自分の上下に動かしても変わらない。無い鍵はそのまま。段は最大 6',
-        [Dashboard.newRowPane({ rows: [['x'], ['y']], hidden: [] }, 'x', 0, 'above').rows, Dashboard.newRowPane(a, 'nope', 0, 'above'),
-         Dashboard.newRowPane({ rows: [['a'], ['b'], ['c'], ['d'], ['e'], ['f', 'g']], hidden: [] }, 'g', 5, 'below').rows.length],
-        [[['x'], ['y']], a, 6]);
-      assert('Dashboard.oneRow / oneColumn: 全部を 1 段に（段の順）／1 面ずつの段に。hidden はそのまま',
-        [Dashboard.oneRow(a), Dashboard.oneColumn(a)],
-        [{ rows: [['court:A', 'court:B', 'desk', 'rank']], hidden: ['rank'] }, { rows: [['court:A'], ['court:B'], ['desk'], ['rank']], hidden: ['rank'] }]);
-      assert('Dashboard.oneColumn: 6 段を超える分は最後の段にまとめる',
-        Dashboard.oneColumn({ rows: [['a', 'b', 'c', 'd', 'e', 'f', 'g']], hidden: [] }).rows, [['a'], ['b'], ['c'], ['d'], ['e'], ['f', 'g']]);
+        [Dashboard.newRowPane({ rows: [[['x']], [['y']]], hidden: [] }, 'x', 0, 'above').rows, Dashboard.newRowPane(a, 'nope', 0, 'above'),
+         Dashboard.newRowPane({ rows: [[['a']], [['b']], [['c']], [['d']], [['e']], [['f'], ['g']]], hidden: [] }, 'g', 5, 'below').rows.length],
+        [[[['x']], [['y']]], a, 6]);
+      assert('Dashboard.oneRow / oneColumn: 全部を 1 段に（今の順。積んだ面もばらす）／1 面ずつの段に。hidden はそのまま',
+        [Dashboard.oneRow(stacked), Dashboard.oneColumn(a)],
+        [{ rows: [[['court:A'], ['court:B'], ['rank'], ['desk']]], hidden: [] }, { rows: [[['court:A']], [['court:B']], [['desk']], [['rank']]], hidden: ['rank'] }]);
+      assert('Dashboard.oneColumn: 6 段を超える分は最後の段に横に',
+        Dashboard.oneColumn({ rows: [[['a'], ['b'], ['c'], ['d'], ['e'], ['f'], ['g']]], hidden: [] }).rows, [[['a']], [['b']], [['c']], [['d']], [['e']], [['f'], ['g']]]);
       assert('Dashboard.oneRow: 空でも落ちない', Dashboard.oneRow({ rows: [], hidden: [] }), { rows: [], hidden: [] });
+      assert('Dashboard.allKeys: 段 → 列 → 積んだ順', Dashboard.allKeys(stacked), ['court:A', 'court:B', 'rank', 'desk']);
     })();
-    assert('Dashboard.rowKey: 0 段目 top<n>、1 段目は 2 面だけ以前からの bottom、以降 row<段>_<n>',
-      [Dashboard.rowKey(0, 1), Dashboard.rowKey(0, 3), Dashboard.rowKey(1, 2), Dashboard.rowKey(1, 1), Dashboard.rowKey(1, 3), Dashboard.rowKey(2, 2)],
-      ['top1', 'top3', 'bottom', 'bottom1', 'bottom3', 'row2_2']);
+    assert('Dashboard.rowKey: 0 段目 top<n>、1 段目は 2 列だけ以前からの bottom、以降 row<段>_<n>。stackKey は stk<段>_<列>_<n>',
+      [Dashboard.rowKey(0, 1), Dashboard.rowKey(0, 3), Dashboard.rowKey(1, 2), Dashboard.rowKey(1, 1), Dashboard.rowKey(1, 3), Dashboard.rowKey(2, 2), Dashboard.stackKey(0, 2, 2)],
+      ['top1', 'top3', 'bottom', 'bottom1', 'bottom3', 'row2_2', 'stk0_2_2']);
     assert('Dashboard.rowGeometry: 段の数で高さを分け、段の間に横の仕切り。1 段なら 100% で仕切り無し。段が無ければ空',
       [Dashboard.rowGeometry(L0, [2, 2]), Dashboard.rowGeometry(L0, [1]), Dashboard.rowGeometry({ row: 60, cols: {}, rows: { rows3: [20, 30, 50] } }, [1, 1, 2]), Dashboard.rowGeometry(L0, [])],
       [{ rows: [{ y: 0, h: 60 }, { y: 60, h: 40 }], gutters: 1 },
@@ -7106,10 +7122,10 @@
     assert('Dashboard.colGeometry', Dashboard.colGeometry([30, 70]), [{ x: 0, w: 30 }, { x: 30, w: 70 }]);
     try { localStorage.removeItem('tmg_dashboard_panes'); } catch (e) {}
     assert('Dashboard.loadPanes: 控えが無ければ空', Dashboard.loadPanes(), { rows: [], hidden: [] });
-    Dashboard.savePanes({ rows: [['a', 'b', 'a'], 'x', ['b', 'c']], hidden: ['b', 1, ''] });
-    assert('Dashboard.savePanes → loadPanes（文字列だけ・重複なし。壊れた段は飛ばす）', Dashboard.loadPanes(), { rows: [['a', 'b'], ['c']], hidden: ['b'] });
+    Dashboard.savePanes({ rows: [[['a', 'b', 'a'], 'x', ['b', 'c']], 'y', [[]]], hidden: ['b', 1, ''] });
+    assert('Dashboard.savePanes → loadPanes（文字列だけ・重複なし。壊れた段は飛ばす。列が文字列なら 1 面の列）', Dashboard.loadPanes(), { rows: [[['a', 'b'], ['x'], ['c']]], hidden: ['b'] });
     Dashboard.savePanes({ top: ['a'], bottom: ['b'], hidden: [] });
-    assert('Dashboard.loadPanes: 以前の控え（top / bottom）は 2 段として読む', Dashboard.loadPanes(), { rows: [['a'], ['b']], hidden: [] });
+    assert('Dashboard.loadPanes: 以前の控え（top / bottom）は 2 段として読む', Dashboard.loadPanes(), { rows: [[['a']], [['b']]], hidden: [] });
     try { localStorage.removeItem('tmg_dashboard_panes'); } catch (e) {}
 
     // ---- EventStatus.roundProgress（順位表の「〜巡目 済み/全員」。ユーザー要望 2026-10-05） ----
