@@ -29,29 +29,19 @@ var Home = (function() {
 
   // --- 大会の並び（純粋関数）---
 
-  // 設計書「画面設計 > トップ」の並び順。小さいほど上。
-  //   0: 採点できる状態（一巡目 / 二巡目 進行中）
-  //   1: 準備中・一巡目終了・二巡目終了（運営の手が要る）
-  //   2: 最終結果（終わっている）
-  function statusRank(status) {
-    if (EventStatus.isScoringOpen(status)) return 0;
-    if (status === 'final') return 2;
-    return 1;
-  }
-
   // 進行中の大会の一覧を並べ替える。アーカイブは除く。
-  // 同じ段の中は updatedAt の新しい順、それも同じなら元の順（Array#sort は
-  // 実装によって不安定なので、添字を持って同着の順を固定する）。
-  // 元の配列は書き換えない。
+  // updatedAt の新しい順、それも同じなら元の順（Array#sort は実装によって不安定なので、
+  // 添字を持って同着の順を固定する）。元の配列は書き換えない。
+  // 以前は状態で段を分けていた（採点中 → 準備中・巡目終了 → 最終結果。設計書「画面設計 > トップ」）が、
+  // 最終結果にした途端に行が下へ移って別の大会と見間違えたので、状態では並びを変えない
+  // （ユーザー要望 2026-10-06）。
   function sortForHome(events) {
     var rows = [];
     (events || []).forEach(function(ev, i) {
-      var status = EventStatus.of(ev);
-      if (status === 'archived') return;
-      rows.push({ ev: ev, i: i, rank: statusRank(status) });
+      if (EventStatus.of(ev) === 'archived') return;
+      rows.push({ ev: ev, i: i });
     });
     rows.sort(function(a, b) {
-      if (a.rank !== b.rank) return a.rank - b.rank;
       var x = String(a.ev.updatedAt || ''), y = String(b.ev.updatedAt || '');
       if (x !== y) return x < y ? 1 : -1;
       return a.i - b.i;
@@ -616,7 +606,7 @@ var Home = (function() {
 
   function renderList(box, events) {
     box.innerHTML = '';
-    // sortForHome はアーカイブを外して「採点中 → 準備中・巡目終了 → 最終結果」の順にする
+    // sortForHome はアーカイブを外して更新の新しい順にする（状態では並びを変えない）
     var active = sortForHome(events).filter(visibleHere);
     var archived = (events || []).filter(function(ev) {
       return EventStatus.of(ev) === 'archived';

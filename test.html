@@ -6462,9 +6462,10 @@
       { id: 'r1d', status: 'round1_done', updatedAt: '2026-09-18T11:00:00.000Z' },
       { id: 'r2',  status: 'round2',      updatedAt: '2026-09-18T08:00:00.000Z' }
     ];
-    assert('sortForHome: 採点中が先、次に準備中と巡目終了、最後に最終結果',
+    // 状態では段を分けず、更新の新しい順だけ（ユーザー要望 2026-10-06。最終結果にしても行が動かない）
+    assert('sortForHome: 状態によらず更新の新しい順',
       Home.sortForHome(homeEvents).map(function(ev) { return ev.id; }),
-      ['r1', 'r2', 'r1d', 'd', 'f']);
+      ['f', 'r1d', 'd', 'r1', 'r2']);
     assert('sortForHome: アーカイブは出さない',
       Home.sortForHome(homeEvents).filter(function(ev) { return ev.id === 'a'; }).length, 0);
     assert('sortForHome: 元の配列を書き換えない',
@@ -6475,12 +6476,17 @@
       })(), ['d', 'f', 'r1', 'a', 'r1d', 'r2']);
     assert('sortForHome: 0 件でも落ちない', Home.sortForHome([]), []);
     assert('sortForHome: null でも落ちない', Home.sortForHome(null), []);
-    assert('sortForHome: status の無い大会は推定する（一巡目を採点中 → 先頭）',
+    assert('sortForHome: status の無い大会も推定してアーカイブでなければ出し、並びは更新順',
       Home.sortForHome([
         { id: 'x', status: 'final', updatedAt: '2026-09-18T20:00:00.000Z' },
         { id: 'y', updatedAt: '2026-09-18T01:00:00.000Z',
           players: [ { order: 'A-男子-1-1', score: 10 }, { order: 'A-男子-1-2', score: 0 } ] }
-      ]).map(function(ev) { return ev.id; }), ['y', 'x']);
+      ]).map(function(ev) { return ev.id; }), ['x', 'y']);
+    assert('sortForHome: updatedAt が同じなら元の順',
+      Home.sortForHome([
+        { id: 'p', status: 'final', updatedAt: '2026-09-18T20:00:00.000Z' },
+        { id: 'q', status: 'round1', updatedAt: '2026-09-18T20:00:00.000Z' }
+      ]).map(function(ev) { return ev.id; }), ['p', 'q']);
 
     // 「前回の大会」（設計書 2026-09-21-home-launcher-design.md「純粋関数」）。
     // トップの作成画面の「前回の大会をコピー」が元にする 1 件。
