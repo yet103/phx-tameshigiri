@@ -6442,6 +6442,12 @@
       'scoring.html#event/a%20b/' + encodeURIComponent('未分類'));
     assert('redirectTarget: ハッシュ無しは転送しない', Home.redirectTarget(''), null);
     assert('redirectTarget: null でも落ちない', Home.redirectTarget(null), null);
+    // 戻ってきたとき・タブに戻ったときの一覧の読み直し（ユーザー報告 2026-10-06）
+    assert('refreshDue: 一覧の区画で 5 秒たっていれば読み直す', Home.refreshDue('#list', 1000, 6000), true);
+    assert('refreshDue: 5 秒未満は読み直さない', Home.refreshDue('#list', 1000, 5999), false);
+    assert('refreshDue: まだ一度も取っていなければ読み直す', Home.refreshDue('#list', 0, 100000), true);
+    assert('refreshDue: 入口（ハッシュ無し）では読み直さない', Home.refreshDue('', 0, 100000), false);
+    assert('refreshDue: 新規作成の区画でも読み直さない', Home.refreshDue('#new', 0, 100000), false);
     assert('redirectTarget: 大会IDが無ければ転送しない', Home.redirectTarget('#event/'), null);
     assert('redirectTarget: 運営画面のハッシュは転送しない', Home.redirectTarget('#events'), null);
     assert('redirectTarget: 壊れたエンコードでも例外を投げず転送しない',

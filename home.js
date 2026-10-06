@@ -553,24 +553,51 @@ var Home = (function() {
   var listExpanded = false; // 「すべて見る」を押したか
   var LIST_LIMIT = 5;       // 畳む前に出す件数（設計書「作成済みの大会」。いまの名前は大会一覧）
 
-  async function loadEvents() {
-    listExpanded = false;   // #list を開き直したら「すべて見る」の展開を引きずらない
-    // 運営画面が大会なしで開かれて戻ってきたときの一言（Storage.setPendingToast。設計書 2026-10-05-event-list-on-home-design.md §3）
-    var pending = Storage.takePendingToast();
-    if (pending) showListNote(pending);
+  // 直近に一覧を取りに行った時刻（quiet な読み直しの間引きに使う）
+  var lastListAttemptAt = 0;
+  var REFRESH_FLOOR_MS = 5000;
+
+  // opts.quiet: 戻ってきたとき・タブに戻ったときの読み直し。「読み込み中…」を出さず、
+  // 「すべて見る」の展開も保ち、取れなければ今の一覧をそのまま残す（ユーザー報告 2026-10-06:
+  // 運営画面で二巡目を終了してトップに戻っても、bfcache や別タブのトップは古いバッジのままだった）。
+  async function loadEvents(opts) {
+    var quiet = !!(opts && opts.quiet);
+    if (!quiet) {
+      listExpanded = false;   // #list を開き直したら「すべて見る」の展開を引きずらない
+      // 運営画面が大会なしで開かれて戻ってきたときの一言（Storage.setPendingToast。設計書 2026-10-05-event-list-on-home-design.md §3）
+      var pending = Storage.takePendingToast();
+      if (pending) showListNote(pending);
+    }
     var seq = ++eventsSeq;
+    lastListAttemptAt = Date.now();
     var box = document.getElementById('homeEventList');
-    box.textContent = '読み込み中…';
+    if (!quiet) box.textContent = '読み込み中…';
     var events = await Api.listEvents();
     if (seq !== eventsSeq) return;                      // 新しい読み込みが始まっている
     if (paneFor(location.hash) !== 'list') return;      // 待っている間に区画を離れた
-    eventsCache = events;
     // Api.listEvents は通信に失敗すると null、大会が 0 件なら [] を返す。区別して出す。
     if (events === null) {
+      if (quiet) return;                                // 静かな読み直しは失敗しても今の一覧を残す
+      eventsCache = events;
       renderNote(box, '大会の一覧を取得できませんでした。通信を確かめて、画面を読み込み直してください。');
       return;
     }
+    eventsCache = events;
     renderList(box, events);
+  }
+
+  // 戻ってきた・タブに戻った・窓が前に来たときに一覧を読み直すか（純粋関数）。
+  // 一覧の区画が出ていて、直近の取得から REFRESH_FLOOR_MS 以上たっていれば読み直す
+  // （切り替えのたびに叩き過ぎない。present.js の visibilitychange と同じ 5 秒）。
+  function refreshDue(hash, lastAt, now) {
+    if (paneFor(hash) !== 'list') return false;
+    return (Number(now) || 0) - (Number(lastAt) || 0) >= REFRESH_FLOOR_MS;
+  }
+
+  function refreshListIfDue() {
+    if (document.hidden) return;
+    if (!refreshDue(location.hash, lastListAttemptAt, Date.now())) return;
+    loadEvents({ quiet: true }).catch(function(e) { console.error(e); });
   }
 
   function renderNote(box, text) {
@@ -880,6 +907,11 @@ var Home = (function() {
     // 効くよう applyRoute からも通す。
     applyRoute();
     window.addEventListener('hashchange', applyRoute);
+    // 運営画面から戻るボタンで戻った（bfcache から復帰した）・別タブから戻った・別の窓から
+    // 前に来たときは一覧を静かに読み直す。他の端末・画面で進めた状態のバッジを古いまま見せない。
+    window.addEventListener('pageshow', function(ev) { if (ev.persisted) refreshListIfDue(); });
+    document.addEventListener('visibilitychange', refreshListIfDue);
+    window.addEventListener('focus', refreshListIfDue);
   }
 
   document.addEventListener('DOMContentLoaded', init);
@@ -888,6 +920,7 @@ var Home = (function() {
     redirectTarget: redirectTarget,
     redirectIfScoring: redirectIfScoring,
     sortForHome: sortForHome,
+    refreshDue: refreshDue,
     pickPrevious: pickPrevious,
     templateSpec: templateSpec,
     importHref: importHref,
