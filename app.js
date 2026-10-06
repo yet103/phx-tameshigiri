@@ -2599,6 +2599,7 @@ var App = (function() {
   function renderRankPanel() {
     if (!rankPanelSection || !rankPanelCols) return;
     rankPanelSection.hidden = !currentEvent;
+    var prevRows = Ranking.captureRows(rankPanelCols);   // 入れ替わりのアニメーション用に前の位置を控える
     rankPanelCols.innerHTML = '';
     if (!currentEvent) return;
     var cats = Courts.rankPanel(players, { countAll: typeof currentEvent.status !== 'string' });
@@ -2657,6 +2658,8 @@ var App = (function() {
         c.rows.forEach(function(r) {
           var tr = document.createElement('tr');
           tr.dataset.key = r.key || '';
+          tr.dataset.rowkey = c.key + '|' + (r.key || r.name || '');   // 描き直しで同じ人の行を見つける（Ranking.animateRows）
+          tr.dataset.score = String(Number(r.score) || 0);
           var ch = withChance ? catChances.byKey[r.key] : null;
           tr.innerHTML = '<td class="rank">' + (Number(r.rank) || 0) + '</td>' +
             '<td class="name">' + esc(r.name || '') + '</td>' +
@@ -2690,6 +2693,7 @@ var App = (function() {
       rankPanelCols.appendChild(legend);
     }
     markRankPanelCurrent();
+    Ranking.animateRows(rankPanelCols, prevRows);   // 順位の入れ替わりを滑らせる（ユーザー要望 2026-10-06）
   }
 
   // 今開いている選手の組の鍵（playerTotals の key）。一巡目の行なら自分の id、二巡目の行なら sourcePlayerId

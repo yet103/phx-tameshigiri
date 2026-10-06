@@ -159,6 +159,7 @@
     rankEventSelect.addEventListener('change', function() { selectEvent(rankEventSelect.value); });
 
     function renderRankings(data) {
+      var prevRows = Ranking.captureRows(rankingContainer);   // 入れ替わりのアニメーション用に前の位置を控える
       rankingContainer.innerHTML = '';
       var ev = data.event || {};
       // ダウンロードした単体HTMLだけを見てもどの大会か分かるよう、見出しを出す
@@ -178,7 +179,8 @@
       CATEGORIES.forEach(function(c) {
         var sec = buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || [],
           data.progress && data.progress[c.key],
-          data.best4Chance ? { remaining: data.best4Chance.remaining && data.best4Chance.remaining[c.key], rows: data.best4Chance[c.key] } : null);
+          data.best4Chance ? { remaining: data.best4Chance.remaining && data.best4Chance.remaining[c.key], rows: data.best4Chance[c.key] } : null,
+          c.key);
         sec.classList.add('rank-panel-col');
         sec.dataset.category = c.key;
         built[c.key] = sec;
@@ -199,12 +201,14 @@
         legend.textContent = 'ベスト4: ' + data.best4Chance.legend.join('　') + '　→n? はまだ斬っていない人の最大（二巡目が全部成功したときの合計）';
         rankingContainer.appendChild(legend);
       }
+      Ranking.animateRows(rankingContainer, prevRows);   // 順位の入れ替わりを滑らせる（ユーザー要望 2026-10-06）
     }
 
     // progress（省略可）: { label } 「一巡目 12/17」= その巡目で確定した人数／全員（サーバーの roundProgress）
     // chance（省略可）: { remaining, rows: [ {flag,label,max} | null, ... ] }（rows と同じ並び。サーバーの best4Chance の部門分）。
     // あれば見出しに「残り n 名」、「ベスト4」の列（◎ ○ ✕ の記号。凡例は表の下）を出す
-    function buildRankTable(title, rows, progress, chance) {
+    // catKey（省略可）: 部門の鍵。行の data-rowkey（部門|名前）に使い、描き直しのときに同じ人の行を見つける
+    function buildRankTable(title, rows, progress, chance, catKey) {
       var div = document.createElement('div');
       div.className = 'ranking-section';
       // 見出しは採点画面の順位表と同じ部品（.rank-panel-progress）。HTML ダウンロードでは class が効かないので
@@ -222,8 +226,10 @@
       }
       var trs = rows.map(function(r, i) {
         var c = withChance ? chance.rows[i] : null;
-        return '<tr><td class="rank">' + Storage.esc(String(r.rank)) + '</td><td class="name">' + Storage.esc(r.name) +
-               '</td><td class="total">' + Storage.esc(String(r.score)) +
+        return '<tr data-rowkey="' + Storage.esc((catKey || title) + '|' + r.name).replace(/"/g, '&quot;') + '" data-score="' + Storage.esc(String(r.score)) + '">' +
+               '<td class="rank">' + Storage.esc(String(r.rank)) + '</td><td class="name">' + Storage.esc(r.name) +
+               // 確定した得点がまだ無い組（counted 偽）は合計をグレーに（ユーザー要望 2026-10-06）。HTML ダウンロードでは class が効かないので色は style でも
+               '</td><td class="total' + (r.counted === false ? ' pending" style="color:#888' : '') + '">' + Storage.esc(String(r.score)) +
                (c && c.pending ? '<span class="rank-panel-max" style="margin-left:2px;font-size:11px;font-weight:normal;color:#888">→' + Storage.esc(String(c.max)) + '?</span>' : '') + '</td>' +
                (withChance ? '<td class="chance ' + ((c && c.flag) || '') + '" style="text-align:center;white-space:nowrap' +
                  (c && c.flag === 'sure' ? ';font-weight:bold' : (c && c.flag === 'out' ? ';color:#888' : '')) + '"' +

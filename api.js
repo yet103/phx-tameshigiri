@@ -833,7 +833,7 @@ var Api = (function() {
   async function loadRanking(eventId) {
     // GET /api/events/:eventId/ranking
     // 戻り値: { event: { name, date, venue, updatedAt, status },
-    //          rankings: { male: [{ rank, name, score }], female: [...], newFace: [...] },
+    //          rankings: { male: [{ rank, name, score, counted }], female: [...], newFace: [...] },
     //          best4: { final, remaining, rows: [{ name, total, r1, r2, rank }] } }
     //                  （ベスト4＝一般男子の合計の上位 4 名・同点は全員・0 点以下は除く。
     //                    final: false の間は暫定ベスト4 で、remaining は二巡目が未確定の一般男子の人数。
@@ -842,7 +842,7 @@ var Api = (function() {
     //       | null（400/404/通信失敗）
     //   event.status は大会の状態（EventStatus.of。旧データの状態名は今の状態名に読み替えた値）。
     //   共有ページが表示条件（ベスト4 を出すか）に使う。rankings は EventStatus.rankings と同じ規則
-    //   （key・counted は返さない。設計書 2026-10-05 2.3・4.2）。
+    //   （key は返さない。counted は確定した得点のある組なら真。設計書 2026-10-05 2.3・4.2）。
     //   共有リンク越しの GET /api/links/:token/ranking（fetchSharedRanking）も同じ形。
     try {
       var res = await fetch('/api/events/' + eventId + '/ranking');

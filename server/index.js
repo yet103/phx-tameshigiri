@@ -405,7 +405,8 @@ function computeRanking(event) {
   const lockedEvent = countsAllScores(event);   // 旧データ（status 無し）だけ全行を数える
   const players = ((event && event.players) || []).filter(p => p && typeof p === 'object');
   const r = EventStatus.rankings(players, { countAll: lockedEvent });
-  const strip = e => ({ rank: e.rank, name: e.name, score: e.score });
+  // counted … 確定した得点が 1 つでもある組（偽なら合計はまだ仮。順位表示ページは得点をグレーにする。ユーザー要望 2026-10-06）
+  const strip = e => ({ rank: e.rank, name: e.name, score: e.score, counted: e.counted === true });
   // ベスト4 に残れる可能性（一般男子。二巡目の行ができてから。順位表示ページの列。ユーザー要望 2026-10-05）
   const techList = (event && Array.isArray(event.techniques) && event.techniques.length > 0)
     ? event.techniques : readTechniques().techniques;
@@ -416,7 +417,7 @@ function computeRanking(event) {
     return sum + strikes.reduce((a, v) => a + ((typeof v === 'number' && isFinite(v)) ? v : 0), 0);
   }, 0);
   const chances = EventStatus.best4Chances(players, { countAll: lockedEvent, maxExtraOf });
-  // 順位の行は rank/name/score だけ（共有リンクにも出る契約）。可能性は別の項目に、各部門の行と同じ並びで持つ
+  // 順位の行は rank/name/score/counted だけ（key は出さない。共有リンクにも出る契約）。可能性は別の項目に、各部門の行と同じ並びで持つ
   const chanceRows = key => r[key].map(e => {
     const c = chances[key].byKey[e.key];
     return c ? { flag: c.flag, label: c.label, max: c.max, pending: c.pending } : null;

@@ -442,6 +442,8 @@ body.score-frozen .action-block button[disabled] { opacity: 0.45; }
    同じ横並びの配置に（ユーザー要望 2026-10-05）。大会名の見出し（.rank-heading）は 3 列ぶち抜き */
 /* 順位表示ページは幅を 660px に絞らない（3 つの表が横に並ぶように。ダッシュボードの面や PC で見る） */
 body.ranking-page { max-width: none; }
+/* 順位表示ページは全部明朝（ユーザー要望 2026-10-06。発表ページと同じ）。ボタン・セレクトは font を継がないので明示 */
+body.ranking-page, body.ranking-page button, body.ranking-page select, body.ranking-page input { font-family: var(--mincho); }
 .ranking-container { padding: 12px 0; gap: 16px; }
 .ranking-container .rank-heading { flex-basis: 100%; }
 .ranking-container .rank-heading h2 { margin: 0 0 2px; }
@@ -668,6 +670,14 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .rank-panel-table tr.current td.rank { color: var(--row-current-text); }
 .rank-panel-table td.name { font-weight: bold; white-space: nowrap; }   /* 折り返さない（ユーザー要望 2026-10-05） */
 .rank-panel-table td.total { font-weight: bold; color: var(--score-confirmed); }
+.rank-panel-table td.total.pending { color: var(--text-muted); }   /* 確定した得点がまだ無い組の合計はグレー（ユーザー要望 2026-10-06） */
+/* 順位の入れ替わりのアニメーション（Ranking.animateRows。ユーザー要望 2026-10-06）。
+   動いた行は前の位置からの transform を置かれ、次のフレームで 0 に戻る（FLIP）。新しい行は薄く出て、変わった合計は金で光る */
+.rank-panel-table tr.rank-row-move { transition: transform .7s cubic-bezier(.2, .7, .2, 1); position: relative; z-index: 1; }
+.rank-panel-table tr.rank-row-new td { animation: rank-row-in .8s ease; }
+@keyframes rank-row-in { from { opacity: 0; } }
+.rank-panel-table td.total.rank-score-changed { animation: rank-score-flash 1.4s ease; }
+@keyframes rank-score-flash { 0%, 40% { background: var(--gold); color: #1b1b1b; } }
 /* ベスト4 に残れる可能性（一般男子の列。◎ 確定・○ 可能性あり・✕ 圏外） */
 .rank-panel-table th.chance, .rank-panel-table td.chance { font-size: 13px; white-space: nowrap; text-align: center; width: 1%; }
 .rank-panel-legend { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }

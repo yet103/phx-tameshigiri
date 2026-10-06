@@ -1877,15 +1877,15 @@
       [ranking.event.date, ranking.event.venue], ['2026-03-01', '道場']);
     assert('一般男子は氏名で合算し同点は同順位（1,1,3）',
       ranking.rankings.male,
-      [ { rank: 1, name: '吉野', score: 74 },
-        { rank: 1, name: '田中', score: 74 },
-        { rank: 3, name: '佐藤', score: 20 },
-        { rank: 4, name: '新人太郎', score: 10 } ]);
-    assert('一般女子', ranking.rankings.female, [{ rank: 1, name: '花子', score: 30 }]);
+      [ { rank: 1, name: '吉野', score: 74, counted: true },
+        { rank: 1, name: '田中', score: 74, counted: true },
+        { rank: 3, name: '佐藤', score: 20, counted: true },
+        { rank: 4, name: '新人太郎', score: 10, counted: true } ]);
+    assert('一般女子', ranking.rankings.female, [{ rank: 1, name: '花子', score: 30, counted: true }]);
     assert('新人は男子にも新人にも入る',
-      ranking.rankings.newFace, [{ rank: 1, name: '新人太郎', score: 10 }]);
-    assert('順位の項目は rank/name/score だけ',
-      Object.keys(ranking.rankings.male[0]), ['rank', 'name', 'score']);
+      ranking.rankings.newFace, [{ rank: 1, name: '新人太郎', score: 10, counted: true }]);
+    assert('順位の項目は rank/name/score/counted だけ',
+      Object.keys(ranking.rankings.male[0]), ['rank', 'name', 'score', 'counted']);
     assert('順位に result は含まれない', ranking.rankings.male[0].result, undefined);
     // 状態を持つ大会は、最終結果にしても確定の印が無い得点は順位に出ない（確定の瞬間に順位が跳ねないように。2026-09-30）
     var lkEvent = await Api.saveEvent({ name: '確定なし順位', date: '2026-03-01', venue: '', players: [] });
@@ -1898,7 +1898,7 @@
     await Api.deleteEvent(rankEvent.id);
 
     // ---- ranking の形（設計書 2026-10-05 4.2）: finale は無く、event.status がある。
-    //      rankings は EventStatus.rankings と（key・counted を除いて）一致する（2.3） ----
+    //      rankings は EventStatus.rankings と（key を除いて）一致する（2.3。counted は 2026-10-06 から返す） ----
     var flEvent = await makeGenEvent('順位の共通化',
       'G1,A-男子-1-1,真,,,42,,,1    \nG2,A-男子-1-2,真,,,30,,,1    \n' +
       'G3,A-男子-1-3,真,,,20,○,,1    \nG4,A-女子-1-1,真,,,50,,○,1    \n' +
@@ -1906,7 +1906,7 @@
     await toRound1Done(flEvent.id);
     await Api.changeStatus(flEvent.id, 'round2');
     function flStrip(r) {
-      function f(list) { return list.map(function(e) { return { rank: e.rank, name: e.name, score: e.score }; }); }
+      function f(list) { return list.map(function(e) { return { rank: e.rank, name: e.name, score: e.score, counted: e.counted === true }; }); }
       return { male: f(r.male), female: f(r.female), newFace: f(r.newFace) };
     }
     async function flShared(players) { return flStrip(EventStatus.rankings(players, { countAll: false })); }
@@ -1920,10 +1920,11 @@
     assert('ranking: finale の項目は無い（設計書 2026-10-05 D3）', 'finale' in flRank, false);
     assert('ranking: event は name・date・venue・updatedAt・status、status は今の状態',
       [Object.keys(flRank.event), flRank.event.status], [['name', 'date', 'venue', 'updatedAt', 'status'], 'round2']);
-    assert('ranking: 二巡目の途中の rankings は EventStatus.rankings と一致する（key・counted を除く）',
+    assert('ranking: 二巡目の途中の rankings は EventStatus.rankings と一致する（key を除く。counted も同じ）',
       flRank.rankings, await flShared(flP));
-    assert('ranking: 順位の項目は rank/name/score だけ（key・counted は出さない）',
-      Object.keys(flRank.rankings.male[0]), ['rank', 'name', 'score']);
+    assert('ranking: 順位の項目は rank/name/score/counted だけ（key は出さない。counted は確定した得点のある組なら真）',
+      [Object.keys(flRank.rankings.male[0]), flRank.rankings.male.every(function(e) { return typeof e.counted === 'boolean'; })],
+      [['rank', 'name', 'score', 'counted'], true]);
     var flLink = await Api.createShareLink(flEvent.id);
     var flSharedRank = await Api.loadSharedRanking(flLink.token);
     assert('共有リンクの ranking: finale は無く、event.status が今の状態',
@@ -2026,11 +2027,11 @@
     var shared = await Api.loadSharedRanking(link1.token);
     assert('loadSharedRanking は氏名合算と同点同順位（1,1,3）を返す',
       shared.rankings.male,
-      [ { rank: 1, name: '乙', score: 50 },
-        { rank: 1, name: '甲', score: 50 },
-        { rank: 3, name: '丙', score: 10 } ]);
-    assert('共有の順位の項目も rank/name/score だけ',
-      Object.keys(shared.rankings.male[0]), ['rank', 'name', 'score']);
+      [ { rank: 1, name: '乙', score: 50, counted: true },
+        { rank: 1, name: '甲', score: 50, counted: true },
+        { rank: 3, name: '丙', score: 10, counted: true } ]);
+    assert('共有の順位の項目も rank/name/score/counted だけ',
+      Object.keys(shared.rankings.male[0]), ['rank', 'name', 'score', 'counted']);
     assert('共有の順位は大会名を含む', shared.event.name, '共有テスト');
 
     assert('fetchSharedRanking は成功時に ok と data を返す',
@@ -2155,13 +2156,13 @@
     assert('氏名の前後空白は同一人物として合算する',
       rank2.rankings.male.filter(function(r) { return r.name === '田中'; })[0].score, 14);
     assert('__proto__ という氏名でも順位に出る',
-      rank2.rankings.male[0], { rank: 1, name: '__proto__', score: 20 });
+      rank2.rankings.male[0], { rank: 1, name: '__proto__', score: 20, counted: true });
     assert('同点は同順位で次の順位が飛ぶ（1,2,3,3,5）',
       rank2.rankings.male.map(function(r) { return r.rank; }), [1, 2, 3, 3, 5]);
     assert('同点は氏名順で安定する',
       rank2.rankings.male.slice(2, 4).map(function(r) { return r.name; }), ['高橋', '鈴木']);
     assert('文字列の得点は0として扱う',
-      rank2.rankings.male[4], { rank: 5, name: '文字列', score: 0 });
+      rank2.rankings.male[4], { rank: 5, name: '文字列', score: 0, counted: true });
     assert('順位は updatedAt を含む', typeof rank2.event.updatedAt, 'string');
 
     var reLink = await Api.createShareLink(rank2Event.id);
@@ -6974,6 +6975,32 @@
     assert('Ranking.parseHash: 無し・他のハッシュ・壊れたエンコードは空',
       [Ranking.parseHash(''), Ranking.parseHash('#foo'), Ranking.parseHash('#event/'), Ranking.parseHash('#event/%E0%A4%A'), Ranking.parseHash(null)],
       ['', '', '', '', '']);
+    // ---- 順位の入れ替わりのアニメーション（Ranking.captureRows / animateRows。ユーザー要望 2026-10-06） ----
+    (function() {
+      var box = document.createElement('div');
+      box.style.cssText = 'position:absolute;left:-9999px;top:0';
+      box.innerHTML = '<table class="rank-panel-table"><tbody>' +
+        '<tr data-rowkey="male|a" data-score="10"><td class="total">10</td></tr>' +
+        '<tr data-rowkey="male|b" data-score="5"><td class="total">5</td></tr></tbody></table>';
+      document.body.appendChild(box);
+      var prev = Ranking.captureRows(box);
+      assert('Ranking.captureRows: 行の鍵ごとに位置と得点を控える',
+        [Object.keys(prev), prev['male|a'].score, prev['male|b'].top > prev['male|a'].top], [['male|a', 'male|b'], '10', true]);
+      box.innerHTML = '<table class="rank-panel-table"><tbody>' +
+        '<tr data-rowkey="male|b" data-score="20"><td class="total">20</td></tr>' +
+        '<tr data-rowkey="male|a" data-score="10"><td class="total">10</td></tr>' +
+        '<tr data-rowkey="male|c" data-score="1"><td class="total">1</td></tr></tbody></table>';
+      var st = Ranking.animateRows(box, prev);
+      var trs = box.querySelectorAll('tr');
+      assert('Ranking.animateRows: 動いた行は前の位置からの transform と .rank-row-move、新しい行は .rank-row-new、得点の変わった合計は .rank-score-changed',
+        [st, trs[0].style.transform !== '', trs[0].classList.contains('rank-row-move'), trs[1].classList.contains('rank-row-move'),
+         trs[2].classList.contains('rank-row-new'), trs[0].querySelector('td.total').classList.contains('rank-score-changed'),
+         trs[1].querySelector('td.total').classList.contains('rank-score-changed')],
+        [{ moved: 2, added: 1, changed: 1 }, true, true, true, true, true, false]);
+      assert('Ranking.animateRows: 控えが空（最初の描画）なら何もしない', Ranking.animateRows(box, {}), { moved: 0, added: 0, changed: 0 });
+      assert('Ranking.captureRows / animateRows: 無い要素でも落ちない', [Ranking.captureRows(null), Ranking.animateRows(null, prev)], [{}, { moved: 0, added: 0, changed: 0 }]);
+      document.body.removeChild(box);
+    })();
 
     // ---- dashboard.js（設計書 2026-10-05 dashboard §4） ----
     assert('Dashboard.parseHash', [Dashboard.parseHash('#event/abc'), Dashboard.parseHash('#event/a%20b'), Dashboard.parseHash(''), Dashboard.parseHash('#foo'), Dashboard.parseHash('#event/%E0%A4%A')],
