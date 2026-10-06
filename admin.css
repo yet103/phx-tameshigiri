@@ -6,7 +6,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
+  /* 全画面を明朝に（ユーザー要望 2026-10-06「ゴシックの明朝化」。順位表示・発表ページと同じ var(--mincho)）。
+     同梱の しっぽり明朝 B1 は Bold だけなので、太字でない行も同じ字形で出る。ボタン・入力欄も継ぐ */
+  font-family: var(--mincho);
   font-size: 15px;
   line-height: 1.5;
   background: var(--bg);
@@ -14,6 +16,7 @@ body {
   padding: 52px 0 64px;   /* 上下の固定バーの高さぶん本文を逃がす */
   -webkit-text-size-adjust: 100%;
 }
+button, input, select, textarea { font-family: inherit; }
 
 button {
   font-family: inherit;

@@ -94,7 +94,9 @@
     var head = document.createElement('div');
     head.className = 'section-head';
     var h2 = document.createElement('h2');
-    h2.textContent = '選手登録 ' + ctx.players.length + '名';
+    // 人数は一巡目の行の数（二巡目の行があれば行数も添える。PC 運営の選手登録と同じ。ユーザー指摘 2026-10-06）
+    var r1Count = (ctx.players || []).filter(function(p) { return Courts.roundOf(p) === 1; }).length;
+    h2.textContent = '選手登録 ' + (r1Count !== ctx.players.length ? r1Count + '名（行 ' + ctx.players.length + '）' : ctx.players.length + '名');
     var spacer = document.createElement('div');
     spacer.className = 'spacer';
     var btnMenu = document.createElement('button');

@@ -4,9 +4,11 @@
 html, body { height: 100%; margin: 0; }
 body {
   background: var(--bg); color: var(--text);
-  font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  /* 全画面を明朝に（ユーザー要望 2026-10-06「ゴシックの明朝化」。順位表示・発表ページと同じ var(--mincho)） */
+  font-family: var(--mincho);
   display: flex; flex-direction: column; overflow: hidden;
 }
+button, input, select, textarea { font-family: inherit; }
 
 /* ===== 上の帯 ===== */
 .dash-bar {

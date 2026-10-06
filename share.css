@@ -2,11 +2,13 @@
    配色はポスターと同じ黒金で固定（share.js の applyTheme が data-theme="dark" にする）。 */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: "Meiryo", "Yu Gothic", "ヒラギノ角ゴ Pro W3", sans-serif;
+  /* 全画面を明朝に（ユーザー要望 2026-10-06「ゴシックの明朝化」。順位表示・発表ページと同じ var(--mincho)） */
+  font-family: var(--mincho);
   font-size: 15px;
   background: var(--bg);
   color: var(--text);
 }
+button, input, select, textarea { font-family: inherit; }
 /* 画面幅は theme.css のマスタ設定。採点画面と同じく左に寄せる */
 body { max-width: var(--page-max-width); margin: 0; }
 .share-root { max-width: none; margin: 0; padding: 14px var(--page-gutter) 40px; }

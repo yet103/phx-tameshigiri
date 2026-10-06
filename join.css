@@ -7,10 +7,12 @@ body {
   max-width: var(--page-max-width);
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  /* 全画面を明朝に（ユーザー要望 2026-10-06「ゴシックの明朝化」。順位表示・発表ページと同じ var(--mincho)） */
+  font-family: var(--mincho);
   line-height: 1.6;
   -webkit-text-size-adjust: 100%;
 }
+button, input, select, textarea { font-family: inherit; }
 
 .join-band {
   padding: 10px var(--page-gutter) 12px;

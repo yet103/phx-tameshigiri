@@ -1169,7 +1169,8 @@ app.get('/api/events', (req, res) => {
         name: data.name,
         date: data.date,
         venue: data.venue,
-        playerCount: Array.isArray(data.players) ? data.players.length : 0,
+        // 人数は一巡目の行の数（二巡目の行は同じ人のもう 1 行。行数を出すと 70 名に見えた。ユーザー指摘 2026-10-06）
+        playerCount: Array.isArray(data.players) ? data.players.filter(p => p && typeof p === 'object' && EventStatus.roundOf(p) === 1).length : 0,
         // ファイルに status が無ければ選手から推定する（ファイルには書かない）
         status: EventStatus.of(data),
         updatedAt: data.updatedAt,
