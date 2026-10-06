@@ -98,12 +98,14 @@ body.dash-swapping { cursor: grabbing; }
 body.dash-swapping .dash-pane-head { cursor: grabbing; }
 .dash-pane.dash-drag-src { opacity: .55; }
 .dash-pane.dash-drop-target { outline: 3px solid var(--gold); outline-offset: -3px; }
-/* 左右の端に放すと隣に差し込む: その側に金の帯 */
+/* 左右の端に放すと隣に差し込む: その側に金の帯。上下の端に放すとその段の上／下に新しい段: その側に金の帯 */
 .dash-pane.dash-drop-before { box-shadow: inset 8px 0 0 var(--gold); }
 .dash-pane.dash-drop-after { box-shadow: inset -8px 0 0 var(--gold); }
-/* 空いている段の受け皿（ドラッグ中だけ）。上の段が空なら上端、下の段が空なら下端に帯で出す */
+.dash-pane.dash-drop-above { box-shadow: inset 0 8px 0 var(--gold); }
+.dash-pane.dash-drop-below { box-shadow: inset 0 -8px 0 var(--gold); }
+/* 画面の上端・下端の受け皿（ドラッグ中だけ）。放すと一番上／一番下の段になる */
 .dash-drop-row {
-  position: absolute; left: 0; right: 0; height: 44px; z-index: 5;
+  position: absolute; left: 0; right: 0; height: 36px; z-index: 5;
   display: flex; align-items: center; justify-content: center; font-size: 13px;
   color: var(--text-muted); background: color-mix(in srgb, var(--card-bg) 85%, transparent);
   border: 2px dashed var(--border); border-radius: 6px;
