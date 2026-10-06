@@ -48,12 +48,8 @@ a { color: var(--accent); }
 .desk-head-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .desk-head-name { font-size: 18px; font-weight: bold; }
 .desk-head-meta { color: var(--text-muted); font-size: 13px; }
-.desk-stage { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
-.desk-stage-steps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.desk-stage-step { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
-.desk-stage-step.done { color: var(--text); }
-.desk-stage-step.on { color: var(--accent); font-weight: bold; font-size: 14px; }
-.desk-stage-sep { color: var(--text-muted); }
+/* 見出しの行の右端の件数（段階の並びは左メニューに移した。設計書 2026-10-06-desk-nav-stages-design.md） */
+.desk-stage { margin-left: auto; display: inline-flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--text-muted); white-space: nowrap; }
 .desk-stage-count { font-size: 13px; color: var(--text-muted); }
 /* 現在の段の補足文（二巡目終了・アーカイブなど。desk.js の STAGE_NOTES） */
 .desk-stage-note { margin-left: 6px; font-size: 12px; font-weight: normal; }
@@ -88,7 +84,16 @@ a { color: var(--accent); }
 .desk-nav button:hover:not(:disabled) { background: var(--card-bg); }
 .desk-nav button.on { background: var(--card-bg); color: var(--accent); font-weight: bold; border-left-color: var(--accent); }
 .desk-nav button:disabled { opacity: .45; cursor: not-allowed; }
+.desk-nav button.done { color: var(--text-muted); }
 .desk-nav-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+/* 段階の区切り（左メニューが工程表を兼ねる）。今の段階は金で「◀ いまここ」、終えた段階は薄く */
+.desk-nav-group {
+  margin-top: 6px; padding: 8px 12px 2px; font-size: 12px; letter-spacing: .04em;
+  color: var(--text-muted); border-top: 1px solid var(--border);
+}
+.desk-nav-group.now { color: var(--accent); font-weight: bold; }
+.desk-nav-group.done { color: var(--text-muted); }
+.desk-nav-now { margin-left: 6px; font-size: 11px; font-weight: normal; }
 .desk-nav-link {
   display: block; min-height: 40px; line-height: 40px; padding: 0 12px;
   color: var(--text-muted); text-decoration: none; border-left: 3px solid transparent;
@@ -468,32 +473,23 @@ a { color: var(--accent); }
 /* 試合進行の工程表（desk-match.js の buildSteps。ユーザー要望 2026-09-30）。
    黒地に金の帯のトーン。現在の段を金で塗り、通過した段は金の文字、未到達は薄い文字。
    帯の色なのでテーマに依らず band- と gold- の変数だけを使う。 */
+/* 区画の先頭の操作の行: いまやること（左）と、その段階のボタン（右）を 1 行に。狭ければ折り返す
+   （段の並び ① → ② → ③ → ④ は左メニューの区切りに移した。設計書 2026-10-06-desk-nav-stages-design.md） */
 .desk-steps {
-  margin-bottom: 12px; padding: 10px 14px; border-radius: 6px;
+  display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap;
+  margin-bottom: 12px; padding: 8px 14px; border-radius: 6px;
   background: var(--band-bg); color: var(--band-text); border: 1px solid var(--gold-deep);
 }
-.desk-steps-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.desk-steps-step {
-  padding: 3px 14px; border-radius: 14px; white-space: nowrap;
-  font-family: var(--mincho); font-size: 15px;
-  color: var(--band-muted); border: 1px solid var(--gold-deep);
-}
-.desk-steps-step.done { color: var(--gold-light); }
-.desk-steps-step.on {
-  background: linear-gradient(180deg, var(--gold-light), var(--gold-deep));
-  color: var(--band-bg); border-color: var(--gold); font-weight: bold;
-}
-.desk-steps-arrow { color: var(--gold); font-weight: bold; }
 .desk-steps-todo {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin-top: 8px; font-size: 14px; color: var(--band-text);
+  flex: 1 1 320px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0; font-size: 14px; color: var(--band-text);
 }
-.desk-steps-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.desk-steps-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 0 auto; }
 .desk-steps .desk-btn-sub { color: var(--band-muted); border: 1px solid var(--gold-deep); }
 .desk-steps .desk-btn-sub:hover:not(:disabled) { color: var(--gold-light); border-color: var(--gold); }
 /* 二巡目を開始できない理由（Courts.round2StartBlockers。設計書 2026-10-03 5.3）。帯の上で読める朱の地 */
 .desk-steps-blockers {
-  margin-top: 8px; padding: 6px 10px; border-radius: 4px; white-space: pre-line;
+  flex-basis: 100%; margin: 0; padding: 6px 10px; border-radius: 4px; white-space: pre-line;
   font-size: 13px; font-weight: bold; color: var(--band-text);
   background: color-mix(in srgb, var(--vermilion) 35%, var(--band-bg)); border-left: 3px solid var(--vermilion);
 }
@@ -662,14 +658,7 @@ a { color: var(--accent); }
 .desk-head { background: var(--band-bg); border-bottom: 2px solid var(--gold); }
 .desk-head-name { font-family: var(--mincho); letter-spacing: .04em; color: var(--gold-light); font-size: 20px; }
 .desk-head-meta { color: var(--band-muted); }
-.desk-stage-step { color: var(--band-muted); }
-.desk-stage-step.done { color: var(--gold-light); }
-.desk-stage-step.on {
-  background: linear-gradient(180deg, var(--gold-light), var(--gold-deep));
-  color: var(--band-bg); padding: 1px 10px; border-radius: 10px;
-}
-.desk-stage-sep { color: var(--gold-deep); }
-.desk-stage-count { color: var(--band-muted); }
+.desk-stage, .desk-stage-count { color: var(--band-muted); }
 
 /* 左の区画ナビ。ページリンクと同じ黒地に金 */
 .desk-nav { background: var(--band-bg); }
@@ -680,6 +669,10 @@ a { color: var(--accent); }
   border-left-color: var(--gold); font-family: var(--mincho);
 }
 .desk-nav-sep { background: var(--gold-deep); }
+.desk-nav-group { color: var(--band-muted); border-top-color: var(--gold-deep); font-family: var(--mincho); }
+.desk-nav-group.now { color: var(--gold-light); }
+.desk-nav-group.done { color: var(--gold-deep); }
+.desk-nav button.done { color: var(--band-muted); }
 
 /* 主ボタン。前後の選手ボタンと同じ黒地に金の枠 */
 .desk-btn { border-color: var(--gold-deep); }

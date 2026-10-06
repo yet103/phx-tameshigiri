@@ -11,35 +11,37 @@
 // 採点画面の tmg_last とは分ける。別の端末で別の大会を見ていることがある）。
 var Desk = (function() {
   var LAST_KEY = 'tmg_desk_last';
-  // when: その状態のときだけ左メニューに出す（省略時は常に出す）。二巡目の形登録は
-  // 「二巡目準備（形の登録）」のときだけ（ユーザー要望 2026-09-30）。
   var HOME_LIST_URL = 'index.html#list';   // 左メニューの先頭「← 大会一覧」と、大会の無いときの転送先
-  var NAV = [
-    { tab: 'setup',      id: 'navSetup',      label: '基本情報' },
-    { tab: 'techniques', id: 'navTechniques', label: '技得点表' },
-    { tab: 'players',    id: 'navPlayers',    label: '選手登録' },
-    { tab: 'match',      id: 'navMatch',      label: '試合進行' },
-    { tab: 'round2',     id: 'navRound2',     label: '二巡目の形登録',
-      when: function(st) { return st === 'round1_done'; } },
-    { tab: 'results',    id: 'navResults',    label: '結果確認' }
+  // 左メニューは工程表を兼ねる（設計書 2026-10-06-desk-nav-stages-design.md。案 B'）。
+  // 5 つの段階（準備 → 一巡目 → 形登録 → 二巡目 → 結果）に区切り、各段階の下にその段階で使う区画を置く。
+  // 試合進行は一巡目と二巡目の両方にある（区画は 1 つ。navModel が今の段階に近い方だけ on にする）。
+  // states は EventStatus の状態値。状態値と遷移はそのままで、見せ方だけをまとめる。
+  // 二巡目終了・アーカイブは上の見出しの件数の前に補足文（STAGE_NOTES）で示す。
+  var NAV_GROUPS = [
+    { label: '準備',   states: ['draft'], items: [
+      { tab: 'setup',      id: 'navSetup',      label: '基本情報' },
+      { tab: 'techniques', id: 'navTechniques', label: '技得点表' },
+      { tab: 'players',    id: 'navPlayers',    label: '選手登録' }
+    ] },
+    { label: '一巡目', states: ['round1'], items: [
+      { tab: 'match',      id: 'navMatch',      label: '試合進行' }
+    ] },
+    { label: '形登録', states: ['round1_done'], items: [
+      { tab: 'round2',     id: 'navRound2',     label: '二巡目の形登録' }
+    ] },
+    { label: '二巡目', states: ['round2', 'round2_done'], items: [
+      { tab: 'match',      id: 'navMatch2',     label: '試合進行' }
+    ] },
+    { label: '結果',   states: ['final', 'archived'], items: [
+      { tab: 'results',    id: 'navResults',    label: '結果確認' }
+    ] }
   ];
-  var TABS = NAV.map(function(n) { return n.tab; });
-
-  // 上部の状態バーの 5 段（ユーザー要望 2026-09-30）。EventStatus の状態値と遷移はそのままで、
-  // 見せ方だけをまとめる。二巡目終了・アーカイブは段の中の補足文（STAGE_NOTES）で示す。
-  // 試合進行の工程表（desk-match.js の MATCH_STEPS）は 4 段（① 一巡目・② 二巡目の形登録・③ 二巡目・④ 結果・表彰）。
-  // 状態バーは幅が限られるので段を分けず、工程表の ③ と ④ の二巡目終了はここの「二巡目」
-  // （補足文で区別）、④ の最終結果・アーカイブは「最終結果」に当たる（2026-10-05）。
-  var STAGE_GROUPS = [
-    { label: '準備中',   states: ['draft'] },
-    { label: '一巡目',   states: ['round1'] },
-    { label: '形登録',   states: ['round1_done'] },
-    { label: '二巡目',   states: ['round2', 'round2_done'] },
-    { label: '最終結果', states: ['final', 'archived'] }
-  ];
+  var TABS = [];
+  NAV_GROUPS.forEach(function(g) { g.items.forEach(function(it) { if (TABS.indexOf(it.tab) === -1) TABS.push(it.tab); }); });
+  // 段階（stageOf が使う）。左メニューの区切りと同じ
+  var STAGE_GROUPS = NAV_GROUPS.map(function(g) { return { label: g.label, states: g.states }; });
+  // 見出しの件数の前に添える補足（進行中は添えない。左メニューの「◀ いまここ」で分かる）
   var STAGE_NOTES = {
-    round1: '進行中',
-    round2: '進行中',
     round2_done: '二巡目終了',
     archived: 'アーカイブ'
   };
@@ -295,53 +297,52 @@ var Desk = (function() {
     meta.textContent = (event.date || '日付なし') + '　' + (event.venue || '会場未設定');
     line.appendChild(name);
     line.appendChild(meta);
+    line.appendChild(buildStage(EventStatus.of(event), event.players || []));
     head.appendChild(line);
-    head.appendChild(buildStage(EventStatus.of(event), event.players || []));
   }
 
-  // 上部の状態バー。現在の段階を金で塗り、通過した段階を塗る（表示だけ。進める・戻すのボタンは
-  // 工程表（desk-match.js の DeskMatch.buildSteps）の中にだけ置く。ユーザー要望 2026-09-30「段階の
-  // 遷移ボタンは 1 か所に」。工程表は試合進行と二巡目の形登録の先頭に出す。2026-10-03）。
-  // 二巡目終了・アーカイブは、現在の段の補足文（stageOf の note）で示す。
+  // 見出しの行の右端の件数（「確定 14 / 35」など。Courts.stageCountText）。段階の並びは左メニューに移した
+  // （設計書 2026-10-06-desk-nav-stages-design.md）。二巡目終了・アーカイブは件数の前に補足文（stageOf の note）
   function buildStage(st, players) {
-    var wrap = document.createElement('div');
+    var wrap = document.createElement('span');
     wrap.className = 'desk-stage';
     wrap.title = '現在の状態: ' + (EventStatus.LABELS[st] || st);
-
-    var steps = document.createElement('div');
-    steps.className = 'desk-stage-steps';
-    steps.id = 'deskStageSteps';
     var view = stageOf(st);
-    STAGE_GROUPS.forEach(function(g, i) {
-      if (i > 0) {
-        var sep = document.createElement('span');
-        sep.className = 'desk-stage-sep';
-        sep.textContent = '─';
-        steps.appendChild(sep);
-      }
-      var isCurrent = (i === view.index);
-      var isPast = (i < view.index);
-      var el = document.createElement('span');
-      el.className = 'desk-stage-step' + (isCurrent ? ' on' : '') + (isPast ? ' done' : '');
-      // 通過済みと現在は塗り（●）、未到達は空（○）
-      el.textContent = (isCurrent || isPast ? '●' : '○') + g.label;
-      if (isCurrent && view.note) {
-        var note = document.createElement('span');
-        note.className = 'desk-stage-note';
-        note.id = 'deskStageNote';
-        note.textContent = view.note;
-        el.appendChild(note);
-      }
-      steps.appendChild(el);
-    });
-    wrap.appendChild(steps);
-
+    if (view.note) {
+      var note = document.createElement('span');
+      note.className = 'desk-stage-note';
+      note.id = 'deskStageNote';
+      note.textContent = view.note;
+      wrap.appendChild(note);
+    }
     var count = document.createElement('span');
     count.className = 'desk-stage-count';
     count.id = 'deskStageCount';
     count.textContent = Courts.stageCountText(st, players);
     wrap.appendChild(count);
     return wrap;
+  }
+
+  // 左メニューの材料（純粋関数。test.html が見る）。段階ごとに state（'done' 終えた・'now' いま・'todo' まだ・
+  // '' 状態が分からない）と、項目の on（いま開いている区画）。同じ区画が複数の段階にあるとき（試合進行）は、
+  // 今の段階に一番近い（添字が今の段階以下で最大。無ければ最初の）段階の項目だけ on にする
+  function navModel(st, currentTab) {
+    var view = stageOf(st);
+    var idx = [];
+    NAV_GROUPS.forEach(function(g, gi) {
+      g.items.forEach(function(it) { if (it.tab === currentTab) idx.push(gi); });
+    });
+    var under = idx.filter(function(i) { return i <= view.index; });
+    var onIdx = under.length ? under[under.length - 1] : (idx.length ? idx[0] : -1);
+    return NAV_GROUPS.map(function(g, gi) {
+      return {
+        label: g.label,
+        state: view.index < 0 ? '' : (gi < view.index ? 'done' : (gi === view.index ? 'now' : 'todo')),
+        items: g.items.map(function(it) {
+          return { tab: it.tab, id: it.id, label: it.label, on: it.tab === currentTab && gi === onIdx };
+        })
+      };
+    });
   }
 
   // 状態 → 状態バーの段（STAGE_GROUPS の添字・段の名前・補足文）。未知の状態は index -1。
@@ -526,17 +527,28 @@ var Desk = (function() {
     var sep = document.createElement('div');
     sep.className = 'desk-nav-sep';
     nav.appendChild(sep);
-    var st = currentEvent ? EventStatus.of(currentEvent) : null;
-    NAV.forEach(function(item) {
-      // 状態で出し分ける項目。いま開いている区画なら（段階が変わった直後でも）残す
-      if (item.when && item.tab !== currentTab && !(st && item.when(st))) return;
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = (item.tab === currentTab) ? 'on' : '';
-      b.id = item.id;
-      b.textContent = item.label;
-      b.addEventListener('click', function() { navigate(item.tab, selectedEventId); });
-      nav.appendChild(b);
+    // 段階の区切り（準備 → 一巡目 → 形登録 → 二巡目 → 結果）と、その下の区画。今の段階に「◀ いまここ」
+    var st = currentEvent ? EventStatus.of(currentEvent) : '';
+    navModel(st, currentTab).forEach(function(g) {
+      var h = document.createElement('div');
+      h.className = 'desk-nav-group' + (g.state ? ' ' + g.state : '');
+      h.textContent = g.label;
+      if (g.state === 'now') {
+        var mark = document.createElement('span');
+        mark.className = 'desk-nav-now';
+        mark.textContent = '◀ いまここ';
+        h.appendChild(mark);
+      }
+      nav.appendChild(h);
+      g.items.forEach(function(item) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = (item.on ? 'on' : '') + (g.state === 'done' ? ' done' : '');
+        b.id = item.id;
+        b.textContent = item.label;
+        b.addEventListener('click', function() { navigate(item.tab, selectedEventId); });
+        nav.appendChild(b);
+      });
     });
   }
 
@@ -718,6 +730,7 @@ var Desk = (function() {
     closeAllDialogs: closeAllDialogs,
     copyText: copyText,
     scoringHref: scoringHref,
+    navModel: navModel,
     openScoring: openScoring
   };
 })();

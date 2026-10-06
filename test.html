@@ -6326,13 +6326,32 @@
       EventStatus.STATES.map(function(s) { return Desk.stageOf(s).index; }), [0, 1, 2, 3, 3, 4, 4]);
     assert('stageOf: 段の名前',
       ['draft', 'round1', 'round1_done', 'round2', 'final'].map(function(s) { return Desk.stageOf(s).label; }),
-      ['準備中', '一巡目', '形登録', '二巡目', '最終結果']);
-    assert('stageOf: 進行中・二巡目終了・アーカイブは段の補足文で示す',
+      ['準備', '一巡目', '形登録', '二巡目', '結果']);
+    assert('stageOf: 二巡目終了・アーカイブだけ補足文（進行中は左メニューの「◀ いまここ」で分かるので添えない。2026-10-06 の案 Bダッシュ）',
       ['round1', 'round2', 'round2_done', 'archived', 'final', 'draft'].map(function(s) { return Desk.stageOf(s).note; }),
-      ['進行中', '進行中', '二巡目終了', 'アーカイブ', '', '']);
+      ['', '', '二巡目終了', 'アーカイブ', '', '']);
     assert('stageOf: 二巡目の段は round2・round2_done（旧状態 round2_final は段に無い）',
       [Desk.stageOf('round2').index, Desk.stageOf('round2_done').index, Desk.stageOf('round2_final').index], [3, 3, -1]);
     assert('stageOf: 知らない状態は -1', Desk.stageOf('zzz').index, -1);
+    // 左メニューは工程表を兼ねる（設計書 2026-10-06-desk-nav-stages-design.md。案 B'）
+    (function() {
+      var m = Desk.navModel('round1', 'match');
+      assert('navModel: 5 つの段階とその区画。一巡目なら 準備 done・一巡目 now・以降 todo',
+        [m.map(function(g) { return g.label; }), m.map(function(g) { return g.state; }), m.map(function(g) { return g.items.map(function(i) { return i.label; }); })],
+        [['準備', '一巡目', '形登録', '二巡目', '結果'], ['done', 'now', 'todo', 'todo', 'todo'],
+         [['基本情報', '技得点表', '選手登録'], ['試合進行'], ['二巡目の形登録'], ['試合進行'], ['結果確認']]]);
+      assert('navModel: 試合進行は 2 か所。一巡目のときは一巡目の下だけ on、二巡目のときは二巡目の下だけ on',
+        [m[1].items[0].on, m[3].items[0].on, Desk.navModel('round2', 'match')[1].items[0].on, Desk.navModel('round2', 'match')[3].items[0].on,
+         Desk.navModel('round2_done', 'match')[3].items[0].on, Desk.navModel('final', 'match')[3].items[0].on],
+        [true, false, false, true, true, true]);
+      assert('navModel: 準備中に試合進行を開いたら一巡目の下が on。形登録のときは形登録 now で二巡目の形登録 on',
+        [Desk.navModel('draft', 'match')[1].items[0].on, Desk.navModel('draft', 'match')[0].state,
+         Desk.navModel('round1_done', 'round2')[2].state, Desk.navModel('round1_done', 'round2')[2].items[0].on],
+        [true, 'now', 'now', true]);
+      assert('navModel: 状態が分からなければ段階の印は無し。開いている区画だけ on',
+        [Desk.navModel('', 'setup').map(function(g) { return g.state; }), Desk.navModel('zzz', 'setup')[0].items[0].on, Desk.navModel('zzz', 'setup')[0].items[1].on],
+        [['', '', '', '', ''], true, false]);
+    })();
 
     // 状態を変えたあとのトースト（二巡目の形の申請。設計書 2026-10-03 3.4・6.5）
     assert('statusToastText: 生成の結果が無ければ「〜にしました」だけ',

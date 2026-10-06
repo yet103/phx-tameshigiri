@@ -447,23 +447,8 @@
     box.className = 'desk-steps';
     box.id = where === 'round2' ? 'round2Steps' : (where === 'players' ? 'playersSteps' : 'matchSteps');
 
-    var row = document.createElement('div');
-    row.className = 'desk-steps-row';
-    var cur = matchStepIndex(st);
-    MATCH_STEPS.forEach(function(s, i) {
-      if (i > 0) {
-        var arrow = document.createElement('span');
-        arrow.className = 'desk-steps-arrow';
-        arrow.textContent = '→';
-        row.appendChild(arrow);
-      }
-      var el = document.createElement('span');
-      el.className = 'desk-steps-step' + (i === cur ? ' on' : '') + (i < cur ? ' done' : '');
-      el.textContent = s.label;
-      row.appendChild(el);
-    });
-    box.appendChild(row);
-
+    // 段の並び（① → ② → ③ → ④）は左メニューの区切りに移した（設計書 2026-10-06-desk-nav-stages-design.md）。
+    // ここは「いまやること」の 1 行と、その段階で押せるボタンだけ
     var todo = document.createElement('p');
     todo.className = 'desk-steps-todo';
     todo.id = where === 'round2' ? 'round2StepsTodo' : (where === 'players' ? 'playersStepsTodo' : 'matchStepsTodo');
