@@ -133,7 +133,7 @@
     spacer.className = 'spacer';
     var count = document.createElement('span');
     count.className = 'desk-head-meta';
-    count.textContent = (ctx.players || []).length + ' 名';
+    count.textContent = countLabel(ctx.players);
     head.appendChild(h2);
     head.appendChild(spacer);
     head.appendChild(count);
@@ -508,6 +508,18 @@
     r2unknownTech: '二巡目: 表に無い技', r2repeat: '二巡目: 同じ形 2 回', r2rental: '二巡目: レンタル不可の形'
   };
 
+  // 人数は一巡目の行の数（二巡目の行は同じ人のもう 1 行）。二巡目の行があれば見出しも「35 名（行 70）」にする
+  function peopleCount(players) {
+    return (players || []).filter(function(p) { return Courts.roundOf(p) === 1; }).length;
+  }
+  function round2Rows(players) {
+    return (players || []).filter(function(p) { return Courts.roundOf(p) !== 1; }).length;
+  }
+  function countLabel(players) {
+    var rows = (players || []).length;
+    return round2Rows(players) > 0 ? peopleCount(players) + ' 名（行 ' + rows + '）' : rows + ' 名';
+  }
+
   // 表の上の「表示 n / N 名」「ゼッケン未入力 n …」「絞り込みを解除」。
   // 件数は Courts.startBlockers をそのまま数えるので、「試合開始」で止まる条件と
   // 必ず一致する（絞り込みで隠れている行も数える。隠れたまま止まると理由が分からない）。
@@ -516,7 +528,11 @@
     view.bar.innerHTML = '';
     var span = document.createElement('span');
     span.className = 'desk-players-count';
-    span.textContent = '表示 ' + shown + ' / ' + total + ' 名';
+    // 二巡目の行があると行数は人数の 2 倍になる。「70 名」と出て一人を二重に数えたように見えた（ユーザー指摘 2026-10-06）ので、
+    // 行数と人数を分けて出す
+    span.textContent = round2Rows(view.ctx.players) > 0
+      ? '表示 ' + shown + ' / ' + total + ' 行（選手 ' + peopleCount(view.ctx.players) + ' 名。一巡目と二巡目の行）'
+      : '表示 ' + shown + ' / ' + total + ' 名';
     view.bar.appendChild(span);
 
     // 件数は一巡目の行だけを対象にする（bib/rank は startBlockers が一巡目だけ拾うが、
