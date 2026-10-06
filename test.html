@@ -7034,6 +7034,21 @@
       assert('Dashboard.swapPanes: 無い鍵・同じ鍵はそのまま',
         [Dashboard.swapPanes(a, 'court:A', 'nope'), Dashboard.swapPanes(a, 'desk', 'desk')], [a, a]);
     })();
+    (function() {
+      var a = { top: ['court:A', 'court:B'], bottom: ['desk', 'rank'], hidden: [] };
+      assert('Dashboard.insertPane: 別の段の面の前に差し込む（元の段から抜ける）',
+        Dashboard.insertPane(a, 'rank', 'top', 'court:B', 'before'), { top: ['court:A', 'rank', 'court:B'], bottom: ['desk'], hidden: [] });
+      assert('Dashboard.insertPane: 後ろに差し込む・同じ段の中で動かす',
+        [Dashboard.insertPane(a, 'desk', 'top', 'court:B', 'after').top, Dashboard.insertPane(a, 'court:B', 'top', 'court:A', 'before').top],
+        [['court:A', 'court:B', 'desk'], ['court:B', 'court:A']]);
+      assert('Dashboard.insertPane: refKey 無しは段の末尾（空の段へ移すのもこれ）',
+        Dashboard.insertPane({ top: ['court:A', 'desk'], bottom: [], hidden: [] }, 'desk', 'bottom', null), { top: ['court:A'], bottom: ['desk'], hidden: [] });
+      assert('Dashboard.insertPane: 同じ鍵・無い鍵・変な段はそのまま。元は変えない',
+        [Dashboard.insertPane(a, 'desk', 'top', 'desk', 'before'), Dashboard.insertPane(a, 'nope', 'top', 'court:A', 'before'), Dashboard.insertPane(a, 'desk', 'middle', null), a.bottom],
+        [a, a, a, ['desk', 'rank']]);
+      assert('Dashboard.oneRow: 全部を上段に（上段 → 下段の順）。hidden はそのまま',
+        Dashboard.oneRow({ top: ['court:A'], bottom: ['desk', 'rank'], hidden: ['rank'] }), { top: ['court:A', 'desk', 'rank'], bottom: [], hidden: ['rank'] });
+    })();
     assert('Dashboard.rowKey: 上段 top<n>、下段は 2 面だけ以前からの bottom',
       [Dashboard.rowKey('top', 1), Dashboard.rowKey('top', 3), Dashboard.rowKey('bottom', 2), Dashboard.rowKey('bottom', 1), Dashboard.rowKey('bottom', 3)],
       ['top1', 'top3', 'bottom', 'bottom1', 'bottom3']);
