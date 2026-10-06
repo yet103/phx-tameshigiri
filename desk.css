@@ -450,7 +450,9 @@ a { color: var(--accent); }
 .desk-match-courts { grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); }
 .desk-match-table { width: 100%; font-size: 13px; margin: 4px 0 6px; }
 .desk-match-table th, .desk-match-table td { padding: 2px 8px; text-align: center; white-space: nowrap; width: 1%; }
-.desk-match-table th.note, .desk-match-table td.note { width: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+/* 備考もセル内で折り返さない（ユーザー要望 2026-10-06）。長い備考で表がカードより広くなったら、カード側で横にスクロール */
+.desk-match-table th.note, .desk-match-table td.note { width: auto; white-space: nowrap; text-align: left; }
+.desk-match-card { overflow-x: auto; }
 .desk-match-table td.name { font-family: var(--mincho); font-weight: bold; }
 .desk-match-table td.score { color: var(--score-color); font-weight: bold; }
 .desk-match-table td.score.confirmed { color: var(--score-confirmed); }
