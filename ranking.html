@@ -27,6 +27,9 @@
         <option value="">-- 大会を選択 --</option>
       </select>
       <label class="rank-zoom">文字 <input type="range" id="rankZoom" min="50" max="200" step="10" value="100"> <span id="rankZoomVal">100%</span></label>
+      <!-- 表示の設定（端末に覚える。Ranking.loadOpts / saveOpts）: 合計の内訳「41+44」、ベスト4 の列 -->
+      <label class="rank-opt"><input type="checkbox" id="rankShowDetail"> 内訳</label>
+      <label class="rank-opt"><input type="checkbox" id="rankShowBest4"> ベスト4</label>
       <button id="btnDownloadHtml" class="btn-neutral">HTMLダウンロード</button>
       <button class="theme-btn" id="btnTheme">🌙 ダーク</button>
     </div>
@@ -158,10 +161,27 @@
     }
     rankEventSelect.addEventListener('change', function() { selectEvent(rankEventSelect.value); });
 
+    // 表示の設定（内訳・ベスト4）。変えたら保存して、描き直さずに class だけ付け替える
+    var optDetail = document.getElementById('rankShowDetail');
+    var optBest4 = document.getElementById('rankShowBest4');
+    (function() {
+      var o = Ranking.loadOpts();
+      optDetail.checked = o.detail;
+      optBest4.checked = o.best4;
+    })();
+    function onOptsChange() {
+      var o = { detail: optDetail.checked, best4: optBest4.checked };
+      Ranking.saveOpts(o);
+      Ranking.applyOpts(rankingContainer, o);
+    }
+    optDetail.addEventListener('change', onOptsChange);
+    optBest4.addEventListener('change', onOptsChange);
+
     function renderRankings(data) {
       var prevRows = Ranking.captureRows(rankingContainer);   // 入れ替わりのアニメーション用に前の位置を控える
       rankingContainer.innerHTML = '';
       var ev = data.event || {};
+      var finished = ev.status === 'final' || ev.status === 'archived';   // 終わった大会は全員「二巡目まで」の色
       // ダウンロードした単体HTMLだけを見てもどの大会か分かるよう、見出しを出す
       // （大会名が無ければ、意味のある見出しにならないので省略する）。
       // rank-heading クラスは HTML ダウンロード時に表本体と切り分けるための目印。
@@ -180,7 +200,7 @@
         var sec = buildRankTable(c.title, (data.rankings && data.rankings[c.key]) || [],
           data.progress && data.progress[c.key],
           data.best4Chance ? { remaining: data.best4Chance.remaining && data.best4Chance.remaining[c.key], rows: data.best4Chance[c.key] } : null,
-          c.key);
+          c.key, (data.detail && data.detail[c.key]) || [], finished);
         sec.classList.add('rank-panel-col');
         sec.dataset.category = c.key;
         built[c.key] = sec;
@@ -193,14 +213,23 @@
       if (built.female) stack.appendChild(built.female);
       if (built.newFace) stack.appendChild(built.newFace);
       rankingContainer.appendChild(stack);
-      // 凡例（ベスト4 の列があるときだけ）
+      // 凡例（ベスト4 の列があるときだけ。ベスト4 を隠す設定なら凡例も消える）
       if (data.best4Chance && Array.isArray(data.best4Chance.legend)) {
         var legend = document.createElement('p');
-        legend.className = 'rank-panel-legend';
+        legend.className = 'rank-panel-legend rank-panel-legend-best4';
         legend.style.cssText = 'grid-column:1/-1;font-size:12px;color:#888;margin:4px 0 0';
         legend.textContent = 'ベスト4: ' + data.best4Chance.legend.join('　') + '　→n? はまだ斬っていない人の最大（二巡目が全部成功したときの合計）';
         rankingContainer.appendChild(legend);
       }
+      // 合計の色の凡例（終わった大会では全員青なので出さない）
+      if (!finished) {
+        var colorLegend = document.createElement('p');
+        colorLegend.className = 'rank-panel-legend rank-panel-legend-colors';
+        colorLegend.style.cssText = 'grid-column:1/-1;font-size:12px;color:#888;margin:4px 0 0';
+        colorLegend.textContent = Ranking.COLOR_LEGEND;
+        rankingContainer.appendChild(colorLegend);
+      }
+      Ranking.applyOpts(rankingContainer, Ranking.loadOpts());
       Ranking.animateRows(rankingContainer, prevRows);   // 順位の入れ替わりを滑らせる（ユーザー要望 2026-10-06）
     }
 
@@ -208,7 +237,9 @@
     // chance（省略可）: { remaining, rows: [ {flag,label,max} | null, ... ] }（rows と同じ並び。サーバーの best4Chance の部門分）。
     // あれば見出しに「残り n 名」、「ベスト4」の列（◎ ○ ✕ の記号。凡例は表の下）を出す
     // catKey（省略可）: 部門の鍵。行の data-rowkey（部門|名前）に使い、描き直しのときに同じ人の行を見つける
-    function buildRankTable(title, rows, progress, chance, catKey) {
+    // detail（省略可）: rows と同じ並びの { r1, r2, r2Done } | null（サーバーの detail）。合計の色分けと内訳「41+44」に使う
+    // finished（省略可）: 大会が終わっていれば全員「二巡目まで」の色
+    function buildRankTable(title, rows, progress, chance, catKey, detail, finished) {
       var div = document.createElement('div');
       div.className = 'ranking-section';
       // 見出しは採点画面の順位表と同じ部品（.rank-panel-progress）。HTML ダウンロードでは class が効かないので
@@ -226,10 +257,15 @@
       }
       var trs = rows.map(function(r, i) {
         var c = withChance ? chance.rows[i] : null;
+        var d = (detail && detail[i]) || null;
+        // 合計の色: 未確定グレー・一巡目まで金茶・二巡目まで青（ユーザー要望 2026-10-06）。HTML ダウンロードでは class が効かないので色は style でも
+        var tc = Ranking.totalClass(r.counted, d, finished);
+        var tcStyle = tc === 'pending' ? 'color:#888' : (tc === 'r1' ? 'color:#8a6d1c' : 'color:#1f4fa3');
+        var dt = Ranking.detailText(d);
         return '<tr data-rowkey="' + Storage.esc((catKey || title) + '|' + r.name).replace(/"/g, '&quot;') + '" data-score="' + Storage.esc(String(r.score)) + '">' +
                '<td class="rank">' + Storage.esc(String(r.rank)) + '</td><td class="name">' + Storage.esc(r.name) +
-               // 確定した得点がまだ無い組（counted 偽）は合計をグレーに（ユーザー要望 2026-10-06）。HTML ダウンロードでは class が効かないので色は style でも
-               '</td><td class="total' + (r.counted === false ? ' pending" style="color:#888' : '') + '">' + Storage.esc(String(r.score)) +
+               '</td><td class="total ' + tc + '" style="' + tcStyle + '">' + Storage.esc(String(r.score)) +
+               (dt ? '<span class="rank-panel-sub" style="margin-left:3px;font-size:11px;font-weight:normal;color:#888">' + Storage.esc(dt) + '</span>' : '') +
                (c && c.pending ? '<span class="rank-panel-max" style="margin-left:2px;font-size:11px;font-weight:normal;color:#888">→' + Storage.esc(String(c.max)) + '?</span>' : '') + '</td>' +
                (withChance ? '<td class="chance ' + ((c && c.flag) || '') + '" style="text-align:center;white-space:nowrap' +
                  (c && c.flag === 'sure' ? ';font-weight:bold' : (c && c.flag === 'out' ? ';color:#888' : '')) + '"' +
@@ -253,8 +289,15 @@
       // 取り出して flex の外に置く。
       var headingEl = rankingContainer.querySelector('.rank-heading');
       var headingHTML = headingEl ? headingEl.outerHTML : '';
+      // 画面で隠している内訳・ベスト4 の列は、ダウンロードした HTML にも入れない（class は効かないので要素ごと外す）
+      var opts = Ranking.loadOpts();
       var sectionsHTML = '';
-      for (var i = 0; i < sections.length; i++) sectionsHTML += sections[i].outerHTML;
+      for (var i = 0; i < sections.length; i++) {
+        var copy = sections[i].cloneNode(true);
+        if (!opts.detail) copy.querySelectorAll('.rank-panel-sub').forEach(function(el) { el.parentNode.removeChild(el); });
+        if (!opts.best4) copy.querySelectorAll('.chance').forEach(function(el) { el.parentNode.removeChild(el); });
+        sectionsHTML += copy.outerHTML;
+      }
       var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
         '<style>body{font-family:sans-serif}table{border-collapse:collapse;display:inline-table;margin:0 16px 16px 0}' +
         'th,td{border:1px solid #999;padding:6px 12px}th{background:#eee}td.total{text-align:center}h3{margin-bottom:8px}</style></head>' +

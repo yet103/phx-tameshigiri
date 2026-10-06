@@ -2602,7 +2602,12 @@ var App = (function() {
     var prevRows = Ranking.captureRows(rankPanelCols);   // 入れ替わりのアニメーション用に前の位置を控える
     rankPanelCols.innerHTML = '';
     if (!currentEvent) return;
-    var cats = Courts.rankPanel(players, { countAll: typeof currentEvent.status !== 'string' });
+    var countAllHere = typeof currentEvent.status !== 'string';
+    var cats = Courts.rankPanel(players, { countAll: countAllHere });
+    // 合計の内訳（一巡目・二巡目・二巡目を終えたか）。色分けと「41+44」（ユーザー要望 2026-10-06）
+    var totalsByKey = Object.create(null);
+    EventStatus.playerTotals(players, { countAll: countAllHere }).forEach(function(t) { totalsByKey[t.key] = t; });
+    var finished = currentStatus() === 'final' || currentStatus() === 'archived';
     // 見出しに「〜巡目 済み/全員」（何人中何人が確定したか。ユーザー要望 2026-10-05）
     var progress = EventStatus.roundProgress(players, currentStatus());
     // ベスト4 に残れる可能性（部門ごと。二巡目の行ができてから。記号だけで、凡例は下。ユーザー要望 2026-10-05）
@@ -2661,9 +2666,11 @@ var App = (function() {
           tr.dataset.rowkey = c.key + '|' + (r.key || r.name || '');   // 描き直しで同じ人の行を見つける（Ranking.animateRows）
           tr.dataset.score = String(Number(r.score) || 0);
           var ch = withChance ? catChances.byKey[r.key] : null;
+          var dt = Ranking.detailText(totalsByKey[r.key]);
           tr.innerHTML = '<td class="rank">' + (Number(r.rank) || 0) + '</td>' +
             '<td class="name">' + esc(r.name || '') + '</td>' +
-            '<td class="total">' + (Number(r.score) || 0) +
+            '<td class="total ' + Ranking.totalClass(true, totalsByKey[r.key], finished) + '">' + (Number(r.score) || 0) +
+              (dt ? '<span class="rank-panel-sub">' + esc(dt) + '</span>' : '') +
               // まだ斬っていない人は「→最大」（二巡目が全部成功したときの合計）を添える（低い人に ○ が付く理由が分かるように）
               (ch && ch.pending ? '<span class="rank-panel-max">→' + ch.max + '?</span>' : '') + '</td>' +
             (withChance ? '<td class="chance ' + (ch ? ch.flag : '') + '" title="' +
@@ -2683,16 +2690,24 @@ var App = (function() {
     if (built.female) stack.appendChild(built.female);
     if (built.newFace) stack.appendChild(built.newFace);
     if (stack.childNodes.length) rankPanelCols.appendChild(stack);
-    // 凡例（ベスト4 の列があるときだけ）
+    // 合計の色の凡例（終わった大会では全員青なので出さない）
+    if (!finished) {
+      var colorLegend = document.createElement('p');
+      colorLegend.className = 'rank-panel-legend rank-panel-legend-colors';
+      colorLegend.textContent = Ranking.COLOR_LEGEND;
+      rankPanelCols.appendChild(colorLegend);
+    }
+    // 凡例（ベスト4 の列があるときだけ。ベスト4 を隠す設定なら凡例も消える）
     if (chances) {
       var legend = document.createElement('p');
-      legend.className = 'rank-panel-legend';
+      legend.className = 'rank-panel-legend rank-panel-legend-best4';
       legend.textContent = 'ベスト4: ' + ['sure', 'possible', 'out'].map(function(k) {
         return EventStatus.BEST4_FLAGS[k] + ' ' + EventStatus.BEST4_FLAG_TEXT[k];
       }).join('　') + '　→n? はまだ斬っていない人の最大（二巡目が全部成功したときの合計）';
       rankPanelCols.appendChild(legend);
     }
     markRankPanelCurrent();
+    Ranking.applyOpts(rankPanelCols, Ranking.loadOpts());   // 内訳・ベスト4 の表示は順位表示ページの設定と同じ
     Ranking.animateRows(rankPanelCols, prevRows);   // 順位の入れ替わりを滑らせる（ユーザー要望 2026-10-06）
   }
 

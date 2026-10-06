@@ -1925,6 +1925,13 @@
     assert('ranking: 順位の項目は rank/name/score/counted だけ（key は出さない。counted は確定した得点のある組なら真）',
       [Object.keys(flRank.rankings.male[0]), flRank.rankings.male.every(function(e) { return typeof e.counted === 'boolean'; })],
       [['rank', 'name', 'score', 'counted'], true]);
+    (function() {
+      var names = flRank.rankings.male.map(function(e) { return e.name; });
+      var d = flRank.detail.male;
+      assert('ranking: detail は順位の行と同じ並びで { r1, r2, r2Done }。二巡目を確定した G3 だけ r2Done（20+30）、他は一巡目だけ',
+        [d.length, d[names.indexOf('G3')], d[names.indexOf('G1')], Object.keys(flRank.detail)],
+        [names.length, { r1: 20, r2: 30, r2Done: true }, { r1: 42, r2: 0, r2Done: false }, ['male', 'female', 'newFace']]);
+    })();
     var flLink = await Api.createShareLink(flEvent.id);
     var flSharedRank = await Api.loadSharedRanking(flLink.token);
     assert('共有リンクの ranking: finale は無く、event.status が今の状態',
@@ -6975,6 +6982,29 @@
     assert('Ranking.parseHash: 無し・他のハッシュ・壊れたエンコードは空',
       [Ranking.parseHash(''), Ranking.parseHash('#foo'), Ranking.parseHash('#event/'), Ranking.parseHash('#event/%E0%A4%A'), Ranking.parseHash(null)],
       ['', '', '', '', '']);
+    // ---- 順位表の表示の設定・色分け・内訳（ユーザー要望 2026-10-06） ----
+    assert('Ranking.normalizeOpts: 既定は 内訳なし・ベスト4 あり。壊れた値も既定',
+      [Ranking.normalizeOpts(null), Ranking.normalizeOpts({ detail: true, best4: false }), Ranking.normalizeOpts({ detail: 'x', best4: 0 })],
+      [{ detail: false, best4: true }, { detail: true, best4: false }, { detail: false, best4: true }]);
+    try { localStorage.removeItem('tmg_ranking_opts'); } catch (e) {}
+    assert('Ranking.loadOpts: 控えが無ければ既定', Ranking.loadOpts(), { detail: false, best4: true });
+    Ranking.saveOpts({ detail: true, best4: false });
+    assert('Ranking.saveOpts → loadOpts', Ranking.loadOpts(), { detail: true, best4: false });
+    try { localStorage.removeItem('tmg_ranking_opts'); } catch (e) {}
+    assert('Ranking.totalClass: 未確定 pending、二巡目まで（か終わった大会）done、それ以外 r1',
+      [Ranking.totalClass(false, null, false), Ranking.totalClass(true, { r2Done: true }, false), Ranking.totalClass(true, { r2Done: false }, true), Ranking.totalClass(true, { r2Done: false }, false), Ranking.totalClass(true, null, false)],
+      ['pending', 'done', 'done', 'r1', 'r1']);
+    assert('Ranking.detailText: 二巡目まで終えていれば「41+44」、そうでなければ空',
+      [Ranking.detailText({ r1: 41, r2: 44, r2Done: true }), Ranking.detailText({ r1: 41, r2: 0, r2Done: false }), Ranking.detailText(null)], ['41+44', '', '']);
+    (function() {
+      var box = document.createElement('div');
+      box.className = 'rank-panel-cols';
+      Ranking.applyOpts(box, { detail: true, best4: false });
+      var a = [box.classList.contains('show-detail'), box.classList.contains('hide-best4')];
+      Ranking.applyOpts(box, null);
+      assert('Ranking.applyOpts: show-detail / hide-best4 の class を付け外し', [a, box.classList.contains('show-detail'), box.classList.contains('hide-best4')], [[true, true], false, false]);
+    })();
+
     // ---- 順位の入れ替わりのアニメーション（Ranking.captureRows / animateRows。ユーザー要望 2026-10-06） ----
     (function() {
       var box = document.createElement('div');

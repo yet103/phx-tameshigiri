@@ -422,6 +422,14 @@ function computeRanking(event) {
     const c = chances[key].byKey[e.key];
     return c ? { flag: c.flag, label: c.label, max: c.max, pending: c.pending } : null;
   });
+  // 合計の内訳（一巡目・二巡目・二巡目を終えたか）。順位の行と同じ並びで別の項目に持つ（行の契約は変えない。
+  // 順位表示ページの「内訳」トグルと、一巡目まで／二巡目までの色分け。ユーザー要望 2026-10-06）
+  const totalsByKey = Object.create(null);
+  EventStatus.playerTotals(players, { countAll: lockedEvent }).forEach(t => { totalsByKey[t.key] = t; });
+  const detailRows = key => r[key].map(e => {
+    const t = totalsByKey[e.key];
+    return t ? { r1: t.r1, r2: t.r2, r2Done: t.r2Done === true } : null;
+  });
   const best4Chance = chances ? {
     remaining: { male: chances.male.remaining, female: chances.female.remaining, newFace: chances.newFace.remaining },
     male: chanceRows('male'),
@@ -443,6 +451,7 @@ function computeRanking(event) {
       female: r.female.map(strip),
       newFace: r.newFace.map(strip)
     },
+    detail: { male: detailRows('male'), female: detailRows('female'), newFace: detailRows('newFace') },
     // ベスト4 に残れる可能性（部門ごと。rankings の各配列と同じ並びの配列、二巡目が未確定の人数、凡例。
     // 二巡目の行が無ければ null。順位表示ページの列。ユーザー要望 2026-10-05）
     best4Chance: best4Chance,

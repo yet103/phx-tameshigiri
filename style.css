@@ -671,6 +671,13 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .rank-panel-table td.name { font-weight: bold; white-space: nowrap; }   /* 折り返さない（ユーザー要望 2026-10-05） */
 .rank-panel-table td.total { font-weight: bold; color: var(--score-confirmed); }
 .rank-panel-table td.total.pending { color: var(--text-muted); }   /* 確定した得点がまだ無い組の合計はグレー（ユーザー要望 2026-10-06） */
+.rank-panel-table td.total.r1 { color: var(--score-color); }        /* 一巡目まで確定は金茶、二巡目まで（.done）は青のまま（ユーザー要望 2026-10-06） */
+/* 合計の内訳「41+44」（→170? と同じ作法）。入れ物の .show-detail（Ranking.applyOpts）で出す */
+.rank-panel-sub { display: none; margin-left: 3px; font-size: 11px; font-weight: normal; color: var(--text-muted); }
+.rank-panel-cols.show-detail .rank-panel-sub { display: inline; }
+/* ベスト4 の列と凡例は .hide-best4 で消す */
+.rank-panel-cols.hide-best4 .rank-panel-table .chance, .rank-panel-cols.hide-best4 .rank-panel-legend-best4 { display: none; }
+.rank-opt { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-muted); white-space: nowrap; cursor: pointer; }
 /* 順位の入れ替わりのアニメーション（Ranking.animateRows。ユーザー要望 2026-10-06）。
    動いた行は前の位置からの transform を置かれ、次のフレームで 0 に戻る（FLIP）。新しい行は薄く出て、変わった合計は金で光る */
 .rank-panel-table tr.rank-row-move { transition: transform .7s cubic-bezier(.2, .7, .2, 1); position: relative; z-index: 1; }

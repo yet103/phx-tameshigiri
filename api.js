@@ -834,6 +834,7 @@ var Api = (function() {
     // GET /api/events/:eventId/ranking
     // 戻り値: { event: { name, date, venue, updatedAt, status },
     //          rankings: { male: [{ rank, name, score, counted }], female: [...], newFace: [...] },
+    //          detail: { male: [{ r1, r2, r2Done } | null, ...], ... }（rankings と同じ並び。合計の内訳。2026-10-06）,
     //          best4: { final, remaining, rows: [{ name, total, r1, r2, rank }] } }
     //                  （ベスト4＝一般男子の合計の上位 4 名・同点は全員・0 点以下は除く。
     //                    final: false の間は暫定ベスト4 で、remaining は二巡目が未確定の一般男子の人数。

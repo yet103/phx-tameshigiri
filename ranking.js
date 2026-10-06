@@ -27,6 +27,41 @@ var Ranking = (function() {
     return Math.round(n / 10) * 10;
   }
 
+  // ---- 順位表の表示の設定（ユーザー要望 2026-10-06）: 内訳（41+44）とベスト4 の列を出すか ----
+  // localStorage tmg_ranking_opts = { detail: false, best4: true }。採点画面の順位表も同じ設定を読む
+  var OPTS_KEY = 'tmg_ranking_opts';
+  function normalizeOpts(raw) {
+    var s = (raw && typeof raw === 'object') ? raw : {};
+    return { detail: s.detail === true, best4: s.best4 !== false };
+  }
+  function loadOpts() {
+    try { return normalizeOpts(JSON.parse(localStorage.getItem(OPTS_KEY) || 'null')); }
+    catch (e) { return normalizeOpts(null); }
+  }
+  function saveOpts(o) {
+    try { localStorage.setItem(OPTS_KEY, JSON.stringify(normalizeOpts(o))); } catch (e) {}
+  }
+  // 表の入れ物（.rank-panel-cols）に設定の class を付ける。show-detail で内訳が出て、hide-best4 でベスト4 の列と凡例が消える
+  function applyOpts(container, opts) {
+    if (!container || !container.classList) return;
+    var o = normalizeOpts(opts);
+    container.classList.toggle('show-detail', o.detail);
+    container.classList.toggle('hide-best4', !o.best4);
+  }
+  // 合計のセルの色分け: 確定した得点が無い → 'pending'（グレー）、二巡目まで終えた（または大会が終わった）→ 'done'（青）、
+  // それ以外（一巡目まで）→ 'r1'（金茶）。counted は行、detail は { r2Done }、finished は大会が final / archived か
+  function totalClass(counted, detail, finished) {
+    if (counted === false) return 'pending';
+    if (finished || (detail && detail.r2Done === true)) return 'done';
+    return 'r1';
+  }
+  // 内訳の文字。二巡目まで終えていれば「41+44」、そうでなければ ''
+  function detailText(detail) {
+    if (!detail || detail.r2Done !== true) return '';
+    return (Number(detail.r1) || 0) + '+' + (Number(detail.r2) || 0);
+  }
+  var COLOR_LEGEND = '合計の色: 青 二巡目まで確定　金茶 一巡目まで　グレー 未確定';
+
   // ---- 順位の入れ替わりのアニメーション（ユーザー要望 2026-10-06）----
   // 表を描き直す前に captureRows で行（tr[data-rowkey]）の位置と得点を控え、描き直した後に animateRows を呼ぶ。
   // 位置の変わった行は前の位置からの差を transform で置き、次のフレームで 0 に戻す（FLIP。style.css の .rank-row-move）。
@@ -82,5 +117,7 @@ var Ranking = (function() {
   }
 
   return { parseHash: parseHash, pickCurrent: pickCurrent, clampZoom: clampZoom,
+           normalizeOpts: normalizeOpts, loadOpts: loadOpts, saveOpts: saveOpts, applyOpts: applyOpts,
+           totalClass: totalClass, detailText: detailText, COLOR_LEGEND: COLOR_LEGEND,
            captureRows: captureRows, animateRows: animateRows };
 })();
