@@ -7013,6 +7013,46 @@
     assert('Dashboard.saveLayout → loadLayout（壊れた列は落ちる）', Dashboard.loadLayout(), { row: 70, cols: { bottom: [40, 60] } });
     try { localStorage.removeItem('tmg_dashboard_layout'); } catch (e) {}
 
+    // ---- dashboard.js 面を閉じる・再表示・入れ替え（設計書 2026-10-06 dashboard-panes） ----
+    assert('Dashboard.paneKey: コートは court:<名>、他は kind', Dashboard.panes('e1', ['A', '第 1']).map(Dashboard.paneKey), ['court:A', 'court:第 1', 'desk', 'rank']);
+    assert('Dashboard.arrangePanes: 控えが無ければ既定の段',
+      Dashboard.arrangePanes(['court:A', 'court:B', 'desk', 'rank'], ['court:A', 'court:B'], ['desk', 'rank'], null),
+      { top: ['court:A', 'court:B'], bottom: ['desk', 'rank'], hidden: [] });
+    assert('Dashboard.arrangePanes: 控えの並びを使い、無い鍵は落とし、控えに無い鍵は既定の段の末尾。hidden も今ある鍵だけ',
+      Dashboard.arrangePanes(['court:A', 'court:B', 'desk', 'rank'], ['court:A', 'court:B'], ['desk', 'rank'],
+        { top: ['rank', 'court:C', 'court:A'], bottom: ['desk', 'court:A'], hidden: ['desk', 'court:C', 5] }),
+      { top: ['rank', 'court:A', 'court:B'], bottom: ['desk'], hidden: ['desk'] });
+    assert('Dashboard.arrangePanes: 壊れた控えは既定。どの既定にも無い鍵は下段',
+      Dashboard.arrangePanes(['desk', 'rank', 'zzz'], [], ['desk', 'rank'], 'x'),
+      { top: [], bottom: ['desk', 'rank', 'zzz'], hidden: [] });
+    (function() {
+      var a = { top: ['court:A', 'court:B'], bottom: ['desk', 'rank'], hidden: ['rank'] };
+      assert('Dashboard.swapPanes: 同じ段', Dashboard.swapPanes(a, 'court:A', 'court:B').top, ['court:B', 'court:A']);
+      var x = Dashboard.swapPanes(a, 'court:A', 'rank');
+      assert('Dashboard.swapPanes: 別の段をまたいで。hidden はそのまま。元は変えない',
+        [x.top, x.bottom, x.hidden, a.top], [['rank', 'court:B'], ['desk', 'court:A'], ['rank'], ['court:A', 'court:B']]);
+      assert('Dashboard.swapPanes: 無い鍵・同じ鍵はそのまま',
+        [Dashboard.swapPanes(a, 'court:A', 'nope'), Dashboard.swapPanes(a, 'desk', 'desk')], [a, a]);
+    })();
+    assert('Dashboard.rowKey: 上段 top<n>、下段は 2 面だけ以前からの bottom',
+      [Dashboard.rowKey('top', 1), Dashboard.rowKey('top', 3), Dashboard.rowKey('bottom', 2), Dashboard.rowKey('bottom', 1), Dashboard.rowKey('bottom', 3)],
+      ['top1', 'top3', 'bottom', 'bottom1', 'bottom3']);
+    assert('Dashboard.normalizeLayout: bottom1 / bottom3 も受ける（top だけの裸のキーは落とす）',
+      Dashboard.normalizeLayout({ cols: { bottom3: [20, 30, 50], bottom1: [100], top: [100], top0: [100] } }).cols,
+      { bottom3: [20, 30, 50], bottom1: [100] });
+    assert('Dashboard.rowGeometry: 両段あれば row% で分けて横の仕切り 1 本。片方だけなら 100% で仕切り無し',
+      [Dashboard.rowGeometry({ row: 60 }, 2, 2), Dashboard.rowGeometry({ row: 60 }, 1, 0), Dashboard.rowGeometry({ row: 62.5 }, 0, 2), Dashboard.rowGeometry({ row: 60 }, 0, 0)],
+      [{ top: { y: 0, h: 60 }, bottom: { y: 60, h: 40 }, gutters: 1 },
+       { top: { y: 0, h: 100 }, bottom: null, gutters: 0 },
+       { top: null, bottom: { y: 0, h: 100 }, gutters: 0 },
+       { top: null, bottom: null, gutters: 0 }]);
+    assert('Dashboard.colGeometry', Dashboard.colGeometry([30, 70]), [{ x: 0, w: 30 }, { x: 30, w: 70 }]);
+    try { localStorage.removeItem('tmg_dashboard_panes'); } catch (e) {}
+    assert('Dashboard.loadPanes: 控えが無ければ空', Dashboard.loadPanes(), { top: [], bottom: [], hidden: [] });
+    Dashboard.savePanes({ top: ['a', 'b', 'a'], bottom: 'x', hidden: ['b', 1, ''] });
+    assert('Dashboard.savePanes → loadPanes（文字列だけ・重複なし。壊れた部分は空）', Dashboard.loadPanes(), { top: ['a', 'b'], bottom: [], hidden: ['b'] });
+    try { localStorage.removeItem('tmg_dashboard_panes'); } catch (e) {}
+
     // ---- EventStatus.roundProgress（順位表の「〜巡目 済み/全員」。ユーザー要望 2026-10-05） ----
     (function() {
       var ps = [

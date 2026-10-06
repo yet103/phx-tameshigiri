@@ -1,15 +1,20 @@
-// ダッシュボード（設計書 2026-10-05-dashboard-design.md）。採点画面（コートごと）・PC 運営の試合進行・
-// 順位表示を iframe で 1 画面に並べる。閲覧専用（盾がクリックを止め、ホイールだけ中へ渡す）と
-// 操作可能（盾なし）の 2 モード。各 iframe は等倍で読み込み、transform: scale で縮める。
+// ダッシュボード（設計書 2026-10-05-dashboard-design.md、面の閉じる・入れ替えは 2026-10-06-dashboard-panes-design.md）。
+// 採点画面（コートごと）・PC 運営の試合進行・順位表示を iframe で 1 画面に並べる。閲覧専用（盾がクリックを止め、
+// ホイールだけ中へ渡す）と操作可能（盾なし）の 2 モード。各 iframe は等倍で読み込み、transform: scale で縮める。
+// 面は DOM の順番ではなく絶対配置で並べる（閉じる・入れ替えで iframe を読み直さないため）。
 // 依存: Api（listEvents / loadEvent）、Storage（テーマ）、Courts（listFrom / UNASSIGNED）。
 var Dashboard = (function() {
   var ZOOM_KEY = 'tmg_dashboard_zoom';
   var MODE_KEY = 'tmg_dashboard_mode';
   var ZOOM_DEFAULT = 75, ZOOM_MIN = 50, ZOOM_MAX = 100, ZOOM_STEP = 5;
   // 面の仕切り（ユーザー要望 2026-10-05: 枠をリサイズでき、位置を端末に保存）。
-  // layout = { row: 上段の高さ %, cols: { top2: [%,%], top3: [%,%,%], bottom: [%,%] } }（各配列の合計 100）
+  // layout = { row: 上段の高さ %, cols: { top1: [%], top2: [%,%], top3: [%,%,%], bottom: [%,%], bottom1: [%], bottom3: [%,%,%] … } }
+  // （各配列の合計 100。キーは rowKey() が作る。下段 2 面の 'bottom' は以前からの控えとの互換）
   var LAYOUT_KEY = 'tmg_dashboard_layout';
   var ROW_DEFAULT = 60, PANE_MIN = 15, GUTTER_PX = 8;
+  // 面の並びと閉じた面（ユーザー要望 2026-10-06）。panes = { top: [鍵], bottom: [鍵], hidden: [鍵] }
+  var PANES_KEY = 'tmg_dashboard_panes';
+  var DRAG_START_PX = 6;   // 見出しを掴んでこれだけ動いたら入れ替えのドラッグ開始（クリックと区別）
 
   // --- 純粋関数（test.html が見る） ---
 
@@ -32,6 +37,9 @@ var Dashboard = (function() {
     return list;
   }
 
+  // 面の鍵（並び・非表示の控えに使う。大会をまたいで同じ）: コートは court:<名>、他は kind
+  function paneKey(p) { return p.kind === 'court' ? 'court:' + p.court : p.kind; }
+
   // 上段の列数＝コート数（0 なら 1 枚の案内）
   function columnsFor(courtCount) { return Math.max(1, courtCount | 0); }
 
@@ -42,6 +50,82 @@ var Dashboard = (function() {
     return Math.round(n / ZOOM_STEP) * ZOOM_STEP;
   }
   function normalizeMode(v) { return v === 'edit' ? 'edit' : 'view'; }
+
+  // --- 面の並びと非表示（純粋関数） ---
+
+  // 文字列だけ・重複なしの配列に正す
+  function cleanKeys(arr, seen) {
+    var out = [];
+    (Array.isArray(arr) ? arr : []).forEach(function(k) {
+      if (typeof k !== 'string' || !k || seen[k]) return;
+      seen[k] = true;
+      out.push(k);
+    });
+    return out;
+  }
+  // 控えから読んだ生の値を正す（鍵の実在は見ない。それは arrangePanes）
+  function normalizePanes(raw) {
+    var s = (raw && typeof raw === 'object') ? raw : {};
+    var seen = Object.create(null);
+    var top = cleanKeys(s.top, seen), bottom = cleanKeys(s.bottom, seen);
+    return { top: top, bottom: bottom, hidden: cleanKeys(s.hidden, Object.create(null)) };
+  }
+  // 控えの並びを今の大会の面（keys）に合わせる。無い鍵は落とし、控えに無い鍵は既定の段の末尾に足す。
+  // hidden は今ある鍵だけ残す。壊れた控えは既定の並び
+  function arrangePanes(keys, defaultTop, defaultBottom, saved) {
+    var have = Object.create(null);
+    (keys || []).forEach(function(k) { have[k] = true; });
+    var s = normalizePanes(saved);
+    var seen = Object.create(null);
+    function pick(arr) {
+      var out = [];
+      arr.forEach(function(k) { if (have[k] && !seen[k]) { seen[k] = true; out.push(k); } });
+      return out;
+    }
+    var top = pick(s.top), bottom = pick(s.bottom);
+    top = top.concat(pick(defaultTop || []));
+    bottom = bottom.concat(pick(defaultBottom || []));
+    bottom = bottom.concat(pick(keys || []));   // どちらの既定にも無い鍵（念のため）は下段へ
+    var hidden = s.hidden.filter(function(k) { return have[k]; });
+    return { top: top, bottom: bottom, hidden: hidden };
+  }
+  // 面 a と b の場所を入れ替える（同じ段でも別の段でも）。片方が無ければそのまま
+  function swapPanes(arr, a, b) {
+    var out = { top: arr.top.slice(), bottom: arr.bottom.slice(), hidden: arr.hidden.slice() };
+    function find(k) {
+      var i = out.top.indexOf(k);
+      if (i >= 0) return { row: 'top', i: i };
+      i = out.bottom.indexOf(k);
+      if (i >= 0) return { row: 'bottom', i: i };
+      return null;
+    }
+    var pa = find(a), pb = find(b);
+    if (!pa || !pb || a === b) return out;
+    out[pa.row][pa.i] = b;
+    out[pb.row][pb.i] = a;
+    return out;
+  }
+  // 幅の控えのキー。上段 top<n>。下段は 2 面なら以前からの 'bottom'、他は bottom<n>
+  function rowKey(row, n) { return row === 'top' ? 'top' + n : (n === 2 ? 'bottom' : 'bottom' + n); }
+  // 段の縦の位置（%）。両方あれば上段 row%・下段 100-row% で横の仕切り 1 本、片方だけなら 100%。無い段は null
+  function rowGeometry(layout, topN, bottomN) {
+    var both = topN > 0 && bottomN > 0;
+    var row = (layout && isFinite(Number(layout.row))) ? Number(layout.row) : ROW_DEFAULT;
+    return {
+      top: topN > 0 ? { y: 0, h: both ? row : 100 } : null,
+      bottom: bottomN > 0 ? { y: both ? row : 0, h: both ? Math.round((100 - row) * 10) / 10 : 100 } : null,
+      gutters: both ? 1 : 0
+    };
+  }
+  // 段の中の横の位置（%）。cols（合計 100）から各面の x と w
+  function colGeometry(cols) {
+    var x = 0;
+    return cols.map(function(w) {
+      var o = { x: Math.round(x * 10) / 10, w: w };
+      x += w;
+      return o;
+    });
+  }
 
   // --- 面の仕切り（純粋関数） ---
   function clampPct(v, lo, hi) {
@@ -74,8 +158,8 @@ var Dashboard = (function() {
     if (row !== null) out.row = row;
     var cols = (raw.cols && typeof raw.cols === 'object') ? raw.cols : {};
     Object.keys(cols).forEach(function(key) {
-      var m = key.match(/^(top(\d+)|bottom)$/);
-      if (!m) return;
+      var m = key.match(/^(top|bottom)(\d*)$/);
+      if (!m || (m[1] === 'top' && !m[2])) return;
       var n = m[2] ? parseInt(m[2], 10) : 2;
       if (n < 1 || n > 12) return;
       if (validCols(cols[key], n)) out.cols[key] = cols[key].map(function(v) { return Math.round(Number(v) * 10) / 10; });
@@ -109,6 +193,13 @@ var Dashboard = (function() {
   function saveLayout(layout) {
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(normalizeLayout(layout))); } catch (e) {}
   }
+  function loadPanes() {
+    try { return normalizePanes(JSON.parse(localStorage.getItem(PANES_KEY) || 'null')); }
+    catch (e) { return normalizePanes(null); }
+  }
+  function savePanes(p) {
+    try { localStorage.setItem(PANES_KEY, JSON.stringify(normalizePanes(p))); } catch (e) {}
+  }
   function loadZoom() { try { return clampZoom(localStorage.getItem(ZOOM_KEY)); } catch (e) { return ZOOM_DEFAULT; } }
   function saveZoom(z) { try { localStorage.setItem(ZOOM_KEY, String(clampZoom(z))); } catch (e) {} }
   function loadMode() { try { return normalizeMode(localStorage.getItem(MODE_KEY)); } catch (e) { return 'view'; } }
@@ -117,7 +208,10 @@ var Dashboard = (function() {
   // --- 画面 ---
   var mode = 'view', zoom = ZOOM_DEFAULT, eventId = '', courts = [];
   var layout = { row: ROW_DEFAULT, cols: {} };
-  var topKey = 'top2';   // 上段の列の控えのキー（コート数で変わる）
+  var arr = { top: [], bottom: [], hidden: [] };   // 面の並びと閉じた面（今の大会の鍵に合わせたもの）
+  var paneList = [];                               // 今の大会の面（panes() に key を足したもの。nocourt の案内も含む）
+  var paneEls = Object.create(null);               // 鍵 → 面の要素（大会を選んだときに 1 回だけ作る）
+  var defaults = { top: [], bottom: [] };          // 「並びを元に戻す」の既定
 
   function applyTheme(theme) {
     document.body.setAttribute('data-theme', theme);
@@ -154,8 +248,10 @@ var Dashboard = (function() {
   function buildPane(p) {
     var box = document.createElement('div');
     box.className = 'dash-pane dash-pane-' + p.kind;
+    box.setAttribute('data-key', p.key);
     var head = document.createElement('div');
     head.className = 'dash-pane-head';
+    head.title = 'ドラッグして別の面と場所を入れ替えます';
     var name = document.createElement('span');
     name.className = 'name';
     name.textContent = p.title;
@@ -163,6 +259,15 @@ var Dashboard = (function() {
     tag.className = 'tag';
     head.appendChild(name);
     head.appendChild(tag);
+    // × で閉じる。戻すのは上の帯の「▦ 面」（ユーザー要望 2026-10-06）
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'dash-pane-close';
+    close.textContent = '×';
+    close.title = 'この面を閉じます（上の「▦ 面」で戻せます）';
+    close.setAttribute('aria-label', p.title + ' を閉じる');
+    close.addEventListener('click', function() { hidePane(p.key); });
+    head.appendChild(close);
     box.appendChild(head);
 
     var body = document.createElement('div');
@@ -180,20 +285,135 @@ var Dashboard = (function() {
     }, { passive: false });
     body.appendChild(shield);
     box.appendChild(body);
+    enablePaneDrag(box, head, p.key);
     return box;
   }
 
-  // グリッドの行・列のテンプレートを layout から当てる（仕切りは GUTTER_PX の固定幅のトラック）
-  function applyLayout() {
-    var grid = document.getElementById('dashGrid');
-    grid.style.gridTemplateRows = layout.row + 'fr ' + GUTTER_PX + 'px ' + (100 - layout.row) + 'fr';
-    var rows = grid.querySelectorAll('.dash-row');
-    for (var i = 0; i < rows.length; i++) {
-      var key = rows[i].getAttribute('data-cols-key');
-      var n = parseInt(rows[i].getAttribute('data-cols'), 10) || 1;
-      var cols = colsFor(layout, key, n);
-      rows[i].style.gridTemplateColumns = cols.map(function(c) { return c + 'fr'; }).join(' ' + GUTTER_PX + 'px ');
+  // コートが無い大会の案内（閉じられない・掴めない・メニューに出ない面）
+  function buildNoCourtPane() {
+    var box = document.createElement('div');
+    box.className = 'dash-pane dash-empty';
+    box.setAttribute('data-key', 'nocourt');
+    box.textContent = 'コートがありません（選手登録でコートを付けてください）。';
+    return box;
+  }
+
+  // 面の入れ替え: 見出しを掴んで DRAG_START_PX 動いたらドラッグ。下にある面に印を付け、放したら swapPanes。
+  // 仕切りと同じく、ドラッグ中は body.dash-dragging で iframe の pointer-events を切る（elementFromPoint で面が拾える）
+  function enablePaneDrag(box, head, key) {
+    var start = null, target = null;
+    head.addEventListener('pointerdown', function(e) {
+      if (e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest('.dash-pane-close')) return;
+      start = { x: e.clientX, y: e.clientY, moving: false };
+      head.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    head.addEventListener('pointermove', function(e) {
+      if (!start) return;
+      if (!start.moving) {
+        if (Math.abs(e.clientX - start.x) < DRAG_START_PX && Math.abs(e.clientY - start.y) < DRAG_START_PX) return;
+        start.moving = true;
+        document.body.classList.add('dash-dragging', 'dash-swapping');
+        box.classList.add('dash-drag-src');
+      }
+      var el = document.elementFromPoint(e.clientX, e.clientY);
+      var t = (el && el.closest) ? el.closest('.dash-pane[data-key]') : null;
+      if (t === box || (t && t.getAttribute('data-key') === 'nocourt')) t = null;
+      if (t !== target) {
+        if (target) target.classList.remove('dash-drop-target');
+        target = t;
+        if (target) target.classList.add('dash-drop-target');
+      }
+    });
+    function finish(commit) {
+      if (!start) return;
+      var moved = start.moving, t = target;
+      start = null;
+      target = null;
+      document.body.classList.remove('dash-dragging', 'dash-swapping');
+      box.classList.remove('dash-drag-src');
+      if (t) t.classList.remove('dash-drop-target');
+      if (commit && moved && t) {
+        arr = swapPanes(arr, key, t.getAttribute('data-key'));
+        savePanes(arr);
+        applyPositions();
+      }
     }
+    head.addEventListener('pointerup', function() { finish(true); });
+    head.addEventListener('pointercancel', function() { finish(false); });
+  }
+
+  function hidePane(key) {
+    if (arr.hidden.indexOf(key) < 0) arr.hidden.push(key);
+    savePanes(arr);
+    applyPositions();
+  }
+  function showPane(key) {
+    arr.hidden = arr.hidden.filter(function(k) { return k !== key; });
+    savePanes(arr);
+    applyPositions();
+  }
+
+  // calc() で位置を入れる。全体から仕切りの分（px）を引いた残りに割合を掛け、手前の仕切りの分を足す
+  function calcPos(pct, gutterCount, before) {
+    return 'calc((100% - ' + (gutterCount * GUTTER_PX) + 'px) * ' + (pct / 100) + ' + ' + (before * GUTTER_PX) + 'px)';
+  }
+  function calcSize(pct, gutterCount) {
+    return 'calc((100% - ' + (gutterCount * GUTTER_PX) + 'px) * ' + (pct / 100) + ')';
+  }
+
+  // 面と仕切りの位置を当てる。面の要素は動かさず style だけ変える（iframe を読み直さない）。
+  // 仕切りは本数が変わるので作り直す
+  function applyPositions() {
+    var grid = document.getElementById('dashGrid');
+    var old = grid.querySelectorAll('.dash-gutter');
+    for (var i = 0; i < old.length; i++) grid.removeChild(old[i]);
+    var hidden = Object.create(null);
+    arr.hidden.forEach(function(k) { hidden[k] = true; });
+    var rows = {
+      top: arr.top.filter(function(k) { return !hidden[k] && paneEls[k]; }),
+      bottom: arr.bottom.filter(function(k) { return !hidden[k] && paneEls[k]; })
+    };
+    Object.keys(paneEls).forEach(function(k) {
+      paneEls[k].classList.toggle('hidden', rows.top.indexOf(k) < 0 && rows.bottom.indexOf(k) < 0);
+    });
+    var allClosed = document.getElementById('dashAllClosed');
+    if (allClosed) allClosed.classList.toggle('hidden', rows.top.length + rows.bottom.length > 0);
+
+    var geo = rowGeometry(layout, rows.top.length, rows.bottom.length);
+    ['top', 'bottom'].forEach(function(row) {
+      var keys = rows[row], g = geo[row];
+      if (!g) return;
+      var n = keys.length, key = rowKey(row, n);
+      var cols = colGeometry(colsFor(layout, key, n));
+      var before = (row === 'bottom') ? geo.gutters : 0;
+      var top = calcPos(g.y, geo.gutters, before), height = calcSize(g.h, geo.gutters);
+      keys.forEach(function(k, i) {
+        var el = paneEls[k];
+        el.style.left = calcPos(cols[i].x, n - 1, i);
+        el.style.width = calcSize(cols[i].w, n - 1);
+        el.style.top = top;
+        el.style.height = height;
+        if (i > 0) {
+          var gv = buildGutter('v', key, n, i - 1);
+          gv.style.left = calcPos(cols[i].x, n - 1, i - 1);
+          gv.style.width = GUTTER_PX + 'px';
+          gv.style.top = top;
+          gv.style.height = height;
+          grid.appendChild(gv);
+        }
+      });
+    });
+    if (geo.gutters) {
+      var gh = buildGutter('h', 'row', 2, 0);
+      gh.style.left = '0';
+      gh.style.width = '100%';
+      gh.style.top = calcPos(layout.row, 1, 0);
+      gh.style.height = GUTTER_PX + 'px';
+      grid.appendChild(gh);
+    }
+    renderPanesMenu();
   }
 
   // 仕切り。pointerdown で掴み、pointermove で layout を更新して当て直し、pointerup で保存。
@@ -208,8 +428,7 @@ var Dashboard = (function() {
     var start = null;
     g.addEventListener('pointerdown', function(e) {
       if (e.button !== 0) return;
-      var grid = document.getElementById('dashGrid');
-      var rect = (kind === 'h' ? grid : g.parentNode).getBoundingClientRect();
+      var rect = document.getElementById('dashGrid').getBoundingClientRect();
       var gutters = kind === 'h' ? 1 : (n - 1);
       var track = (kind === 'h' ? rect.height : rect.width) - GUTTER_PX * gutters;
       start = { x: e.clientX, y: e.clientY, track: track, row: layout.row, cols: colsFor(layout, key, n) };
@@ -224,7 +443,7 @@ var Dashboard = (function() {
       } else {
         layout.cols[key] = dragCols(start.cols, index, (e.clientX - start.x) / start.track * 100);
       }
-      applyLayout();
+      applyPositions();
     });
     function finish() {
       if (!start) return;
@@ -237,60 +456,86 @@ var Dashboard = (function() {
     g.addEventListener('dblclick', function() {
       if (kind === 'h') layout.row = ROW_DEFAULT;
       else delete layout.cols[key];
-      applyLayout();
+      applyPositions();
       saveLayout(layout);
     });
     return g;
   }
 
-  // 1 段分（面と、面の間の仕切り）
-  function buildRow(paneList, key) {
-    var row = document.createElement('div');
-    row.className = 'dash-row';
-    row.setAttribute('data-cols-key', key);
-    row.setAttribute('data-cols', String(paneList.length));
-    paneList.forEach(function(p, i) {
-      if (i > 0) row.appendChild(buildGutter('v', key, paneList.length, i - 1));
-      row.appendChild(buildPane(p));
+  // 「▦ 面」のメニュー: 面ごとのチェック（付いている＝表示中）、すべて表示、並びを元に戻す
+  function renderPanesMenu() {
+    var list = document.getElementById('dashPanesList');
+    if (!list) return;
+    list.innerHTML = '';
+    var hidden = Object.create(null);
+    arr.hidden.forEach(function(k) { hidden[k] = true; });
+    var byKey = Object.create(null);
+    paneList.forEach(function(p) { byKey[p.key] = p; });
+    arr.top.concat(arr.bottom).forEach(function(k) {
+      var p = byKey[k];
+      if (!p || k === 'nocourt') return;
+      var label = document.createElement('label');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !hidden[k];
+      cb.addEventListener('change', function() { if (cb.checked) showPane(k); else hidePane(k); });
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(p.title));
+      list.appendChild(label);
     });
-    return row;
+    var sep = document.createElement('div');
+    sep.className = 'sep';
+    list.appendChild(sep);
+    var all = document.createElement('button');
+    all.type = 'button';
+    all.textContent = 'すべて表示';
+    all.disabled = arr.hidden.length === 0;
+    all.addEventListener('click', function() { arr.hidden = []; savePanes(arr); applyPositions(); });
+    list.appendChild(all);
+    var reset = document.createElement('button');
+    reset.type = 'button';
+    reset.textContent = '並びを元に戻す';
+    reset.addEventListener('click', function() {
+      arr = arrangePanes(paneList.map(function(p) { return p.key; }), defaults.top, defaults.bottom, null);
+      savePanes(arr);
+      applyPositions();
+    });
+    list.appendChild(reset);
   }
 
   function renderGrid() {
     var grid = document.getElementById('dashGrid');
     grid.innerHTML = '';
-    grid.style.gridTemplateRows = '';
+    paneEls = Object.create(null);
+    paneList = [];
+    var menu = document.getElementById('dashPanesMenu');
+    if (menu) menu.classList.toggle('hidden', !eventId);
     if (!eventId) {
       var empty = document.createElement('div');
       empty.className = 'dash-empty';
-      empty.style.gridRow = '1 / -1';
       empty.textContent = '大会を選んでください。';
       grid.appendChild(empty);
       return;
     }
-    var list = panes(eventId, courts);
-    var courtPanes = list.filter(function(p) { return p.kind === 'court'; });
-    topKey = 'top' + Math.max(1, courtPanes.length);
-
-    var top;
-    if (courtPanes.length === 0) {
-      top = document.createElement('div');
-      top.className = 'dash-row';
-      top.setAttribute('data-cols-key', topKey);
-      top.setAttribute('data-cols', '1');
-      var none = document.createElement('div');
-      none.className = 'dash-pane dash-empty';
-      none.textContent = 'コートがありません（選手登録でコートを付けてください）。';
-      top.appendChild(none);
-    } else {
-      top = buildRow(courtPanes, topKey);
+    paneList = panes(eventId, courts).map(function(p) { p.key = paneKey(p); return p; });
+    var courtKeys = paneList.filter(function(p) { return p.kind === 'court'; }).map(function(p) { return p.key; });
+    paneList.forEach(function(p) { paneEls[p.key] = buildPane(p); });
+    if (courtKeys.length === 0) {
+      paneList.push({ kind: 'empty', key: 'nocourt', title: '' });
+      paneEls.nocourt = buildNoCourtPane();
+      courtKeys = ['nocourt'];
     }
-    var bottom = buildRow(list.filter(function(p) { return p.kind !== 'court'; }), 'bottom');
+    paneList.forEach(function(p) { grid.appendChild(paneEls[p.key]); });
+    var allClosed = document.createElement('div');
+    allClosed.className = 'dash-empty hidden';
+    allClosed.id = 'dashAllClosed';
+    allClosed.textContent = 'すべての面を閉じています。上の「▦ 面」から表示できます。';
+    grid.appendChild(allClosed);
 
-    grid.appendChild(top);
-    grid.appendChild(buildGutter('h', 'row', 2, 0));
-    grid.appendChild(bottom);
-    applyLayout();
+    defaults = { top: courtKeys, bottom: ['desk', 'rank'] };
+    arr = arrangePanes(paneList.map(function(p) { return p.key; }), defaults.top, defaults.bottom, loadPanes());
+    arr.hidden = arr.hidden.filter(function(k) { return k !== 'nocourt'; });
+    applyPositions();
     applyZoom();
     applyMode();
   }
@@ -326,6 +571,18 @@ var Dashboard = (function() {
     sel.value = eventId;
   }
 
+  // 「▦ 面」のメニュー（details）。外側のクリックか Esc で閉じる
+  function initPanesMenu() {
+    var menu = document.getElementById('dashPanesMenu');
+    if (!menu) return;
+    document.addEventListener('click', function(e) {
+      if (menu.open && !menu.contains(e.target)) menu.open = false;
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && menu.open) menu.open = false;
+    });
+  }
+
   function init() {
     if (!document.getElementById('dashGrid')) return;   // test.html では描かない
     mode = loadMode();
@@ -354,6 +611,7 @@ var Dashboard = (function() {
     document.getElementById('dashReload').addEventListener('click', function() {
       loadEvents().then(function() { return selectEvent(eventId); }).catch(function(e) { console.error(e); });
     });
+    initPanesMenu();
     window.addEventListener('hashchange', function() {
       var id = parseHash(location.hash);
       if (id !== eventId) selectEvent(id).catch(function(e) { console.error(e); });
@@ -366,6 +624,7 @@ var Dashboard = (function() {
   return {
     parseHash: parseHash,
     panes: panes,
+    paneKey: paneKey,
     columnsFor: columnsFor,
     clampZoom: clampZoom,
     normalizeMode: normalizeMode,
@@ -378,6 +637,14 @@ var Dashboard = (function() {
     dragCols: dragCols,
     dragRow: dragRow,
     loadLayout: loadLayout,
-    saveLayout: saveLayout
+    saveLayout: saveLayout,
+    normalizePanes: normalizePanes,
+    arrangePanes: arrangePanes,
+    swapPanes: swapPanes,
+    rowKey: rowKey,
+    rowGeometry: rowGeometry,
+    colGeometry: colGeometry,
+    loadPanes: loadPanes,
+    savePanes: savePanes
   };
 })();

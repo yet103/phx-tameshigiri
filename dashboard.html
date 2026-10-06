@@ -10,6 +10,7 @@
 </head>
 <body data-theme="light">
   <!-- 採点画面（コートごと）・PC 運営の試合進行・順位表示を iframe で 1 画面に（設計書 2026-10-05-dashboard-design.md）。
+       面は × で閉じ、「▦ 面」で戻し、見出しのドラッグで入れ替える（2026-10-06-dashboard-panes-design.md）。
        中身は dashboard.js が描く。URL は #event/<id>。 -->
   <header class="dash-bar">
     <a href="index.html" class="dash-home" title="トップへ戻る">🏠 トップ</a>
@@ -21,6 +22,11 @@
       <button type="button" id="dashModeEdit" data-mode="edit">✎ 操作可能</button>
     </span>
     <label class="dash-zoom">縮小 <input type="range" id="dashZoom" min="50" max="100" step="5" value="75"> <span id="dashZoomVal">75%</span></label>
+    <!-- 面の表示・非表示（× で閉じた面を戻す）と並びの既定化。中身は dashboard.js の renderPanesMenu -->
+    <details class="dash-menu hidden" id="dashPanesMenu">
+      <summary title="面の表示・非表示と並び">▦ 面</summary>
+      <div class="dash-menu-body" id="dashPanesList" role="group" aria-label="面の表示"></div>
+    </details>
     <span class="spacer"></span>
     <button type="button" class="dash-icon" id="btnTheme" aria-label="テーマ切り替え">🌙</button>
   </header>

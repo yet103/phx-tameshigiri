@@ -33,12 +33,38 @@ body {
 .dash-zoom input { width: 90px; }
 .dash-icon { background: none; border: 0; color: var(--band-text); font-size: 15px; cursor: pointer; padding: 0 2px; }
 
-/* ===== 面のグリッド ===== */
-.dash-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 60fr 8px 40fr; padding: 8px; }
-.dash-row { display: grid; min-height: 0; }
+/* ===== 「▦ 面」のメニュー（面の表示・非表示、並びを元に戻す） ===== */
+.dash-menu { position: relative; }
+.dash-menu.hidden { display: none; }
+.dash-menu > summary {
+  list-style: none; cursor: pointer; font-size: 12px; padding: 3px 8px; border: 1px solid var(--band-muted);
+  border-radius: 4px; background: var(--band-bg-2); color: var(--band-text); white-space: nowrap; user-select: none;
+}
+.dash-menu > summary::-webkit-details-marker { display: none; }
+.dash-menu[open] > summary, .dash-menu > summary:hover { border-color: var(--gold); color: var(--gold-light); }
+.dash-menu-body {
+  position: absolute; right: 0; top: 30px; z-index: 30; min-width: 180px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 13px;
+  background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+}
+.dash-menu-body label { display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; padding: 2px 4px; }
+.dash-menu-body label:hover { background: var(--row-selected); border-radius: 3px; }
+.dash-menu-body .sep { border-top: 1px solid var(--border); margin: 4px 0; }
+.dash-menu-body button {
+  font-size: 12px; text-align: left; cursor: pointer; padding: 3px 8px;
+  background: var(--bg-header); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
+}
+.dash-menu-body button:disabled { opacity: .5; cursor: default; }
+
+/* ===== 面の配置 =====
+   面と仕切りは .dash-grid の中の絶対配置（dashboard.js の applyPositions が calc() で left/top/width/height を入れる）。
+   DOM の順番で並べないのは、閉じる・入れ替えで iframe を動かして読み直さないため。
+   余白は padding でなく margin（絶対配置の % は padding の内側まで含むので） */
+.dash-grid { flex: 1 1 auto; min-height: 0; position: relative; margin: 8px; }
 
 /* 面の仕切り（dashboard.js の buildGutter）。段の間は横線、面の間は縦線。掴むと金 */
-.dash-gutter { touch-action: none; background: transparent; position: relative; }
+.dash-gutter { touch-action: none; background: transparent; position: absolute; }
 .dash-gutter-h { cursor: row-resize; }
 .dash-gutter-v { cursor: col-resize; }
 .dash-gutter::after {
@@ -50,15 +76,28 @@ body {
 body.dash-dragging { cursor: grabbing; user-select: none; }
 body.dash-dragging .dash-pane-body iframe { pointer-events: none; }
 .dash-pane {
+  position: absolute; box-sizing: border-box;
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg); overflow: hidden;
 }
+.dash-pane.hidden { display: none; }   /* × で閉じた面。display: none なら iframe は読み直されない */
 .dash-pane-head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 2px 8px; font-size: 12px;
   background: var(--bg-header); border-bottom: 1px solid var(--border);
+  cursor: grab; touch-action: none; user-select: none;   /* 見出しを掴んで別の面と入れ替える */
 }
 .dash-pane-head .name { font-weight: bold; }
 .dash-pane-head .tag { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.dash-pane-close {
+  background: none; border: 0; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px;
+  color: var(--text-muted); border-radius: 3px;
+}
+.dash-pane-close:hover { color: var(--text); background: var(--row-selected); }
+/* 入れ替えのドラッグ中: 掴んだ面は薄く、放せる面に金の枠 */
+body.dash-swapping { cursor: grabbing; }
+body.dash-swapping .dash-pane-head { cursor: grabbing; }
+.dash-pane.dash-drag-src { opacity: .55; }
+.dash-pane.dash-drop-target { outline: 3px solid var(--gold); outline-offset: -3px; }
 .dash-pane-body { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .dash-pane-body iframe { border: 0; transform-origin: 0 0; display: block; background: var(--bg); }
 
@@ -66,4 +105,5 @@ body.dash-dragging .dash-pane-body iframe { pointer-events: none; }
 .pane-shield { position: absolute; inset: 0; cursor: default; }
 body.dash-edit .pane-shield { display: none; }
 
-.dash-empty { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 15px; }
+.dash-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 15px; }
+.dash-empty.hidden { display: none; }
