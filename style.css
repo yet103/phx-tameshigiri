@@ -691,8 +691,9 @@ body.list-dragging, body.list-dragging * { cursor: grabbing !important; user-sel
 .rank-panel-max { margin-left: 2px; font-size: 11px; font-weight: normal; color: var(--text-muted); }
 .rank-panel-table td.chance.sure { color: var(--gold-deep); font-weight: bold; }
 [data-theme="dark"] .rank-panel-table td.chance.sure { color: var(--gold-light); }
-.rank-panel-table td.chance.possible { color: var(--text); }
-.rank-panel-table td.chance.out { color: var(--text-muted); }
+/* 「可」は黒だと目立ちすぎる（ユーザー指摘 2026-10-06）。「確」だけ金で目立たせ、「可」はグレー、「-」はさらに薄く */
+.rank-panel-table td.chance.possible { color: var(--text-muted); }
+.rank-panel-table td.chance.out { color: var(--text-muted); opacity: .55; }
 /* 見出しの右の「〜巡目 済み/全員」 */
 .rank-panel-progress { margin-left: 8px; font-size: 12px; font-weight: normal; color: var(--text-muted); white-space: nowrap; }
 /* 今開いている選手の行（一覧の .current-player と同じ色。D7） */
