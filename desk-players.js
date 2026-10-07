@@ -2699,7 +2699,8 @@
     var body = document.createElement('div');
     body.className = 'desk-arrange';
     body.appendChild(radioGroup('コートの振り分け', 'arrangeAssign', ASSIGN_OPTIONS.map(function(o) {
-      return o[0] === 'bibParity' && courts.length !== 2 ? [o[0], bibParityLabel(courts)] : o;
+      if (o[0] !== 'bibParity' || courts.length === 2) return o;
+      return [o[0], oneCourt ? 'ゼッケンで振り分け' : bibParityLabel(courts)];
     }), opts.assign, function(v) { opts.assign = v; paint(); }, oneCourt ? 'コートが 1 つなので振り分けはありません' : ''));
     body.appendChild(radioGroup('各コートの試技順', 'arrangeOrder', ORDER_OPTIONS, opts.order, function(v) { opts.order = v; paint(); }));
     var pvHead = document.createElement('div');
