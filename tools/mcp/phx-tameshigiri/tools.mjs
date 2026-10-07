@@ -6,7 +6,7 @@ import { loadScoring, loadStatus, mulberry32, planScoring, scoreBody } from './s
 
 export const SANDBOX_PREFIX = 'テスト用';
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
-const ORDER_PATTERN = /^([^-]+)-(男子|女子)-(\d+)-(\d+)$/;
+const ORDER_PATTERN = /^([^-]+)-(男子|女子|混合)-(\d+)-(\d+)$/;
 const VALUES = ['○', '×', '△', ''];
 const STATES = ['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final', 'archived'];
 const FORCE_STATES = ['final', 'archived'];

@@ -4663,6 +4663,19 @@
     // score は 0（△ の配点が 0 の技も含めて result 文字列だけで判定できることを見る）。
     assert('isScored: result が"2"（△）だけでも採点済み', Courts.isScored({ score: 0, result: '2    ' }), true);
 
+    // 混合（order の性別の段が '混合'。設計書 2026-10-07 §2）
+    assert('roundOf: 混合の order も巡目を読む', Courts.roundOf({ order: 'B-混合-2-7' }), 2);
+    assert('orderKey: 混合は sex 0・番号を読む', Courts.orderKey({ order: 'B-混合-2-7' }), { court: 'B', sex: 0, round: 2, no: 7 });
+    assert('compareOrder: 混合は番号順（男女は見ない）',
+      [{ order: 'A-混合-1-2', isFemale: true }, { order: 'A-混合-1-10', isFemale: false }, { order: 'A-混合-1-1', isFemale: false }]
+        .sort(Courts.compareOrder).map(function(p) { return p.order; }),
+      ['A-混合-1-1', 'A-混合-1-2', 'A-混合-1-10']);
+    assert('reorderGroupKey: 混合は コート×巡目 で 1 組（男女で分かれない）',
+      [Courts.reorderGroupKey({ order: 'A-混合-1-1', isFemale: false }), Courts.reorderGroupKey({ order: 'A-混合-1-2', isFemale: true })],
+      ['A|0|1', 'A|0|1']);
+    assert('sexOf: 混合の order では行の isFemale から', [Courts.sexOf({ order: 'A-混合-1-1', isFemale: true }), Courts.sexOf({ order: 'A-混合-1-1' })], ['女子', '男子']);
+    assert('isMixedOrder', [Courts.isMixedOrder({ order: 'A-混合-1-1' }), Courts.isMixedOrder({ order: 'A-男子-1-1' }), Courts.isMixedOrder({})], [true, false, false]);
+
     assert('compareOrder: 番号は数値順（1-2 が 1-10 より前）',
       Courts.compareOrder({ order: 'A-男子-1-2' }, { order: 'A-男子-1-10' }) < 0, true);
     assert('compareOrder: 同じコート・巡目・番号なら男子が女子より前',

@@ -64,7 +64,7 @@ var Courts = (function() {
   // クライアント側は test.html の roundOf テスト、サーバー側は createPlayer / generateNextRound の API テストで固定する。
   function roundOf(player) {
     var order = (player && typeof player.order === 'string') ? player.order : '';
-    var m = order.match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
+    var m = order.match(/^([^-]+)-(男子|女子|混合)-(\d+)-(\d+)$/);
     return m ? parseInt(m[3], 10) : 1;
   }
 
@@ -86,14 +86,14 @@ var Courts = (function() {
   }
 
   // 行の並び順。order 文字列をそのまま比較すると 1-10 が 1-2 より前に来るので、
-  // 巡目 → コート → 性別（男子が先）→ 番号 に分解して比べる。
+  // 巡目 → コート → 性別（男子が先。混合は全行 0 なので効かない）→ 番号 に分解して比べる。
   // admin-players.js（選手タブ）と admin-round.js（進行タブ）で共有する。
   function orderKey(p) {
-    var m = String((p && p.order) || '').match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
+    var m = String((p && p.order) || '').match(/^([^-]+)-(男子|女子|混合)-(\d+)-(\d+)$/);
     if (!m) return { court: courtOf(p), sex: 2, round: roundOf(p), no: 0 };
     return {
       court: m[1],
-      sex: m[2] === '男子' ? 0 : 1,
+      sex: m[2] === '女子' ? 1 : 0,
       round: parseInt(m[3], 10),
       no: parseInt(m[4], 10)
     };
@@ -189,8 +189,15 @@ var Courts = (function() {
     return !(String(p.tech1 || '').trim() || String(p.tech2 || '').trim() || String(p.tech3 || '').trim());
   }
 
+  // 混合の大会の行か（order の性別の段が '混合'。設計書 2026-10-07 §2）。
+  // 採点画面・配信ボードは大会の settings を持たないので order から判定する。
+  function isMixedOrder(p) {
+    return /^[^-]+-混合-/.test(String((p && p.order) || ''));
+  }
+
   // 性別（'男子' | '女子'）。order の第 2 セグメントを優先し、解析できなければ isFemale で補う
   // （選手データは両方を持っているが、採番の元になる order を正とする）。
+  // 混合の order の性別の段は当たらないので isFemale に落ちる。
   // 巡目・番号が欠けた order でも第 2 セグメントがあれば性別として使う（orderKey より緩い。絞り込み用なので拾える方を優先）。
   function sexOf(p) {
     var m = String((p && p.order) || '').match(/^[^-]+-(男子|女子)-/);
@@ -1164,6 +1171,7 @@ var Courts = (function() {
     normalizeName: normalizeName,
     hasNoTech: hasNoTech,
     sexOf: sexOf,
+    isMixedOrder: isMixedOrder,
     roundsOf: roundsOf,
     defaultFilter: defaultFilter,
     applyFilter: applyFilter,

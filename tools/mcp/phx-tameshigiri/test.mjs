@@ -204,7 +204,7 @@ async function expectStartRefused(env) {
 }
 
 // ───────── 期待値の独立した計算（予行スクリプトと同じ） ─────────
-const ORDER = /^([^-]+)-(男子|女子)-(\d+)-(\d+)$/;
+const ORDER = /^([^-]+)-(男子|女子|混合)-(\d+)-(\d+)$/;
 const parseOrder = o => { const m = ORDER.exec(String(o || '')); return m ? { court: m[1], gender: m[2], round: +m[3], number: +m[4] } : null; };
 const roundOf = p => { const o = parseOrder(p.order); return o ? o.round : 1; };
 function rankOf(list) {
