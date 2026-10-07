@@ -219,7 +219,7 @@ function escapeCSV(field) {
 // クライアント側の対応実装は courts.js（Courts.courtOf / Courts.roundOf）。
 // モジュールを共有できない（CommonJS と <script> の IIFE）ため同じ規則を2箇所に持ち、
 // クライアント側は test.html の roundOf テスト、サーバー側は createPlayer / generateNextRound の API テストで固定する。
-const ORDER_PATTERN = /^([^-]+)-(男子|女子)-(\d+)-(\d+)$/;
+const ORDER_PATTERN = /^([^-]+)-(男子|女子|混合)-(\d+)-(\d+)$/;
 
 // order を { court, gender, round, number } に分解する。解析できなければ null。
 function parseOrder(order) {
@@ -282,22 +282,34 @@ function sanitizeCourtList(list) {
   return out.slice(0, 20);
 }
 
-// 同一の コート×性別×巡目 における次の番号。該当が無ければ 1。
+// 大会の設定 settings.mixed（男女を分けずに進める。設計書 2026-10-07）。
+function isMixedEvent(event) {
+  return !!(event && event.settings && typeof event.settings === 'object' && event.settings.mixed === true);
+}
+
+// order の性別の段。混合の大会は '混合'（男女を区別せず コート×巡目 で通し番号）、
+// そうでなければ行の性別。性別の段を決めるのはこの関数だけ。
+function genderSeg(event, isFemale) {
+  return isMixedEvent(event) ? '混合' : (isFemale === true ? '女子' : '男子');
+}
+
+// 同一の コート×性別の段×巡目 における次の番号。該当が無ければ 1。
+// seg は genderSeg の戻り値（男子・女子・混合）。
 // 件数+1 ではなく最大+1 を使う（削除で欠番があっても衝突しない）。
-function nextOrderNumber(players, court, gender, round) {
+function nextOrderNumber(players, court, seg, round) {
   let max = 0;
   (players || []).forEach(p => {
     const parsed = parseOrder((p && p.order) || '');
     if (!parsed) return;
-    if (parsed.court !== court || parsed.gender !== gender || parsed.round !== round) return;
+    if (parsed.court !== court || parsed.gender !== seg || parsed.round !== round) return;
     if (parsed.number > max) max = parsed.number;
   });
   return max + 1;
 }
 
-// order 文字列を組み立てる。
-function buildOrder(court, isFemale, round, n) {
-  return court + '-' + (isFemale ? '女子' : '男子') + '-' + round + '-' + n;
+// order 文字列を組み立てる。seg は genderSeg の戻り値。
+function buildOrder(court, seg, round, n) {
+  return court + '-' + seg + '-' + round + '-' + n;
 }
 
 // JSONのアトミック書き込み
@@ -1470,7 +1482,7 @@ app.post('/api/events', (req, res) => {
       const courtsErr = validateCourtList(courtsInput);
       if (courtsErr) return res.status(400).json({ error: courtsErr });
       // finalCourt（2026-09-22 の決戦コートの名前）は廃止。届いても保存しない（設計書 2026-09-28）。
-      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, courts: courtsInput.slice() };
+      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, mixed: s.mixed === true, courts: courtsInput.slice() };
     } else if (prev && prev.settings && typeof prev.settings === 'object' && !Array.isArray(prev.settings)) {
       event.settings = prev.settings;
     }
@@ -1553,7 +1565,10 @@ app.patch('/api/events/:id', (req, res) => {
       // finalCourt（2026-09-22 の決戦コートの名前）は廃止。届いても無視して保存しない
       // （設計書 2026-09-28）。既存の大会に残っている
       // finalCourt キーも、settings を送る PATCH で落ちる（どこからも読まないので害は無い）。
-      event.settings = { requireBib: requireBib, requireRank: requireRank, courts: courts };
+      // mixed（男女を分けずに進める。設計書 2026-10-07）。requireBib と同じ部分更新。
+      // 切り替え時の振り直しと準備中だけのガードは Task 2。
+      const mixed = s.mixed !== undefined ? s.mixed === true : cur.mixed === true;
+      event.settings = { requireBib: requireBib, requireRank: requireRank, mixed: mixed, courts: courts };
     }
 
     event.updatedAt = new Date().toISOString();
@@ -1685,6 +1700,7 @@ app.post('/api/events/:id/copy', (req, res) => {
       event.settings = {
         requireBib: src.settings.requireBib === true,
         requireRank: src.settings.requireRank === true,
+        mixed: src.settings.mixed === true,
         courts: sanitizeCourtList(src.settings.courts)
       };
     }
@@ -1760,7 +1776,7 @@ function buildSystestPlayers(techniques) {
       players.push({
         id: generateId(),
         name: label + String(i).padStart(2, '0'),
-        order: buildOrder(court, isFemale, 1, numberInCourt[court][label]),
+        order: buildOrder(court, label, 1, numberInCourt[court][label]),
         tech1: techs[0],
         tech2: techs[1],
         tech3: techs[2],
@@ -1803,7 +1819,7 @@ app.post('/api/events/from-template', (req, res) => {
       updatedAt: now,
       status: 'draft',
       techniques: techniques,
-      settings: { requireBib: spec.requireBib === true, requireRank: false, courts: spec.courts.slice() },
+      settings: { requireBib: spec.requireBib === true, requireRank: false, mixed: false, courts: spec.courts.slice() },
       players: []
     };
 
@@ -2044,13 +2060,13 @@ app.post('/api/events/:id/players', (req, res) => {
     }
 
     const isFemale = createIsFemale;
-    const gender = isFemale ? '女子' : '男子';
-    const n = nextOrderNumber(event.players, court, gender, round);
+    const seg = genderSeg(event, isFemale);
+    const n = nextOrderNumber(event.players, court, seg, round);
 
     const player = {
       id: generateId(),
       name: name,
-      order: buildOrder(court, isFemale, round, n),
+      order: buildOrder(court, seg, round, n),
       // 前後の空白は落とす（残ると技得点表の完全一致に掛からず配点が 0 になる）
       tech1: techs[0],
       tech2: techs[1],
@@ -2342,16 +2358,16 @@ function bulkFromRows(req, res, rows) {
   // 2. 採番して書く
   const nextNo = {};
   const created = checked.map(row => {
-    const gender = row.isFemale ? '女子' : '男子';
-    const key = bulkOrderKey(row.court, gender);
+    const seg = genderSeg(event, row.isFemale);
+    const key = bulkOrderKey(row.court, seg);
     if (nextNo[key] === undefined) {
-      nextNo[key] = nextOrderNumber(event.players, row.court, gender, 1);
+      nextNo[key] = nextOrderNumber(event.players, row.court, seg, 1);
     }
     const n = nextNo[key]++;
     const player = {
       id: generateId(),
       name: row.name,
-      order: buildOrder(row.court, row.isFemale, 1, n),
+      order: buildOrder(row.court, seg, 1, n),
       tech1: row.techs[0],
       tech2: row.techs[1],
       tech3: row.techs[2],
@@ -2376,8 +2392,8 @@ function bulkFromRows(req, res, rows) {
 
 // 採番の控えのキー。コート名に使えない文字（改行）で連結して、
 // 'A' + '男子' と 'A男' + '子' が同じキーにならないようにする。
-function bulkOrderKey(court, gender) {
-  return court + '\n' + gender;
+function bulkOrderKey(court, seg) {
+  return court + '\n' + seg;
 }
 
 // POST /api/events/:id/players/bulk : 選手をまとめて追加（一巡目）
@@ -2424,13 +2440,13 @@ app.post('/api/events/:id/players/bulk', (req, res) => {
 
     const isFemale = body.isFemale === true;
     const isNewFace = body.isNewFace === true;
-    const gender = isFemale ? '女子' : '男子';
-    let n = nextOrderNumber(event.players, court, gender, 1);
+    const seg = genderSeg(event, isFemale);
+    let n = nextOrderNumber(event.players, court, seg, 1);
     const created = names.map(name => {
       const player = {
         id: generateId(),
         name: name,
-        order: buildOrder(court, isFemale, 1, n),
+        order: buildOrder(court, seg, 1, n),
         tech1: '',
         tech2: '',
         tech3: '',
@@ -2495,13 +2511,14 @@ app.post('/api/events/:id/players/reorder', (req, res) => {
     if (rejectIfLocked(res, event)) return;
     if (!Array.isArray(event.players)) event.players = [];
 
-    // この組の行（order の コート・性別・巡目 が一致するもの）を id で引けるようにする
-    const gender = body.isFemale ? '女子' : '男子';
+    // この組の行（order の コート・性別の段・巡目 が一致するもの）を id で引けるようにする。
+    // 混合の大会では性別の段が '混合' なので、body.isFemale は見ない（コート×巡目の全員が 1 組）。
+    const seg = genderSeg(event, body.isFemale === true);
     const byId = Object.create(null);
     event.players.forEach(p => {
       const parsed = parseOrder((p && p.order) || '');
       if (!parsed) return;
-      if (parsed.court !== court || parsed.gender !== gender || parsed.round !== round) return;
+      if (parsed.court !== court || parsed.gender !== seg || parsed.round !== round) return;
       byId[p.id] = p;
     });
     if (Object.keys(byId).length !== ids.length || !ids.every(id => byId[id])) {
@@ -2512,7 +2529,7 @@ app.post('/api/events/:id/players/reorder', (req, res) => {
     }
 
     ids.forEach((id, i) => {
-      byId[id].order = buildOrder(court, body.isFemale, round, i + 1);
+      byId[id].order = buildOrder(court, seg, round, i + 1);
     });
     event.updatedAt = new Date().toISOString();
     writeJsonAtomic(eventPath, event);
@@ -2796,18 +2813,18 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
       if (!Number.isInteger(round) || round < 1 || round > 9) {
         return res.status(400).json({ error: '不正な巡目です' });
       }
-      const gender = player.isFemale === true ? '女子' : '男子';
+      const seg = genderSeg(event, player.isFemale === true);
       // order を解析できない選手（CSV由来の空 order など）は、
-      // コートの指定が無い限り触らない。
+      // コートの指定が無い限り触らない。混合の大会は性別を変えても性別の段が '混合' のままなので order は変わらない。
       const changed = cur
-        ? (cur.court !== court || cur.gender !== gender || cur.round !== round)
+        ? (cur.court !== court || cur.gender !== seg || cur.round !== round)
         : (body.court !== undefined);
       // body.court は上で検証済み。指定が無いときは現在の order のコートをそのまま使う
       // （'未分類' でも再検証しない。再検証すると isFemale だけ書き換わって order と食い違う）。
       if (changed && court) {
         const others = event.players.filter((p, i) => i !== playerIndex);
-        player.order = buildOrder(court, player.isFemale === true, round,
-          nextOrderNumber(others, court, gender, round));
+        player.order = buildOrder(court, seg, round,
+          nextOrderNumber(others, court, seg, round));
       }
     }
 
@@ -2846,11 +2863,11 @@ app.patch('/api/events/:id/players/:playerId', (req, res) => {
         p.isFemale = player.isFemale === true;
         const parsed = parseOrder(p.order || '');
         if (parsed) {
-          const gender = p.isFemale ? '女子' : '男子';
-          if (parsed.gender !== gender) {
+          const seg = genderSeg(event, p.isFemale === true);
+          if (parsed.gender !== seg) {
             const others = event.players.filter(q => q !== p);
-            p.order = buildOrder(parsed.court, p.isFemale, parsed.round,
-              nextOrderNumber(others, parsed.court, gender, parsed.round));
+            p.order = buildOrder(parsed.court, seg, parsed.round,
+              nextOrderNumber(others, parsed.court, seg, parsed.round));
           }
         }
       }
@@ -3126,11 +3143,11 @@ app.post('/api/events/:id/import', (req, res) => {
           return res.status(400).json({ error: (i + 2) + ' 行目のコート名が不正です' });
         }
         const isFemale = has(2) && femaleMark(row[2]);
-        const gender = isFemale ? '女子' : '男子';
-        const n = nextOrderNumber(base.concat(importedPlayers), court, gender, 1);
+        const seg = genderSeg(event, isFemale);
+        const n = nextOrderNumber(base.concat(importedPlayers), court, seg, 1);
         importedPlayers.push(sanitizePlayerForSave({
           name: name,
-          order: buildOrder(court, isFemale, 1, n),
+          order: buildOrder(court, seg, 1, n),
           // 末尾に空白が残ると Scoring.findTechnique の完全一致に掛からず配点が
           // 全部0になる（手入力・コピペ由来の空白は sanitizePlayerForSave が落とす）。
           tech1: has(3) ? String(row[3] || '') : '',
@@ -3631,6 +3648,7 @@ app.get('/api/events/:id/bundle', (req, res) => {
       bundle.event.settings = {
         requireBib: event.settings.requireBib === true,
         requireRank: event.settings.requireRank === true,
+        mixed: event.settings.mixed === true,
         courts: sanitizeCourtList(event.settings.courts)
       };
     }
@@ -3768,6 +3786,7 @@ app.post('/api/events/import', (req, res) => {
       event.settings = {
         requireBib: src.settings.requireBib === true,
         requireRank: src.settings.requireRank === true,
+        mixed: src.settings.mixed === true,
         courts: sanitizeCourtList(src.settings.courts)
       };
     }
@@ -3857,14 +3876,14 @@ function compareForRound2(a, b) {
 // ゼッケン・級位段位・真剣レンタルは同じ選手を指すので複製する（設計書「選手の追加項目」）。
 // 技は二巡目の形の申請（r2tech1〜3）があればそれ、無ければ一巡目の複製（EventStatus.round2TechsOf。
 // 設計書 2026-10-03 3.4。当日の変更は形登録で直す）。得点・結果は複製しない。
-function buildRound2Row(players, newRows, p, court, isFemale) {
-  const gender = isFemale ? '女子' : '男子';
-  const n = nextOrderNumber(players.concat(newRows), court, gender, 2);
+function buildRound2Row(event, players, newRows, p, court, isFemale) {
+  const seg = genderSeg(event, isFemale);
+  const n = nextOrderNumber(players.concat(newRows), court, seg, 2);
   const techs = EventStatus.round2TechsOf(p);
   const row = {
     id: generateId(),
     name: p.name || '',
-    order: buildOrder(court, isFemale, 2, n),
+    order: buildOrder(court, seg, 2, n),
     tech1: techs[0],
     tech2: techs[1],
     tech3: techs[2],
@@ -3951,7 +3970,7 @@ function generateRound2(event, force, allowReorder) {
 
   const newRows = [];
   ordered.forEach(p => {
-    newRows.push(buildRound2Row(players, newRows, p, courtOf(p), p.isFemale === true));
+    newRows.push(buildRound2Row(event, players, newRows, p, courtOf(p), p.isFemale === true));
   });
 
   return {
@@ -3984,13 +4003,14 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
   let reused = 0;
   function place(p, court, isFemale) {
     const old = bySource[p.id];
+    const seg = genderSeg(event, isFemale);
     let row;
     if (old) {
       reused++;
       row = {
         id: old.id,
         name: p.name || '',
-        order: buildOrder(court, isFemale, 2, nextOrderNumber(base.concat(newRows), court, isFemale ? '女子' : '男子', 2)),
+        order: buildOrder(court, seg, 2, nextOrderNumber(base.concat(newRows), court, seg, 2)),
         tech1: typeof old.tech1 === 'string' ? old.tech1 : '',
         tech2: typeof old.tech2 === 'string' ? old.tech2 : '',
         tech3: typeof old.tech3 === 'string' ? old.tech3 : '',
@@ -4009,7 +4029,7 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
       // 版も引き継ぐ（同じ行の入れ物のまま並びだけ変えるので、採点画面の控えと食い違わせない）
       if (EventStatus.revOf(old) > 0) row.rev = EventStatus.revOf(old);
     } else {
-      row = buildRound2Row(base, newRows, p, court, isFemale);
+      row = buildRound2Row(event, base, newRows, p, court, isFemale);
     }
     newRows.push(row);
   }

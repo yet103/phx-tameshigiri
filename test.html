@@ -495,14 +495,14 @@
     var stEvent = await Api.saveEvent({ name: 'settingsテスト', date: '2026-09-19', venue: '', players: [] });
     var stRes = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: true, requireRank: true, other: 'x' } });
     assert('PATCH: settings の真偽値だけを保存する（他のキーは無視）',
-      stRes.event.settings, { requireBib: true, requireRank: true, courts: [] });
+      stRes.event.settings, { requireBib: true, requireRank: true, mixed: false, courts: [] });
     assert('PATCH: 保存した settings が大会に残る',
-      (await Api.loadEvent(stEvent.id)).settings, { requireBib: true, requireRank: true, courts: [] });
+      (await Api.loadEvent(stEvent.id)).settings, { requireBib: true, requireRank: true, mixed: false, courts: [] });
     // settings はキーごとの部分更新（網羅検証 S16 2026-10-01）。送らなかった requireRank は残る。
     var stResBad = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: 'yes' } });
-    assert('PATCH: 真偽値でない値は false 扱い（送らなかったキーはそのまま）', stResBad.event.settings, { requireBib: false, requireRank: true, courts: [] });
+    assert('PATCH: 真偽値でない値は false 扱い（送らなかったキーはそのまま）', stResBad.event.settings, { requireBib: false, requireRank: true, mixed: false, courts: [] });
     var stResRank = await Api.updateEventInfo(stEvent.id, { settings: { requireRank: false } });
-    assert('PATCH: requireRank だけ送ると requireRank だけ変わる（S16）', stResRank.event.settings, { requireBib: false, requireRank: false, courts: [] });
+    assert('PATCH: requireRank だけ送ると requireRank だけ変わる（S16）', stResRank.event.settings, { requireBib: false, requireRank: false, mixed: false, courts: [] });
 
     // settings.courts（コート一覧。設計書「コート一覧」。検証は Courts.validateCourtList と同じ規則）
     var stCourtsOk = await Api.updateEventInfo(stEvent.id, { settings: { courts: ['A', 'B', '稽古'] } });
@@ -521,27 +521,51 @@
     // courts を省いた settings の部分更新（例: requireBib だけ変える）は既存の courts を消さない
     var stCourtsOmit = await Api.updateEventInfo(stEvent.id, { settings: { requireBib: true } });
     assert('PATCH: courts を省くと requireBib だけ変わり courts は残る',
-      stCourtsOmit.event.settings, { requireBib: true, requireRank: false, courts: ['A', 'B', '稽古'] });
+      stCourtsOmit.event.settings, { requireBib: true, requireRank: false, mixed: false, courts: ['A', 'B', '稽古'] });
     // settings を丸ごと送らなくても、送ったキーだけ変わる（S16。古い画面の courts で他端末の追加を消さない）
     var stRankOnly = await Api.updateEventInfo(stEvent.id, { settings: { requireRank: true } });
     assert('PATCH: requireRank だけ送ると requireBib と courts は残る（S16）',
-      stRankOnly.event.settings, { requireBib: true, requireRank: true, courts: ['A', 'B', '稽古'] });
+      stRankOnly.event.settings, { requireBib: true, requireRank: true, mixed: false, courts: ['A', 'B', '稽古'] });
     assert('PATCH: courts を省いた更新後も保存された courts が残る',
       (await Api.loadEvent(stEvent.id)).settings.courts, ['A', 'B', '稽古']);
     await Api.deleteEvent(stEvent.id);
+
+    // ---- 混合（settings.mixed。設計書 2026-10-07）。大会は専用に作って最後に消す ----
+    var mxEvent = await Api.saveEvent({ name: 'テスト用 混合', date: '2026-10-07', venue: '', players: [] });
+    var mxRes = await Api.updateEventInfo(mxEvent.id, { settings: { mixed: true } });
+    assert('PATCH: settings.mixed を保存する', mxRes.event.settings.mixed, true);
+    var mxP1 = await Api.createPlayer(mxEvent.id, { name: '混合 男', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mxP2 = await Api.createPlayer(mxEvent.id, { name: '混合 女', court: 'A', isFemale: true, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    assert('混合: 追加した選手の order は コート-混合-巡目-番号 で男女通し', [mxP1.order, mxP2.order], ['A-混合-1-1', 'A-混合-1-2']);
+    assert('混合: isFemale は行に残る', [mxP1.isFemale, mxP2.isFemale], [false, true]);
+    var mxSex = await Api.updatePlayerInfo(mxEvent.id, mxP1.id, { isFemale: true });
+    assert('混合: 性別を変えても order は変わらない', mxSex.player.order, 'A-混合-1-1');
+    var mxBulk = await Api.createPlayersBulk(mxEvent.id, { court: 'B', isFemale: false, isNewFace: false, names: ['混合 一括 男'] });
+    var mxBulk2 = await Api.createPlayersBulk(mxEvent.id, { court: 'B', isFemale: true, isNewFace: false, names: ['混合 一括 女'] });
+    assert('混合: 一括登録も男女通しの番号', [mxBulk.players[0].order, mxBulk2.players[0].order], ['B-混合-1-1', 'B-混合-1-2']);
+    var mxCopy = await Api.copyEvent(mxEvent.id, { name: 'テスト用 混合コピー' });
+    var mxCopyId = mxCopy && (mxCopy.id || (mxCopy.event && mxCopy.event.id));
+    assert('copyEvent: settings.mixed を複製する', (await Api.loadEvent(mxCopyId)).settings.mixed, true);
+    await Api.deleteEvent(mxCopyId);
+    var mxBundle = JSON.parse(await Api.exportBundle(mxEvent.id));
+    assert('bundle: settings.mixed を書き出す', mxBundle.event.settings.mixed, true);
+    var mxImported = await Api.importBundle(mxBundle);
+    assert('importBundle: settings.mixed を復元する', (await Api.loadEvent(mxImported.id)).settings.mixed, true);
+    await Api.deleteEvent(mxImported.id);
+    await Api.deleteEvent(mxEvent.id);
 
     // ---- settings.finalCourt（決戦コートの名前）は廃止。届いても保存しない（設計書 2026-09-28） ----
     var fcEvent = await Api.saveEvent({ name: '決戦コート廃止', date: '2026-09-28', venue: '',
       settings: { requireBib: false, requireRank: false, courts: ['A'], finalCourt: '決勝' }, players: [] });
     assert('POST /api/events: settings.finalCourt は保存しない',
-      (await Api.loadEvent(fcEvent.id)).settings, { requireBib: false, requireRank: false, courts: ['A'] });
+      (await Api.loadEvent(fcEvent.id)).settings, { requireBib: false, requireRank: false, mixed: false, courts: ['A'] });
     var fcSet = await Api.updateEventInfo(fcEvent.id, {
       name: '決戦コート廃止', settings: { requireBib: false, requireRank: false, courts: ['A'], finalCourt: '決勝' }
     });
     assert('PATCH: finalCourt を送っても保存しない（settings は requireBib / requireRank / courts だけ）',
       [fcSet.ok, fcSet.event.settings, (await Api.loadEvent(fcEvent.id)).settings],
-      [true, { requireBib: false, requireRank: false, courts: ['A'] },
-       { requireBib: false, requireRank: false, courts: ['A'] }]);
+      [true, { requireBib: false, requireRank: false, mixed: false, courts: ['A'] },
+       { requireBib: false, requireRank: false, mixed: false, courts: ['A'] }]);
     // 以前は 400 court_conflict / 「-」入りの名前で 400 にしていた。いまは無視するだけ。
     var fcSame = await Api.updateEventInfo(fcEvent.id, {
       name: '決戦コート廃止', settings: { courts: ['A', '決勝'], finalCourt: '決勝' }
@@ -557,10 +581,10 @@
     fcBundle.event.settings.finalCourt = '決勝';   // 以前のバンドル（finalCourt 入り）を模す
     var fcImported = await Api.importBundle(fcBundle);
     assert('bundle: 以前のバンドルの finalCourt を取り込まない',
-      (await Api.loadEvent(fcImported.id)).settings, { requireBib: false, requireRank: false, courts: ['A'] });
+      (await Api.loadEvent(fcImported.id)).settings, { requireBib: false, requireRank: false, mixed: false, courts: ['A'] });
     var fcCopy = await Api.copyEvent(fcEvent.id, { name: '決戦コート廃止コピー', date: '2026-09-28', venue: '' });
     assert('copyEvent: settings に finalCourt を持たない',
-      (await Api.loadEvent(fcCopy.id)).settings, { requireBib: false, requireRank: false, courts: ['A'] });
+      (await Api.loadEvent(fcCopy.id)).settings, { requireBib: false, requireRank: false, mixed: false, courts: ['A'] });
     await Api.deleteEvent(fcEvent.id);
     await Api.deleteEvent(fcCopy.id);
     await Api.deleteEvent(fcImported.id);
@@ -575,7 +599,7 @@
 
     var pcRes = await Api.copyEvent(pcSrc.id, { name: '追加項目コピー先', date: '2026-09-20', venue: '', withPlayers: true });
     var pcNew = await Api.loadEvent(pcRes.id);
-    assert('copyEvent: settings（courts を含む）を複製する', pcNew.settings, { requireBib: true, requireRank: false, courts: ['A', 'B'] });
+    assert('copyEvent: settings（courts を含む）を複製する', pcNew.settings, { requireBib: true, requireRank: false, mixed: false, courts: ['A', 'B'] });
     assert('copyEvent: test は写さない（false）', pcNew.test, false);
     assert('copyEvent: techniques の drawn を複製する', pcNew.techniques[0].drawn, true);
     assert('copyEvent: withPlayers で bib/rank/rental を複製する',
@@ -604,14 +628,14 @@
     assert('PATCH: bib を元の21に戻せる', pcRevertBib.ok, true);
 
     var pcBundle = JSON.parse(await Api.exportBundle(pcSrc.id));
-    assert('bundle: settings（courts を含む）を書き出す', pcBundle.event.settings, { requireBib: true, requireRank: false, courts: ['A', 'B'] });
+    assert('bundle: settings（courts を含む）を書き出す', pcBundle.event.settings, { requireBib: true, requireRank: false, mixed: false, courts: ['A', 'B'] });
     assert('bundle: test は書き出さない', pcBundle.event.test, undefined);
     assert('bundle: 選手の bib/rank/rental を書き出す',
       [pcBundle.event.players[0].bib, pcBundle.event.players[0].rank, pcBundle.event.players[0].rental],
       [21, '弐段', true]);
     var pcImportRes = await Api.importBundle(pcBundle);
     var pcImported = await Api.loadEvent(pcImportRes.id);
-    assert('importBundle: settings（courts を含む）を復元する', pcImported.settings, { requireBib: true, requireRank: false, courts: ['A', 'B'] });
+    assert('importBundle: settings（courts を含む）を復元する', pcImported.settings, { requireBib: true, requireRank: false, mixed: false, courts: ['A', 'B'] });
     assert('importBundle: test は false のまま', pcImported.test, false);
     var pcImpP1 = pcImported.players.filter(function(p) { return p.name === '複製 一郎'; })[0];
     assert('importBundle: bib/rank/rental を復元する', [pcImpP1.bib, pcImpP1.rank, pcImpP1.rental], [21, '弐段', true]);
@@ -2365,7 +2389,7 @@
     await Api.updateEventInfo(pSetEvent.id, { settings: { requireBib: true, requireRank: true, courts: ['A', 'B'] } });
     await Api.saveEvent({ id: pSetEvent.id, name: 'settings引き継ぎテスト改', date: '2026-09-22', venue: '', players: [] });
     assert('POST /api/events: 既存 ID で settings を省略すると既存の値を引き継ぐ',
-      (await Api.loadEvent(pSetEvent.id)).settings, { requireBib: true, requireRank: true, courts: ['A', 'B'] });
+      (await Api.loadEvent(pSetEvent.id)).settings, { requireBib: true, requireRank: true, mixed: false, courts: ['A', 'B'] });
     await Api.deleteEvent(pSetEvent.id);
 
     // 他大会の shareToken を送っても既存の値が保たれ、削除しても他大会の links が消えない

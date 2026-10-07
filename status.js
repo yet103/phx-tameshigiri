@@ -71,7 +71,7 @@
   // courts.js の roundOf / isScored を変えたら、必ずここも同じに変えること。
   // server/index.js はこのモジュールを require できる（CommonJS）ので、
   // 自前実装を持たずここの roundOf / isScored をそのまま使う。
-  var ORDER_PATTERN = /^([^-]+)-(男子|女子)-(\d+)-(\d+)$/;
+  var ORDER_PATTERN = /^([^-]+)-(男子|女子|混合)-(\d+)-(\d+)$/;
 
   function roundOf(player) {
     var order = (player && typeof player.order === 'string') ? player.order : '';
