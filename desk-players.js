@@ -2681,7 +2681,10 @@
 
   // 振り分け先のコート（先頭が A。未分類は除く）
   function arrangeCourts(ctx) {
-    return Courts.listFrom(ctx.players, extraCourts(ctx)).filter(function(c) { return c !== Courts.UNASSIGNED; });
+    // 使えないコート名（未分類・33 文字以上）は振り分け先にも入れない（arrangePlayers とサーバーの対象外の規則と同じ）
+    return Courts.listFrom(ctx.players, extraCourts(ctx)).filter(function(c) {
+      return c !== Courts.UNASSIGNED && Courts.validateCourtList([c]) === '';
+    });
   }
 
   // 「ゼッケンで振り分ける」の文言。規則は「ゼッケンをコート数で割った余り」（余り 1 → 先頭のコート … 0 → 末尾）
@@ -2699,7 +2702,7 @@
     var body = document.createElement('div');
     body.className = 'desk-arrange';
     body.appendChild(radioGroup('コートの振り分け', 'arrangeAssign', ASSIGN_OPTIONS.map(function(o) {
-      if (o[0] !== 'bibParity' || courts.length === 2) return o;
+      if (o[0] !== 'bibParity') return o;
       return [o[0], oneCourt ? 'ゼッケンで振り分け' : bibParityLabel(courts)];
     }), opts.assign, function(v) { opts.assign = v; paint(); }, oneCourt ? 'コートが 1 つなので振り分けはありません' : ''));
     body.appendChild(radioGroup('各コートの試技順', 'arrangeOrder', ORDER_OPTIONS, opts.order, function(v) { opts.order = v; paint(); }));
@@ -2721,6 +2724,7 @@
     btnApply.textContent = '適用';
 
     var result = null;
+    var busy = false;   // 適用の通信中（ラジオを変えて paint() が走っても適用を有効に戻さない）
     function paint() {
       result = Courts.arrangePlayers(ctx.players || [], courts, opts);
       pv.innerHTML = '';
@@ -2742,7 +2746,7 @@
       });
       var msgs = [];
       var total = result.layout.reduce(function(n, l) { return n + l.ids.length; }, 0);
-      btnApply.disabled = total === 0;
+      btnApply.disabled = busy || total === 0;
       if (total === 0) msgs.push('整列できる選手がいません（一巡目でコートが決まっている選手が対象です）。');
       if (result.skipped.length > 0) msgs.push('ゼッケン未登録 ' + result.skipped.length + ' 名は対象外です。今のコートの末尾に残し、適用後に赤く示します。');
       if (result.unassigned.length > 0) msgs.push('コート未定 ' + result.unassigned.length + ' 名は対象外です。');
@@ -2757,9 +2761,11 @@
       var eventId = ctx.eventId;   // await をまたぐので大会をここで固定する
       var applied = result;
       var before = Courts.arrangePlayers(ctx.players || [], courts, { assign: 'keep', order: 'keep' }).layout;
+      busy = true;
       btnApply.disabled = true;
       dialog.lock(true);
       var res = await Api.arrangePlayers(eventId, { layout: applied.layout });
+      busy = false;
       // 貼り付けのダイアログと同じく大会で判定する（Desk.reloadEvent は isStale を上げるので、
       // ctx.isStale() だとダイアログが固まる）。大会が違えば closeAllDialogs が閉じている
       if (Desk.currentEventId() !== eventId) return;
