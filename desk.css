@@ -810,3 +810,18 @@ input[type="text"]:focus, input[type="date"]:focus, input[type="number"]:focus, 
 .desk-steps-list { margin: 0 0 12px 22px; font-size: 13px; }
 .desk-steps-list li { margin-bottom: 6px; }
 .desk-dialog-body .desk-form + .desk-note { margin-top: 12px; margin-bottom: 0; }
+
+/* 自動整列（設計書 2026-10-07 auto-arrange）。対象外（ゼッケン未登録）の行の赤枠と案内 */
+.desk-players-table tr.desk-row-attention td { background: color-mix(in srgb, var(--cell-fail-text) 12%, var(--card-bg)); }
+.desk-players-table tr.desk-row-attention td.col-name { box-shadow: inset 3px 0 0 var(--cell-fail-text); }
+.desk-row-attention-note { font-size: 11px; line-height: 1.25; white-space: normal; color: var(--cell-fail-text); text-align: left; }
+.desk-dialog:has(.desk-arrange) { width: 560px; }
+.desk-arrange-field { margin-bottom: 12px; }
+.desk-arrange-label { font-weight: bold; margin-bottom: 4px; }
+.desk-arrange-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin: 4px 0 8px; }
+.desk-arrange-court { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+.desk-arrange-court-head { font-weight: bold; margin-bottom: 2px; }
+.desk-arrange-more { color: var(--text-muted); }
+.desk-arrange-warn { margin-bottom: 0; white-space: pre-line; }
+.desk-radio-row { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.desk-radio-row label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
