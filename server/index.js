@@ -3902,14 +3902,20 @@ function compareRound1Order(a, b) {
   return x.number - y.number;
 }
 
-// 二巡目の並び: 女子が先、その中で一巡目の確定得点が低い順、同点は一巡目の試技順。
-// 番号はコート×性別ごとに振るので、実際に効くのは「その組の中で低い順」。
-function compareForRound2(a, b) {
-  const fa = a.isFemale === true ? 0 : 1;
-  const fb = b.isFemale === true ? 0 : 1;
-  if (fa !== fb) return fa - fb;
-  if (scoreOf(a) !== scoreOf(b)) return scoreOf(a) - scoreOf(b);
-  return compareRound1Order(a, b);
+// 二巡目の並び。
+//   分ける大会: 女子が先、その中で一巡目の確定得点が低い順、同点は一巡目の試技順。
+//     番号はコート×性別ごとに振るので、実際に効くのは「その組の中で低い順」。
+//   混合の大会（設計書 2026-10-07 §4）: 女子先をやめ、男女を通して一巡目の確定得点が低い順、同点は一巡目の試技順。
+function round2Comparator(mixed) {
+  return function(a, b) {
+    if (!mixed) {
+      const fa = a.isFemale === true ? 0 : 1;
+      const fb = b.isFemale === true ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+    }
+    if (scoreOf(a) !== scoreOf(b)) return scoreOf(a) - scoreOf(b);
+    return compareRound1Order(a, b);
+  };
 }
 
 // 一巡目の行から二巡目の行を1つ作る。
@@ -4006,7 +4012,7 @@ function generateRound2(event, force, allowReorder) {
   const generated = Object.create(null);
   existing.forEach(p => { if (p && p.sourcePlayerId) generated[p.sourcePlayerId] = true; });
   const targets = src.filter(p => p && !generated[p.id]);
-  const ordered = targets.slice().sort(compareForRound2);
+  const ordered = targets.slice().sort(round2Comparator(isMixedEvent(event)));
 
   const newRows = [];
   ordered.forEach(p => {
@@ -4036,8 +4042,8 @@ function reorderRound2(event, src, existing, base, unassignedCount) {
   const bySource = Object.create(null);
   existing.forEach(p => { if (p && p.sourcePlayerId) bySource[p.sourcePlayerId] = p; });
 
-  // generateRound2 と同じ並び（全員を自分のコートに。女子先→一巡目の確定得点の昇順→同点は試技順）
-  const ordered = src.slice().sort(compareForRound2);
+  // generateRound2 と同じ並び（全員を自分のコートに。分ける大会は女子先→一巡目の確定得点の昇順→同点は試技順、混合は男女通しで得点の昇順）
+  const ordered = src.slice().sort(round2Comparator(isMixedEvent(event)));
 
   const newRows = [];
   let reused = 0;

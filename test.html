@@ -589,6 +589,43 @@
       ['A-混合-1-1', 'A-混合-1-2', 'A-混合-1-3']);
     await Api.deleteEvent(mx2.id);
 
+    // ---- 混合の並べ替えと二巡目生成（設計書 2026-10-07 §4）----
+    var mx3 = await Api.saveEvent({ name: 'テスト用 混合進行', date: '2026-10-07', venue: '', players: [] });
+    await Api.updateEventInfo(mx3.id, { settings: { mixed: true } });
+    var mx3a = await Api.createPlayer(mx3.id, { name: '混合 男2', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mx3b = await Api.createPlayer(mx3.id, { name: '混合 男', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mx3c = await Api.createPlayer(mx3.id, { name: '混合 女', court: 'A', isFemale: true, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    // 並べ替え: 混合では コート×巡目 の全員を 1 組として受ける（isFemale は見ない）
+    var mxReo = await Api.reorderPlayers(mx3.id, { court: 'A', isFemale: false, round: 1, ids: [mx3c.id, mx3a.id, mx3b.id] });
+    assert('混合: 並べ替えは男女通しの組で通る', mxReo.ok, true);
+    assert('混合: 並べ替えの結果',
+      mxReo.players.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
+      ['A-混合-1-1:混合 女', 'A-混合-1-2:混合 男2', 'A-混合-1-3:混合 男']);
+    var mxReoShort = await Api.reorderPlayers(mx3.id, { court: 'A', isFemale: true, round: 1, ids: [mx3c.id, mx3a.id] });
+    assert('混合: 組の全員でなければ reorder_mismatch', [mxReoShort.ok, mxReoShort.reason], [false, 'reorder_mismatch']);
+    // 二巡目: 女子が先ではなく、一巡目の確定得点が低い順を男女通しで
+    await Api.changeStatus(mx3.id, 'round1');
+    await Api.updatePlayer(mx3.id, mx3c.id, { score: 30, result: '1', confirmed: true });   // 女
+    await Api.updatePlayer(mx3.id, mx3a.id, { score: 10, result: '1', confirmed: true });   // 男2
+    await Api.updatePlayer(mx3.id, mx3b.id, { score: 20, result: '1', confirmed: true });   // 男
+    function mxRound2(ps) {
+      return ps.filter(function(p) { return Courts.roundOf(p) === 2; })
+        .sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; });
+    }
+    var mxDone = await Api.changeStatus(mx3.id, 'round1_done');
+    assert('混合: 一巡目の終了が通る', [mxDone.ok, mxDone.round2 && mxDone.round2.created], [true, 3]);
+    assert('混合: 二巡目は一巡目の得点が低い順を男女通しで',
+      mxRound2((await Api.loadEvent(mx3.id)).players),
+      ['A-混合-2-1:混合 男2', 'A-混合-2-2:混合 男', 'A-混合-2-3:混合 女']);
+    // 二巡目が未採点のうちに一巡目の得点を直して終了し直すと、並びを付け直す（reorderRound2）。ここも混合の段
+    await Api.changeStatus(mx3.id, 'round1');
+    await Api.updatePlayer(mx3.id, mx3b.id, { score: 5, result: '1', confirmed: true });
+    await Api.changeStatus(mx3.id, 'round1_done');
+    assert('混合: 二巡目の付け直しも男女通しの得点順',
+      mxRound2((await Api.loadEvent(mx3.id)).players),
+      ['A-混合-2-1:混合 男', 'A-混合-2-2:混合 男2', 'A-混合-2-3:混合 女']);
+    await Api.deleteEvent(mx3.id);
+
     // ---- settings.finalCourt（決戦コートの名前）は廃止。届いても保存しない（設計書 2026-09-28） ----
     var fcEvent = await Api.saveEvent({ name: '決戦コート廃止', date: '2026-09-28', venue: '',
       settings: { requireBib: false, requireRank: false, courts: ['A'], finalCourt: '決勝' }, players: [] });
