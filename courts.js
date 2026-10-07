@@ -287,6 +287,89 @@ var Courts = (function() {
     });
   }
 
+  // ---- 自動整列（設計書 2026-10-07 auto-arrange §2） ----
+  // 一巡目で order が読める行を、コートの振り分け（assign）と各コートの試技順（order）で並べ直した
+  // layout（コートごとの id の並び）を返す。サーバーの POST …/players/arrange に送る形。
+  //   assign: 'keep' | 'bibParity'（ゼッケンをコート数で割った余り。1→courts[0] … 0→末尾）| 'alternate'（名簿順に交互）| 'halves'（名簿順に等分）
+  //   order : 'keep'（今の試技順）| 'bib'（ゼッケン順）| 'name'（五十音）
+  // ゼッケンを使う規則（bibParity / bib）では、ゼッケンの無い選手は対象外（skipped）にして今のコートの末尾に今の順で残す。
+  // 二巡目の行は含めない。order が読めない一巡目の行は unassigned（触らない）。
+  // courts は振り分け先の並び（先頭が A）。courts に無いコートにいる選手は assign:'keep' のときだけそのコートの layout を足す。
+  function arrangePlayers(players, courts, opts) {
+    opts = opts || {};
+    var assign = opts.assign || 'keep';
+    var order = opts.order || 'keep';
+    courts = courts || [];
+    if (courts.length === 0) assign = 'keep';   // 振り分け先が無ければ今のコートのまま
+    var usesBib = assign === 'bibParity' || order === 'bib';
+    var target = [], unassigned = [];
+    (players || []).forEach(function(p) {
+      if (!p || roundOf(p) !== 1) return;
+      if (orderKey(p).sex === 2) { unassigned.push(p.id); return; }
+      target.push(p);
+    });
+    target.sort(compareOrder);   // 名簿順＝今の試技順
+    var hasBib = function(p) { return typeof p.bib === 'number' && isFinite(p.bib); };
+    var skipped = usesBib ? target.filter(function(p) { return !hasBib(p); }) : [];
+    var active = usesBib ? target.filter(hasBib) : target;
+
+    var list = courts.slice();
+    var byCourt = Object.create(null);
+    list.forEach(function(c) { byCourt[c] = []; });
+    function put(court, p) {
+      if (!byCourt[court]) { byCourt[court] = []; list.push(court); }
+      byCourt[court].push(p);
+    }
+    if (assign === 'keep') {
+      active.forEach(function(p) { put(courtOf(p), p); });
+    } else if (assign === 'bibParity') {
+      active.forEach(function(p) {
+        var r = p.bib % courts.length;
+        put(courts[r === 0 ? courts.length - 1 : r - 1], p);
+      });
+    } else if (assign === 'alternate') {
+      active.forEach(function(p, i) { put(courts[i % courts.length], p); });
+    } else if (assign === 'halves') {
+      var n = active.length, k = courts.length;
+      var base = Math.floor(n / k), extra = n % k, idx = 0;
+      courts.forEach(function(c, ci) {
+        var take = base + (ci < extra ? 1 : 0);
+        active.slice(idx, idx + take).forEach(function(p) { put(c, p); });
+        idx += take;
+      });
+    }
+    function cmp(a, b) {
+      var c = 0;
+      if (order === 'bib') c = bibValue(a) - bibValue(b);
+      else if (order === 'name') c = String(a.name || '').localeCompare(String(b.name || ''), 'ja');
+      return c !== 0 ? c : compareOrder(a, b);
+    }
+    list.forEach(function(c) { byCourt[c].sort(cmp); });
+    skipped.forEach(function(p) { put(courtOf(p), p); });   // 今のコートの末尾に今の順で
+    return {
+      layout: list.map(function(c) { return { court: c, ids: byCourt[c].map(function(p) { return p.id; }) }; }),
+      skipped: skipped.map(function(p) { return p.id; }),
+      unassigned: unassigned
+    };
+  }
+
+  // プレビューの材料。コートごとの人数と先頭 maxHeads 名（既定 4）の表示文字列（「No.3　あべ」。ゼッケン無しは名前だけ）。
+  function arrangePreview(layout, players, maxHeads) {
+    var byId = Object.create(null);
+    (players || []).forEach(function(p) { if (p && p.id) byId[p.id] = p; });
+    var n = maxHeads || 4;
+    return (layout || []).map(function(l) {
+      return {
+        court: l.court,
+        count: l.ids.length,
+        heads: l.ids.slice(0, n).map(function(id) {
+          var p = byId[id] || {};
+          return (typeof p.bib === 'number' ? 'No.' + p.bib + '　' : '') + (p.name || '');
+        })
+      };
+    });
+  }
+
   // ---- 試合の区画（PC 運営 #match）の集計 ----
   // 画面を持たない判定はここに置き、test.html で固定する
   // （test.html は desk-match.js を読み込まないため）。
@@ -1186,6 +1269,8 @@ var Courts = (function() {
     applyFilter: applyFilter,
     defaultSort: defaultSort,
     sortBy: sortBy,
+    arrangePlayers: arrangePlayers,
+    arrangePreview: arrangePreview,
     progressRound: progressRound,
     courtProgress: courtProgress,
     livePlayerName: livePlayerName,

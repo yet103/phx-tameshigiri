@@ -4846,6 +4846,49 @@
     assert('compareOrder: 解析できない順番は後ろに回す',
       Courts.compareOrder({ order: '' }, { order: 'A-男子-1-1' }) > 0, true);
 
+    // ---- 自動整列（設計書 2026-10-07 auto-arrange §2） ----
+    function arP(id, court, no, bib, name, female) {
+      var p = { id: id, order: court + '-' + (female ? '女子' : '男子') + '-1-' + no, name: name, isFemale: !!female };
+      if (bib !== null) p.bib = bib;
+      return p;
+    }
+    // 名前順を試すため、名簿順（m1, m2）と五十音順（さとう, たなか）が逆になるよう m1 を「たなか」にしてある
+    var arPlayers = [
+      arP('m1', 'A', 1, 5, 'たなか', false), arP('m2', 'A', 2, 2, 'さとう', false), arP('m3', 'B', 1, 3, 'あべ', false),
+      arP('f1', 'A', 1, 4, 'やまだ', true), arP('f2', 'B', 1, null, 'いとう', true),   // f2 はゼッケン無し
+      { id: 'r2', order: 'A-男子-2-1', name: 'たなか', isFemale: false, bib: 5, sourcePlayerId: 'm1' },   // 二巡目は対象外
+      { id: 'x1', order: '', name: 'コート未定', isFemale: false }   // order が読めない
+    ];
+    var arA = Courts.arrangePlayers(arPlayers, ['A', 'B'], { assign: 'bibParity', order: 'bib' });
+    assert('arrangePlayers: 奇数→A・偶数→B、各コートはゼッケン順。ゼッケン無しは今のコートの末尾',
+      arA.layout, [{ court: 'A', ids: ['m3', 'm1'] }, { court: 'B', ids: ['m2', 'f1', 'f2'] }]);
+    assert('arrangePlayers: ゼッケン無しは skipped、読めない order は unassigned、二巡目は含めない',
+      [arA.skipped, arA.unassigned], [['f2'], ['x1']]);
+    var arK = Courts.arrangePlayers(arPlayers, ['A', 'B'], { assign: 'keep', order: 'keep' });
+    assert('arrangePlayers: keep/keep は今の並びそのまま（元に戻す用）',
+      arK.layout, [{ court: 'A', ids: ['m1', 'm2', 'f1'] }, { court: 'B', ids: ['m3', 'f2'] }]);
+    var arAlt = Courts.arrangePlayers(arPlayers, ['A', 'B'], { assign: 'alternate', order: 'keep' });
+    assert('arrangePlayers: 名簿順に交互（名簿順＝今の試技順 A の男子→女子→B）',
+      arAlt.layout, [{ court: 'A', ids: ['m1', 'f1', 'f2'] }, { court: 'B', ids: ['m2', 'm3'] }]);
+    var arHalf = Courts.arrangePlayers(arPlayers, ['A', 'B'], { assign: 'halves', order: 'name' });
+    assert('arrangePlayers: 前半・後半で等分（端数は前）、各コートは名前順（さとう・たなか・やまだ / あべ・いとう）',
+      arHalf.layout, [{ court: 'A', ids: ['m2', 'm1', 'f1'] }, { court: 'B', ids: ['m3', 'f2'] }]);
+    var ar3 = Courts.arrangePlayers(arPlayers, ['A', 'B', 'C'], { assign: 'bibParity', order: 'bib' });
+    assert('arrangePlayers: 3 コートはゼッケンを 3 で割った余り（1→A, 2→B, 0→C）。ゼッケン無しは今のコートの末尾',
+      ar3.layout, [{ court: 'A', ids: ['f1'] }, { court: 'B', ids: ['m2', 'm1', 'f2'] }, { court: 'C', ids: ['m3'] }]);
+    assert('arrangePlayers: 名前順だけならゼッケン無しも対象（skipped は空）',
+      [Courts.arrangePlayers(arPlayers, ['A', 'B'], { assign: 'keep', order: 'name' }).skipped,
+       Courts.arrangePlayers(arPlayers, ['A', 'B'], { assign: 'keep', order: 'name' }).layout],
+      [[], [{ court: 'A', ids: ['m2', 'm1', 'f1'] }, { court: 'B', ids: ['m3', 'f2'] }]]);
+    assert('arrangePlayers: keep で courts に無いコートの選手はそのコートの layout を足す',
+      Courts.arrangePlayers(arPlayers, ['A'], { assign: 'keep', order: 'keep' }).layout,
+      [{ court: 'A', ids: ['m1', 'm2', 'f1'] }, { court: 'B', ids: ['m3', 'f2'] }]);
+    assert('arrangePreview: コートごとの人数と先頭（ゼッケン無しは名前だけ）',
+      Courts.arrangePreview(arA.layout, arPlayers),
+      [{ court: 'A', count: 2, heads: ['No.3　あべ', 'No.5　たなか'] }, { court: 'B', count: 3, heads: ['No.2　さとう', 'No.4　やまだ', 'いとう'] }]);
+    assert('arrangePreview: maxHeads で先頭の数を絞る',
+      Courts.arrangePreview(arA.layout, arPlayers, 1)[1], { court: 'B', count: 3, heads: ['No.2　さとう'] });
+
     assert('nextRoundConflictMessage: 未採点は生成済み件数も出す',
       Courts.nextRoundConflictMessage({ reason: 'unscored', unscoredCount: 2, existingCount: 4, untrackedCount: 0, unassignedCount: 0 }, 'X').indexOf('既に 4 名分') >= 0, true);
     assert('nextRoundConflictMessage: 未採点でも生成済みが0件なら「既に」は出さない',
