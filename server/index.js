@@ -1511,7 +1511,11 @@ app.post('/api/events', (req, res) => {
       const courtsErr = validateCourtList(courtsInput);
       if (courtsErr) return res.status(400).json({ error: courtsErr });
       // finalCourt（2026-09-22 の決戦コートの名前）は廃止。届いても保存しない（設計書 2026-09-28）。
-      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, mixed: s.mixed === true, courts: courtsInput.slice() };
+      // mixed（男女を分けずに進める）は既存の大会では本文の値を無視して引き継ぐ。この経路には
+      // 準備中だけのガード（409 mixed_locked）も出走順の振り直しも無いので、ここで変わると
+      // 試合開始の後でも設定だけが変わり、order と食い違う。変更は PATCH /api/events/:id だけ。
+      const mixed = prev ? (prev.settings && prev.settings.mixed === true) : s.mixed === true;
+      event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, mixed, courts: courtsInput.slice() };
     } else if (prev && prev.settings && typeof prev.settings === 'object' && !Array.isArray(prev.settings)) {
       event.settings = prev.settings;
     }
@@ -3253,6 +3257,20 @@ app.post('/api/events/:id/import', (req, res) => {
           sourceOrder: fmt.roundtrip ? String(row[19] || '').trim() : ''
         });
       });
+      // 拡張形式は order をそのまま使うので、性別の段（男子・女子・混合）が大会の分け方と食い違う
+      // CSV は取り込めない（混合の大会の CSV を分ける大会へ、またはその逆）。何も保存せず断る。
+      // 簡易形式（上の枝）はサーバーが採番するので対象外。設計書 2026-10-07 §4。
+      const mixedNow = isMixedEvent(event);
+      const mismatch = rows.some(r => {
+        const parsed = parseOrder(r.player.order);
+        return parsed && (parsed.gender === '混合') !== mixedNow;
+      });
+      if (mismatch) {
+        return res.status(400).json({
+          error: '男女の分け方（混合）が違う大会の CSV です。基本情報の「男女を分けずに進める（混合）」を合わせてから取り込んでください',
+          reason: 'mixed_mismatch'
+        });
+      }
       // 拡張形式は「順番」列（p.order）から巡目が分かる。二巡目以降の行は一巡目の複製と
       // 同じ bib を持つのが正常な状態なので、重複判定の対象外にして値をそのまま通す
       // （レビュー修正。簡易形式は順番をサーバーが採番するので常に一巡目＝対象）。
