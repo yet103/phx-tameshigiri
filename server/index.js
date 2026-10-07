@@ -2583,6 +2583,82 @@ app.post('/api/events/:id/players/reorder', (req, res) => {
   }
 });
 
+// POST /api/events/:id/players/arrange : 自動整列（設計書 2026-10-07 auto-arrange §3）
+// Body: { layout: [{ court, ids }] }。一巡目で order が読める行の全員を、コートごとの並びで受け取り、
+// コートと番号を 1 回で書き直す（原子的）。番号は コート×性別の段（genderSeg）ごとに 1 から。
+// 準備中（draft）だけ（409 not_draft。確定済みは rejectIfLocked が先）。全員と過不足なく一致しなければ
+// 400 arrange_mismatch。rev は上げない（得点・技は変わらない）。二巡目の行と order が読めない行は触らない。
+// 「元に戻す」は画面が適用前の layout を送り返す。
+app.post('/api/events/:id/players/arrange', (req, res) => {
+  try {
+    if (!requireValidId(req, res)) return;
+    const body = req.body || {};
+    const layout = body.layout;
+    if (!Array.isArray(layout) || layout.length === 0 || layout.length > 20) {
+      return res.status(400).json({ error: 'layout の形式が不正です' });
+    }
+    const seenCourt = Object.create(null);   // コート名・id が '__proto__' などでも壊れないように
+    const seenId = Object.create(null);
+    let total = 0;
+    for (const l of layout) {
+      if (!l || typeof l !== 'object' || !isValidCourt(l.court) || !Array.isArray(l.ids)) {
+        return res.status(400).json({ error: 'layout の形式が不正です' });
+      }
+      if (seenCourt[l.court]) return res.status(400).json({ error: 'コートが重複しています' });
+      seenCourt[l.court] = true;
+      for (const id of l.ids) {
+        if (typeof id !== 'string' || id === '' || seenId[id]) {
+          return res.status(400).json({ error: '選手IDが不正か重複しています' });
+        }
+        seenId[id] = true;
+        total++;
+      }
+    }
+    if (total === 0 || total > 1000) return res.status(400).json({ error: '選手の数が不正です' });
+
+    const eventPath = path.join(EVENTS_DIR, `${req.params.id}.json`);
+    if (!fs.existsSync(eventPath)) return res.status(404).json({ error: '大会が見つかりません' });
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+    if (rejectIfLocked(res, event)) return;
+    const st = EventStatus.of(event);
+    if (st !== 'draft') {
+      return res.status(409).json({ error: '自動整列は準備中だけ使えます', reason: 'not_draft', status: st });
+    }
+    if (!Array.isArray(event.players)) event.players = [];
+
+    // 対象＝一巡目で order が読める行。layout の id の集合と過不足なく一致すること
+    const byId = Object.create(null);
+    let targetCount = 0;
+    event.players.forEach(p => {
+      const parsed = parseOrder((p && p.order) || '');
+      if (!parsed || parsed.round !== 1) return;
+      byId[p.id] = p;
+      targetCount++;
+    });
+    if (targetCount !== total || !Object.keys(seenId).every(id => byId[id])) {
+      return res.status(400).json({
+        error: '整列する選手が現在の登録と一致しません。画面を読み直してからやり直してください',
+        reason: 'arrange_mismatch'
+      });
+    }
+
+    layout.forEach(l => {
+      const next = Object.create(null);   // 性別の段ごとの次の番号
+      l.ids.forEach(id => {
+        const p = byId[id];
+        const seg = genderSeg(event, p.isFemale === true);
+        next[seg] = (next[seg] || 0) + 1;
+        p.order = buildOrder(l.court, seg, 1, next[seg]);
+      });
+    });
+    event.updatedAt = new Date().toISOString();
+    writeJsonAtomic(eventPath, event);
+    res.json({ success: true, players: event.players });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/events/:id/players/:playerId : 選手の部分更新（採点と運営編集の共用）
 // 受理するフィールドは allowlist に限る。単純マージだと id / order / 未知のキーまで
 // クライアントが書き込めてしまう。

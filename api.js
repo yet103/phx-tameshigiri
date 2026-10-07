@@ -447,6 +447,39 @@ var Api = (function() {
     }
   }
 
+  async function arrangePlayers(eventId, body) {
+    // POST /api/events/:eventId/players/arrange（PC 運営の選手登録の「⚙ 自動整列」。設計書 2026-10-07）
+    // Body: { layout: [{ court, ids }] }。一巡目で order が読める行の全員をコートごとの並びで送る。
+    //   サーバーはコートと番号を 1 回で書き直す（番号は コート×性別の段ごとに 1 から。混合は通し）。
+    //   「元に戻す」は適用前の layout を同じ形で送る。
+    // 戻り値: { ok: true, players }（大会の選手全体）
+    //       | { ok: false, status: <HTTPステータス>, reason, error }
+    //         （reason は 'not_draft'（409。準備中でない）/ 'locked'（409。確定済み）/
+    //          'arrange_mismatch'（400。layout の id が現在の一巡目の行と一致しない）/ ''。
+    //          通信自体に失敗した場合は status: 0）
+    try {
+      var res = await fetch('/api/events/' + eventId + '/players/arrange', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        var errJson = null;
+        try { errJson = await res.json(); } catch (e) { /* JSON でない応答 */ }
+        return {
+          ok: false,
+          status: res.status,
+          reason: (errJson && errJson.reason) || '',
+          error: (errJson && errJson.error) || ('サーバーがエラーを返しました（' + res.status + '）')
+        };
+      }
+      var json = await res.json();
+      return { ok: true, players: json.players || [] };
+    } catch (e) {
+      return { ok: false, status: 0, reason: '', error: '' };
+    }
+  }
+
   async function deletePlayer(eventId, playerId, force) {
     // DELETE /api/events/:eventId/players/:playerId?force=1
     // 戻り値: true（削除成功）
@@ -1049,6 +1082,7 @@ var Api = (function() {
     createPlayersBulk: createPlayersBulk,
     updatePlayerInfo: updatePlayerInfo,
     reorderPlayers: reorderPlayers,
+    arrangePlayers: arrangePlayers,
     deletePlayer: deletePlayer,
     importCsv: importCsv,
     exportCsv: exportCsv,

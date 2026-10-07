@@ -395,6 +395,52 @@
     assert('reorder: 大会が無ければ 404', [roNoEvent.ok, roNoEvent.status], [false, 404]);
     await Api.deleteEvent(roEvent.id);
 
+    // ==== 自動整列 POST /api/events/:id/players/arrange（Api.arrangePlayers。設計書 2026-10-07 auto-arrange §3）====
+    var agEv = await Api.saveEvent({ name: 'テスト用 自動整列', date: '2026-10-07', venue: '', players: [] });
+    var agM1 = await Api.createPlayer(agEv.id, { name: '男1', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1, bib: 1 });
+    var agM2 = await Api.createPlayer(agEv.id, { name: '男2', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1, bib: 2 });
+    var agF1 = await Api.createPlayer(agEv.id, { name: '女1', court: 'A', isFemale: true, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1, bib: 3 });
+    function agOrders(players) {
+      return players.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; });
+    }
+    var agRes = await Api.arrangePlayers(agEv.id, { layout: [{ court: 'A', ids: [agF1.id, agM1.id] }, { court: 'B', ids: [agM2.id] }] });
+    assert('arrange: 成功。分ける大会は番号が性別ごとに 1 から', agRes.ok && agOrders(agRes.players),
+      ['A-男子-1-1:男1', 'A-女子-1-1:女1', 'B-男子-1-1:男2']);
+    var agMiss = await Api.arrangePlayers(agEv.id, { layout: [{ court: 'A', ids: [agF1.id] }] });
+    assert('arrange: 全員が含まれていなければ 400 arrange_mismatch', [agMiss.ok, agMiss.status, agMiss.reason], [false, 400, 'arrange_mismatch']);
+    var agUnknown = await Api.arrangePlayers(agEv.id, { layout: [{ court: 'A', ids: [agF1.id, agM1.id, 'no-such-id'] }, { court: 'B', ids: [agM2.id] }] });
+    assert('arrange: 知らない id が混ざれば 400 arrange_mismatch', [agUnknown.ok, agUnknown.reason], [false, 'arrange_mismatch']);
+    var agDup = await Api.arrangePlayers(agEv.id, { layout: [{ court: 'A', ids: [agF1.id, agM1.id, agM1.id] }, { court: 'B', ids: [agM2.id] }] });
+    assert('arrange: id の重複は 400', [agDup.ok, agDup.status], [false, 400]);
+    var agDupCourt = await Api.arrangePlayers(agEv.id, { layout: [{ court: 'A', ids: [agF1.id, agM1.id] }, { court: 'A', ids: [agM2.id] }] });
+    assert('arrange: コートの重複は 400', [agDupCourt.ok, agDupCourt.status], [false, 400]);
+    var agBad = await Api.arrangePlayers(agEv.id, { layout: [{ court: 'A-B', ids: [agF1.id, agM1.id, agM2.id] }] });
+    assert('arrange: コート名の不正は 400', [agBad.ok, agBad.status], [false, 400]);
+    var agBadShape = await Api.arrangePlayers(agEv.id, { layout: [] });
+    assert('arrange: layout が空なら 400', [agBadShape.ok, agBadShape.status], [false, 400]);
+    assert('arrange: 断ったときは order を変えない', agOrders((await Api.loadEvent(agEv.id)).players),
+      ['A-男子-1-1:男1', 'A-女子-1-1:女1', 'B-男子-1-1:男2']);
+    var agNoEv = await Api.arrangePlayers('no-such-event-arrange', { layout: [{ court: 'A', ids: [agM1.id] }] });
+    assert('arrange: 大会が無ければ 404', [agNoEv.ok, agNoEv.status], [false, 404]);
+    // 元に戻す往復（keep/keep の layout を送り返す）
+    var agNow = (await Api.loadEvent(agEv.id)).players;
+    var agBefore = Courts.arrangePlayers(agNow, ['A', 'B'], { assign: 'keep', order: 'keep' }).layout;
+    await Api.arrangePlayers(agEv.id, { layout: [{ court: 'A', ids: [agM2.id, agM1.id, agF1.id] }, { court: 'B', ids: [] }] });
+    assert('arrange: 並べ替え後は order が変わっている', agOrders((await Api.loadEvent(agEv.id)).players),
+      ['A-男子-1-1:男2', 'A-男子-1-2:男1', 'A-女子-1-1:女1']);
+    var agUndo = await Api.arrangePlayers(agEv.id, { layout: agBefore });
+    assert('arrange: 元に戻すと order が完全に戻る', agOrders(agUndo.players),
+      ['A-男子-1-1:男1', 'A-女子-1-1:女1', 'B-男子-1-1:男2']);
+    await Api.changeStatus(agEv.id, 'round1');
+    var agLocked = await Api.arrangePlayers(agEv.id, { layout: agBefore });
+    assert('arrange: 準備中でなければ 409 not_draft', [agLocked.ok, agLocked.status, agLocked.reason], [false, 409, 'not_draft']);
+    await Api.changeStatus(agEv.id, 'draft');
+    await Api.updateEventInfo(agEv.id, { settings: { mixed: true } });
+    var agMix = await Api.arrangePlayers(agEv.id, { layout: [{ court: 'A', ids: [agF1.id, agM1.id] }, { court: 'B', ids: [agM2.id] }] });
+    assert('arrange: 混合は男女通し', agOrders(agMix.players),
+      ['A-混合-1-1:女1', 'A-混合-1-2:男1', 'B-混合-1-1:男2']);
+    await Api.deleteEvent(agEv.id);
+
     // ---- 2. bulk rows の bib/rank/rental・レンタルの drawn 縛り・同じ形の回数制限 ----
     var pf2Event = await Api.saveEvent({ name: '一括登録追加項目テスト', date: '2026-09-19', venue: '', players: [] });
     await Api.saveEventTechniques(pf2Event.id, [
@@ -1282,6 +1328,11 @@
     assert('確定後の試技順の並べ替えは 409 locked',
       await writeResult(lockBase + '/players/reorder', 'POST',
         { court: 'A', isFemale: false, round: 1, ids: lockRound1Ids.slice().reverse() }),
+      { status: 409, reason: 'locked' });
+
+    assert('確定後の自動整列は 409 locked',
+      await writeResult(lockBase + '/players/arrange', 'POST',
+        { layout: [{ court: 'A', ids: lockRound1Ids }] }),
       { status: 409, reason: 'locked' });
 
     // Api の各関数も（changeStatus と同じ作法で）409 の reason と error をそのまま返す。

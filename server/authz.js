@@ -39,6 +39,7 @@ const ROUTES = [
   { method: 'POST', pattern: '/api/events/:id/players', roles: { scorer: 'none', ai: 'sandbox' } },
   { method: 'POST', pattern: '/api/events/:id/players/bulk', roles: { scorer: 'none', ai: 'sandbox' } },
   { method: 'POST', pattern: '/api/events/:id/players/reorder', roles: { scorer: 'none', ai: 'sandbox' } },
+  { method: 'POST', pattern: '/api/events/:id/players/arrange', roles: { scorer: 'none', ai: 'sandbox' } },
   { method: 'PATCH', pattern: '/api/events/:id/players/:playerId', roles: { scorer: 'own', ai: 'sandbox' } },
   { method: 'DELETE', pattern: '/api/events/:id/players/:playerId', roles: { scorer: 'none', ai: 'sandbox' } },
   { method: 'POST', pattern: '/api/events/:id/import', roles: { scorer: 'none', ai: 'sandbox' } },
