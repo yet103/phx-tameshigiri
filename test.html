@@ -601,6 +601,9 @@
     assert('混合: 並べ替えの結果',
       mxReo.players.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
       ['A-混合-1-1:混合 女', 'A-混合-1-2:混合 男2', 'A-混合-1-3:混合 男']);
+    // 組の全員を送れば、body の isFemale が違っていても通る（混合は isFemale を見ない）
+    var mxReoFem = await Api.reorderPlayers(mx3.id, { court: 'A', isFemale: true, round: 1, ids: [mx3c.id, mx3a.id, mx3b.id] });
+    assert('混合: body の isFemale が女子でも、組の全員なら通る（isFemale を見ない）', mxReoFem.ok, true);
     var mxReoShort = await Api.reorderPlayers(mx3.id, { court: 'A', isFemale: true, round: 1, ids: [mx3c.id, mx3a.id] });
     assert('混合: 組の全員でなければ reorder_mismatch', [mxReoShort.ok, mxReoShort.reason], [false, 'reorder_mismatch']);
     // 二巡目: 女子が先ではなく、一巡目の確定得点が低い順を男女通しで
@@ -625,6 +628,87 @@
       mxRound2((await Api.loadEvent(mx3.id)).players),
       ['A-混合-2-1:混合 男', 'A-混合-2-2:混合 男2', 'A-混合-2-3:混合 女']);
     await Api.deleteEvent(mx3.id);
+
+    // ---- 混合の振り直しの往復（男女が入り交じった並び。設計書 2026-10-07 §3）----
+    var mx4 = await Api.saveEvent({ name: 'テスト用 混合往復', date: '2026-10-07', venue: '', players: [] });
+    await Api.updateEventInfo(mx4.id, { settings: { mixed: true } });
+    async function mx4Add(name, isFemale) {
+      return Api.createPlayer(mx4.id, { name: name, court: 'A', isFemale: isFemale, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    }
+    await mx4Add('男1', false); await mx4Add('女1', true); await mx4Add('男2', false); await mx4Add('女2', true);
+    function mx4Orders(ps) {
+      return ps.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; });
+    }
+    assert('往復: 混合で男・女・男・女の順に通し番号',
+      mx4Orders((await Api.loadEvent(mx4.id)).players),
+      ['A-混合-1-1:男1', 'A-混合-1-2:女1', 'A-混合-1-3:男2', 'A-混合-1-4:女2']);
+    await Api.updateEventInfo(mx4.id, { settings: { mixed: false } });
+    assert('往復: 分ける大会に戻すと、男子は男子の中・女子は女子の中で相対順を保ち 1 から',
+      mx4Orders((await Api.loadEvent(mx4.id)).players),
+      ['A-男子-1-1:男1', 'A-男子-1-2:男2', 'A-女子-1-1:女1', 'A-女子-1-2:女2']);
+    await Api.updateEventInfo(mx4.id, { settings: { mixed: true } });
+    assert('往復: 再び混合にすると 男子 → 女子 の順で通し番号',
+      mx4Orders((await Api.loadEvent(mx4.id)).players),
+      ['A-混合-1-1:男1', 'A-混合-1-2:男2', 'A-混合-1-3:女1', 'A-混合-1-4:女2']);
+    await Api.deleteEvent(mx4.id);
+
+    // ---- 混合: コート変更は移動先の末尾へ。性別の変更は二巡目の order を動かさない ----
+    var mx5 = await Api.saveEvent({ name: 'テスト用 混合二巡目', date: '2026-10-07', venue: '', players: [] });
+    await Api.updateEventInfo(mx5.id, { settings: { mixed: true } });
+    var mx5a = await Api.createPlayer(mx5.id, { name: '混合 甲', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mx5b = await Api.createPlayer(mx5.id, { name: '混合 乙', court: 'A', isFemale: true, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mx5c = await Api.createPlayer(mx5.id, { name: '混合 丙', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mx5d = await Api.createPlayer(mx5.id, { name: '混合 丁', court: 'B', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mx5Move = await Api.updatePlayerInfo(mx5.id, mx5b.id, { court: 'B' });
+    assert('混合: コートを変えると移動先の末尾（A-混合-1-2 → B-混合-1-2）',
+      [mx5Move.ok, mx5Move.player && mx5Move.player.order], [true, 'B-混合-1-2']);
+    await Api.updatePlayerInfo(mx5.id, mx5b.id, { court: 'A' });   // A の末尾へ戻す
+    await Api.changeStatus(mx5.id, 'round1');
+    await Api.updatePlayer(mx5.id, mx5a.id, { score: 10, result: '1', confirmed: true });
+    await Api.updatePlayer(mx5.id, mx5b.id, { score: 20, result: '1', confirmed: true });
+    await Api.updatePlayer(mx5.id, mx5c.id, { score: 30, result: '1', confirmed: true });
+    await Api.updatePlayer(mx5.id, mx5d.id, { score: 40, result: '1', confirmed: true });
+    var mx5Done = await Api.changeStatus(mx5.id, 'round1_done');
+    assert('混合: 二巡目が作られる', [mx5Done.ok, mx5Done.round2 && mx5Done.round2.created], [true, 4]);
+    var mx5Before = mxRound2((await Api.loadEvent(mx5.id)).players);
+    var mx5Sex = await Api.updatePlayerInfo(mx5.id, mx5a.id, { isFemale: true, force: true });
+    assert('混合: 一巡目の行の性別を変えられる', mx5Sex.ok, true);
+    assert('混合: 一巡目の行の性別を変えても二巡目の行の order は変わらない',
+      mxRound2((await Api.loadEvent(mx5.id)).players), mx5Before);
+    await Api.deleteEvent(mx5.id);
+
+    // ---- 拡張形式の CSV は order をそのまま使うので、男女の分け方（混合）が違う大会には取り込めない（設計書 §4）----
+    var mxCsvA = await Api.saveEvent({ name: 'テスト用 混合CSV', date: '2026-10-07', venue: '', players: [] });
+    await Api.updateEventInfo(mxCsvA.id, { settings: { mixed: true } });
+    await Api.createPlayer(mxCsvA.id, { name: 'CSV混合 男', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    await Api.createPlayer(mxCsvA.id, { name: 'CSV混合 女', court: 'A', isFemale: true, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mxCsvText = await Api.exportCsv(mxCsvA.id);
+    assert('混合 CSV: 書き出しの順番列に 混合 が入る', mxCsvText.indexOf('A-混合-1-1') >= 0, true);
+    var mxCsvB = await Api.saveEvent({ name: 'テスト用 分けるCSV', date: '2026-10-07', venue: '', players: [] });
+    await Api.createPlayer(mxCsvB.id, { name: 'CSV分け 男', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mxCsvBad = await Api.importCsv(mxCsvB.id, mxCsvText, 'replace', true);
+    assert('混合の CSV を分ける大会へ取り込むと 400 mixed_mismatch', [mxCsvBad.success, mxCsvBad.reason], [false, 'mixed_mismatch']);
+    assert('mixed_mismatch: 何も保存しない（既存の選手のまま）',
+      (await Api.loadEvent(mxCsvB.id)).players.map(function(p) { return p.name; }), ['CSV分け 男']);
+    var mxCsvSplitText = await Api.exportCsv(mxCsvB.id);
+    var mxCsvBad2 = await Api.importCsv(mxCsvA.id, mxCsvSplitText, 'replace', true);
+    assert('分ける大会の CSV を混合の大会へ取り込んでも 400 mixed_mismatch', [mxCsvBad2.success, mxCsvBad2.reason], [false, 'mixed_mismatch']);
+    var mxCsvOk = await Api.importCsv(mxCsvA.id, mxCsvText, 'replace', true);
+    assert('混合の CSV は同じ混合の大会へ取り込める', mxCsvOk && mxCsvOk.success, true);
+    assert('混合の大会へ取り込んだ order はそのまま',
+      (await Api.loadEvent(mxCsvA.id)).players.map(function(p) { return p.order; }).sort(), ['A-混合-1-1', 'A-混合-1-2']);
+    var mxCsvSimple = await Api.importCsv(mxCsvB.id, '名前,コート,性別,技①,技②,技③,新人\nCSV簡易 女,A,女,,,,', 'replace', true);
+    assert('簡易形式は対象外（取り込んだ大会の設定で採番される）',
+      [mxCsvSimple.success, (await Api.loadEvent(mxCsvB.id)).players[0].order], [true, 'A-女子-1-1']);
+    await Api.deleteEvent(mxCsvA.id);
+    await Api.deleteEvent(mxCsvB.id);
+
+    // ---- POST /api/events（大会ファイルの丸ごと保存）は既存の大会の settings.mixed を変えない ----
+    var mxPost = await Api.saveEvent({ name: 'テスト用 混合POST', date: '2026-10-07', venue: '', settings: { mixed: true, courts: ['A'] }, players: [] });
+    assert('POST /api/events: 新規の大会は settings.mixed を保存する', (await Api.loadEvent(mxPost.id)).settings.mixed, true);
+    await Api.saveEvent({ id: mxPost.id, name: 'テスト用 混合POST', date: '2026-10-07', venue: '', settings: { mixed: false, courts: ['A'] }, players: [] });
+    assert('POST /api/events: 既存の大会では本文の mixed を無視して引き継ぐ', (await Api.loadEvent(mxPost.id)).settings.mixed, true);
+    await Api.deleteEvent(mxPost.id);
 
     // ---- settings.finalCourt（決戦コートの名前）は廃止。届いても保存しない（設計書 2026-09-28） ----
     var fcEvent = await Api.saveEvent({ name: '決戦コート廃止', date: '2026-09-28', venue: '',
