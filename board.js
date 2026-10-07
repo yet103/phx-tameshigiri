@@ -225,10 +225,11 @@ var Board = (function() {
     el.totalAdjust.textContent = n > 0 ? '+' + n : String(n);
   }
 
-  // 順番（A-男子-1-3）を「男子 1巡目 3番」にする。読めない形はそのまま出す。
+  // 順番（A-男子-1-3）を「男子 1巡目」にする（番号は出さない。設計書 2026-10-07 §1）。混合は「1巡目」。読めない形は空。
   function orderLabel(order) {
-    var m = String(order || '').match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
-    return m ? m[2] + ' ' + m[3] + '巡目 ' + m[4] + '番' : String(order || '');
+    var m = String(order || '').match(/^([^-]+)-(男子|女子|混合)-(\d+)-(\d+)$/);
+    if (!m) return '';
+    return (m[2] === '混合' ? '' : m[2] + ' ') + m[3] + '巡目';
   }
 
   // 待機中（このコートのライブ状態が無い・選手が未設定）
