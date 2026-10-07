@@ -994,22 +994,23 @@ var App = (function() {
   }
 
   function updatePlayerLabels(p) {
-    // 順番パース: コート-性別-巡目-番号（コート名は Courts.roundOf 等と同じく「-」を含まない前提）
-    var m = (p.order || '').match(/^([^-]+)-(男子|女子)-(\d+)-(\d+)$/);
-    // ゼッケンは持っている選手だけ。コートで呼び出すときに使うので順番の右に添える
-    // （未設定の選手に「No.」だけが残らないよう、数値のときだけ足す）。
-    var bib = (typeof p.bib === 'number') ? '　No.' + p.bib : '';
+    // 順番パース: コート-性別の段-巡目-番号（性別の段は 男子・女子・混合。コート名は Courts.roundOf 等と
+    // 同じく「-」を含まない前提。設計書 2026-10-07）
+    var m = (p.order || '').match(/^([^-]+)-(男子|女子|混合)-(\d+)-(\d+)$/);
+    // ゼッケンは持っている選手だけ（出走番号は画面に出さない。設計書 2026-10-07 §1）。
+    // コートで呼び出すときに使う。未設定の選手に「No.」だけが残らないよう、数値のときだけ出す。
+    var bib = (typeof p.bib === 'number') ? 'No.' + p.bib : '';
     if (m) {
-      // 部・巡目・コートは帯の 1 行目に大きく出す（「男子の部　一巡目　A コート」）。
-      // 左端のコートのバッジは同じ内容の重複になるので出さない。
+      // 部・巡目・コートは帯の 1 行目に大きく出す（「男子の部　一巡目　A コート」。混合は部を付けず
+      // 「一巡目　A コート」）。左端のコートのバッジは同じ内容の重複になるので出さない。
       var roundName = m[3] === '1' ? '一巡目' : (m[3] === '2' ? '二巡目' : m[3] + '巡目');
-      playerStageLabel.textContent = m[2] + 'の部　' + roundName + '　' + m[1] + ' コート';
+      playerStageLabel.textContent = (m[2] === '混合' ? '' : m[2] + 'の部　') + roundName + '　' + m[1] + ' コート';
       courtLabel.textContent = '';
-      playerOrderLabel.textContent = m[4] + '番' + bib;
+      playerOrderLabel.textContent = bib;
     } else {
       playerStageLabel.textContent = '';
       courtLabel.textContent = '';
-      playerOrderLabel.textContent = (p.order || '') + bib;
+      playerOrderLabel.textContent = bib;
     }
     playerNameLabel.textContent = p.name || '';
     // 級位・段位は名前の右に小さく（空なら :empty で消える）
@@ -2082,10 +2083,10 @@ var App = (function() {
   // 採点中のコートの一覧は visiblePlayers（巡回の対象）そのもの、他のコートは courtPlayers で同じ規則で作る。
   // 一覧の下に順位表（renderRankPanel）。
 
-  // 一覧の見出し行（7 列。運営の端末では左端に掴み手の列を足して 8 列）。
+  // 一覧の見出し行（6 列。運営の端末では左端に掴み手の列を足して 7 列）。順番の列は出さない（設計書 2026-10-07 §1）。
   // 合計・順位・新人枠の列はやめ、順位は一覧の下の順位表に出す（設計書 2026-10-05 5.3）
   var PLAYER_LIST_HEAD =
-    '<th>順番</th><th>ゼッケン</th><th>選手名</th><th>級位・段位</th>' +
+    '<th>ゼッケン</th><th>選手名</th><th>級位・段位</th>' +
     '<th>一巡目</th><th>二巡目</th><th class="note">備考</th>';
 
   function playerListHead() {
@@ -2094,7 +2095,7 @@ var App = (function() {
   }
 
   function playerListColumns() {
-    return canReorder ? 8 : 7;
+    return canReorder ? 7 : 6;
   }
 
   // そのコートの区画を開いているか。採点中のコートは既定で開き、他は既定で閉じる
@@ -2158,20 +2159,26 @@ var App = (function() {
     wrap.appendChild(table);
     box.appendChild(wrap);
 
-    // 男子の部・女子の部の帯で分ける（並びは list のまま。性別が切り替わる所に帯を入れる）
+    // 分ける大会: 男子の部・女子の部の帯で分ける（並びは list のまま。性別が切り替わる所に帯を入れる）。
+    // 混合の大会（order の性別の段が 混合。Courts.isMixedOrder）: 性別の帯は入れず、複数の巡目が並ぶときだけ巡目の帯。
     var lastSex = null;
     var rounds = {};
     list.forEach(function(p) { rounds[Courts.roundOf(p)] = true; });
     var manyRounds = Object.keys(rounds).length > 1;   // 複数の巡目が並ぶ状態（準備中・形登録・最終結果など）
     for (var i = 0; i < list.length; i++) {
       var r = Courts.roundOf(list[i]);
-      var sex = (list[i].isFemale === true ? '女子の部' : '男子の部') +
-        (manyRounds ? ('　' + (r === 1 ? '一巡目' : r === 2 ? '二巡目' : r + '巡目')) : '');
-      if (sex !== lastSex) {
+      var roundText = r === 1 ? '一巡目' : r === 2 ? '二巡目' : r + '巡目';
+      var sex;
+      if (Courts.isMixedOrder(list[i])) {
+        sex = manyRounds ? roundText : '';
+      } else {
+        sex = (list[i].isFemale === true ? '女子の部' : '男子の部') + (manyRounds ? ('　' + roundText) : '');
+      }
+      if (sex && sex !== lastSex) {
         var band = document.createElement('tr');
         band.className = 'player-list-band';
         var td = document.createElement('td');
-        td.colSpan = playerListColumns();   // （掴み手・）順番・ゼッケン・選手名・級位段位・一巡目・二巡目・備考
+        td.colSpan = playerListColumns();   // （掴み手・）ゼッケン・選手名・級位段位・一巡目・二巡目・備考
         td.textContent = sex;
         band.appendChild(td);
         tbody.appendChild(band);
@@ -2197,8 +2204,6 @@ var App = (function() {
     tr.innerHTML =
       // 運営の端末だけ、左端に試技順を入れ替える掴み手（⋮⋮。中身は下の gripHandle）
       (canReorder ? '<td class="grip"></td>' : '') +
-      // 順番は「A-男子-2-1」（コート・性別・巡目は見出しと帯にもある）
-      '<td class="order">' + esc(p.order || '') + '</td>' +
       // 未設定は薄い「—」（数値なので esc は要らないが、列を空にはしない）
       '<td' + (hasBib ? '' : ' class="no-bib"') + '>' + (hasBib ? p.bib : '—') + '</td>' +
       '<td class="name">' + esc(p.name || '') + '</td>' +
