@@ -1514,7 +1514,7 @@ app.post('/api/events', (req, res) => {
       // mixed（男女を分けずに進める）は既存の大会では本文の値を無視して引き継ぐ。この経路には
       // 準備中だけのガード（409 mixed_locked）も出走順の振り直しも無いので、ここで変わると
       // 試合開始の後でも設定だけが変わり、order と食い違う。変更は PATCH /api/events/:id だけ。
-      const mixed = prev ? (prev.settings && prev.settings.mixed === true) : s.mixed === true;
+      const mixed = prev ? !!(prev.settings && prev.settings.mixed === true) : s.mixed === true;
       event.settings = { requireBib: s.requireBib === true, requireRank: s.requireRank === true, mixed, courts: courtsInput.slice() };
     } else if (prev && prev.settings && typeof prev.settings === 'object' && !Array.isArray(prev.settings)) {
       event.settings = prev.settings;

@@ -357,15 +357,16 @@ var Courts = (function() {
       .sort(function(a, b) { return compareOrder(a.player, b.player); });
   }
 
-  // 級位・段位の表示用（「二段」「三段」を「弐段」「参段」に読み替える。EventStatus.normalizeRank）
-  // 選手の居場所の表示（「A コート 一巡目」）。確認文やトーストで選手を特定するのに使う
-  // （出走番号は画面に出さない方針。設計書 2026-10-07 §1。order 文字列をそのまま出さない）。
+  // 選手の居場所の表示（「A コート 一巡目」。未分類は「未分類 一巡目」）。確認文やトーストで選手を
+  // 特定するのに使う（出走番号は画面に出さない方針。設計書 2026-10-07 §1。order 文字列をそのまま出さない）。
   function placeLabel(p) {
     var r = roundOf(p);
     var round = r === 1 ? '一巡目' : (r === 2 ? '二巡目' : r + '巡目');
-    return courtOf(p) + ' コート ' + round;
+    var court = courtOf(p);
+    return (court === UNASSIGNED ? court : court + ' コート') + ' ' + round;
   }
 
+  // 級位・段位の表示用（「二段」「三段」を「弐段」「参段」に読み替える。EventStatus.normalizeRank）
   function rankLabel(rank) {
     return EventStatus.normalizeRank(rank);
   }
