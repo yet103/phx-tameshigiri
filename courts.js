@@ -293,7 +293,7 @@ var Courts = (function() {
   //   assign: 'keep' | 'bibParity'（ゼッケンをコート数で割った余り。1→courts[0] … 0→末尾）| 'alternate'（名簿順に交互）| 'halves'（名簿順に等分）
   //   order : 'keep'（今の試技順）| 'bib'（ゼッケン順）| 'name'（五十音）
   // ゼッケンを使う規則（bibParity / bib）では、ゼッケンの無い選手は対象外（skipped）にして今のコートの末尾に今の順で残す。
-  // 二巡目の行は含めない。order が読めない一巡目の行は unassigned（触らない）。
+  // 二巡目の行は含めない。order が読めない・コート名が使えない（'未分類' など）一巡目の行は unassigned（触らない）。
   // courts は振り分け先の並び（先頭が A）。courts に無いコートにいる選手は assign:'keep' のときだけそのコートの layout を足す。
   function arrangePlayers(players, courts, opts) {
     opts = opts || {};
@@ -305,7 +305,10 @@ var Courts = (function() {
     var target = [], unassigned = [];
     (players || []).forEach(function(p) {
       if (!p || roundOf(p) !== 1) return;
-      if (orderKey(p).sex === 2) { unassigned.push(p.id); return; }
+      // コートが決まらない行は対象外。サーバーの arrange と同じ規則（order が読めない、'未分類'、
+      // isValidCourt を通らないコート名（33 文字以上など）は触らない）
+      var k = orderKey(p);
+      if (k.sex === 2 || k.court === UNASSIGNED || validateCourtList([k.court]) !== '') { unassigned.push(p.id); return; }
       target.push(p);
     });
     target.sort(compareOrder);   // 名簿順＝今の試技順

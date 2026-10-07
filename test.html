@@ -441,6 +441,31 @@
       ['A-混合-1-1:女1', 'A-混合-1-2:男1', 'B-混合-1-1:男2']);
     await Api.deleteEvent(agEv.id);
 
+    // 読めない order・使えないコート名の行は対象外（変わらない）。rev は上げず、updatedAt は更新する
+    var ag2Ev = await Api.saveEvent({ name: 'テスト用 自動整列2', date: '2026-10-07', venue: '',
+      players: [
+        { id: 'ag2a', name: '甲', order: 'A-男子-1-1', rev: 7, tech1: '', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: false, result: '' },
+        { id: 'ag2b', name: '乙', order: 'A-男子-1-2', rev: 3, tech1: '', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: false, result: '' },
+        { id: 'ag2x', name: '空', order: '', rev: 2, tech1: '', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: false, result: '' },
+        { id: 'ag2u', name: '未', order: '未分類-男子-1-1', rev: 4, tech1: '', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: false, result: '' }
+      ] });
+    var ag2Before = await Api.loadEvent(ag2Ev.id);
+    var ag2Rev = ag2Before.players.map(function(p) { return p.id + ':' + p.rev; });
+    var ag2Ok = await Api.arrangePlayers(ag2Ev.id, { layout: [{ court: 'A', ids: ['ag2b', 'ag2a'] }, { court: 'B', ids: [] }] });
+    var ag2After = await Api.loadEvent(ag2Ev.id);
+    var ag2ById = {};
+    ag2After.players.forEach(function(p) { ag2ById[p.id] = p; });
+    assert('arrange: order が空の行と未分類コートの行は対象に入らず変わらない（それ以外は並べ直る）',
+      ag2Ok.ok && [ag2ById.ag2x.order, ag2ById.ag2u.order, ag2ById.ag2b.order, ag2ById.ag2a.order],
+      ['', '未分類-男子-1-1', 'A-男子-1-1', 'A-男子-1-2']);
+    assert('arrange: rev は変わらない', ag2After.players.map(function(p) { return p.id + ':' + p.rev; }), ag2Rev);
+    assert('arrange: updatedAt が更新される', ag2After.updatedAt !== ag2Before.updatedAt && !!ag2After.updatedAt, true);
+    var ag2Inc = await Api.arrangePlayers(ag2Ev.id, { layout: [{ court: 'A', ids: ['ag2b', 'ag2a', 'ag2x'] }] });
+    assert('arrange: 対象外の行の id を混ぜると 400 arrange_mismatch', [ag2Inc.ok, ag2Inc.reason], [false, 'arrange_mismatch']);
+    var ag2Una = await Api.arrangePlayers(ag2Ev.id, { layout: [{ court: 'A', ids: ['ag2b', 'ag2a', 'ag2u'] }] });
+    assert('arrange: 未分類コートの行の id を混ぜると 400 arrange_mismatch', [ag2Una.ok, ag2Una.reason], [false, 'arrange_mismatch']);
+    await Api.deleteEvent(ag2Ev.id);
+
     // ---- 2. bulk rows の bib/rank/rental・レンタルの drawn 縛り・同じ形の回数制限 ----
     var pf2Event = await Api.saveEvent({ name: '一括登録追加項目テスト', date: '2026-09-19', venue: '', players: [] });
     await Api.saveEventTechniques(pf2Event.id, [
@@ -4939,6 +4964,43 @@
       [{ court: 'A', count: 2, heads: ['No.3　あべ', 'No.5　たなか'] }, { court: 'B', count: 3, heads: ['No.2　さとう', 'No.4　やまだ', 'いとう'] }]);
     assert('arrangePreview: maxHeads で先頭の数を絞る',
       Courts.arrangePreview(arA.layout, arPlayers, 1)[1], { court: 'B', count: 3, heads: ['No.2　さとう'] });
+    // 5 名（全員 A。名簿順 q1〜q5）
+    var arQ = [arP('q1', 'A', 1, 3, 'q1'), arP('q2', 'A', 2, 1, 'q2'), arP('q3', 'A', 3, null, 'q3'), arP('q4', 'A', 4, 2, 'q4'), arP('q5', 'A', 5, 4, 'q5')];
+    assert('arrangePlayers: 3 コートの等分は端数を前から（5 名 → 2・2・1）',
+      Courts.arrangePlayers(arQ, ['A', 'B', 'C'], { assign: 'halves', order: 'keep' }).layout,
+      [{ court: 'A', ids: ['q1', 'q2'] }, { court: 'B', ids: ['q3', 'q4'] }, { court: 'C', ids: ['q5'] }]);
+    assert('arrangePlayers: 3 コートの交互（5 名 → A:q1・q4、B:q2・q5、C:q3）',
+      Courts.arrangePlayers(arQ, ['A', 'B', 'C'], { assign: 'alternate', order: 'keep' }).layout,
+      [{ court: 'A', ids: ['q1', 'q4'] }, { court: 'B', ids: ['q2', 'q5'] }, { court: 'C', ids: ['q3'] }]);
+    var arHB = Courts.arrangePlayers(arQ, ['A', 'B'], { assign: 'halves', order: 'bib' });
+    assert('arrangePlayers: 等分 × ゼッケン順。ゼッケン無し（q3）は等分の人数に数えず、今のコートの末尾',
+      arHB.layout, [{ court: 'A', ids: ['q2', 'q1', 'q3'] }, { court: 'B', ids: ['q4', 'q5'] }]);
+    assert('arrangePlayers: 等分 × ゼッケン順の skipped', arHB.skipped, ['q3']);
+    assert('arrangePlayers: courts が空なら振り分けは keep 扱い（落ちない）。undefined でも同じ',
+      [Courts.arrangePlayers(arPlayers, [], { assign: 'bibParity', order: 'bib' }).layout,
+       Courts.arrangePlayers(arPlayers, undefined, { assign: 'halves', order: 'keep' }).layout],
+      [[{ court: 'A', ids: ['m2', 'f1', 'm1'] }, { court: 'B', ids: ['m3', 'f2'] }],
+       [{ court: 'A', ids: ['m1', 'm2', 'f1'] }, { court: 'B', ids: ['m3', 'f2'] }]]);
+    // 混合の order（A-混合-1-n）でも、同じ選手なら layout は分ける大会と同じ
+    var arMixed = [
+      { id: 'm1', order: 'A-混合-1-1', name: 'たなか', isFemale: false, bib: 5 }, { id: 'm2', order: 'A-混合-1-2', name: 'さとう', isFemale: false, bib: 2 },
+      { id: 'f1', order: 'A-混合-1-3', name: 'やまだ', isFemale: true, bib: 4 }, { id: 'm3', order: 'B-混合-1-1', name: 'あべ', isFemale: false, bib: 3 },
+      { id: 'f2', order: 'B-混合-1-2', name: 'いとう', isFemale: true }
+    ];
+    assert('arrangePlayers: 混合の order でも同じ layout（奇数→A・偶数→B、ゼッケン順）',
+      Courts.arrangePlayers(arMixed, ['A', 'B'], { assign: 'bibParity', order: 'bib' }).layout, arA.layout);
+    assert('arrangePlayers: 混合の alternate・halves も分ける大会と同じ layout',
+      [Courts.arrangePlayers(arMixed, ['A', 'B'], { assign: 'alternate', order: 'keep' }).layout,
+       Courts.arrangePlayers(arMixed, ['A', 'B'], { assign: 'halves', order: 'name' }).layout],
+      [arAlt.layout, arHalf.layout]);
+    // コート名が使えない行（未分類・33 文字以上）は unassigned。layout に入らない（サーバーも同じ規則）
+    var arLong = new Array(34).join('あ');   // 33 文字
+    var arBadCourt = Courts.arrangePlayers([
+      arP('g1', 'A', 1, 1, 'g1'), { id: 'u1', order: '未分類-男子-1-1', name: 'u1', isFemale: false },
+      { id: 'u2', order: arLong + '-男子-1-1', name: 'u2', isFemale: false }
+    ], ['A', 'B'], { assign: 'alternate', order: 'keep' });
+    assert('arrangePlayers: 未分類コート・33 文字以上のコートの行は unassigned で layout に入らない',
+      [arBadCourt.unassigned, arBadCourt.layout], [['u1', 'u2'], [{ court: 'A', ids: ['g1'] }, { court: 'B', ids: [] }]]);
 
     assert('nextRoundConflictMessage: 未採点は生成済み件数も出す',
       Courts.nextRoundConflictMessage({ reason: 'unscored', unscoredCount: 2, existingCount: 4, untrackedCount: 0, unassignedCount: 0 }, 'X').indexOf('既に 4 名分') >= 0, true);

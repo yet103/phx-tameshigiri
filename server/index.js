@@ -2587,7 +2587,7 @@ app.post('/api/events/:id/players/reorder', (req, res) => {
 // Body: { layout: [{ court, ids }] }。一巡目で order が読める行の全員を、コートごとの並びで受け取り、
 // コートと番号を 1 回で書き直す（原子的）。番号は コート×性別の段（genderSeg）ごとに 1 から。
 // 準備中（draft）だけ（409 not_draft。確定済みは rejectIfLocked が先）。全員と過不足なく一致しなければ
-// 400 arrange_mismatch。rev は上げない（得点・技は変わらない）。二巡目の行と order が読めない行は触らない。
+// 400 arrange_mismatch（コート名が使えない行は対象外。Courts.arrangePlayers と同じ規則）。rev は上げない（得点・技は変わらない）。二巡目の行と order が読めない行は触らない。
 // 「元に戻す」は画面が適用前の layout を送り返す。
 app.post('/api/events/:id/players/arrange', (req, res) => {
   try {
@@ -2632,6 +2632,9 @@ app.post('/api/events/:id/players/arrange', (req, res) => {
     event.players.forEach(p => {
       const parsed = parseOrder((p && p.order) || '');
       if (!parsed || parsed.round !== 1) return;
+      // コート名が使えない行（'未分類'・33 文字以上など）は対象外。クライアントの Courts.arrangePlayers と同じ規則
+      // （相手側と同じ規則。変えるときは両方）
+      if (!isValidCourt(parsed.court)) return;
       byId[p.id] = p;
       targetCount++;
     });
