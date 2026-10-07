@@ -167,8 +167,7 @@ a { color: var(--accent); }
 .desk-players-table th.col-name { background: var(--bg-header); }
 .desk-players-table td.col-name { background: var(--card-bg); }
 .desk-players-table tbody tr:hover td.col-name { background: var(--row-selected); }
-.desk-players-table .col-round { width: 34px; }
-.desk-players-table .col-no { width: 44px; }
+.desk-players-table .col-round { width: 50px; }
 .desk-players-table .col-name { width: 136px; }
 /* 名前は読めることを優先して、セルの左右の余白を詰めて入力欄を広く取る（8 字ほどの名前まで欠けない） */
 .desk-players-table td.col-name { padding-left: 3px; padding-right: 3px; }
@@ -693,12 +692,12 @@ a { color: var(--accent); }
 
 /* 選手表の配色を技得点表と同じ作法にする（ユーザー要望 2026-09-30）。本文は端末の明朝（通常の太さ）、
    名前だけ web フォント（太字）。列を組に分けて地色を付け、組の境目に金の太線を引く。
-   組: 1 巡・No.・名前（金の薄い地）｜2 ゼッケン・級位段位・レンタル（灰みの地）｜3 コート・性別・新人（白）
-   ｜4 技1〜3（白。列番号 10〜12）｜二巡目の形（白。col-r2）｜5 得点（金の薄い地）｜⋯。
+   組: 1 巡・名前（金の薄い地）｜2 ゼッケン・級位段位・レンタル（灰みの地）｜3 コート・性別・新人（白）
+   ｜4 技1〜3（白。列番号 9〜11）｜二巡目の形（白。col-r2）｜5 得点（金の薄い地）｜⋯。
    列を足したら nth-child の番号も直すこと。 */
 .desk-players-table { font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; border: 2px solid var(--gold); }
 .desk-players-table td { background: var(--card-bg); }
-.desk-players-table td.col-round, .desk-players-table td.col-no, .desk-players-table td.col-name, .desk-players-table td.col-score {
+.desk-players-table td.col-round, .desk-players-table td.col-name, .desk-players-table td.col-score {
   background: color-mix(in srgb, var(--gold) 14%, var(--card-bg));
 }
 .desk-players-table td.col-bib, .desk-players-table td.col-rank, .desk-players-table td.col-rental {
@@ -707,7 +706,7 @@ a { color: var(--accent); }
 .desk-players-table td.col-name { font-family: var(--mincho); }
 .desk-players-table th.col-bib, .desk-players-table td.col-bib,
 .desk-players-table th.col-court, .desk-players-table td.col-court,
-.desk-players-table th:nth-child(10), .desk-players-table td:nth-child(10),
+.desk-players-table th:nth-child(9), .desk-players-table td:nth-child(9),
 .desk-players-table th.col-r2, .desk-players-table td.col-r2,
 .desk-players-table th.col-score, .desk-players-table td.col-score { border-left: 2px solid var(--gold); }
 /* 追加中の下書き行と、ホバーした名前列（sticky）は従来の色を保つ（上の組の地色より後ろに置いて勝たせる） */
@@ -728,7 +727,7 @@ a { color: var(--accent); }
   background: var(--bg); border-left: none; border-right: none; padding: 0;
 }
 /* 行のドラッグで試技順を入れ替える（desk-players.js。ユーザー要望 2026-09-30）。
-   掴み手（⋮⋮）は巡のセルの左端。並べ替えできない帯（No. 順以外・絞り込み中）では薄くする。 */
+   掴み手（⋮⋮）は巡のセルの左端。並べ替えできない帯（試技順以外・絞り込み中）では薄くする。 */
 .desk-players-table td.col-round { position: relative; padding-left: 14px; padding-right: 2px; }
 .desk-players-table .drag-handle {
   position: absolute; left: 0; top: 0; bottom: 0; width: 15px;

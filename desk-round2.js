@@ -36,8 +36,8 @@
     table.className = 'desk-table desk-match-table desk-round2-table';
     // 「一巡目から」は形を一巡目から変えるか（同じ／変更）。最終確認で誰が形を変えるかを一目で見る
     table.innerHTML =
-      // 「No.」はゼッケンと紛らわしいので「順番」（コート内の試技順）にし、ゼッケンの列を足す（ユーザー要望 2026-10-05）
-      '<thead><tr><th>巡</th><th>順番</th><th>名前</th><th>ゼッケン</th><th>一巡目</th><th>一巡目から</th>' +
+      // 出走番号（順番）は画面に出さない（設計書 2026-10-07）。呼び出しはゼッケンで行う
+      '<thead><tr><th>巡</th><th>名前</th><th>ゼッケン</th><th>一巡目</th><th>一巡目から</th>' +
       '<th>技1</th><th>技2</th><th>技3</th>' + (editable ? '<th></th>' : '') + '</tr></thead>';
     var tbody = document.createElement('tbody');
     rows.forEach(function(p) { tbody.appendChild(buildRow(p, ctx, editable, techniques)); });
@@ -208,7 +208,6 @@
     var tr = document.createElement('tr');
     tr.setAttribute('data-player-id', p.id);
     tr.appendChild(cell('2', 'num'));
-    tr.appendChild(cell(String(Courts.orderKey(p).no || ''), 'num'));
     tr.appendChild(cell(p.name || '', 'desk-cell-main'));
     tr.appendChild(cell(Number.isInteger(p.bib) ? String(p.bib) : '—', 'num'));
     // 一巡目の得点は確定済みだけ出す（採点途中の値は順位にも入らない。網羅検証 S10）
