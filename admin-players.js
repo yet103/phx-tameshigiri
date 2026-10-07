@@ -873,7 +873,7 @@
         return false;
       }
       added++;
-      Admin.toast(created.order + ' ' + created.name + ' を追加しました');
+      Admin.toast(created.name + ' を追加しました');
       var addNote = round1AddNote(ctx);
       if (addNote) alert(addNote);
       return true;
@@ -1087,7 +1087,7 @@
       // 一巡目の行だけ「二巡目の行は残ります」と断る（二巡目の行自体を削除するときは不要）。
       var roundFragment = (Courts.roundOf(player) === 1) ? '二巡目の行は残ります。\n' : '';
       if (!confirm(
-        '選手「' + (player.name || '') + '」（' + (player.order || '') + '）を削除します。\n' +
+        '選手「' + (player.name || '') + '」（' + Courts.placeLabel(player) + '）を削除します。\n' +
         roundFragment +
         'よろしいですか？'
       )) return;
@@ -1111,7 +1111,7 @@
         // 直前に読んだクロージャの値（name/order/score）にフォールバックする。
         var bp = res.player || { name: player.name, order: player.order, score: player.score };
         var ok = confirm(
-          '「' + bp.name + '」（' + bp.order + '）は採点済みです（' +
+          '「' + bp.name + '」（' + Courts.placeLabel(bp) + '）は採点済みです（' +
           bp.score + '点）。\n' +
           '削除すると採点結果は戻せません。' + roundFragment + '\n' +
           '本当に削除しますか？'

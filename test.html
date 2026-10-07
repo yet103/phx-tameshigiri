@@ -4831,6 +4831,9 @@
       ['A|0|1', 'A|0|1']);
     assert('sexOf: 混合の order では行の isFemale から', [Courts.sexOf({ order: 'A-混合-1-1', isFemale: true }), Courts.sexOf({ order: 'A-混合-1-1' })], ['女子', '男子']);
     assert('isMixedOrder', [Courts.isMixedOrder({ order: 'A-混合-1-1' }), Courts.isMixedOrder({ order: 'A-男子-1-1' }), Courts.isMixedOrder({})], [true, false, false]);
+    assert('placeLabel: コートと巡目（番号は出さない）',
+      [Courts.placeLabel({ order: 'A-混合-1-3' }), Courts.placeLabel({ order: 'B-女子-2-1' }), Courts.placeLabel({ order: '' })],
+      ['A コート 一巡目', 'B コート 二巡目', '未分類 コート 一巡目']);
 
     assert('compareOrder: 番号は数値順（1-2 が 1-10 より前）',
       Courts.compareOrder({ order: 'A-男子-1-2' }, { order: 'A-男子-1-10' }) < 0, true);

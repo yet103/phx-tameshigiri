@@ -2442,7 +2442,7 @@
       // 一巡目の行だけ「二巡目の行は残ります」と断る（二巡目の行自体を消すときは不要）
       var roundFragment = (Courts.roundOf(p) === 1) ? '二巡目の行は残ります。\n' : '';
       if (!confirm(
-        '選手「' + (p.name || '') + '」（' + (p.order || '') + '）を削除します。\n' +
+        '選手「' + (p.name || '') + '」（' + Courts.placeLabel(p) + '）を削除します。\n' +
         roundFragment +
         'よろしいですか？'
       )) return;
@@ -2458,7 +2458,7 @@
         // 採点済みガード。得点を出してもう一度確認し、承諾したときだけ force。
         var bp = res.player || { name: p.name, order: p.order, score: p.score };
         if (!confirm(
-          '「' + bp.name + '」（' + bp.order + '）は採点済みです（' + bp.score + '点）。\n' +
+          '「' + bp.name + '」（' + Courts.placeLabel(bp) + '）は採点済みです（' + bp.score + '点）。\n' +
           '削除すると採点結果は戻せません。' + roundFragment + '\n' +
           '本当に削除しますか？'
         )) return;
