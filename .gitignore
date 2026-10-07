@@ -39,3 +39,4 @@ server/data/
 
 # サブエージェントの作業用 worktree（Agent の isolation: worktree）
 .claude/worktrees/
+docs/memo/*.single.html

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大会運営 手順メモ（リハ用）</title>
+<style>
+  :root { --ink: #1b1b1b; --muted: #666; --gold: #b8962e; --line: #ddd; --paper: #fffdf8; --mark: #ff3b3b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; line-height: 1.8; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; border-bottom: 3px solid var(--gold); padding-bottom: 8px; }
+  .lead { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  h2 { font-size: 20px; margin: 40px 0 12px; padding: 6px 12px; background: #141414; color: #f1d98a; border-radius: 6px; }
+  h2 small { font-weight: normal; color: #ccc; font-size: 13px; margin-left: 10px; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: 8px 12px; margin: 18px 0 8px; }
+  .num { width: 40px; height: 40px; border-radius: 50%; background: var(--gold); color: #fff; font-weight: bold; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+  .step h3 { margin: 4px 0 0; font-size: 18px; }
+  .step p { margin: 4px 0 0; }
+  .ui { display: inline-block; border: 1px solid #999; border-radius: 4px; padding: 0 6px; background: #fff; font-size: 0.95em; white-space: nowrap; }
+  .hint { background: #fff6dc; border-left: 4px solid var(--gold); padding: 8px 12px; margin: 8px 0 0; font-size: 14px; border-radius: 0 6px 6px 0; }
+  .hint b { color: #8a6a10; }
+  figure { margin: 12px 0 0; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; display: block; }
+  figcaption { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .mark { color: var(--mark); font-weight: bold; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; font-size: 14px; }
+  .flow span { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; }
+  .flow span.on { background: #141414; color: #f1d98a; border-color: #141414; }
+  @media print { h2 { break-after: avoid; } figure { break-inside: avoid; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>大会運営 手順メモ（リハ用）</h1>
+  <p class="lead">PC 運営画面（desk.html）での当日の流れを、画面写真つきでまとめました。写真の <span class="mark">赤い枠</span> が押す場所です。写真はリハーサル用の名簿で撮ったものです。</p>
+
+  <div class="flow">
+    <span>大会を選ぶ</span><span>順番を整える</span><span class="on">試合開始</span><span>採点係の登録</span><span>配信・ダッシュボード</span><span class="on">一巡目終了</span><span>二巡目の形登録</span><span class="on">二巡目開始</span><span>ベスト4候補</span><span class="on">二巡目終了</span><span>ベスト4</span><span>表彰</span>
+  </div>
+
+  <h2>準備 <small>試合が始まる前に</small></h2>
+
+  <div class="step"><div class="num">1</div><div>
+    <h3>大会一覧から「リハ用」を選ぶ</h3>
+    <p>トップ画面の <span class="ui">▶ 作成済みの大会</span> を開き、一覧から <b>リハ用</b> を押します。運営画面が開きます。</p>
+  </div></div>
+  <figure><img src="img/01-home.png" alt="大会一覧でリハ用を選ぶ"><figcaption>大会一覧。リハ用の行を押すと運営画面が開きます。</figcaption></figure>
+
+  <div class="step"><div class="num">2</div><div>
+    <h3>順番の並べ替えはドラッグでできます</h3>
+    <p>左メニューの <span class="ui">選手登録</span> を開きます。各行の左端にある <span class="ui">⋮⋮</span> を押さえたまま上下に動かして離すと、試技順が入れ替わります。別のコートの帯に落とすと、そのコートへ移ります。</p>
+    <p class="hint"><b>補足:</b> まとめて並べ替えたいときは上の <span class="ui">⚙ 自動整列</span> が使えます（ゼッケンの奇数→A・偶数→B、ゼッケン順など）。準備中だけ使えます。</p>
+  </div></div>
+  <figure><img src="img/02-players-drag.png" alt="選手登録の表。左端の掴み手をドラッグ"><figcaption>選手登録の表。左端の ⋮⋮ を掴んで上下に動かします。</figcaption></figure>
+
+  <div class="step"><div class="num">3</div><div>
+    <h3>「試合開始」を押す</h3>
+    <p>左メニューの <span class="ui">試合進行</span> を開き、右上の <span class="ui">試合開始 ▶</span> を押します。確認が出たら「OK」。これで各コートの採点ができるようになります。</p>
+  </div></div>
+  <figure><img src="img/03-start.png" alt="試合進行の試合開始ボタン"><figcaption>試合進行の画面。右上の「試合開始 ▶」を押します。</figcaption></figure>
+
+  <h2>採点係用 <small>タブレット・スマホで採点する人</small></h2>
+
+  <div class="step"><div class="num">4</div><div>
+    <h3>「この端末を招待（QR）」で QR を表示する</h3>
+    <p>試合進行のコートのカード（A コート・B コート）の下にある <span class="ui">📱 この端末を招待（QR）</span> を押し、<span class="ui">発行する</span> を押すと QR コードが出ます。採点係のスマホやタブレットのカメラで読み取り、開いた画面で <span class="ui">この端末を登録する</span> を押すと、そのコートの採点画面が開けるようになります。</p>
+    <p class="hint"><b>注意:</b> QR は採点ができる「鍵」です。会場の画面で直接読み取らせてください。写真に撮って送らないでください。閉じると同じ QR は二度と出ません（必要なら発行し直します）。</p>
+  </div></div>
+  <figure><img src="img/04-invite-btn.png" alt="この端末を招待ボタン"><figcaption>コートのカードの下の「📱 この端末を招待（QR）」。</figcaption></figure>
+  <figure><img src="img/05-invite-qr.png" alt="QR コードの表示"><figcaption>「発行する」のあと QR が出ます（写真ではぼかしています）。タブレットのカメラで読み取ります。</figcaption></figure>
+
+  <h2>オンライン配信用 <small>配信担当の人</small></h2>
+
+  <div class="step"><div class="num">5</div><div>
+    <h3>「配信用ボードの URL をコピー」</h3>
+    <p>コートのカードの <span class="ui">📺 配信用ボードの URL をコピー</span> を押すと、オンライン配信に入れ込める画面の URL がコピーされます。配信ソフト（OBS など）の「ブラウザ」ソースに貼ります。コートごとに 1 つです。いま採点中の選手と得点が自動で切り替わります。</p>
+  </div></div>
+  <figure><img src="img/06-board-url.png" alt="配信用ボードの URL をコピー"><figcaption>「📺 配信用ボードの URL をコピー」。コートごとに押します。</figcaption></figure>
+
+  <h2>ダッシュボード <small>実況席用</small></h2>
+
+  <div class="step"><div class="num">6</div><div>
+    <h3>「ダッシュボード」で採点と順位をまとめて見る</h3>
+    <p>試合進行の見出しの横の <span class="ui">📊 ダッシュボード</span> を押すと、各コートの採点・試合進行・順位が 1 画面に並んだ画面が開きます。実況席のモニターに向いています。</p>
+    <p class="hint"><b>補足:</b> ダッシュボードの上の <span class="ui">✎ 操作可能</span> に切り替えると、この画面から採点や試合進行の操作もできます。見るだけなら <span class="ui">👁 閲覧専用</span> のままにしておくと安全です。</p>
+  </div></div>
+  <figure><img src="img/07-dashboard-btn.png" alt="ダッシュボードのボタン"><figcaption>「📊 ダッシュボード」は試合進行の見出しの右にあります。</figcaption></figure>
+  <figure><img src="img/08-dashboard.png" alt="ダッシュボードの画面"><figcaption>ダッシュボード。上に各コートの採点、下に運営と順位。</figcaption></figure>
+
+  <h2>一巡目の終わり <small>二巡目の形登録まで</small></h2>
+
+  <div class="step"><div class="num">7</div><div>
+    <h3>「一巡目を終了」を押す</h3>
+    <p>全コートの採点が「確定」まで済んだら、試合進行の <span class="ui">一巡目を終了 ▶</span> を押します。押した時点で二巡目の行が自動で作られます（二巡目の試技順はコートごとに一巡目の得点が低い人からです）。</p>
+  </div></div>
+  <figure><img src="img/09-round1-end.png" alt="一巡目を終了ボタン"><figcaption>「一巡目を終了 ▶」。確定の件数が全員分になってから押します。</figcaption></figure>
+
+  <div class="step"><div class="num">8</div><div>
+    <h3>二巡目の形登録</h3>
+    <p>自動で <span class="ui">二巡目の形登録</span> の画面に移ります。二巡目で形を変える選手の技が合っているか確かめ、違っていればここで直します。技に誤りがあると次の「二巡目を開始」が押せないので、画面の案内に従って直してください。</p>
+  </div></div>
+  <figure><img src="img/10-round2-forms.png" alt="二巡目の形登録の画面"><figcaption>二巡目の形登録。各選手の二巡目の技を確かめます。</figcaption></figure>
+
+  <h2>二巡目 <small>開始からベスト4まで</small></h2>
+
+  <div class="step"><div class="num">9</div><div>
+    <h3>「二巡目を開始」を押す</h3>
+    <p>形の確認が終わったら <span class="ui">二巡目を開始 ▶</span> を押します。各コートの採点画面に二巡目の選手が出ます。</p>
+  </div></div>
+  <figure><img src="img/11-round2-start.png" alt="二巡目を開始ボタン"><figcaption>「二巡目を開始 ▶」。</figcaption></figure>
+
+  <div class="step"><div class="num">10</div><div>
+    <h3>ベスト4候補の選出</h3>
+    <p>二巡目の間、試合進行の上に <b>暫定ベスト4（合計）</b> の行が出ます。一巡目と二巡目の合計が高い 4 名と、まだ採点が済んでいない人数です。採点が確定するたびに自動で入れ替わります。</p>
+    <p class="hint"><b>終盤の演出:</b> ベスト4 に入りそうな選手を最後に斬らせたいときは、採点画面の選手一覧（運営の端末の ⋮⋮）か選手登録で、その選手をドラッグして最後のほうに動かします。</p>
+  </div></div>
+  <figure><img src="img/12-best4-line.png" alt="暫定ベスト4の行"><figcaption>二巡目の試合進行。上に「暫定ベスト4（合計）」の行が出ます。</figcaption></figure>
+
+  <div class="step"><div class="num">11</div><div>
+    <h3>「二巡目を終了」を押す</h3>
+    <p>全員が斬り終わって確定したら <span class="ui">二巡目を終了 ▶</span> を押します。</p>
+  </div></div>
+  <figure><img src="img/13-round2-end.png" alt="二巡目を終了ボタン"><figcaption>「二巡目を終了 ▶」。</figcaption></figure>
+
+  <div class="step"><div class="num">12</div><div>
+    <h3>ベスト4 と順位を確かめて確定する</h3>
+    <p>ベスト4（合計）と、一般男子・新人枠・一般女子の上位 3 名が出ます。内容を確かめて <span class="ui">結果を確定して表彰へ ▶</span> を押します。全順位は <span class="ui">結果確認で全順位 →</span> で見られます。</p>
+  </div></div>
+  <figure><img src="img/14-confirm-results.png" alt="ベスト4と上位の確認、結果を確定して表彰へ"><figcaption>二巡目終了後の画面。確かめたら「結果を確定して表彰へ ▶」。</figcaption></figure>
+
+  <h2>表彰 <small>会場のスクリーンに映す</small></h2>
+
+  <div class="step"><div class="num">13</div><div>
+    <h3>「発表モードで開く」で表彰画面を出す</h3>
+    <p>左メニューの <span class="ui">結果確認</span> を開き、<span class="ui">発表モードで開く</span> を押すと、スクリーン用の画面が別タブで開きます。右上の <span class="ui">全画面</span> で全画面にします。</p>
+    <ul>
+      <li><span class="ui">ベスト4</span> — 画面をタップするたびに 4 位 → 3 位 → 2 位 → 1 位の順に 1 人ずつ出ます。</li>
+      <li><span class="ui">発表</span> — 部門（一般男子・新人枠・一般女子）を選び、タップするたびに下の順位から順に名前が出ます。</li>
+      <li><span class="ui">掲示</span> — 全順位をそのまま一覧で出します。</li>
+    </ul>
+    <p class="hint"><b>補足:</b> 1 つ戻したいときは「←」キーです。</p>
+  </div></div>
+  <figure><img src="img/15-results-tab.png" alt="結果確認の画面と発表モードで開くボタン"><figcaption>結果確認。「発表モードで開く」を押します。</figcaption></figure>
+  <figure><img src="img/16-present-best4.png" alt="ベスト4 発表の画面"><figcaption>ベスト4 発表。タップで 4 位から順に出ます。</figcaption></figure>
+  <figure><img src="img/17-present-reveal.png" alt="部門別の発表画面"><figcaption>部門別の発表。タップで下の順位から名前が出ます。</figcaption></figure>
+</main>
+</body>
+</html>
