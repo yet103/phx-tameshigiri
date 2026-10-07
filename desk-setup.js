@@ -185,7 +185,7 @@
         if (result && result.reason === 'locked') {
           alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
         } else if (result && result.reason === 'mixed_locked') {
-          alert('試合開始の後は男女の分け方を変えられません。');
+          alert('試合開始の後は男女の分け方を変えられません');
         } else {
           alert((result && result.error) || '保存できませんでした。通信を確認してください。');
         }

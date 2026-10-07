@@ -221,12 +221,11 @@
     group([{ value: true, label: '技未入力' }], filter.noTech, function() { filter.noTech = !filter.noTech; });
   }
 
-  // 表の列。key があるものは見出しタップで並べ替えられる（巡・コート・性は絞り込み軸なので対象外）。
+  // 表の列。key があるものは見出しタップで並べ替えられる（巡は試技順。コート・性は絞り込み軸なので対象外）。
   var COLUMNS = [
-    { label: '巡' },
+    { key: 'order', label: '巡' },
     { label: 'コート' },
     { label: '性' },
-    { key: 'order', label: 'No' },
     { key: 'name', label: '名前', cls: 'col-name' },
     // ゼッケンは名前のすぐ右（col-name は sticky なので、その右に足すぶんには
     // 左端の固定に影響しない）。級位段位とレンタルは行のシートで見る。
@@ -297,10 +296,9 @@
     return none;
   }
 
-  // 1 人 1 行。order（A-男子-1-1）は巡・コート・性・No の 4 列に分けて出す。
+  // 1 人 1 行。order（A-男子-1-1）は巡・コート・性の 3 列に分けて出す（番号は出さない）。
   function buildTr(ctx, p) {
     var tr = document.createElement('tr');
-    var key = Courts.orderKey(p);
     var noTech = Courts.hasNoTech(p);
     function cell(text, cls) {
       var td = document.createElement('td');
@@ -331,7 +329,6 @@
     cell(String(Courts.roundOf(p)));
     cell(Courts.courtOf(p));
     cell(Courts.sexOf(p) === '女子' ? '女' : '男');
-    cell(key.no ? String(key.no) : '');
     cell(p.name || '', 'col-name');
     // ゼッケンは未設定なら「—」を薄く出す（0 と空欄を見間違えないように）
     var hasBib = (typeof p.bib === 'number');

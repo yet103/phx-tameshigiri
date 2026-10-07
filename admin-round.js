@@ -559,7 +559,8 @@ var AdminRound = (function() {
     top.className = 'round-row-top';
     var name = document.createElement('span');
     name.className = 'round-name';
-    name.textContent = (p.order || '') + '　' + (p.name || '');
+    // 出走番号は出さない（呼び出しはゼッケン。設計書 2026-10-07 §1）
+    name.textContent = (typeof p.bib === 'number' ? 'No.' + p.bib + '　' : '') + (p.name || '');
     var prev = document.createElement('span');
     prev.className = 'round-prev';
     // 一巡目の得点は確定済みだけ出す（採点途中の値は順位にも入らない。網羅検証 S10）
