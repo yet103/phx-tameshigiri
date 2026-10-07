@@ -99,7 +99,7 @@ var Api = (function() {
     // PATCH /api/events/:eventId （基本情報の保存専用。name / date / venue / settings だけを送る）
     // 大会ファイルを丸ごと送り直す saveEvent と違い、techniques / players / status には
     // 一切触れない（techniques を持たない大会の技リストを固定してしまわないため）。
-    // settings は { requireBib, requireRank, courts }。courts を省くと既存を保つ
+    // settings は { requireBib, requireRank, mixed, courts }。courts を省くと既存を保つ
     // （ゼッケン・級位段位は設計書「選手の追加項目」、courts は設計書「コート一覧」）。
     // 他のキーが混ざっていてもサーバーが無視する。
     // 戻り値: { ok: true, event: { id, name, date, venue, updatedAt, settings } }
@@ -419,6 +419,7 @@ var Api = (function() {
     // POST /api/events/:eventId/players/reorder（PC 運営の選手登録の表で行をドラッグしたとき）
     // Body: { court, isFemale, round, ids: [選手ID, ...] }
     //   ids はその組（コート×性別×巡目）の行すべて。この順に番号を 1 から振り直す。
+    //   混合の大会では isFemale は無視される（コート×巡目の全員が 1 組）。
     // 戻り値: { ok: true, players }（大会の選手全体）
     //       | { ok: false, status: <HTTPステータス>, reason, error }
     //         （reason は 'locked'（409。確定済み）/ 'reorder_mismatch'（400。組の行と ids が

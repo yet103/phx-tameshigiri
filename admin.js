@@ -534,6 +534,7 @@ var Admin = (function() {
     // 開いた時点の設定。保存では、ここから変わったキーだけを送る（網羅検証 S16。desk-setup.js と同じ）
     var origBib = settings.requireBib === true;
     var origRank = settings.requireRank === true;
+    var origMixed = settings.mixed === true;
     var origCourts = JSON.stringify(extra);
 
     var body = document.createElement('div');
@@ -588,6 +589,9 @@ var Admin = (function() {
     }
     var chkBib = addCheck('ゼッケン番号を必須にする', settings.requireBib === true);
     var chkRank = addCheck('級位・段位を必須にする', settings.requireRank === true);
+    // 男女を分けずに進める（混合。設計書 2026-10-07）。準備中だけ変えられる
+    var chkMixed = addCheck('男女を分けずに進める（混合）', origMixed);
+    chkMixed.disabled = EventStatus.of(ev) !== 'draft';
 
     var reqNote = document.createElement('p');
     reqNote.className = 'field-note';
@@ -595,6 +599,13 @@ var Admin = (function() {
       'チェックを入れても、選手の登録は空のままできます。' +
       '一巡目にその項目が空の選手がいる間だけ「試合開始」で止まり、人数と名前が出ます。';
     body.appendChild(reqNote);
+
+    var mixedNote = document.createElement('p');
+    mixedNote.className = 'field-note';
+    mixedNote.textContent =
+      '「男女を分けずに進める（混合）」を入れると、試合進行・選手登録・採点画面の一覧で男子の部・女子の部に分けず、' +
+      '出走順はコートごとに男女通しになります（順位の部門は変わりません）。試合開始の後は変えられません。';
+    body.appendChild(mixedNote);
 
     // --- コート一覧 ---
     var courtField = document.createElement('div');
@@ -691,6 +702,7 @@ var Admin = (function() {
       inVenue.disabled = true;
       chkBib.disabled = true;
       chkRank.disabled = true;
+      chkMixed.disabled = true;
       btnSave.disabled = true;
     }
 
@@ -711,6 +723,13 @@ var Admin = (function() {
           !confirm('この大会は AI が書き込める大会になります（名前が「' + SANDBOX_PREFIX + '」で始まるため）。\nよろしいですか？')) {
         return;
       }
+      // 混合の切り替えは出走順を全員振り直すので、選手がいるときは先に確認する（止めたらボタンは触らない）
+      if (chkMixed.checked !== origMixed && players.length > 0) {
+        var mixedMsg = chkMixed.checked
+          ? '出走順を男女通しに振り直します。並びは今のまま（男子 → 女子）です。よろしいですか？'
+          : '出走順を男女それぞれで振り直します。並びは今のままです。よろしいですか？';
+        if (!confirm(mixedMsg)) return;
+      }
       btnSave.disabled = true;
       sheet.lock(true);
       // 旧「決戦コート」の名前の設定（finalCourt）は廃止（2026-10-05 に仕組みごとやめた。
@@ -718,6 +737,7 @@ var Admin = (function() {
       var settingsPatch = {};
       if (chkBib.checked !== origBib) settingsPatch.requireBib = chkBib.checked;
       if (chkRank.checked !== origRank) settingsPatch.requireRank = chkRank.checked;
+      if (chkMixed.checked !== origMixed) settingsPatch.mixed = chkMixed.checked;
       if (JSON.stringify(extra) !== origCourts) settingsPatch.courts = extra.slice();
       var info = { name: name, date: inDate.value, venue: inVenue.value.trim() };
       if (Object.keys(settingsPatch).length > 0) info.settings = settingsPatch;
@@ -730,6 +750,8 @@ var Admin = (function() {
       if (!result || !result.ok) {
         if (result && result.reason === 'locked') {
           alert('この大会は最終結果を確定済みです。編集するには「戻す」を押してください');
+        } else if (result && result.reason === 'mixed_locked') {
+          alert('試合開始の後は男女の分け方を変えられません。');
         } else {
           alert((result && result.error) || '保存できませんでした。通信を確認してください。');
         }
