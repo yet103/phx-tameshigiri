@@ -121,6 +121,7 @@
     }
     if (locked) draft = null;   // 確定済みの大会では行を足せない
     if (undoEventId !== ctx.eventId) { undoLayout = null; attentionIds = {}; undoEventId = ctx.eventId; }
+    bindPopoverCloseOnce();   // 区画を離れたときの後始末（ポップオーバーと自動整列の状態）。1 回だけ束縛される
     // 絞り込み中のコート・巡目の選手が全員いなくなったら「すべて」に戻す
     var courtList = Courts.listFrom(ctx.players);
     filter.court = (filter.court || []).filter(function(c) { return courtList.indexOf(c) !== -1; });
@@ -305,7 +306,12 @@
     }, true);
     window.addEventListener('resize', function() { closePopover(); });
     // 別の区画へ移っても body に残り続けないように
-    window.addEventListener('hashchange', function() { closePopover(); });
+    window.addEventListener('hashchange', function() {
+      closePopover();
+      // 選手登録の区画を離れたら、自動整列の「元に戻す」と赤枠を捨てる（設計書 2026-10-07 auto-arrange §1。
+      // Desk.reloadEvent はハッシュを変えないので、描き直しでは消えない）
+      if (!/^#players(\/|$)/.test(location.hash)) { undoLayout = null; attentionIds = {}; }
+    });
   }
 
   // refocus を true にしたときだけ ▼ にフォーカスを戻す（Esc と ▼ の再クリック）。
@@ -928,6 +934,7 @@
         redrawTable();   // 元の並びに戻す
         return;
       }
+      dropUndo();   // コートは移った。古い整列を黙って戻さない
       var r2 = await Api.reorderPlayers(eventId, {
         court: toBand.court, isFemale: toBand.isFemale === true, round: toBand.round, ids: targetIds
       });
@@ -994,6 +1001,7 @@
         redrawTable();   // 元の並びに戻す
         return;
       }
+      dropUndo();   // 手で並べ替えたら、古い整列を黙って戻さない
       Desk.toast('試技順を保存しました');
       await Desk.reloadEvent();
     } finally {
@@ -1219,7 +1227,8 @@
       });
     }
     // 自動整列で対象外になった行は、ゼッケンかコートを保存したら赤枠と案内を外す
-    if (attentionIds[p.id] && (patch.bib !== undefined || patch.court !== undefined)) {
+    if (patch.court !== undefined) dropUndo();   // 手でコートを変えたら、古い整列を黙って戻さない
+    if (attentionIds[p.id] && (typeof patch.bib === 'number' || patch.court !== undefined)) {
       delete attentionIds[p.id];
       var attTr = el.closest ? el.closest('tr') : null;
       if (attTr) {
@@ -2675,17 +2684,23 @@
     return Courts.listFrom(ctx.players, extraCourts(ctx)).filter(function(c) { return c !== Courts.UNASSIGNED; });
   }
 
+  // 「ゼッケンで振り分ける」の文言。規則は「ゼッケンをコート数で割った余り」（余り 1 → 先頭のコート … 0 → 末尾）
+  function bibParityLabel(courts) {
+    if (courts.length === 2) return 'ゼッケンの奇数 → ' + courts[0] + '、偶数 → ' + courts[1];
+    var parts = courts.map(function(c, i) { return (i === courts.length - 1 ? 0 : i + 1) + ' → ' + c; });
+    return 'ゼッケンを ' + courts.length + ' で割った余りで（余り ' + parts.join('、') + '）';
+  }
+
   function openArrangeDialog(ctx) {
     var courts = arrangeCourts(ctx);
     if (courts.length === 0) { alert('コートがありません。基本情報でコートを足してください。'); return; }
-    var opts = { assign: 'bibParity', order: 'bib' };
+    var oneCourt = courts.length === 1;   // 振り分け先が 1 つなら振り分けは意味が無い（試技順だけ使える）
+    var opts = { assign: oneCourt ? 'keep' : 'bibParity', order: 'bib' };
     var body = document.createElement('div');
     body.className = 'desk-arrange';
     body.appendChild(radioGroup('コートの振り分け', 'arrangeAssign', ASSIGN_OPTIONS.map(function(o) {
-      // 3 コート以上では奇数偶数の文言を変える（規則は「コート数で割った余り」）
-      return o[0] === 'bibParity' && courts.length > 2
-        ? [o[0], 'ゼッケンを ' + courts.length + ' で割った余りで ' + courts.join('・') + ' へ'] : o;
-    }), opts.assign, function(v) { opts.assign = v; paint(); }));
+      return o[0] === 'bibParity' && courts.length !== 2 ? [o[0], bibParityLabel(courts)] : o;
+    }), opts.assign, function(v) { opts.assign = v; paint(); }, oneCourt ? 'コートが 1 つなので振り分けはありません' : ''));
     body.appendChild(radioGroup('各コートの試技順', 'arrangeOrder', ORDER_OPTIONS, opts.order, function(v) { opts.order = v; paint(); }));
     var pvHead = document.createElement('div');
     pvHead.className = 'desk-arrange-label';
@@ -2697,6 +2712,12 @@
     var warn = document.createElement('p');
     warn.className = 'desk-warn desk-arrange-warn';
     body.appendChild(warn);
+
+    var btnApply = document.createElement('button');
+    btnApply.type = 'button';
+    btnApply.className = 'desk-btn primary';
+    btnApply.id = 'btnDeskArrangeApply';
+    btnApply.textContent = '適用';
 
     var result = null;
     function paint() {
@@ -2719,6 +2740,9 @@
         pv.appendChild(box);
       });
       var msgs = [];
+      var total = result.layout.reduce(function(n, l) { return n + l.ids.length; }, 0);
+      btnApply.disabled = total === 0;
+      if (total === 0) msgs.push('整列できる選手がいません（一巡目でコートが決まっている選手が対象です）。');
       if (result.skipped.length > 0) msgs.push('ゼッケン未登録 ' + result.skipped.length + ' 名は対象外です。今のコートの末尾に残し、適用後に赤く示します。');
       if (result.unassigned.length > 0) msgs.push('コート未定 ' + result.unassigned.length + ' 名は対象外です。');
       warn.textContent = msgs.join('\n');
@@ -2726,11 +2750,6 @@
     }
     paint();
 
-    var btnApply = document.createElement('button');
-    btnApply.type = 'button';
-    btnApply.className = 'desk-btn primary';
-    btnApply.id = 'btnDeskArrangeApply';
-    btnApply.textContent = '適用';
     var dialog = Desk.openDialog('自動整列（一巡目）', body, [btnApply]);
     btnApply.addEventListener('click', async function() {
       if (!result) return;
@@ -2740,7 +2759,9 @@
       btnApply.disabled = true;
       dialog.lock(true);
       var res = await Api.arrangePlayers(eventId, { layout: applied.layout });
-      if (ctx.isStale()) return;   // 通信中に区画や大会を切り替えられた。ダイアログは Desk 側が閉じる
+      // 貼り付けのダイアログと同じく大会で判定する（Desk.reloadEvent は isStale を上げるので、
+      // ctx.isStale() だとダイアログが固まる）。大会が違えば closeAllDialogs が閉じている
+      if (Desk.currentEventId() !== eventId) return;
       dialog.lock(false);
       if (!res || !res.ok) {
         btnApply.disabled = false;
@@ -2765,12 +2786,19 @@
     return '自動整列を保存できませんでした。\n' + ((res && res.error) || '通信を確認してください。');
   }
 
+  // 「元に戻す」を捨てる（手で並べ直した・コートを変えたとき）。ボタンも消す
+  function dropUndo() {
+    undoLayout = null;
+    var b = document.getElementById('btnDeskPlayersUndoArrange');
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  }
+
   async function undoArrange(ctx, btn) {
     if (!undoLayout) return;
     var eventId = ctx.eventId;
     btn.disabled = true;
     var res = await Api.arrangePlayers(eventId, { layout: undoLayout });
-    if (ctx.isStale()) return;
+    if (Desk.currentEventId() !== eventId) return;   // 大会が切り替わっていたら画面に触らない
     if (!res || !res.ok) {
       btn.disabled = false;
       alert(arrangeFailureMessage(res));
@@ -2784,7 +2812,8 @@
   }
 
   // ラジオの組。options は [値, 文言] の並び。onChange(値)
-  function radioGroup(labelText, name, options, value, onChange) {
+  // note があれば全部の選択肢を disabled にして、その注記を添える
+  function radioGroup(labelText, name, options, value, onChange, disabledNote) {
     var wrap = document.createElement('div');
     wrap.className = 'desk-arrange-field';
     var lab = document.createElement('div');
@@ -2800,12 +2829,19 @@
       r.name = name;
       r.value = o[0];
       r.checked = o[0] === value;
+      if (disabledNote) r.disabled = true;
       r.addEventListener('change', function() { if (r.checked) onChange(o[0]); });
       l.appendChild(r);
       l.appendChild(document.createTextNode(' ' + o[1]));
       row.appendChild(l);
     });
     wrap.appendChild(row);
+    if (disabledNote) {
+      var note = document.createElement('div');
+      note.className = 'desk-note';
+      note.textContent = disabledNote;
+      wrap.appendChild(note);
+    }
     return wrap;
   }
 
