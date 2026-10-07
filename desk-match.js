@@ -559,12 +559,13 @@
       wrap.appendChild(note);
     }
 
-    // 男子の部・女子の部でカードの組を分ける（0 名の部は出さない）。見出しは「男子の部 一巡目」のように巡目を添える。
+    // 分ける大会: 男子の部・女子の部でカードの組を分ける（0 名の部は出さない）。見出しは「男子の部 一巡目」。
+    // 混合の大会（settings.mixed。設計書 2026-10-07 §5）: 巡目ごとに 1 組（見出しは「一巡目」）。
     var groups = [];
-    [[false, '男子の部'], [true, '女子の部']].forEach(function(g) {
+    divisionsOf(ctx).forEach(function(g) {
       var cards = courtCards(ctx, round, g[0]);
       if (cards.some(function(r) { return r.total > 0; })) {
-        groups.push({ caption: g[1] + ' ' + roundLabel, rows: cards, female: g[0] });
+        groups.push({ caption: (g[1] ? g[1] + ' ' : '') + roundLabel, rows: cards, female: g[0] });
       }
     });
     if (groups.length === 0) {
@@ -591,14 +592,20 @@
     return wrap;
   }
 
+  // カードの組。分ける大会は [性別, 部の名前] の 2 組、混合は性別で絞らない 1 組（female は undefined）
+  function divisionsOf(ctx) {
+    var mixed = !!(ctx.event && ctx.event.settings && ctx.event.settings.mixed === true);
+    return mixed ? [[undefined, '']] : [[false, '男子の部'], [true, '女子の部']];
+  }
+
   // 二巡目を数えている間も一巡目の結果を残す（ユーザー要望 2026-09-30）。一巡目のカード一式を
   // 「一巡目の結果」として畳んで下に置く（読み取り専用: 採点中の表示とボタンは出さない）。
   function appendRound1Results(wrap, ctx, round) {
     if (round !== 2) return;
     var groups = [];
-    [[false, '男子の部'], [true, '女子の部']].forEach(function(g) {
+    divisionsOf(ctx).forEach(function(g) {
       var cards = courtCards(ctx, 1, g[0]);
-      if (cards.length > 0) groups.push({ caption: g[1] + ' 一巡目', rows: cards });
+      if (cards.length > 0) groups.push({ caption: (g[1] ? g[1] + ' ' : '') + '一巡目', rows: cards });
     });
     if (groups.length === 0) return;
     var box = document.createElement('details');
@@ -681,7 +688,7 @@
     }
     card.appendChild(live);
 
-    // そのカードの選手の表（順番・ゼッケン・選手名・級位段位・得点・備考。ユーザー要望 2026-09-30）。
+    // そのカードの選手の表（ゼッケン・選手名・級位段位・得点・備考。ユーザー要望 2026-09-30）。
     // 数えている行（同じコート・巡目・性別）を試技順に並べる。
     card.appendChild(buildCardTable(ctx, row, round, liveP ? liveP.id : null));
 
@@ -746,8 +753,8 @@
     (ctx.players || []).forEach(function(p) { if (p && typeof p.id === 'string') byId[p.id] = p; });
     var withR1 = (round === 2);   // 二巡目の表には一巡目の得点も並べる（ユーザー要望 2026-09-30）
     var labels = withR1
-      ? ['順番', 'ゼッケン', '選手名', '級位・段位', '一巡目', '得点', '備考']
-      : ['順番', 'ゼッケン', '選手名', '級位・段位', '得点', '備考'];
+      ? ['ゼッケン', '選手名', '級位・段位', '一巡目', '得点', '備考']
+      : ['ゼッケン', '選手名', '級位・段位', '得点', '備考'];
     labels.forEach(function(label, i) {
       var th = document.createElement('th');
       th.textContent = label;
@@ -762,10 +769,8 @@
       // 確定済みの行はグレー、いま採点中の行は反転（採点画面の選手一覧と同じ配色）
       if (p.confirmed === true) tr.className = 'done';
       if (liveId && p.id === liveId) tr.className = 'current';
-      var m = (p.order || '').match(/-(\d+)$/);
       var scored = p.confirmed === true;   // 得点は確定済みだけ出す（ユーザー要望 2026-09-30）
       var cells = [
-        [m ? m[1] : (p.order || ''), 'num'],
         [Number.isInteger(p.bib) ? String(p.bib) : '', 'num'],
         [p.name || '', 'name'],
         [Courts.rankLabel(p.rank), '']
