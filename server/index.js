@@ -312,6 +312,35 @@ function buildOrder(court, seg, round, n) {
   return court + '-' + seg + '-' + round + '-' + n;
 }
 
+// settings.mixed の切り替えで全行の order を振り直す（設計書 2026-10-07 §3）。
+// 今の並び（巡目 → コート → 男子 → 女子 → 番号。混合の行は性別の段が同じなので番号順）を保ったまま、
+//   mixed … コート×巡目 ごとに 1 から通し番号。性別の段は '混合'
+//   分ける … コート×巡目×性別 ごとに 1 から。性別の段は行の isFemale から
+// order が読めない行（CSV 由来の空 order など）は触らない。rev は上げない（得点・技は変わらない）。
+function renumberForMixed(event, mixed) {
+  const players = Array.isArray(event.players) ? event.players : [];
+  const rows = [];
+  players.forEach(p => {
+    const o = parseOrder((p && p.order) || '');
+    if (o) rows.push({ p: p, o: o });
+  });
+  rows.sort((a, b) => {
+    if (a.o.round !== b.o.round) return a.o.round - b.o.round;
+    if (a.o.court !== b.o.court) return a.o.court < b.o.court ? -1 : 1;
+    const ga = a.o.gender === '女子' ? 1 : 0;
+    const gb = b.o.gender === '女子' ? 1 : 0;
+    if (ga !== gb) return ga - gb;
+    return a.o.number - b.o.number;
+  });
+  const next = Object.create(null);
+  rows.forEach(x => {
+    const seg = mixed ? '混合' : (x.p.isFemale === true ? '女子' : '男子');
+    const key = x.o.court + '\n' + seg + '\n' + x.o.round;
+    next[key] = (next[key] || 0) + 1;
+    x.p.order = buildOrder(x.o.court, seg, x.o.round, next[key]);
+  });
+}
+
 // JSONのアトミック書き込み
 // writeFileSync で直接上書きすると、書き込み中にプロセスが落ちたときに
 // ファイルが切り詰められ、大会データが丸ごと失われる。
@@ -1566,8 +1595,19 @@ app.patch('/api/events/:id', (req, res) => {
       // （設計書 2026-09-28）。既存の大会に残っている
       // finalCourt キーも、settings を送る PATCH で落ちる（どこからも読まないので害は無い）。
       // mixed（男女を分けずに進める。設計書 2026-10-07）。requireBib と同じ部分更新。
-      // 切り替え時の振り直しと準備中だけのガードは Task 2。
       const mixed = s.mixed !== undefined ? s.mixed === true : cur.mixed === true;
+      if (mixed !== (cur.mixed === true)) {
+        // 男女の分け方は準備中だけ変えられる（採点画面の巡回が order の並びに乗っているため。設計書 2026-10-07 §1）
+        const st = EventStatus.of(event);
+        if (st !== 'draft') {
+          return res.status(409).json({
+            error: '試合開始の後は男女の分け方を変えられません',
+            reason: 'mixed_locked',
+            status: st
+          });
+        }
+        renumberForMixed(event, mixed);
+      }
       event.settings = { requireBib: requireBib, requireRank: requireRank, mixed: mixed, courts: courts };
     }
 

@@ -554,6 +554,41 @@
     await Api.deleteEvent(mxImported.id);
     await Api.deleteEvent(mxEvent.id);
 
+    // ---- 混合の切り替えの振り直しと準備中だけのガード（設計書 2026-10-07 §3）----
+    var mx2 = await Api.saveEvent({ name: 'テスト用 混合切替', date: '2026-10-07', venue: '', players: [] });
+    await Api.updateEventInfo(mx2.id, { settings: { mixed: true } });
+    var mx2P1 = await Api.createPlayer(mx2.id, { name: '混合 男', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    var mx2P2 = await Api.createPlayer(mx2.id, { name: '混合 女', court: 'A', isFemale: true, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    await Api.updatePlayerInfo(mx2.id, mx2P1.id, { isFemale: true });   // 混合なので order は変わらない
+    // 切り替えの振り直し。分ける大会に戻すと男女それぞれ 1 から
+    var mx2Off = await Api.updateEventInfo(mx2.id, { settings: { mixed: false } });
+    assert('混合 → 分ける: PATCH は成功し mixed が false', [mx2Off.ok, mx2Off.event.settings.mixed], [true, false]);
+    assert('混合 → 分ける: 全行を男女それぞれ 1 から振り直す',
+      (await Api.loadEvent(mx2.id)).players.map(function(p) { return p.order; }).sort(),
+      ['A-女子-1-1', 'A-女子-1-2']);   // mx2P1 は女子に変えた
+    var mx2P3 = await Api.createPlayer(mx2.id, { name: '混合 男2', court: 'A', isFemale: false, isNewFace: false, tech1: '', tech2: '', tech3: '', round: 1 });
+    assert('分ける大会に戻したあとの追加は 男子 1 から', mx2P3.order, 'A-男子-1-1');
+    await Api.updateEventInfo(mx2.id, { settings: { mixed: true } });
+    assert('分ける → 混合: 今の並び（男子 → 女子、番号順）のまま通し番号',
+      (await Api.loadEvent(mx2.id)).players.slice().sort(Courts.compareOrder).map(function(p) { return p.order + ':' + p.name; }),
+      ['A-混合-1-1:混合 男2', 'A-混合-1-2:混合 男', 'A-混合-1-3:混合 女']);
+    // 試合開始の後は変えられない
+    await Api.changeStatus(mx2.id, 'round1');
+    var mx2Locked = await Api.updateEventInfo(mx2.id, { settings: { mixed: false } });
+    assert('試合開始の後は mixed を変えられない（409 mixed_locked）', [mx2Locked.ok, mx2Locked.status, mx2Locked.reason], [false, 409, 'mixed_locked']);
+    assert('409 のとき settings は変わらず order も振り直さない',
+      [(await Api.loadEvent(mx2.id)).settings.mixed,
+       (await Api.loadEvent(mx2.id)).players.map(function(p) { return p.order; }).sort()],
+      [true, ['A-混合-1-1', 'A-混合-1-2', 'A-混合-1-3']]);
+    var mx2Same = await Api.updateEventInfo(mx2.id, { settings: { mixed: true, requireBib: true } });
+    assert('試合開始の後でも mixed が変わらない PATCH は通る', [mx2Same.ok, mx2Same.event.settings.requireBib], [true, true]);
+    await Api.changeStatus(mx2.id, 'draft');
+    await Api.updateEventInfo(mx2.id, { settings: { mixed: true, requireBib: false } });
+    assert('mixed が変わらない PATCH は振り直さない',
+      (await Api.loadEvent(mx2.id)).players.slice().sort(Courts.compareOrder).map(function(p) { return p.order; }),
+      ['A-混合-1-1', 'A-混合-1-2', 'A-混合-1-3']);
+    await Api.deleteEvent(mx2.id);
+
     // ---- settings.finalCourt（決戦コートの名前）は廃止。届いても保存しない（設計書 2026-09-28） ----
     var fcEvent = await Api.saveEvent({ name: '決戦コート廃止', date: '2026-09-28', venue: '',
       settings: { requireBib: false, requireRank: false, courts: ['A'], finalCourt: '決勝' }, players: [] });
