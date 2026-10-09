@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>実況席向け 画面の見かた（ダッシュボード）</title>
+<style>
+  :root { --ink: #1b1b1b; --muted: #666; --gold: #b8962e; --line: #ddd; --paper: #fffdf8; --mark: #ff3b3b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; line-height: 1.8; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; border-bottom: 3px solid var(--gold); padding-bottom: 8px; }
+  .lead { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  h2 { font-size: 20px; margin: 40px 0 12px; padding: 6px 12px; background: #141414; color: #f1d98a; border-radius: 6px; }
+  h2 small { font-weight: normal; color: #ccc; font-size: 13px; margin-left: 10px; }
+  h3 { font-size: 17px; margin: 22px 0 6px; }
+  .ui { display: inline-block; border: 1px solid #999; border-radius: 4px; padding: 0 6px; background: #fff; font-size: 0.95em; white-space: nowrap; }
+  .hint { background: #fff6dc; border-left: 4px solid var(--gold); padding: 8px 12px; margin: 8px 0 0; font-size: 14px; border-radius: 0 6px 6px 0; }
+  .hint b { color: #8a6a10; }
+  .say { background: #eef3ff; border-left: 4px solid #4a6fd8; padding: 8px 12px; margin: 8px 0 0; font-size: 14px; border-radius: 0 6px 6px 0; }
+  .say b { color: #2b49a8; }
+  figure { margin: 12px 0 0; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; display: block; }
+  figcaption { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .mark { color: var(--mark); font-weight: bold; }
+  .n { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--mark); color: #fff; font-weight: bold; font-size: 13px; align-items: center; justify-content: center; margin-right: 4px; font-family: sans-serif; vertical-align: -3px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; font-size: 14px; align-items: center; }
+  .flow span { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; }
+  .flow span.on { background: #141414; color: #f1d98a; border-color: #141414; }
+  .flow i { color: var(--muted); font-style: normal; }
+  table.k { border-collapse: collapse; font-size: 14px; margin: 8px 0 0; width: 100%; }
+  table.k th, table.k td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  table.k th { background: #f3eedd; white-space: nowrap; }
+  .sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; border: 1px solid #999; }
+  ul { margin: 6px 0 0; padding-left: 22px; }
+  li { margin: 2px 0; }
+  @media print { h2 { break-after: avoid; } figure { break-inside: avoid; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>実況席向け 画面の見かた（ダッシュボード）</h1>
+  <p class="lead">実況席の PC にはダッシュボードを開いておきます。採点・試合の進み具合・順位が 1 画面に並び、見ているだけで最新になります（10 秒ごと）。写真はリハーサル用の名簿で撮ったもので、得点は撮影用の仮の値です。</p>
+
+  <h2>1. 画面の全体 <small>4 つの面</small></h2>
+  <figure><img src="img2/c01-dashboard-r1.png" alt="ダッシュボードの全体"><figcaption>ダッシュボード（一巡目の途中）。上 2 つがコートの採点、左下が運営の試合進行、右下が順位。</figcaption></figure>
+  <table class="k">
+    <tr><th><span class="n">1</span><span class="n">2</span>A コート／B コート</th><td>そのコートで<b>いま斬っている選手</b>と、技ごとの採点がリアルタイムに出ます。採点席のタブレットと同じ内容で、タイマーも採点席に合わせて動きます。見るだけの面なので、触っても採点は変わりません。</td></tr>
+    <tr><th><span class="n">3</span>運営（試合進行）</th><td>大会がいまどの段階か（一巡目・二巡目など）、各コートの「確定 n / N」（何人斬り終えたか）、「いま採点中: 名前」が分かります。二巡目の間は上に<b>暫定ベスト4</b>の 1 行が出ます。</td></tr>
+    <tr><th><span class="n">4</span>順位</th><td>部門ごとの順位表。確定した得点だけを合計します。二巡目の間は「ベスト4」の列と「内訳」が使えます（後述）。</td></tr>
+  </table>
+  <p class="hint"><b>上の帯:</b> <span class="ui">👁 閲覧専用</span> のままにしておきます（触っても動かない安全な状態）。<span class="ui">縮小</span> のつまみで 4 面の大きさを変えられます。面を閉じてしまったら <span class="ui">▦ 面</span> から戻せます。<span class="ui">↻</span> は全部の面を読み直します。</p>
+
+  <h2>2. 採点の面の見かた <small>何点入ったかはここで分かる</small></h2>
+  <figure><img src="img2/c02-scoring-A.png" alt="採点画面の見かた"><figcaption>採点画面（A コート）。実際のダッシュボードではこれが縮小されて面に入ります。</figcaption></figure>
+  <table class="k">
+    <tr><th><span class="n">1</span>部・巡目・コート</th><td>「男子の部　一巡目　A コート」。いまどの部の何巡目かを常に確かめられます。</td></tr>
+    <tr><th><span class="n">2</span>ゼッケン・名前・段位</th><td>いま斬っている選手。「No.7」はゼッケンです（呼び出しもゼッケンで行います）。</td></tr>
+    <tr><th><span class="n">3</span>技と太刀の表</th><td>縦に 3 つの技、横に初太刀〜四ノ太刀。太刀ごとの結果と配点が出ます。技によって太刀の数が違い、灰色の枠は「その技に無い太刀」です。</td></tr>
+    <tr><th><span class="n">4</span>合計</th><td>その選手のこの巡の得点。採点席が「確定」を押すと確定になり、順位に反映されます。確定前は「未確定」の印が付きます。</td></tr>
+    <tr><th><span class="n">5</span>タイマー</th><td>採点席が押した 5 分のカウントダウンがそのまま映ります。</td></tr>
+    <tr><th><span class="n">6</span>選手一覧</th><td>このコートの試技順。灰色の行は確定済み、黄色の行がいま斬っている選手、白い行はこれから。得点の列に確定した点が入ります。</td></tr>
+    <tr><th><span class="n">7</span>順位</th><td>面の下にも簡単な順位表があります（右下の順位の面と同じ内容）。</td></tr>
+  </table>
+  <h3>太刀の結果の読みかた</h3>
+  <table class="k">
+    <tr><th><span class="sw" style="background:#dff0df"></span>成功</th><td>その太刀の配点が入ります（例「成功 17点」）。</td></tr>
+    <tr><th><span class="sw" style="background:#f6d6d6"></span>失敗</th><td>0 点。<b>失敗より後ろの太刀は「無効」</b>になり、その技はそこで終わりです。</td></tr>
+    <tr><th><span class="sw" style="background:#fff2cc"></span>減点</th><td>成功はしたが減点つき（初太刀だけ。配点が下がります）。</td></tr>
+    <tr><th><span class="sw" style="background:#f3eedd"></span>未</th><td>まだ斬っていない太刀。薄い字の数字はその太刀の配点です。</td></tr>
+    <tr><th>補正点</th><td>審判が入れる加点・減点。技ごとと全体の 2 種類があり、合計に足されます。</td></tr>
+  </table>
+  <p class="say"><b>実況のヒント:</b> 配点は技ごとに違います（難しい技ほど高い）。表の「未」の薄い数字を見れば「この太刀が決まれば何点」が分かるので、「次の太刀が決まれば 17 点、合計 40 点に乗ります」のように先読みできます。</p>
+
+  <h2>3. 試合の進みかた <small>一巡目 → 二巡目 → 確定</small></h2>
+  <div class="flow"><span>準備中</span><i>→</i><span class="on">一巡目 進行中</span><i>→</i><span>一巡目終了（二巡目の形登録）</span><i>→</i><span class="on">二巡目 進行中</span><i>→</i><span>二巡目終了</span><i>→</i><span class="on">最終結果（表彰）</span></div>
+  <ul>
+    <li><b>一巡目</b>: 各コートで試技順に全員が 3 つの技を斬ります。コートは同時進行なので、A と B の面を交互に見ます。</li>
+    <li><b>一巡目終了</b>: 全員の確定が揃うと運営が「一巡目を終了」を押します。ここで二巡目の行が自動で作られ、<b>二巡目の試技順は一巡目の得点が低い人から</b>になります（上位ほど後ろ）。二巡目で形を変える選手はこの間に登録されます。</li>
+    <li><b>二巡目</b>: もう一度全員が 3 つの技を斬ります。合計は一巡目＋二巡目です。</li>
+    <li><b>二巡目終了 → 最終結果</b>: 全員の確定が揃うと順位が確定し、表彰へ進みます。</li>
+  </ul>
+  <figure><img src="img2/c04-desk-match-r1.png" alt="運営の試合進行（一巡目）"><figcaption>運営の面（一巡目）。コートごとに「確定 n / N」と「いま採点中」が出ます。表の灰色は確定済み、黒い行がいま採点中、白はこれから。</figcaption></figure>
+  <p class="say"><b>実況のヒント:</b> 「確定 6 / 14」なら「A コートは 14 人中 6 人が終了」。残り人数と、いま誰が斬っているかはこの面でひと目で分かります。</p>
+
+  <h2>4. 順位の確かめかた <small>右下の面</small></h2>
+  <figure><img src="img2/c03-ranking-r1.png" alt="順位表（一巡目の途中）"><figcaption>順位表（一巡目の途中）。部門ごとに順位・名前・合計。見出しの「一巡目 11/26」は「26 人中 11 人が確定済み」。</figcaption></figure>
+  <ul>
+    <li><b>部門</b>は 3 つ: 一般男子・新人枠・一般女子。新人枠の選手は一般の順位にも入ります（新人枠は別枠の表彰）。</li>
+    <li><b>合計の色</b>: <span class="sw" style="background:#c9a24a"></span>金茶＝一巡目まで確定、<span class="sw" style="background:#4a7fd0"></span>青＝二巡目まで確定、<span class="sw" style="background:#bbb"></span>グレー＝未確定（まだ斬っていない）。</li>
+    <li><b>同点は同順位</b>です（例: 4 位が 2 人なら次は 6 位）。</li>
+    <li>一巡目の途中は、まだ斬っていない人が 0 点で下に並びます。「順位」というより「ここまでの得点の高い順」と読んでください。</li>
+  </ul>
+
+  <h2>5. 二巡目とベスト4 <small>終盤の見どころ</small></h2>
+  <figure><img src="img2/c05-dashboard-r2.png" alt="ダッシュボード（二巡目の途中）"><figcaption>二巡目の途中。各面の帯が「二巡目 進行中」になり、運営の面の上に「暫定ベスト4（合計）」の行、順位の面に「ベスト4」の列が出ます。</figcaption></figure>
+  <figure><img src="img2/c07-desk-match-r2.png" alt="暫定ベスト4の行"><figcaption>運営の面（二巡目）。「暫定ベスト4（合計）: 名前（点）…　残り n 名」。確定のたびに入れ替わります。</figcaption></figure>
+  <ul>
+    <li><b>ベスト4</b>は<b>一般男子の合計（一巡目＋二巡目）の上位 4 名</b>です。二巡目の間は「暫定」で、残りの人数が 0 になると確定します。同点は全員入ります。</li>
+    <li>二巡目の試技順は一巡目の得点が低い順なので、<b>後半ほど上位候補</b>が出てきます。運営が「上位候補を最後に回す」並べ替えをすることもあります。</li>
+  </ul>
+  <figure><img src="img2/c06-ranking-r2.png" alt="順位表（二巡目の途中、内訳とベスト4）"><figcaption>順位表（二巡目の途中、「内訳」オン）。合計の横に「24+48」（一巡目＋二巡目）、まだの人は「82→164?」（二巡目が全部成功したときの最大）。右の列がベスト4 の可能性。</figcaption></figure>
+  <table class="k">
+    <tr><th>確</th><td>ベスト4 <b>確定</b>。残りの全員が全部成功しても 4 位以内。</td></tr>
+    <tr><th>可</th><td><b>可能性あり</b>。自分の残りが全部成功すれば 4 位以内に届く。</td></tr>
+    <tr><th>-</th><td>圏外。もう 4 位以内には届かない。</td></tr>
+    <tr><th>82→164?</th><td>一巡目 82 点、二巡目はまだ。二巡目が全部成功すると最大 164 点。</td></tr>
+    <tr><th>24+48</th><td>一巡目 24 点＋二巡目 48 点＝合計 72 点（二巡目まで確定）。</td></tr>
+  </table>
+  <p class="hint"><b>内訳の出しかた:</b> 順位の面の上の <span class="ui">内訳</span> にチェックを入れます。ダッシュボードが閲覧専用だと触れないので、上の帯で <span class="ui">✎ 操作可能</span> にしてからチェックし、終わったら <span class="ui">👁 閲覧専用</span> に戻します。別のタブで順位表（<span class="ui">順位表示</span>）を開いておく方法でも構いません。</p>
+  <p class="say"><b>実況のヒント:</b> 「可」の選手が斬る番になったら「ここで 60 点以上を出せばベスト4 に入ります」のように、「→164?」の数字と 4 位の合計を見比べて伝えられます。</p>
+
+  <h2>6. 二巡目が終わったら <small>確定した順位</small></h2>
+  <figure><img src="img2/c08-ranking-final.png" alt="順位表（二巡目終了）"><figcaption>二巡目終了後の順位表。合計が全員青（二巡目まで確定）になり、ベスト4 は「確」か「-」だけになります。</figcaption></figure>
+  <figure><img src="img2/c09-desk-r2done.png" alt="運営の面（二巡目終了）"><figcaption>運営の面（二巡目終了）。確定したベスト4 と、各部門の上位 3 名が並びます。このあと運営が「結果を確定して表彰へ」を押します。</figcaption></figure>
+
+  <h2>7. 困ったとき</h2>
+  <ul>
+    <li><b>面が古いまま</b>に見える: 上の帯の <span class="ui">↻</span> を押します（10 秒ごとに自動で読み直していますが、手動でも読めます）。</li>
+    <li><b>面を閉じてしまった</b>: <span class="ui">▦ 面</span> から出し直せます。並びは面の見出しをドラッグして変えられます。</li>
+    <li><b>面の中を触ってしまった</b>: 閲覧専用なら何も変わりません。操作可能にしていた場合も、採点席の端末が正です。</li>
+    <li><b>選手の名前の読み</b>や段位は、採点の面の名前の横（段位）と、運営の選手登録で確かめられます。</li>
+  </ul>
+</main>
+</body>
+</html>

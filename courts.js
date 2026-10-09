@@ -452,6 +452,22 @@ var Courts = (function() {
     return (court === UNASSIGNED ? court : court + ' コート') + ' ' + round;
   }
 
+  // 配信の状態（live）のタイマーの残り秒数。running なら updatedAt からの経過を引き、0 で止める。
+  // running でなければ sec のまま。時刻が読めないときも sec のまま。now は ms の数値か ISO 文字列。
+  // 配信用ボード（board.js）とダッシュボードの採点の面（app.js）が同じ規則で使う。
+  function liveRemaining(timer, updatedAt, now) {
+    var sec = timer ? Math.trunc(Number(timer.sec)) : 0;
+    if (!Number.isFinite(sec) || sec < 0) sec = 0;
+    if (!timer || timer.running !== true) return sec;
+    var from = Date.parse(updatedAt);
+    var to = typeof now === 'number' ? now : Date.parse(now);
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return sec;
+    var elapsed = Math.floor((to - from) / 1000);
+    if (elapsed < 0) elapsed = 0;   // 時計のずれで未来から来た場合は経過 0 とみなす
+    var left = sec - elapsed;
+    return left > 0 ? left : 0;
+  }
+
   // 級位・段位の表示用（「二段」「三段」を「弐段」「参段」に読み替える。EventStatus.normalizeRank）
   function rankLabel(rank) {
     return EventStatus.normalizeRank(rank);
@@ -1279,6 +1295,7 @@ var Courts = (function() {
     livePlayerName: livePlayerName,
     rankLabel: rankLabel,
     placeLabel: placeLabel,
+    liveRemaining: liveRemaining,
     best4LineText: best4LineText,
     RANK_CATEGORIES: RANK_CATEGORIES,
     rankPanel: rankPanel,

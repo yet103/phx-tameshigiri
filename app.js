@@ -43,6 +43,14 @@ var App = (function() {
   // 一覧の行をドラッグして試技順を入れ替えられるか（ユーザー要望 2026-10-05）。運営（role admin: Basic・開発）だけ。
   // 採点の鍵の端末と、セッションを読めなかったときは出さない（サーバーも reorder は運営だけ。server/authz.js）。
   var canReorder = false;
+  // ダッシュボード（dashboard.html）の面として iframe の中で開かれているか。面の中では、持ち主になるまでは
+  //   ・配信の状態（live。配信用ボードと運営画面の「いま採点中」）を送らない（採点席の端末が持ち主。
+  //     面が開いただけで先頭の選手に上書きされていた。実況席の使い方の確認 2026-10-07）
+  //   ・採点席が映している選手とタイマーを追いかける（refreshFromServer の followLive）
+  var embedded = (function() { try { return window.self !== window.top; } catch (e) { return true; } })();
+  // 配信の持ち主か。通常の採点画面は常に持ち主。面（iframe）は、人がその面で操作した（選手を選ぶ・タイマー・採点）
+  // ときから持ち主になる（takeOwnership。以後は追いかけず、publishLive を送る。レビュー指摘 2026-10-07）
+  var liveOwner = !embedded;
 
   // --- DOM参照 ---
   var courtLabel       = document.getElementById('courtLabel');
@@ -442,9 +450,9 @@ var App = (function() {
     document.getElementById('btnPrev').addEventListener('click', function() { movePlayer(-1); });
     document.getElementById('btnNext').addEventListener('click', function() { movePlayer(1); });
 
-    document.getElementById('btnTimerStart').addEventListener('click', startTimer);
-    document.getElementById('btnTimerStop').addEventListener('click', stopTimer);
-    document.getElementById('btnTimerReset').addEventListener('click', resetTimer);
+    document.getElementById('btnTimerStart').addEventListener('click', function() { takeOwnership(); startTimer(); });
+    document.getElementById('btnTimerStop').addEventListener('click', function() { takeOwnership(); stopTimer(); });
+    document.getElementById('btnTimerReset').addEventListener('click', function() { takeOwnership(); resetTimer(); });
 
     document.getElementById('btnAllSuccess').addEventListener('click', setAllSuccess);
     document.getElementById('btnAllFail').addEventListener('click', setAllFail);
@@ -885,7 +893,7 @@ var App = (function() {
     removeStaleRescuedOptions(currentEvent.id);   // 前の大会の救済分は残さない
     if (court !== undefined) currentCourt = court;
     refreshCourtList();
-    applyCourtFilter();
+    applyCourtFilter();   // 面（iframe）では、この中の selectPlayer → refreshFromServer が採点席の選手を追いかける
     Route.set(currentEvent.id, currentCourt);
     updateAdminLink(currentEvent.id);
     updateTechniquesLink(currentEvent.id);
@@ -916,6 +924,7 @@ var App = (function() {
     var next = currentIndex + delta;
     if (next < 0 || next >= visiblePlayers.length) return;
     if (!confirmLeave()) return;
+    takeOwnership();   // 実際に動いたときだけ、面を配信の持ち主にする
     saveCurrentState();
     selectPlayer(next);
   }
@@ -963,13 +972,21 @@ var App = (function() {
     adoptEvent(loaded);
     refreshCourtList();
     visiblePlayers = courtPlayers(currentCourt);
+    // ダッシュボードの面（持ち主でない）では、採点席が映している選手（live）を追いかける。
+    // 照合は読み直した後の一覧で行う（今回の応答で増えた行も拾う）。採点席が待機中（live が無い・
+    // playerId が null）なら面のタイマーも止めて、配信用ボードと表示を揃える
+    releaseOwnershipIfViewOnly();
+    var following = embedded && !liveOwner && !gridEdited;
+    var followId = following ? liveFollowTarget(loaded, currentCourt) : null;
+    if (followId) currentId = followId;
+    if (following && !followId) haltTimer();
     var idx = -1;
     for (var i = 0; i < visiblePlayers.length; i++) {
       if (visiblePlayers[i].id === currentId) { idx = i; break; }
     }
     if (idx === -1) {
-      // 表示中の選手が消えた（名簿の入れ直しなど）。先頭から出し直す
-      applyCourtFilter();
+      // 表示中の選手が消えた（名簿の入れ直しなど）。先頭（面では追いかけ先）から出し直す
+      applyCourtFilter(followId || undefined);
       return;
     }
     currentIndex = idx;
@@ -991,6 +1008,45 @@ var App = (function() {
     updatePlayerList();
     renderStatusBanner();
     applyScoringLock();
+    if (followId) applyLiveTimer(loaded, currentCourt);
+  }
+
+  // 面（iframe）で追いかける選手の id。コートが決まっていて、live のその選手が今の一覧にいるときだけ
+  function liveFollowTarget(ev, court) {
+    if (!court || !ev || !ev.live || !Object.prototype.hasOwnProperty.call(ev.live, court)) return null;
+    var entry = ev.live[court];
+    var id = entry && entry.playerId;
+    if (!id) return null;
+    for (var i = 0; i < visiblePlayers.length; i++) {
+      if (visiblePlayers[i].id === id) return id;
+    }
+    return null;
+  }
+
+  // 面（iframe）で、採点席のタイマー（live.timer）を映す。配信用ボードと同じ規則（Courts.liveRemaining）。
+  // 面の中では publishLive は送らないので、startTimer を呼んでも配信は変わらない
+  function applyLiveTimer(ev, court) {
+    var entry = ev && ev.live && Object.prototype.hasOwnProperty.call(ev.live, court) ? ev.live[court] : null;
+    if (!entry || !entry.timer) return;
+    var left = Courts.liveRemaining(entry.timer, entry.updatedAt, Api.serverNowMs());   // 時計のずれはサーバーの Date で補正
+    haltTimer();
+    timerSec = left;
+    timerDisplay.textContent = pad(Math.floor(left / 60)) + ':' + pad(left % 60);
+    if (entry.timer.running === true && left > 0) startTimer();
+  }
+
+  // 面の中で人が操作したら、その面が配信の持ち主になる（以後は追いかけず、publishLive を送る）
+  function takeOwnership() {
+    liveOwner = true;
+  }
+
+  // ダッシュボードが「閲覧専用」（body.dash-edit が無い）に戻ったら持ち主を外し、追いかけに戻る
+  // （同一オリジンなので親の body を読める。読めなければ触らない。レビュー指摘 2026-10-07）
+  function releaseOwnershipIfViewOnly() {
+    if (!embedded || !liveOwner) return;
+    try {
+      if (!window.parent.document.body.classList.contains('dash-edit')) liveOwner = false;
+    } catch (e) { /* 別オリジンなどで読めないときはそのまま */ }
   }
 
   function updatePlayerLabels(p) {
@@ -1180,7 +1236,7 @@ var App = (function() {
       if (!confirm('確定済みの選手です。\n技得点表の今の配点で計算し直した ' + after + '点（保存 ' + before +
                    '点）で確定し直しますか？')) return;
     }
-    gridEdited = true;
+    gridEdited = true; takeOwnership();
     updateTotal();          // p.score を再計算の値にし、知らせの行を外す
     saveCurrentState();
     HistoryOutbox.add(currentEvent.id, {
@@ -1427,6 +1483,8 @@ var App = (function() {
   // （大会から離れるとき。表示中の選手を残すとボードが映し続けてしまう）。
   function publishLive(clear) {
     if (!currentEvent) return;
+    releaseOwnershipIfViewOnly();
+    if (!liveOwner) return;   // 人が操作していない面（ダッシュボード）からは配信の状態を変えない
     // 採点できない状態（準備中・終了・確定済みなど）では配信しない。
     // ただし大会を離れるときの clear は通す（映したままにしないため）。
     if (!clear && !scoringOpen()) return;
@@ -1631,7 +1689,7 @@ var App = (function() {
     // 表の内容で合計を出し直して保存する（開いただけでは p.score を書き換えていないため。M4）
     updateTotal();
     p.confirmed = true;
-    gridEdited = true;
+    gridEdited = true; takeOwnership();
     applyConfirmedStyle(true);
     applyScoringLock();   // 確定済みは点数を触れない
     saveCurrentState();
@@ -1662,7 +1720,7 @@ var App = (function() {
     }
     var n = totalAdjustValue();
     totalAdjustInput.value = adjustText(n);
-    gridEdited = true;
+    gridEdited = true; takeOwnership();
     unconfirmIfNeeded();
     updateTotal();
     saveCurrentState();
@@ -1766,7 +1824,7 @@ var App = (function() {
     var n = rowAdjust(tr);
     inp.value = adjustText(n);
     var p = visiblePlayers[currentIndex];
-    gridEdited = true;
+    gridEdited = true; takeOwnership();
     unconfirmIfNeeded();
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
@@ -1836,7 +1894,7 @@ var App = (function() {
     var voided = applyVoiding(tr);
     applySequence(tr);
 
-    gridEdited = true;
+    gridEdited = true; takeOwnership();
     unconfirmIfNeeded();
     updateRowScore(tr, isFemale);
     updateTotal();
@@ -1969,7 +2027,7 @@ var App = (function() {
     }
     applyVoiding(tr);
     applySequence(tr);
-    gridEdited = true;
+    gridEdited = true; takeOwnership();
     unconfirmIfNeeded();
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
@@ -2020,7 +2078,7 @@ var App = (function() {
         detail: '確定時に未を失敗に（以降の太刀は無効）'
       });
     }
-    gridEdited = true;
+    gridEdited = true; takeOwnership();
     updateTotal();
   }
 
@@ -2043,7 +2101,7 @@ var App = (function() {
     setCellDisplay(target, '×');
     var voided = applyVoiding(tr);
     applySequence(tr);
-    gridEdited = true;
+    gridEdited = true; takeOwnership();
     unconfirmIfNeeded();
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
@@ -2221,6 +2279,7 @@ var App = (function() {
         var idx = parseInt(this.dataset.index, 10);
         if (idx !== currentIndex && !confirmLeave()) return;
         saveCurrentState();
+        takeOwnership();   // 面の中で人が選んだら、その面が配信の持ち主になる
         selectPlayer(idx);
       });
     } else if (!section.readOnly) {

@@ -30,16 +30,7 @@ var Board = (function() {
   // 画面に出す残り秒数。running なら updatedAt からの経過を引き、0 で止める。
   // running でなければ sec をそのまま返す。時刻が読めないときも sec のまま。
   function remaining(timer, updatedAt, now) {
-    var sec = timer ? Math.trunc(Number(timer.sec)) : 0;
-    if (!Number.isFinite(sec) || sec < 0) sec = 0;
-    if (!timer || timer.running !== true) return sec;
-    var from = Date.parse(updatedAt);
-    var to = Date.parse(now);
-    if (!Number.isFinite(from) || !Number.isFinite(to)) return sec;
-    var elapsed = Math.floor((to - from) / 1000);
-    if (elapsed < 0) elapsed = 0;   // 時計のずれで未来から来た場合は経過0とみなす
-    var left = sec - elapsed;
-    return left > 0 ? left : 0;
+    return Courts.liveRemaining(timer, updatedAt, now);   // ダッシュボードの採点の面と同じ規則（courts.js）
   }
 
   // 採点表の行。技①②③から空の枠を除き、result と adjust を行に添える。

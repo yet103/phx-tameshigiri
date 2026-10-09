@@ -50,12 +50,25 @@ var Api = (function() {
     }
   }
 
+  // サーバーとの時計のずれ（ms）。応答の Date ヘッダー（秒単位）から求める。配信の状態（live）のタイマーを
+  // 面で映すときに使う（配信用ボードの skewMs と同じ考え方）。
+  var serverSkewMs = 0;
+  function noteServerDate(res) {
+    var d = res && res.headers && res.headers.get('Date');
+    var t = d ? Date.parse(d) : NaN;
+    if (Number.isFinite(t)) serverSkewMs = t - Date.now();
+  }
+  function serverNowMs() {
+    return Date.now() + serverSkewMs;
+  }
+
   async function loadEvent(id) {
     // GET /api/events/:id
     // 戻り値: { id, name, date, venue, players, createdAt, updatedAt } or null
     // 通信自体に失敗した場合も null（fetch は回線断で reject する）
     try {
       var res = await fetchTimed('/api/events/' + id);
+      noteServerDate(res);
       if (!res.ok) return null;
       return await res.json();
     } catch (e) {
@@ -1073,6 +1086,7 @@ var Api = (function() {
     loadEventResult: loadEventResult,
     saveEvent: saveEvent,
     updateEventInfo: updateEventInfo,
+    serverNowMs: serverNowMs,
     deleteEvent: deleteEvent,
     copyEvent: copyEvent,
     createFromTemplate: createFromTemplate,
