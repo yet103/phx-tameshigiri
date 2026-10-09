@@ -379,12 +379,6 @@ var Courts = (function() {
   // EventStatus（status.js）は呼び出し時に参照する。この節を使うページは
   // courts.js と status.js の両方を読むこと。
 
-  // コート別のカードで数える巡目。
-  //   一巡目 / 二巡目 進行中 → その巡目（EventStatus.scoringRound）
-  //   準備中                 → これから採点する一巡目
-  //   一巡目終了             → これから採点する二巡目
-  //   二巡目終了以降         → 二巡目の行があれば二巡目、無ければ一巡目
-  //                            （二巡目なしで終わった大会は一巡目の結果を見せる）
   // 観戦ダッシュボード（watch.html。公開・見るだけ）の URL。共有リンクのトークンをハッシュに入れる。
   // baseHref はいま開いているページの URL（location.href）。運営画面の「📱 観戦用 QR」と test.html が使う
   function watchUrlFor(token, baseHref) {
@@ -392,6 +386,12 @@ var Courts = (function() {
   }
 
   // 規則の本体は EventStatus.progressRoundOf（status.js。サーバーの観戦 API と共有）。ここは呼び出し口だけ
+  // コート別のカードで数える巡目。
+  //   一巡目 / 二巡目 進行中 → その巡目（EventStatus.scoringRound）
+  //   準備中                 → これから採点する一巡目
+  //   一巡目終了             → これから採点する二巡目
+  //   二巡目終了以降         → 二巡目の行があれば二巡目、無ければ一巡目
+  //                            （二巡目なしで終わった大会は一巡目の結果を見せる）
   function progressRound(status, players) {
     return EventStatus.progressRoundOf(status, players);
   }

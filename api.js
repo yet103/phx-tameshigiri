@@ -899,7 +899,12 @@ var Api = (function() {
       var res = await fetchTimed('/api/links/' + encodeURIComponent(token) + '/watch', { headers: headers });
       noteServerDate(res);
       var data = null;
-      if (res.status === 200) data = await res.json();
+      // 本文の読み込みにも同じ時間切れを効かせる（fetchTimed は見出しが届くまでしか見張らない。
+      // 本文の途中で止まると busy が戻らず読み直しが止まるため。レビュー指摘 2026-10-09）
+      var readBody = function() {
+        return Promise.race([res.json(), new Promise(function(_, reject) { setTimeout(function() { reject(new Error('timeout')); }, 15000); })]);
+      };
+      if (res.status === 200) data = await readBody();
       return {
         ok: res.status === 200 || res.status === 304,
         status: res.status,
