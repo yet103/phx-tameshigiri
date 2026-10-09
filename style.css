@@ -865,6 +865,9 @@ body.view-only .score-table td.strike-cell,
 body.view-only .adjust-input,
 body.view-only #totalAdjustInput,
 body.view-only #noteInput { pointer-events: none; }
+/* 閲覧専用の面の中から他の画面（運営・トップなど）へ移れるリンクは出さない */
+body.view-only .page-links,
+body.view-only #linkEventAdmin { display: none; }
 body.view-only .player-list-table th.grip,
 body.view-only .player-list-table td.grip { display: none; }
 /* 見るだけの選択の間は、採点席のタイマーを下の帯に出す（この欄は見ている選手のものではない） */
@@ -882,3 +885,6 @@ body.view-only.view-pinned .timer-bar { display: none; }
   background: var(--band-bg-2); color: var(--band-text); border: 1px solid var(--gold-deep); border-radius: 4px;
 }
 .view-band-back:hover { background: var(--gold-deep); color: var(--band-bg); border-color: var(--gold-light); }
+
+/* ダッシュボードなどの面（iframe）に入った順位表示は、他の画面へのリンクの行を出さない（ranking.html が body.embedded を付ける） */
+body.ranking-page.embedded .page-links { display: none; }

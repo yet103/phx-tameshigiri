@@ -10,6 +10,11 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-theme="light" class="ranking-page">
+  <script>
+    // ダッシュボードなどの面（iframe）の中では、他の画面へのリンクの行を隠す（面の中から運営画面などへ移らせない。
+    // 設計書 2026-10-10 レビュー指摘）
+    try { if (window.self !== window.top) document.body.classList.add('embedded'); } catch (e) { document.body.classList.add('embedded'); }
+  </script>
 
   <div class="page-links">
     <a href="index.html">トップ</a>
