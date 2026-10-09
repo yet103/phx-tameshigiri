@@ -195,8 +195,10 @@ var App = (function() {
         '⚠ サーバーに保存できていません（' + st.pending + '件未保存）';
       saveBannerEl.style.display = 'flex';
     } else if (st.conflicts > 0 && !conflictOverlay) {
-      saveBannerTextEl.textContent =
-        '⚠ 別の端末の更新と衝突した採点が ' + st.conflicts + ' 件あります（この端末に残しています）';
+      // 閲覧専用の間は確認のダイアログを出さずに積んでおく（操作可能にすると順に出る。レビュー指摘 2026-10-10）
+      saveBannerTextEl.textContent = viewOnly
+        ? '⚠ 未解決の衝突があります（操作可能にすると選べます）'
+        : '⚠ 別の端末の更新と衝突した採点が ' + st.conflicts + ' 件あります（この端末に残しています）';
       saveBannerEl.style.display = 'flex';
     } else {
       saveBannerEl.style.display = 'none';
@@ -264,6 +266,8 @@ var App = (function() {
   // 「読み込む／上書き／あとで」の 3 つを出せないので、その場で作る。
   function showNextConflict() {
     if (conflictOverlay) return;
+    // 閲覧専用の面は、積んだまま確認を出さない（バナーで知らせる。setViewOnly(false) で順に出す）
+    if (viewOnly) { onSaveStatus(Outbox.status()); return; }
     var entry = null;
     while (conflictWaiting.length > 0) {
       var e = conflictWaiting.shift();
@@ -2223,12 +2227,23 @@ var App = (function() {
     // ドラッグ中は描き直さない（掴んだ行が DOM から外れる）。離したあとに描く（endListDrag）
     if (listDrag) { listRenderPending = true; return; }
     listRenderPending = false;
+    // 作り直す前に各コートの一覧のスクロール位置を控え、作り直した後で戻す（10 秒ごとの読み直しで
+    // 見ている位置が先頭に戻らないように。レビュー指摘 2026-10-10）
+    var savedScroll = {};
+    Array.prototype.forEach.call(playerListCourts.querySelectorAll('.court-list'), function(box) {
+      var b = box.querySelector('.player-list-body');
+      if (b && b.scrollTop > 0) savedScroll[box.dataset.court] = b.scrollTop;
+    });
     playerListCourts.innerHTML = '';
     if (listOpenCourt !== currentCourt) { listOpen = {}; listOpenCourt = currentCourt; }
     var sections = currentEvent ? Scope.listSections(currentEvent, scorerSession, currentCourt) : [];
     playerListSection.hidden = sections.length === 0;
     sections.forEach(function(s) {
       playerListCourts.appendChild(buildCourtList(s, s.current ? visiblePlayers : courtPlayers(s.court)));
+    });
+    Array.prototype.forEach.call(playerListCourts.querySelectorAll('.court-list'), function(box) {
+      var b = box.querySelector('.player-list-body');
+      if (b && savedScroll[box.dataset.court]) b.scrollTop = savedScroll[box.dataset.court];
     });
   }
 
@@ -2649,6 +2664,7 @@ var App = (function() {
     return playerListCourts.querySelector('.court-list.current tbody');
   }
 
+  var listScrolledKey = '';   // 一覧を今の選手へスクロールした時の「大会|コート|選手」
   function updatePlayerList() {
     markRankPanelCurrent();   // 順位表の今の選手の強調も付け替える
     var body = currentListBody();
@@ -2658,17 +2674,20 @@ var App = (function() {
       var idx = parseInt(rows[i].dataset.index, 10);
       rows[i].classList.toggle('current-player', idx === currentIndex);
     }
-    // 現在の選手行を表示領域内にスクロール
-    scrollPlayerListTo(body.querySelector('tr.current-player'));
+    // 現在の選手行を表示領域内にスクロール。今の選手が変わったときだけ（読み直しのたびに動かすと、
+    // 利用者が一覧をスクロールして見ている位置が戻ってしまう）
+    var cur = visiblePlayers[currentIndex];
+    var key = currentEvent && cur ? currentEvent.id + '|' + currentCourt + '|' + cur.id : '';
+    if (key !== listScrolledKey && scrollPlayerListTo(body.querySelector('tr.current-player'))) listScrolledKey = key;
   }
 
   // 一覧の枠（.player-list-body）の中だけをスクロールさせる。
   // 一覧はページのフローに置いたので、scrollIntoView を使うとページ全体が動き、
   // スマホでは「次の選手」ボタンが画面の外へ逃げてしまう。閉じた区画（高さ 0）では何もしない。
   function scrollPlayerListTo(row) {
-    if (!row) return;
+    if (!row) return false;
     var box = row.closest('.player-list-body');
-    if (!box || box.clientHeight === 0) return;
+    if (!box || box.clientHeight === 0) return false;
     var boxRect = box.getBoundingClientRect();
     var rowRect = row.getBoundingClientRect();
     // 見出し行は position:sticky で枠の上端に居座るので、その分だけ下を使う
@@ -2680,6 +2699,7 @@ var App = (function() {
     } else if (rowRect.bottom > boxRect.bottom) {
       box.scrollTop += rowRect.bottom - boxRect.bottom;
     }
+    return true;
   }
 
   function updatePlayerListScore(index, score) {
@@ -2883,12 +2903,37 @@ var App = (function() {
       clearViewPin();
     }
     applyViewOnlyUi();
+    if (!viewOnly) {
+      // 閲覧中は凍結（score-frozen）で描いた採点表を、操作可能な描画に戻す。applyScoringLock だけでは
+      // 補正点・備考・文例の disabled が残る（レビュー指摘 2026-10-10）
+      var cur = visiblePlayers[currentIndex];
+      if (cur) { renderScoreGrid(cur); applyScoringLock(); }
+      showNextConflict();   // 閲覧中に積んだ衝突の確認を出す
+    } else {
+      onSaveStatus(Outbox.status());   // 保存バナーの文言を閲覧用にする
+    }
     refreshFromServer();   // 採点席の選手を追いかけ直す（操作可能に戻したときも表示を最新にする）
   }
 
   function clearViewPin() {
     viewPinnedId = null;
     viewPinnedLiveId = null;
+  }
+
+  // 「▶ 戻る」: 採点席の選手が一覧にいれば先に同期で映してから、サーバーの最新を読み直す
+  function onViewBack() {
+    var liveId = currentEvent ? liveFollowTarget(currentEvent, currentCourt) : null;
+    clearViewPin();
+    if (liveId) {
+      var idx = -1;
+      visiblePlayers.forEach(function(x, i) { if (x.id === liveId) idx = i; });
+      if (idx >= 0) {
+        showPlayerReadOnly(idx);
+        applyLiveTimer(currentEvent, currentCourt);
+      }
+    }
+    renderViewBand();
+    refreshFromServer();
   }
 
   // 一覧の行を押したとき（閲覧専用）: その選手を見るだけで出す。採点席が映している選手を押したときは追いかけに戻る
@@ -2957,7 +3002,7 @@ var App = (function() {
       back.type = 'button';
       back.className = 'view-band-back';
       back.textContent = '▶ 戻る';
-      back.addEventListener('click', function() { clearViewPin(); renderViewBand(); refreshFromServer(); });
+      back.addEventListener('click', onViewBack);
       band.appendChild(txt); band.appendChild(t); band.appendChild(back);
       viewBandKey = liveId;
     }
