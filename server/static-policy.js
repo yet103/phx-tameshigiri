@@ -10,9 +10,9 @@ const path = require('path');
 // join.html / join.js / join.css は招待の鍵を読み取った端末が開く（まだ認証されていない。
 // 設計書 2026-10-03-invite-links-and-ai-key-design.md 6.1）。
 const PUBLIC_FILES = new Set([
-  'share.html', 'present.html', 'board.html', 'help.html', 'join.html',
-  'theme.css', 'share.css', 'present.css', 'board.css', 'help.css', 'join.css',
-  'api.js', 'share.js', 'present.js', 'board.js', 'scoring.js', 'courts.js', 'join.js'
+  'share.html', 'present.html', 'board.html', 'help.html', 'join.html', 'watch.html',
+  'theme.css', 'share.css', 'present.css', 'board.css', 'help.css', 'join.css', 'watch.css',
+  'api.js', 'share.js', 'present.js', 'board.js', 'scoring.js', 'courts.js', 'join.js', 'watch.js'
 ]);
 // 配下のファイルを無認証で配信するディレクトリ（末尾スラッシュなし）
 const PUBLIC_DIRS = ['help/img', 'fonts'];

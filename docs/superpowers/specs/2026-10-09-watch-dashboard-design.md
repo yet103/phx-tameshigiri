@@ -27,7 +27,8 @@
         player: null | { name, order, isFemale, bib, rank, tech1, tech2, tech3, result, adjust, totalAdjust, score, confirmed }
       } }
   ],
-  ranking: <computeRanking(event) と同じ: rankings / detail / best4Chance / progress / best4>
+  ranking: <computeRanking(event) と同じ: rankings / detail / best4Chance / progress / best4>,
+  techniques: event.techniques（大会の有効な技リスト。/live と同じ。端末は Scoring.setTechniques に渡して技ごとの配点・得点を出す）
 }
 ```
 

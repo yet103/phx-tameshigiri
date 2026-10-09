@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>PHX試し斬り 観戦</title>
+  <meta name="application-name" content="PHX試し斬り">
+  <meta name="apple-mobile-web-app-title" content="PHX試し斬り">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="watch.css">
+</head>
+<!-- 観戦ダッシュボード（公開・閲覧専用）。URL は watch.html#<共有トークン>（運営画面の「📱 観戦用 QR」から配る）。
+     押せるものは「文字の大きさ」と「ダーク／ライト」だけ。5 秒ごとに GET /api/links/:token/watch を読む。 -->
+<body data-theme="dark">
+
+  <div class="watch-root" id="watchRoot">
+    <header class="watch-head">
+      <div class="watch-title">
+        <span class="watch-event" id="eventName">読み込み中…</span>
+        <span class="watch-status" id="eventStatus"></span>
+      </div>
+      <div class="watch-tools">
+        <span class="watch-updated" id="updatedAt" aria-live="polite"></span>
+        <button type="button" id="btnFontDown" aria-label="文字を小さく">A-</button>
+        <button type="button" id="btnFontUp" aria-label="文字を大きく">A+</button>
+        <button type="button" id="btnTheme">☀ ライト</button>
+      </div>
+    </header>
+
+    <p class="watch-notice" id="notice" role="status" hidden></p>
+
+    <section class="watch-courts" id="courts" aria-label="コートの採点中の選手"></section>
+    <p class="watch-best4" id="best4Line" hidden></p>
+    <section class="watch-ranking" id="ranking" aria-label="順位"></section>
+  </div>
+
+  <script src="scoring.js"></script>
+  <script src="courts.js"></script>
+  <script src="api.js"></script>
+  <script src="board.js"></script>
+  <script src="watch.js"></script>
+</body>
+</html>

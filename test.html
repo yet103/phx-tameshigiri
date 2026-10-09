@@ -33,6 +33,7 @@
 <script src="desk-match.js"></script>
 <script src="present.js"></script>
 <script src="board.js"></script>
+<script src="watch.js"></script>
 <script src="share.js"></script>
 <script src="join.js"></script>
 <script>
@@ -7625,6 +7626,55 @@
           [EventStatus.progressRoundOf(st, prPl), EventStatus.progressRoundOf(st, [prPl[0]])],
           [Courts.progressRound(st, prPl), Courts.progressRound(st, [prPl[0]])]);
       });
+    })();
+
+    // ---- Watch（観戦ダッシュボード watch.html の純粋な部分。設計書 2026-10-09 §3） ----
+    (function() {
+      Scoring.setTechniques(TECHNIQUES);
+      assert('Watch.statusLabel', ['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final', 'archived', '', 'toString'].map(Watch.statusLabel),
+        ['準備中', '一巡目 進行中', '二巡目準備', '二巡目 進行中', '二巡目終了', '最終結果', '最終結果', '', '']);
+      assert('Watch.parseToken', [Watch.parseToken('#O7KVvuj-'), Watch.parseToken(''), Watch.parseToken('#%E3%81%82')], ['O7KVvuj-', '', 'あ']);
+      var wcm = Watch.courtCardModel({ court: 'A', progress: { round: 1, done: 2, total: 5 }, live: { updatedAt: '2026-10-09T00:00:00Z', timer: { sec: 300, running: false },
+        player: { name: '甲', order: 'A-男子-1-3', isFemale: false, bib: 7, rank: '参段', tech1: '真', tech2: '連', tech3: '左', result: '11   10   1    ',
+                  adjust: [0, 0, 0], totalAdjust: 0, score: 40, confirmed: false } } });
+      assert('Watch.courtCardModel: 札の見出しと選手の帯', [wcm.title, wcm.progressText, wcm.stage, wcm.who, wcm.idle],
+        ['A コート', '確定 2 / 5', '男子の部　一巡目　A コート', 'No.7　甲　参段', false]);
+      assert('Watch.courtCardModel: 技 3 行・太刀のセル（成功・失敗・無効・打てない太刀）',
+        wcm.rows.map(function(r) { return [r.techName, r.cells.map(function(c) { return c.kind; })]; }),
+        [['真', ['success', 'success', 'na', 'na']], ['連', ['success', 'fail', 'na', 'na']], ['左', ['success', 'none', 'na', 'na']]]);
+      assert('Watch.courtCardModel: 配点と行の得点', [wcm.rows[0].cells[0].points, wcm.rows[0].cells[1].points, wcm.rows[1].cells[1].points, wcm.rows.map(function(r) { return r.score; })],
+        [11, 3, null, [14, 8, 18]]);
+      assert('Watch.courtCardModel: タイマーと合計', [wcm.timer, wcm.score, wcm.confirmed], [{ sec: 300, running: false }, 40, false]);
+      assert('Watch.courtCardModel: 待機中（live が無い）', (function() {
+        var m = Watch.courtCardModel({ court: 'B', progress: { round: 1, done: 0, total: 3 }, live: null });
+        return [m.who, m.idle, m.rows.length, m.progressText];
+      })(), ['待機中', true, 0, '確定 0 / 3']);
+      assert('Watch.courtCardModel: 選手が未設定（player null）も待機中', Watch.courtCardModel({ court: 'B', progress: {}, live: { timer: { sec: 300, running: false }, player: null } }).who, '待機中');
+      assert('Watch.courtCardModel: ゼッケンが無ければ No. を出さない・混合は部を出さない',
+        (function() {
+          var m = Watch.courtCardModel({ court: 'C', progress: {}, live: { timer: { sec: 1, running: false }, player: { name: '乙', order: 'C-混合-2-1', bib: null, rank: '', tech1: '', tech2: '', tech3: '', result: '', score: 0 } } });
+          return [m.who, m.stage];
+        })(), ['乙', '二巡目　C コート']);
+      assert('Watch.courtCardModel: 技を差し替えた後（result が技数と合わない）は内訳なし',
+        Watch.courtCardModel({ court: 'A', progress: {}, live: { timer: null, player: { name: '丙', order: 'A-男子-1-1', tech1: '真', tech2: '', tech3: '', result: '11   10   ', score: 14, adjust: null } } }).noDetail, true);
+      assert('Watch.strikeCellModel: △ は減点・初太刀以外の途中失敗の後ろは無効',
+        [Watch.strikeCellModel('胸尽くし(男)', 0, '△', false, -1).kind, Watch.strikeCellModel('両車', 2, '', false, 0).kind,
+         Watch.strikeCellModel('胸尽くし(男)', 0, '△', false, -1).points],
+        ['reduced', 'voided', 4]);
+      // 順位表の規則は ranking.js・Courts.best4LineText と同じ結果になること
+      var dts = [null, { r1: 41, r2: 44, r2Done: true }, { r1: 41, r2: 0, r2Done: false }];
+      assert('Watch.totalClass / detailText は Ranking と同じ',
+        [[true, false, undefined].map(function(c) { return dts.map(function(d) { return [Watch.totalClass(c, d, false), Watch.totalClass(c, d, true), Watch.detailText(d)]; }); }),],
+        [[true, false, undefined].map(function(c) { return dts.map(function(d) { return [Ranking.totalClass(c, d, false), Ranking.totalClass(c, d, true), Ranking.detailText(d)]; }); }),]);
+      var b4s = [null, { final: false, remaining: 3, rows: [] }, { final: true, remaining: 0, rows: [] },
+        { final: false, remaining: 2, rows: [{ name: ' 甲 ', total: 90 }, { name: '', total: 80 }] }, { final: true, remaining: 0, rows: [{ name: '乙', total: 100 }] }];
+      assert('Watch.best4LineText は Courts.best4LineText と同じ文言', b4s.map(Watch.best4LineText), b4s.map(Courts.best4LineText));
+      assert('Watch.best4Visible は share.js の Share.best4Visible と同じ',
+        [['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final', 'archived', undefined].map(function(st) { return Watch.best4Visible(b4s[3], st); }),
+         Watch.best4Visible(b4s[2], undefined), Watch.best4Visible(null, 'final')],
+        [['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final', 'archived', undefined].map(function(st) { return Share.best4Visible(b4s[3], st); }),
+         Share.best4Visible(b4s[2], undefined), Share.best4Visible(null, 'final')]);
+      assert('Watch.clampFont: 80〜160 の 10 刻み', [Watch.clampFont(null), Watch.clampFont('abc'), Watch.clampFont(50), Watch.clampFont(300), Watch.clampFont(113)], [100, 100, 80, 160, 110]);
     })();
 
     // ---- Courts.techniqueLabel（選択肢の「技名（満点）」。ユーザー要望 2026-10-05） ----

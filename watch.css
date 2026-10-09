@@ -1,0 +1,255 @@
+/* 観戦ダッシュボード（watch.html。公開・閲覧専用）。
+   配色は theme.css の変数だけを使う（既定は黒金の dark。ボタンで生成りの light にもできる）。
+   文字の大きさは --watch-scale（watch.js が A-/A+ で変える。0.8〜1.6）をルートの font-size に掛け、
+   余白・表の文字はすべて rem で決める。375px 幅のスマホで 1 列、広い画面では札が並ぶ。 */
+:root { --watch-scale: 1; }
+html { font-size: calc(16px * var(--watch-scale)); }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--mincho);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.4;
+}
+button { font-family: inherit; }
+
+.watch-root { padding: 0.75rem 16px 2.5rem; }
+.is-hidden { display: none !important; }
+
+/* ===== 見出しの帯 ===== */
+.watch-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--band-bg);
+  border: 2px solid var(--gold);
+  border-radius: 0.4rem;
+  color: var(--band-text);
+}
+.watch-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.8rem; min-width: 0; }
+.watch-event { font-size: 1.4rem; font-weight: bold; letter-spacing: .04em; overflow-wrap: anywhere; }
+.watch-status {
+  font-size: 0.9rem;
+  padding: 0.05rem 0.6rem;
+  border-radius: 0.25rem;
+  color: #1b1405;
+  background: linear-gradient(180deg, var(--gold-light), var(--gold));
+  font-weight: bold;
+}
+.watch-status:empty { display: none; }
+.watch-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.watch-updated { font-size: 0.85rem; color: var(--band-muted); font-variant-numeric: tabular-nums; margin-right: 0.3rem; }
+.watch-tools button {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.7rem;
+  min-height: 2rem;
+  background: var(--band-bg-2);
+  color: var(--band-text);
+  border: 1px solid var(--gold);
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+.watch-tools button:disabled { opacity: .4; cursor: default; }
+
+/* 通信の失敗・リンクが使えないとき */
+.watch-notice {
+  margin: 0.6rem 0 0;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.9rem;
+  color: var(--band-bg);
+  background: var(--warn);
+  border-radius: 0.3rem;
+}
+.watch-notice[hidden] { display: none; }
+.watch-notice.is-fatal {
+  margin: 3rem 0;
+  padding: 1.2rem;
+  font-size: 1.6rem;
+  font-weight: bold;
+  text-align: center;
+  color: var(--text);
+  background: var(--bg-secondary);
+  border: 2px solid var(--border);
+}
+
+/* ===== コートの札 ===== */
+.watch-courts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22.5rem), 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.watch-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--card-bg);
+  border: 2px solid var(--gold);
+  border-radius: 0.4rem;
+  overflow: hidden;
+}
+.watch-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--band-bg);
+  color: var(--band-text);
+}
+.watch-court {
+  display: inline-block;
+  padding: 0.05rem 0.7rem;
+  border-radius: 0.25rem;
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: #1b1405;
+  background: linear-gradient(180deg, var(--gold-light), var(--gold));
+}
+.watch-progress { font-size: 0.95rem; color: var(--band-text); font-variant-numeric: tabular-nums; }
+.watch-stage { padding: 0.35rem 0.7rem 0; font-size: 0.85rem; color: var(--text-muted); }
+.watch-stage:empty { display: none; }
+.watch-who {
+  padding: 0.1rem 0.7rem 0.4rem;
+  font-size: 1.5rem;
+  font-weight: bold;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.watch-card.is-idle .watch-who { color: var(--text-muted); font-size: 1.2rem; padding: 0.8rem 0.7rem 1rem; }
+
+/* 技の表 */
+.watch-table-wrap { padding: 0 0.4rem; }
+.watch-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.watch-table th, .watch-table td {
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  line-height: 1.15;
+  overflow: hidden;
+}
+.watch-table th { background: var(--band-bg); color: var(--gold-light); font-size: 0.7rem; font-weight: bold; }
+.watch-table .c-tech { width: 24%; text-align: left; }
+.watch-table .c-adjust { width: 10%; }
+.watch-table .c-score { width: 11%; }
+.watch-table td.tech { text-align: left; font-weight: bold; padding-left: 0.3rem; white-space: nowrap; text-overflow: ellipsis; }
+.watch-table td.tech .no { color: var(--gold-deep); margin-right: 0.15rem; }
+[data-theme="dark"] .watch-table td.tech .no { color: var(--gold-light); }
+.watch-table td.num { font-variant-numeric: tabular-nums; }
+.watch-cell-label { display: block; }
+.watch-cell-points { display: block; font-size: 0.7rem; opacity: .85; font-variant-numeric: tabular-nums; }
+/* 太刀のセル。採点画面・配信ボードと同じ変数 */
+.watch-table td.none { color: var(--text-muted); }
+.watch-table td.success { background: var(--cell-success); color: var(--cell-success-text); font-weight: bold; }
+.watch-table td.reduced { background: var(--warn); color: var(--bg); font-weight: bold; }
+.watch-table td.fail { background: var(--cell-fail); color: var(--cell-fail-text); font-weight: bold; }
+.watch-table td.na { background: var(--cell-disabled); }
+.watch-table td.voided { background: var(--cell-disabled); color: var(--text); }
+.watch-table td.score { font-weight: bold; color: var(--score-color); }
+.watch-table.confirmed td.score { color: var(--score-confirmed); }
+.watch-table td.no-detail { padding: 0.6rem; color: var(--text-muted); }
+.watch-table tr.total-adjust td { background: var(--bg-secondary); }
+.watch-table td.label { text-align: right; font-weight: bold; padding-right: 0.4rem; }
+
+/* 合計・確定・タイマー */
+.watch-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: auto;
+  padding: 0.4rem 0.7rem;
+}
+.watch-timer {
+  margin-right: auto;
+  min-width: 4.6rem;
+  text-align: center;
+  font-size: 1.7rem;
+  font-weight: bold;
+  line-height: 1.1;
+  padding: 0.1rem 0.6rem;
+  border-radius: 0.3rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--timer-text);
+  background: var(--timer-bg);
+}
+.watch-timer.is-zero { background: var(--band-bg-2); color: var(--band-muted); }
+.watch-badge {
+  font-size: 0.9rem;
+  font-weight: bold;
+  padding: 0.1rem 0.6rem;
+  border-radius: 0.25rem;
+  color: var(--timer-text);
+  background: var(--score-confirmed);
+}
+[data-theme="dark"] .watch-badge { color: #0b0d14; }
+.watch-total { font-size: 1.5rem; font-weight: bold; font-variant-numeric: tabular-nums; color: var(--score-color); }
+.watch-total.confirmed { color: var(--score-confirmed); }
+.watch-card.is-idle .watch-table-wrap,
+.watch-card.is-idle .watch-foot { display: none; }
+
+/* ===== ベスト4 の 1 行 ===== */
+.watch-best4 {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.9rem;
+  font-size: 1.05rem;
+  font-weight: bold;
+  background: var(--band-bg);
+  color: var(--gold-light);
+  border: 2px solid var(--gold);
+  border-radius: 0.4rem;
+  overflow-wrap: anywhere;
+}
+.watch-best4[hidden] { display: none; }
+
+/* ===== 順位表（採点画面の順位表・ranking.html と同じ規則） ===== */
+.watch-ranking { margin-top: 0.9rem; }
+.watch-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.9rem;
+  align-items: start;
+}
+.watch-rank-col { min-width: 0; }
+.watch-rank-col h3 {
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  font-size: 1.05rem;
+  background: var(--band-bg);
+  color: var(--gold-light);
+  border: 1px solid var(--gold);
+  border-bottom: none;
+}
+.watch-rank-progress { margin-left: 0.6rem; font-size: 0.8rem; font-weight: normal; color: var(--band-muted); white-space: nowrap; }
+.watch-rank-none { margin: 0; padding: 0.4rem 0.6rem; font-size: 0.9rem; color: var(--text-muted); border: 1px solid var(--border); }
+.watch-rank-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; background: var(--card-bg); }
+.watch-rank-table th, .watch-rank-table td { border: 1px solid var(--border); padding: 0.15rem 0.45rem; line-height: 1.3; }
+.watch-rank-table th { background: var(--band-bg-2); color: var(--gold-light); border-color: var(--gold); white-space: nowrap; font-size: 0.85rem; }
+.watch-rank-table th.rank, .watch-rank-table td.rank,
+.watch-rank-table th.total, .watch-rank-table td.total,
+.watch-rank-table th.chance, .watch-rank-table td.chance { width: 1%; white-space: nowrap; }
+.watch-rank-table td.rank { text-align: right; font-weight: bold; color: var(--gold-deep); }
+[data-theme="dark"] .watch-rank-table td.rank { color: var(--gold-light); }
+.watch-rank-table td.name { font-weight: bold; white-space: nowrap; }
+.watch-rank-table td.total { text-align: center; font-weight: bold; color: var(--score-confirmed); font-variant-numeric: tabular-nums; }
+.watch-rank-table td.total.pending { color: var(--text-muted); }
+.watch-rank-table td.total.r1 { color: var(--score-color); }
+.watch-rank-sub, .watch-rank-max { margin-left: 0.2rem; font-size: 0.75rem; font-weight: normal; color: var(--text-muted); }
+.watch-rank-table td.chance { text-align: center; font-size: 0.9rem; color: var(--text-muted); }
+.watch-rank-table td.chance.sure { color: var(--gold-deep); font-weight: bold; }
+[data-theme="dark"] .watch-rank-table td.chance.sure { color: var(--gold-light); }
+.watch-rank-table td.chance.out { opacity: .55; }
+.watch-legend { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--text-muted); }
+
+@media (max-width: 600px) {
+  .watch-root { padding-left: 12px; padding-right: 12px; }
+  .watch-event { font-size: 1.2rem; }
+  .watch-who { font-size: 1.35rem; }
+}
