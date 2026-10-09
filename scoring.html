@@ -16,7 +16,7 @@
     /* 左右の余白は全ブロック共通（--gutter）。帯（黒地）は body の幅いっぱいに敷き、中身の左右端を
        20px でそろえる。表・補正段・操作区画・選手一覧も同じ 20px の内側に置く（端がそろい、詰まりすぎない）。 */
     :root { --gutter: var(--page-gutter); }
-    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .timer-bar, .court-list-head {
+    .page-links, .event-bar, .player-nav, .status-banner, .save-banner, .timer-bar, .court-list-head, .view-band {
       padding-left: var(--gutter); padding-right: var(--gutter);
     }
     .score-table-wrap { padding-left: var(--gutter); padding-right: var(--gutter); }
@@ -91,6 +91,9 @@
     <span id="saveBannerText">⚠ サーバーに保存できていません</span>
     <button id="btnRetrySave">今すぐ再試行</button>
   </div>
+
+  <!-- ダッシュボードの閲覧専用の面で、見るだけの選択をしている間だけ出す帯「採点中: ○○　04:12　▶ 戻る」（app.js の renderViewBand。設計書 2026-10-10） -->
+  <div id="viewBand" class="view-band" hidden></div>
 
   <!-- 選手ナビゲーション -->
   <div class="player-nav">

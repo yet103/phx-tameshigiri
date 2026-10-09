@@ -853,3 +853,32 @@ body.scorer-mode .event-bar select:disabled { opacity: 1; cursor: default; }
   /* 固定した技名の左にスクロール中の列が覗かないよう、余白は表の外側ではなく無くす */
   .score-table-wrap { padding: 0; }
 }
+
+/* ===== ダッシュボードの閲覧専用の面（設計書 2026-10-10） =====
+   app.js の viewOnly のとき body.view-only。採点行為だけ禁止で、選手一覧の行は押せる（見るだけの選択）。
+   操作ボタン（前後の選手・形成功・失敗・確定・確定して次へ）とタイマーのボタンは出さない。合計とタイマーの表示は残す */
+body.view-only .action-bar button,
+body.view-only .timer-bar button,
+body.view-only #btnNotePreset,
+body.view-only #btnRecalc { display: none; }
+body.view-only .score-table td.strike-cell,
+body.view-only .adjust-input,
+body.view-only #totalAdjustInput,
+body.view-only #noteInput { pointer-events: none; }
+body.view-only .player-list-table th.grip,
+body.view-only .player-list-table td.grip { display: none; }
+/* 見るだけの選択の間は、採点席のタイマーを下の帯に出す（この欄は見ている選手のものではない） */
+body.view-only.view-pinned .timer-bar { display: none; }
+/* 「採点中: ○○　04:12　▶ 戻る」。黒金の帯（ページ幅の左右の余白は scoring.html の .view-band で他の帯と共通） */
+.view-band {
+  display: flex; align-items: center; gap: 10px; padding-top: 6px; padding-bottom: 6px;
+  background: var(--band-bg); color: var(--band-text); border-bottom: 1px solid var(--gold);
+  font-size: 15px; font-family: var(--mincho);
+}
+.view-band[hidden] { display: none; }
+.view-band-timer { font-variant-numeric: tabular-nums; color: var(--gold-light); }
+.view-band-back {
+  margin-left: auto; min-height: 36px; padding: 0 12px; cursor: pointer;
+  background: var(--band-bg-2); color: var(--band-text); border: 1px solid var(--gold-deep); border-radius: 4px;
+}
+.view-band-back:hover { background: var(--gold-deep); color: var(--band-bg); border-color: var(--gold-light); }

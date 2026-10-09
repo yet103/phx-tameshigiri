@@ -51,6 +51,17 @@ var App = (function() {
   // 配信の持ち主か。通常の採点画面は常に持ち主。面（iframe）は、人がその面で操作した（選手を選ぶ・タイマー・採点）
   // ときから持ち主になる（takeOwnership。以後は追いかけず、publishLive を送る。レビュー指摘 2026-10-07）
   var liveOwner = !embedded;
+  // ダッシュボードの閲覧専用の面（設計書 2026-10-10）。採点行為だけ禁止で、一覧の選手は見るだけで選べる。
+  // 面として開かれた直後は親の body.dash-edit の有無で決め、以後は親が ScoringApp.setViewOnly で切り替える。
+  // 通常の採点画面（iframe でない）は常に false（挙動は変えない）。
+  var viewOnly = false;
+  var viewPinnedId = null;       // 見るだけで選んだ選手の id（null なら採点席を追いかける）
+  var viewPinnedLiveId = null;   // 選んだ時点で採点席が映していた選手の id（待機中なら null）
+  var viewBandKey = '';          // 「採点中: …」の帯を最後に組んだときの採点席の選手 id
+  var viewBandTimerHandle = null; // 帯の残り時間を毎秒書き換える setInterval
+  if (embedded) {
+    try { viewOnly = !window.parent.document.body.classList.contains('dash-edit'); } catch (e) { viewOnly = false; }
+  }
 
   // --- DOM参照 ---
   var courtLabel       = document.getElementById('courtLabel');
@@ -77,6 +88,7 @@ var App = (function() {
   // --- 初期化 ---
   async function init() {
     applyTheme(Storage.loadTheme());
+    if (viewOnly) applyViewOnlyUi();   // 閲覧専用の面は、最初から操作ボタンを出さない
     // 送信キューは何よりも先に起動する。
     // ここから下の API 呼び出しがどう転んでも、前回未送信の採点が
     // 復旧され、online イベントの購読も済んでいる状態にするため。
@@ -450,9 +462,10 @@ var App = (function() {
     document.getElementById('btnPrev').addEventListener('click', function() { movePlayer(-1); });
     document.getElementById('btnNext').addEventListener('click', function() { movePlayer(1); });
 
-    document.getElementById('btnTimerStart').addEventListener('click', function() { takeOwnership(); startTimer(); });
-    document.getElementById('btnTimerStop').addEventListener('click', function() { takeOwnership(); stopTimer(); });
-    document.getElementById('btnTimerReset').addEventListener('click', function() { takeOwnership(); resetTimer(); });
+    // 閲覧専用の面ではボタン自体が見えないが、念のため手元でも止める（applyLiveTimer からの startTimer は通す）
+    document.getElementById('btnTimerStart').addEventListener('click', function() { if (viewOnly) return; takeOwnership(); startTimer(); });
+    document.getElementById('btnTimerStop').addEventListener('click', function() { if (viewOnly) return; takeOwnership(); stopTimer(); });
+    document.getElementById('btnTimerReset').addEventListener('click', function() { if (viewOnly) return; takeOwnership(); resetTimer(); });
 
     document.getElementById('btnAllSuccess').addEventListener('click', setAllSuccess);
     document.getElementById('btnAllFail').addEventListener('click', setAllFail);
@@ -533,7 +546,7 @@ var App = (function() {
     }
     courtSelect.value = currentCourt;
     // 採点専用で選べるコートが 1 つなら選択欄を固定する（全コートの鍵は大会のコートの中で選べる）
-    courtSelect.disabled = !!scorerSession && courtSelect.options.length <= 1;
+    courtSelect.disabled = viewOnly || (!!scorerSession && courtSelect.options.length <= 1);
   }
 
   // 採点中のコートを切り替える（コートの選択欄の change と、他のコートの一覧の行のクリック）。
@@ -646,14 +659,15 @@ var App = (function() {
     var locked = !!currentEvent && !scoringOpen();
     // 確定済みは「採点できる状態」のまま入力だけ止める。確定ボタンは押せる（取り消しのトグル）。
     // 技得点表に無い技がある選手（gridBlocked）は、保存・確定（取り消しも）を止める（網羅検証 M3）。
-    var frozen = locked || currentConfirmed() || gridBlocked;
+    // 閲覧専用の面（viewOnly）は常に凍結（○× も補正点も備考も触れない。設計書 2026-10-10 §2）
+    var frozen = locked || currentConfirmed() || gridBlocked || viewOnly;
     document.body.classList.toggle('scoring-locked', locked);
     document.body.classList.toggle('score-frozen', frozen);
     btnConfirm.disabled = locked || gridBlocked;
     // 「確定して次へ」は確定と同じ条件で押せる（確定済みなら次へ移るだけ）
     document.getElementById('btnConfirmNext').disabled = locked || gridBlocked;
     var btnRecalc = document.getElementById('btnRecalc');
-    if (btnRecalc) btnRecalc.disabled = locked;
+    if (btnRecalc) btnRecalc.disabled = locked || viewOnly;
     document.getElementById('btnAllSuccess').disabled = frozen;
     document.getElementById('btnAllFail').disabled = frozen;
     if (frozen) {
@@ -908,6 +922,7 @@ var App = (function() {
   // のときだけ従来どおり「確定せずに移動」を聞く。
   // 採点できない状態や、まだ何も入れていない選手では聞かない。戻り値 true なら移動してよい。
   function confirmLeave() {
+    if (viewOnly) return true;   // 閲覧専用では未確定の採点が無い（離れても聞かない）
     var p = visiblePlayers[currentIndex];
     if (!p || !scoringOpenHere() || p.confirmed) return true;
     if (gridBlocked) return true;   // 技得点表に無い技がある選手は確定できない（聞いても進めない）
@@ -920,6 +935,7 @@ var App = (function() {
   }
 
   function movePlayer(delta) {
+    if (viewOnly) return;   // 閲覧専用の面は前後の選手へ動かさない（ボタンも隠してある）
     if (visiblePlayers.length === 0) return;
     var next = currentIndex + delta;
     if (next < 0 || next >= visiblePlayers.length) return;
@@ -976,8 +992,18 @@ var App = (function() {
     // 照合は読み直した後の一覧で行う（今回の応答で増えた行も拾う）。採点席が待機中（live が無い・
     // playerId が null）なら面のタイマーも止めて、配信用ボードと表示を揃える
     releaseOwnershipIfViewOnly();
-    var following = embedded && !liveOwner && !gridEdited;
-    var followId = following ? liveFollowTarget(loaded, currentCourt) : null;
+    // 閲覧専用の面で「見るだけ」で選んだ選手がいる間は追いかけない。採点席が次の選手に移った（待機中も含む）か、
+    // 選んだ選手が一覧から消えたら選択を外して追いかけに戻る（Courts.viewFollowDecision。設計書 2026-10-10 §2）。
+    // 採点席の選手は、選んだ時点と同じ規則（liveFollowTarget。一覧にいる選手だけ）で見る
+    var liveIdNow = (embedded && !liveOwner) ? liveFollowTarget(loaded, currentCourt) : null;
+    if (viewOnly && viewPinnedId) {
+      var pinnedListed = visiblePlayers.some(function(x) { return x.id === viewPinnedId; });
+      if (!pinnedListed || Courts.viewFollowDecision({ pinnedId: viewPinnedId, pinnedLiveId: viewPinnedLiveId, liveId: liveIdNow }) === 'follow') {
+        clearViewPin();
+      }
+    }
+    var following = embedded && !liveOwner && !gridEdited && !viewPinnedId;
+    var followId = following ? liveIdNow : null;
     if (followId) currentId = followId;
     if (following && !followId) haltTimer();
     var idx = -1;
@@ -1008,6 +1034,7 @@ var App = (function() {
     updatePlayerList();
     renderStatusBanner();
     applyScoringLock();
+    renderViewBand();
     if (followId) applyLiveTimer(loaded, currentCourt);
   }
 
@@ -1037,12 +1064,14 @@ var App = (function() {
 
   // 面の中で人が操作したら、その面が配信の持ち主になる（以後は追いかけず、publishLive を送る）
   function takeOwnership() {
+    if (viewOnly) return;   // 閲覧専用の面は配信の持ち主にならない
     liveOwner = true;
   }
 
   // ダッシュボードが「閲覧専用」（body.dash-edit が無い）に戻ったら持ち主を外し、追いかけに戻る
   // （同一オリジンなので親の body を読める。読めなければ触らない。レビュー指摘 2026-10-07）
   function releaseOwnershipIfViewOnly() {
+    if (viewOnly) { liveOwner = false; return; }
     if (!embedded || !liveOwner) return;
     try {
       if (!window.parent.document.body.classList.contains('dash-edit')) liveOwner = false;
@@ -1224,6 +1253,7 @@ var App = (function() {
   // 「計算し直して保存」。今の技得点表の配点で合計を出し直して保存する。
   // 確定済みの選手は確定のまま保存し直す（確定し直し）ので、先に確認する。
   function onRecalc() {
+    if (viewOnly) return;
     var p = visiblePlayers[currentIndex];
     if (!p || !currentEvent || gridBlocked) return;
     if (!scoringOpenHere()) {
@@ -1239,7 +1269,7 @@ var App = (function() {
     gridEdited = true; takeOwnership();
     updateTotal();          // p.score を再計算の値にし、知らせの行を外す
     saveCurrentState();
-    HistoryOutbox.add(currentEvent.id, {
+    addHistory(currentEvent.id, {
       action: 'score_update',
       playerName: p.name || '',
       detail: '技得点表の変更で計算し直し（' + before + '点 → ' + after + '点' + (p.confirmed ? '。確定し直し' : '') + '）'
@@ -1482,6 +1512,7 @@ var App = (function() {
   // clear を真にすると、選手がまだ選ばれていても「誰も映さない」を送る
   // （大会から離れるとき。表示中の選手を残すとボードが映し続けてしまう）。
   function publishLive(clear) {
+    if (viewOnly) return;   // 閲覧専用の面は配信の状態を一切送らない（設計書 2026-10-10 §2）
     if (!currentEvent) return;
     releaseOwnershipIfViewOnly();
     if (!liveOwner) return;   // 人が操作していない面（ダッシュボード）からは配信の状態を変えない
@@ -1601,6 +1632,7 @@ var App = (function() {
   }
 
   function onConfirm() {
+    if (viewOnly) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     var p = visiblePlayers[currentIndex];
     if (!p) return;
@@ -1614,13 +1646,13 @@ var App = (function() {
       applyScoringLock();
       // 取り消しは確定の印だけを送る（網羅検証 S5）。画面の全項目を送ると、内訳を復元できない
       // 選手では送れず（saveCurrentState が止める）、復元できても他の値まで書き戻してしまう。
-      Outbox.enqueue({
+      enqueueSave({
         eventId: currentEvent.id,
         playerId: p.id,
         confirmed: false,
         baseRev: EventStatus.revOf(p)
       });
-      HistoryOutbox.add(currentEvent.id, {
+      addHistory(currentEvent.id, {
         action: 'unconfirm',
         playerName: p.name || '',
         detail: '確定を取り消し（' + (p.score || 0) + '点）'
@@ -1635,6 +1667,7 @@ var App = (function() {
   // 確定済みで押したら、取り消しはせずに次の選手へ移るだけ（取り消しは「確定済み」ボタンで）。
   // 最後の選手なら確定だけして、その旨を知らせる。
   function onConfirmNext() {
+    if (viewOnly) return;
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
     var p = visiblePlayers[currentIndex];
     if (!p) return;
@@ -1660,6 +1693,7 @@ var App = (function() {
   // 表示中の選手を確定する。確定ボタンと、未確定で移動するときの「確定して次へ」から呼ぶ。
   // quiet が true のときは理由の alert を出さない。確定できたら true。
   function confirmCurrent(quiet) {
+    if (viewOnly) return false;
     var p = visiblePlayers[currentIndex];
     if (!p || !currentEvent) return false;
     if (!hasScoreRows()) {
@@ -1693,7 +1727,7 @@ var App = (function() {
     applyConfirmedStyle(true);
     applyScoringLock();   // 確定済みは点数を触れない
     saveCurrentState();
-    HistoryOutbox.add(currentEvent.id, {
+    addHistory(currentEvent.id, {
       action: 'confirm',
       playerName: p.name || '',
       detail: '確定（' + (p.score || 0) + '点）'
@@ -1707,6 +1741,7 @@ var App = (function() {
   }
 
   function onTotalAdjustChange() {
+    if (viewOnly) return;
     if (!currentEvent || !hasScoreRows() || gridBlocked) return;
     var p = visiblePlayers[currentIndex];
     // 置き換えを断られたら、入力を保存値へ戻す。空欄にすると表示と
@@ -1724,7 +1759,7 @@ var App = (function() {
     unconfirmIfNeeded();
     updateTotal();
     saveCurrentState();
-    HistoryOutbox.add(currentEvent.id, {
+    addHistory(currentEvent.id, {
       action: 'score_update',
       playerName: p ? p.name : '',
       detail: '全体補正点 → ' + n
@@ -1735,11 +1770,12 @@ var App = (function() {
   // 採点（score / result）を載せないエントリを積むので、既存の得点は動かない。
   // 確定も解除しない。
   function onNoteChange() {
+    if (viewOnly) return;
     if (!currentEvent) return;
     var p = visiblePlayers[currentIndex];
     if (!p) return;
     p.note = noteInput.value.trim().slice(0, 200);
-    Outbox.enqueue({ eventId: currentEvent.id, playerId: p.id, note: p.note });
+    enqueueSave({ eventId: currentEvent.id, playerId: p.id, note: p.note });
     updatePlayerListNote(currentIndex, p.note);
   }
 
@@ -1755,6 +1791,7 @@ var App = (function() {
   }
 
   function openNotePresetSheet() {
+    if (viewOnly) return;
     if (!scoringOpenHere()) return;   // ボタンは無効化してあるが、念のため
     closeNotePresetSheet();
 
@@ -1803,6 +1840,7 @@ var App = (function() {
   // 文例を備考の末尾に追記し、onNoteChange と同じ経路（Outbox.enqueue）で保存する。
   // 200文字を超える分は Scoring.appendNote が切るので、ここでは超えていたかどうかだけ判定して alert する。
   function pickNotePreset(preset) {
+    if (viewOnly) return;
     var current = noteInput.value || '';
     var alreadyIncluded = current.indexOf(preset) !== -1;
     var wouldExceed = !alreadyIncluded && (current ? current.length + 1 + preset.length : preset.length) > 200;
@@ -1812,6 +1850,7 @@ var App = (function() {
   }
 
   function onAdjustChange(e) {
+    if (viewOnly) return;
     var inp = e.currentTarget;
     var tr = inp.closest('tr');
     if (!currentEvent) { alert('大会が選択されていません。'); return; }
@@ -1829,7 +1868,7 @@ var App = (function() {
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
-    HistoryOutbox.add(currentEvent.id, {
+    addHistory(currentEvent.id, {
       action: 'score_update',
       playerName: p ? p.name : '',
       techName: tr.dataset.tech,
@@ -1861,6 +1900,7 @@ var App = (function() {
   var STRIKE_LABELS = ['初太刀', '二ノ太刀', '三ノ太刀', '四ノ太刀'];
 
   function onStrikeClick(e) {
+    if (viewOnly) return;
     if (!scoringOpenHere()) return;   // 採点できない状態（理由はバナーに出ている）
     if (currentConfirmed()) return;   // 確定済みは触れない（確定済みボタンで取り消してから）
     if (gridBlocked) return;         // 技得点表に無い技がある選手は保存しない（M3）
@@ -1910,7 +1950,7 @@ var App = (function() {
     }
     if (voided) detail += '（以降の太刀は無効）';
     if (laterCleared) detail += '（以降の太刀も未に）';
-    HistoryOutbox.add(currentEvent.id, {
+    addHistory(currentEvent.id, {
       action: 'score_update',
       playerName: p ? p.name : '',
       techName: tr.dataset.tech,
@@ -1977,7 +2017,18 @@ var App = (function() {
   // 呼び出し元には選手の切り替え（前後ボタン・一覧のクリック）も含まれるので、
   // この端末で編集していない選手は何も送らない。送ると、画面を開いてから
   // 他端末が付けた確定・備考・得点を、こちらの古い表示で巻き戻してしまう。
+  // 閲覧専用（viewOnly）の面からは、採点も履歴も送らない。ここが書き込みの最後の番（各ハンドラの先頭の番に加えて）
+  function enqueueSave(entry) {
+    if (viewOnly) return;
+    Outbox.enqueue(entry);
+  }
+  function addHistory(eventId, record) {
+    if (viewOnly) return;
+    HistoryOutbox.add(eventId, record);
+  }
+
   function saveCurrentState() {
+    if (viewOnly) return;
     if (!gridEdited) return;
     if (currentIndex < 0 || !visiblePlayers[currentIndex] || !currentEvent) return;
     // 内訳を復元できない選手は、採点し直すまで保存しない
@@ -1999,7 +2050,7 @@ var App = (function() {
     p.note = noteInput.value.trim().slice(0, 200);
     p.confirmed = !!p.confirmed;
 
-    Outbox.enqueue({
+    enqueueSave({
       eventId: currentEvent.id,
       playerId: p.id,
       score: p.score,
@@ -2015,6 +2066,7 @@ var App = (function() {
 
   // 「形成功」: 選択中の技の行の打てる太刀をすべて成功にする（失敗も成功に変える）
   function setAllSuccess() {
+    if (viewOnly) return;
     var tr = guardRowAction();
     if (!tr) return;
     var p = visiblePlayers[currentIndex];
@@ -2032,7 +2084,7 @@ var App = (function() {
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
-    HistoryOutbox.add(currentEvent.id, {
+    addHistory(currentEvent.id, {
       action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
       techRow: parseInt(tr.dataset.row, 10), strike: 'all', value: '○', detail: '形成功'
     });
@@ -2072,7 +2124,7 @@ var App = (function() {
       applyVoiding(tr);
       applySequence(tr);
       updateRowScore(tr, p ? p.isFemale : false);
-      HistoryOutbox.add(currentEvent.id, {
+      addHistory(currentEvent.id, {
         action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
         techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×',
         detail: '確定時に未を失敗に（以降の太刀は無効）'
@@ -2083,6 +2135,7 @@ var App = (function() {
   }
 
   function setAllFail() {
+    if (viewOnly) return;
     var tr = guardRowAction();
     if (!tr) return;
     var target = null;
@@ -2106,7 +2159,7 @@ var App = (function() {
     updateRowScore(tr, p ? p.isFemale : false);
     updateTotal();
     saveCurrentState();
-    HistoryOutbox.add(currentEvent.id, {
+    addHistory(currentEvent.id, {
       action: 'score_update', playerName: p ? p.name : '', techName: tr.dataset.tech,
       techRow: parseInt(tr.dataset.row, 10), strike: 'rest', value: '×',
       detail: '未を失敗に' + (voided ? '（以降の太刀は無効）' : '')
@@ -2277,6 +2330,7 @@ var App = (function() {
       tr.addEventListener('click', function() {
         if (listClickBlocked()) return;   // 並べ替えの直後・保存の通信中は選手を切り替えない
         var idx = parseInt(this.dataset.index, 10);
+        if (viewOnly) { onViewPick(idx); return; }   // 閲覧専用: 見るだけの選択（持ち主にならず、配信も保存もしない）
         if (idx !== currentIndex && !confirmLeave()) return;
         saveCurrentState();
         takeOwnership();   // 面の中で人が選んだら、その面が配信の持ち主になる
@@ -2284,7 +2338,7 @@ var App = (function() {
       });
     } else if (!section.readOnly) {
       tr.addEventListener('click', function() {
-        if (listClickBlocked()) return;
+        if (listClickBlocked() || viewOnly) return;   // 閲覧専用の面は別のコートへ移らない（面はコートごと）
         changeCourt(section.court, p.id);
       });
     }
@@ -2336,7 +2390,7 @@ var App = (function() {
   }
 
   function onGripPointerDown(e) {
-    if (reorderBusy || listDrag || !currentEvent) return;
+    if (viewOnly || reorderBusy || listDrag || !currentEvent) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     var h = e.currentTarget;
     var tr = h.closest('tr');
@@ -2483,6 +2537,7 @@ var App = (function() {
   // 離したあと。先に行を動かして見せ、組の全員の新しい並び（Courts.reorderIds）を保存する。
   // 成功したらサーバーが振り直した番号を当てて作り直し、失敗したら元の並びに描き直して理由を出す。
   async function dropListRow(moving, target, after) {
+    if (viewOnly) { flushListRender(); return; }
     var mp = rowPlayer(moving), tp = rowPlayer(target);
     if (!currentEvent || !mp || !tp || !Courts.canDropInList(mp, tp, currentStatus())) { flushListRender(); return; }
     var tbody = moving.parentNode;
@@ -2800,6 +2855,124 @@ var App = (function() {
   function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
+
+  // --- ダッシュボードの閲覧専用の面（設計書 2026-10-10 §2） ---
+  // 閲覧モードの見た目と無効化をまとめて当てる（setViewOnly と、面として開かれた直後の init から）
+  function applyViewOnlyUi() {
+    document.body.classList.toggle('view-only', viewOnly);
+    if (!viewOnly) document.body.classList.remove('view-pinned');
+    var evSel = document.getElementById('eventSelect');
+    if (evSel) evSel.disabled = viewOnly || !!scorerSession;
+    courtSelect.disabled = viewOnly || (!!scorerSession && courtSelect.options.length <= 1);
+    applyScoringLock();
+    renderViewBand();
+  }
+
+  // ダッシュボードから閲覧専用／操作可能を切り替える（同一オリジン。iframe の contentWindow から呼ぶ）
+  function setViewOnly(flag) {
+    flag = !!flag;
+    if (flag && !viewOnly) {
+      // 入力欄に打ちかけの備考などがあれば、閲覧に入る前に change を発火させて保存させる（入った後は書かない）
+      try { if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } catch (e) { /* 無視 */ }
+    }
+    viewOnly = flag;
+    if (viewOnly) {
+      gridEdited = false;   // 編集は 1 操作ごとに保存済み。閲覧に入ったら採点席の選手を追いかけ直す
+      liveOwner = false;
+    } else {
+      clearViewPin();
+    }
+    applyViewOnlyUi();
+    refreshFromServer();   // 採点席の選手を追いかけ直す（操作可能に戻したときも表示を最新にする）
+  }
+
+  function clearViewPin() {
+    viewPinnedId = null;
+    viewPinnedLiveId = null;
+  }
+
+  // 一覧の行を押したとき（閲覧専用）: その選手を見るだけで出す。採点席が映している選手を押したときは追いかけに戻る
+  function onViewPick(idx) {
+    var p = visiblePlayers[idx];
+    if (!p) return;
+    var liveId = currentEvent ? liveFollowTarget(currentEvent, currentCourt) : null;
+    if (liveId === p.id) {
+      clearViewPin();
+      showPlayerReadOnly(idx);
+      refreshFromServer();   // 採点席のタイマーも映し直す
+      return;
+    }
+    viewPinnedId = p.id;
+    viewPinnedLiveId = liveId;   // 選んだ時点で採点席が映していた選手（待機中なら null）
+    showPlayerReadOnly(idx);
+  }
+
+  // 見るだけの表示。selectPlayer は resetTimer・refreshFromServer・publishLive を呼ぶので使わない
+  function showPlayerReadOnly(idx) {
+    var p = visiblePlayers[idx];
+    if (!p) return;
+    currentIndex = idx;
+    updatePlayerLabels(p);
+    renderScoreGrid(p);
+    updatePlayerList();
+    renderStatusBanner();
+    applyScoringLock();
+    renderViewBand();
+  }
+
+  // 採点席のタイマーの残り表示（"04:12"）。配信用ボードと同じ規則（Courts.liveRemaining）
+  function liveTimerText() {
+    var live = currentEvent && currentEvent.live;
+    var entry = live && Object.prototype.hasOwnProperty.call(live, currentCourt) ? live[currentCourt] : null;
+    if (!entry || !entry.timer) return '';
+    var left = Courts.liveRemaining(entry.timer, entry.updatedAt, Api.serverNowMs());
+    return pad(Math.floor(left / 60)) + ':' + pad(left % 60);
+  }
+
+  // 閲覧専用の面で、見るだけの選択をしている間だけ出す帯「採点中: 衛藤豊　04:12　▶ 戻る」。
+  // 見るだけの選択の間はタイマー欄を隠し（body.view-pinned。見ている選手のタイマーではないので）、採点席のタイマーはこの帯に出す
+  function renderViewBand() {
+    var band = document.getElementById('viewBand');
+    if (!band) return;
+    var pinned = viewOnly && !!viewPinnedId;
+    document.body.classList.toggle('view-pinned', pinned);
+    var liveId = pinned && currentEvent ? liveFollowTarget(currentEvent, currentCourt) : null;
+    var show = pinned && !!liveId && liveId !== viewPinnedId;
+    band.hidden = !show;
+    if (!show) {
+      if (viewBandTimerHandle) { clearInterval(viewBandTimerHandle); viewBandTimerHandle = null; }
+      viewBandKey = '';
+      band.textContent = '';
+      return;
+    }
+    if (viewBandKey !== liveId) {
+      var p = visiblePlayers.filter(function(x) { return x.id === liveId; })[0];
+      band.textContent = '';
+      var txt = document.createElement('span');
+      txt.textContent = '採点中: ' + (p ? p.name : '');
+      var t = document.createElement('span');
+      t.id = 'viewBandTimer';
+      t.className = 'view-band-timer';
+      var back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'view-band-back';
+      back.textContent = '▶ 戻る';
+      back.addEventListener('click', function() { clearViewPin(); renderViewBand(); refreshFromServer(); });
+      band.appendChild(txt); band.appendChild(t); band.appendChild(back);
+      viewBandKey = liveId;
+    }
+    var tEl = document.getElementById('viewBandTimer');
+    if (tEl) tEl.textContent = liveTimerText();
+    if (!viewBandTimerHandle) {
+      // 残り時間は live の updatedAt からの経過で毎秒出し直す（採点席が動かしている間も合う）
+      viewBandTimerHandle = setInterval(function() {
+        var el = document.getElementById('viewBandTimer');
+        if (el) el.textContent = liveTimerText();
+      }, 1000);
+    }
+  }
+
+  window.ScoringApp = { setViewOnly: setViewOnly };
 
   return { init: init };
 })();
