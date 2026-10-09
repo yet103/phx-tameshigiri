@@ -4557,6 +4557,62 @@ app.get('/api/links/:token/ranking', (req, res) => {
   }
 });
 
+// /live と /watch が返す「いま開いている選手 1 人分」。名簿の生データ（id など）は含めない。
+// adjust は配列のときだけそのまま返す。無い選手（旧データ）は null にして、
+// board 側の Scoring.decodeResult に「5文字目を補正点として読む」旧解釈をさせる。
+function livePlayerView(p) {
+  return {
+    name: p.name || '',
+    order: p.order || '',
+    isFemale: p.isFemale === true,
+    tech1: p.tech1 || '',
+    tech2: p.tech2 || '',
+    tech3: p.tech3 || '',
+    result: p.result || '',
+    adjust: Array.isArray(p.adjust) ? p.adjust : null,
+    totalAdjust: Number.isFinite(p.totalAdjust) ? p.totalAdjust : 0,
+    score: typeof p.score === 'number' ? p.score : 0,
+    confirmed: p.confirmed === true
+  };
+}
+
+// 共有リンクのトークンから大会を読む（公開 API の共通部。エラー応答は中で返す）。
+// 戻り値: 大会オブジェクト | null（null のときは res に応答済み）
+function readEventByLinkToken(req, res) {
+  if (!isValidId(req.params.token)) {
+    res.status(400).json({ error: '不正なトークンです' });
+    return null;
+  }
+  const linkPath = path.join(LINKS_DIR, `${req.params.token}.json`);
+  if (!fs.existsSync(linkPath)) {
+    res.status(404).json({ error: 'リンクが見つかりません' });
+    return null;
+  }
+  const link = JSON.parse(fs.readFileSync(linkPath, 'utf-8'));
+  if (link.targetType !== 'event' || !isValidId(link.targetId)) {
+    res.status(404).json({ error: 'リンクが見つかりません' });
+    return null;
+  }
+  const eventPath = path.join(EVENTS_DIR, `${link.targetId}.json`);
+  if (!fs.existsSync(eventPath)) {
+    res.status(404).json({ error: '大会が見つかりません' });
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(eventPath, 'utf-8'));
+}
+
+// 観戦ダッシュボードに出すコートの一覧。settings.courts と選手のコートの和集合を昇順に、
+// 未分類は含めない（Courts.listFrom と同じ並び。courts.js はブラウザ用でここでは読めない）。
+function watchCourtList(event, players) {
+  const seen = new Set();
+  const list = [];
+  const add = c => { if (typeof c === 'string' && c && c !== '未分類' && !seen.has(c)) { seen.add(c); list.push(c); } };
+  players.forEach(p => add(courtOf(p)));
+  const extra = (event.settings && Array.isArray(event.settings.courts)) ? event.settings.courts : [];
+  extra.forEach(add);
+  return list.sort();
+}
+
 // GET /api/links/:token/live : 共有リンク越しのライブ状態（無認証。board.html が2秒ごとに読む）
 // 返すのは「そのコートで今開いている選手1人分」だけ。名簿全体の result / order は返さない
 // （GET /api/links/:token が targetId を伏せているのと同じ方針）。
@@ -4593,21 +4649,7 @@ app.get('/api/links/:token/live', (req, res) => {
           sec: Number.isInteger(entry.timer && entry.timer.sec) ? entry.timer.sec : DEFAULT_LIVE_TIMER.sec,
           running: !!(entry.timer && entry.timer.running)
         },
-        // adjust は配列のときだけそのまま返す。無い選手（旧データ）は null にして、
-        // board 側の Scoring.decodeResult に「5文字目を補正点として読む」旧解釈をさせる。
-        player: p ? {
-          name: p.name || '',
-          order: p.order || '',
-          isFemale: p.isFemale === true,
-          tech1: p.tech1 || '',
-          tech2: p.tech2 || '',
-          tech3: p.tech3 || '',
-          result: p.result || '',
-          adjust: Array.isArray(p.adjust) ? p.adjust : null,
-          totalAdjust: Number.isFinite(p.totalAdjust) ? p.totalAdjust : 0,
-          score: typeof p.score === 'number' ? p.score : 0,
-          confirmed: p.confirmed === true
-        } : null
+        player: p ? livePlayerView(p) : null
       });
     });
 
@@ -4619,6 +4661,59 @@ app.get('/api/links/:token/live', (req, res) => {
       // （board.html は返ってきた配点で得点の内訳を描く）。
       techniques: effectiveTechniques(event)
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/links/:token/watch : 観戦ダッシュボード（watch.html。公開・無認証）。
+// コートごとの採点中の選手・確定 n / N・順位を 1 回で返す。端末は 5 秒ごとに読む。
+// 応答本文の SHA-1 を弱い ETag にして、If-None-Match が一致すれば 304（本文なし）にする
+// （設計書 2026-10-09 §2）。計算は要求ごと（大会ファイル 1 回読む＋順位計算。メモリのキャッシュは持たない）。
+app.get('/api/links/:token/watch', (req, res) => {
+  try {
+    const event = readEventByLinkToken(req, res);
+    if (!event) return;
+    const players = Array.isArray(event.players) ? event.players.filter(p => p && typeof p === 'object') : [];
+    const live = (event.live && typeof event.live === 'object') ? event.live : {};
+    const ranking = computeRanking(event);
+    const status = ranking.event.status;
+    const round = EventStatus.progressRoundOf(status, players);
+    const progress = EventStatus.courtProgress(players, round);
+    const courts = watchCourtList(event, players).map(court => {
+      const entry = getOwn(live, court);
+      const entryOk = entry && typeof entry === 'object';
+      const p = (entryOk && entry.playerId) ? players.filter(q => q.id === entry.playerId)[0] : null;
+      const pr = progress[court] || { done: 0, total: 0 };
+      return {
+        court: court,
+        progress: { round: round, done: pr.done, total: pr.total },
+        live: entryOk ? {
+          updatedAt: entry.updatedAt || '',
+          timer: {
+            sec: Number.isInteger(entry.timer && entry.timer.sec) ? entry.timer.sec : DEFAULT_LIVE_TIMER.sec,
+            running: !!(entry.timer && entry.timer.running)
+          },
+          // /live の形に、ゼッケン（整数のときだけ）と級位・段位を足す
+          player: p ? Object.assign(livePlayerView(p), {
+            bib: Number.isInteger(p.bib) ? p.bib : null,
+            rank: typeof p.rank === 'string' ? EventStatus.normalizeRank(p.rank) : ''
+          }) : null
+        } : null
+      };
+    });
+    const json = JSON.stringify({
+      event: { name: event.name || '', date: event.date || '', status: status, updatedAt: event.updatedAt || '' },
+      courts: courts,
+      ranking: ranking,
+      // 配点は大会ごと（/live と同じ。端末の Scoring.setTechniques に渡して技ごとの得点を出す）
+      techniques: effectiveTechniques(event)
+    });
+    const etag = 'W/"' + crypto.createHash('sha1').update(json).digest('hex') + '"';
+    res.set('Cache-Control', 'no-cache');
+    res.set('ETag', etag);
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.type('application/json').send(json);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

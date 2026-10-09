@@ -303,6 +303,36 @@
     };
   }
 
+  // コートごとの「確定 n / N」（観戦ダッシュボードの API と画面。設計書 2026-10-09 §2）。
+  // round の行だけを数え、order の読めない行（コートが決まらない）は数えない。
+  // 戻り値: { <コート>: { done, total } }（コートは order の先頭の段。行の無いコートは含まない）
+  // コート名が '__proto__' などでも壊れないよう、プロトタイプ無しの辞書に入れる。
+  function courtProgress(players, round) {
+    var out = Object.create(null);
+    (players || []).forEach(function(p) {
+      if (!p || typeof p !== 'object' || roundOf(p) !== round) return;
+      var m = String(p.order || '').match(ORDER_PATTERN);
+      if (!m) return;
+      var c = m[1];
+      if (!out[c]) out[c] = { done: 0, total: 0 };
+      out[c].total++;
+      if (p.confirmed === true) out[c].done++;
+    });
+    return out;
+  }
+
+  // 「確定 n / N」で数える巡目（courts.js の Courts.progressRound と同じ規則。サーバーでも使うのでこちらに置く。
+  // 片方を変えたらもう片方も変える。test.html の「progressRoundOf は Courts.progressRound と同じ」で固定）
+  //   進行中（round1 / round2）→ その巡目、draft（状態が無い場合も）→ 1、round1_done → 2、
+  //   round2_done / final / archived → 二巡目の行があれば 2、無ければ 1
+  function progressRoundOf(status, players) {
+    var r = scoringRound(status);
+    if (r) return r;
+    if (status === 'draft') return 1;
+    if (status === 'round1_done') return 2;
+    return (players || []).some(function(p) { return roundOf(p) === 2; }) ? 2 : 1;
+  }
+
   function rankings(players, opts) {
     var totals = playerTotals(players, opts);
     function rank(list) {
@@ -545,6 +575,8 @@
     best4Standings: best4Standings,
     rankings: rankings,
     roundProgress: roundProgress,
+    courtProgress: courtProgress,
+    progressRoundOf: progressRoundOf,
     best4Chances: best4Chances,
     BEST4_FLAGS: BEST4_FLAGS,
     BEST4_FLAG_TEXT: BEST4_FLAG_TEXT,

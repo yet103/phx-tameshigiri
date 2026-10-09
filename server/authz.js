@@ -60,6 +60,7 @@ const ROUTES = [
   { method: 'GET', pattern: '/api/links/:token', public: true },
   { method: 'GET', pattern: '/api/links/:token/ranking', public: true },
   { method: 'GET', pattern: '/api/links/:token/live', public: true },
+  { method: 'GET', pattern: '/api/links/:token/watch', public: true },
 
   // 新しい API（5.1）
   { method: 'POST', pattern: '/api/join', public: true },

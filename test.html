@@ -2406,6 +2406,52 @@
 
     await Api.deleteEvent(liveEvent.id);
 
+    // --- 観戦ダッシュボードのまとめ API（GET /api/links/:token/watch。設計書 2026-10-09 §2） ---
+    var wEv = await Api.saveEvent({ name: 'テスト用 観戦', date: '2026-10-09', venue: '', players: [] });
+    var wP1 = await Api.createPlayer(wEv.id, { name: '観戦 甲', court: 'A', isFemale: false, isNewFace: false, tech1: '真', tech2: '連', tech3: '左', round: 1, bib: 7, rank: '参段' });
+    var wP2 = await Api.createPlayer(wEv.id, { name: '観戦 乙', court: 'B', isFemale: true, isNewFace: false, tech1: '真', tech2: '連', tech3: '左', round: 1 });
+    await Api.changeStatus(wEv.id, 'round1');
+    await Api.putLive(wEv.id, 'A', { playerId: wP1.id, timer: { sec: 250, running: true } });
+    var wTok = (await Api.createShareLink(wEv.id)).token;
+    var w1 = await Api.loadWatch(wTok, null);
+    assert('watch: 200 で event / courts / ranking / techniques を返す',
+      [w1.ok, w1.status, Object.keys(w1.data).sort()], [true, 200, ['courts', 'event', 'ranking', 'techniques']]);
+    assert('watch: event は name / date / status / updatedAt',
+      [Object.keys(w1.data.event).sort(), w1.data.event.name, w1.data.event.status],
+      [['date', 'name', 'status', 'updatedAt'], 'テスト用 観戦', 'round1']);
+    assert('watch: courts はコートの順で progress と live を持つ',
+      w1.data.courts.map(function(c) { return [c.court, c.progress.round, c.progress.done, c.progress.total, c.live ? c.live.player.name : null]; }),
+      [['A', 1, 0, 1, '観戦 甲'], ['B', 1, 0, 1, null]]);
+    assert('watch: live が無いコートは live: null', w1.data.courts[1].live, null);
+    assert('watch: live.timer と updatedAt', [w1.data.courts[0].live.timer, typeof w1.data.courts[0].live.updatedAt],
+      [{ sec: 250, running: true }, 'string']);
+    assert('watch: live.player に bib と rank が付く（/live には無い）',
+      [w1.data.courts[0].live.player.bib, w1.data.courts[0].live.player.rank,
+       (await Api.loadLive(wTok)).data.courts.A.player.bib],
+      [7, '参段', undefined]);
+    assert('watch: ranking は computeRanking と同じキー', Object.keys(w1.data.ranking).sort(),
+      ['best4', 'best4Chance', 'detail', 'event', 'progress', 'rankings']);
+    assert('watch: techniques は配点の配列（/live と同じ）',
+      [Array.isArray(w1.data.techniques), w1.data.techniques.length > 0, w1.data.techniques[0].strikes.length], [true, true, 4]);
+    assert('watch: ETag が付く', typeof w1.etag === 'string' && w1.etag.indexOf('W/"') === 0, true);
+    var w1b = await Api.loadWatch(wTok, w1.etag);
+    assert('watch: If-None-Match が一致すれば 304（本文なし）', [w1b.ok, w1b.status, w1b.data], [true, 304, null]);
+    await Api.updatePlayer(wEv.id, wP1.id, { score: 20, result: '1    1    1    ', confirmed: true });
+    var w2 = await Api.loadWatch(wTok, w1.etag);
+    assert('watch: 採点を確定すると 200 と新しい ETag、progress が進む',
+      [w2.status, w2.etag !== w1.etag, w2.data.courts[0].progress.done], [200, true, 1]);
+    assert('watch: 新しい ETag なら再び 304', (await Api.loadWatch(wTok, w2.etag)).status, 304);
+    await Api.putLive(wEv.id, 'B', { playerId: wP2.id, timer: { sec: 300, running: false } });
+    var w3 = await Api.loadWatch(wTok, w2.etag);
+    assert('watch: 配信の選手が変わっても 200', [w3.status, w3.data.courts[1].live.player.name], [200, '観戦 乙']);
+    var wBad = await Api.loadWatch('x/../y', null);
+    assert('watch: 不正なトークンは 400、無いトークンは 404',
+      [wBad.status, (await Api.loadWatch('zzzzzzzz', null)).status], [400, 404]);
+    assert('watch: 認証なしの公開経路（Cookie も Authorization も付けずに読める）',
+      (await fetch('/api/links/' + wTok + '/watch', { credentials: 'omit' })).status, 200);
+    await Api.deleteEvent(wEv.id);
+    assert('watch: 大会を消すと 404', (await Api.loadWatch(wTok, null)).status, 404);
+
     // --- 順位の細部と静的配信のガード ---
     var rank2Event = await Api.saveEvent({ name: '順位テスト', date: '2026-03-01', venue: '', players: [
       { id: 'r1', name: '田中 ', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 7, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
@@ -7555,6 +7601,30 @@
       assert('roundProgress: 進行中でなければ行のある最大の巡目', EventStatus.roundProgress(ps, 'final').male.round, 2);
       assert('roundProgress: 行が無ければ一巡目 0/0', EventStatus.roundProgress([], 'draft').male, { round: 1, done: 0, total: 0, label: '一巡目 0/0' });
       assert('roundProgress: null でも落ちない', EventStatus.roundProgress(null, null).female.total, 0);
+    })();
+
+    // ---- EventStatus.courtProgress / progressRoundOf（観戦ダッシュボードの「確定 n / N」。設計書 2026-10-09 §2） ----
+    (function() {
+      var cpP = [
+        { id: 'a', order: 'A-男子-1-1', confirmed: true }, { id: 'b', order: 'A-男子-1-2' }, { id: 'c', order: 'B-女子-1-1', confirmed: true },
+        { id: 'd', order: 'A-男子-2-1', confirmed: true, sourcePlayerId: 'a' }, { id: 'e', order: '', name: 'x' }
+      ];
+      assert('courtProgress: 一巡目はコートごとに 確定 / 行数。未分類（order 無し）は数えない',
+        EventStatus.courtProgress(cpP, 1), { A: { done: 1, total: 2 }, B: { done: 1, total: 1 } });
+      assert('courtProgress: 二巡目は二巡目の行だけ', EventStatus.courtProgress(cpP, 2), { A: { done: 1, total: 1 } });
+      assert('courtProgress: 空・null', [EventStatus.courtProgress([], 1), EventStatus.courtProgress(null, 1)], [{}, {}]);
+      assert('courtProgress: 確定は confirmed === true だけ（採点済みでも未確定は数えない）',
+        EventStatus.courtProgress([{ order: 'A-男子-1-1', score: 20, result: '1    ' }], 1), { A: { done: 0, total: 1 } });
+      assert('progressRoundOf: draft=1, round1=1, round1_done=2, round2=2, round2_done は二巡目の行があれば 2、無ければ 1',
+        [EventStatus.progressRoundOf('draft', cpP), EventStatus.progressRoundOf('round1', cpP), EventStatus.progressRoundOf('round1_done', cpP),
+         EventStatus.progressRoundOf('round2', cpP), EventStatus.progressRoundOf('round2_done', cpP), EventStatus.progressRoundOf('final', [cpP[0]])],
+        [1, 1, 2, 2, 2, 1]);
+      var prPl = [{ order: 'A-男子-1-1' }, { order: 'A-男子-2-1' }];
+      ['draft', 'round1', 'round1_done', 'round2', 'round2_done', 'final', 'archived'].forEach(function(st) {
+        assert('progressRoundOf は Courts.progressRound と同じ（' + st + '）',
+          [EventStatus.progressRoundOf(st, prPl), EventStatus.progressRoundOf(st, [prPl[0]])],
+          [Courts.progressRound(st, prPl), Courts.progressRound(st, [prPl[0]])]);
+      });
     })();
 
     // ---- Courts.techniqueLabel（選択肢の「技名（満点）」。ユーザー要望 2026-10-05） ----

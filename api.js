@@ -876,6 +876,34 @@ var Api = (function() {
     }
   }
 
+  async function loadWatch(token, etag) {
+    // GET /api/links/:token/watch（無認証。観戦ダッシュボード watch.html。設計書 2026-10-09 §2）
+    // etag を渡すと If-None-Match を付け、変化が無ければ status 304・data null で返る。
+    // 戻り値: { ok, status, data, etag }
+    //   ok     … 200 または 304
+    //   data   … 200 のときだけ { event, courts, ranking, techniques }（304・失敗は null）
+    //   etag   … 応答の ETag。304・失敗のときは渡した etag をそのまま返す
+    //   status … HTTP ステータス。0 は通信失敗（400/404 はトークンが無効で、叩き続けない）
+    // 応答の Date ヘッダーで serverNowMs の時計のずれを更新する（304 でも）。
+    // fetch の cache は指定しない（If-None-Match を自分で付けると、ブラウザは勝手に補わず 304 をそのまま返す）。
+    try {
+      var headers = {};
+      if (etag) headers['If-None-Match'] = etag;
+      var res = await fetch('/api/links/' + encodeURIComponent(token) + '/watch', { headers: headers });
+      noteServerDate(res);
+      var data = null;
+      if (res.status === 200) data = await res.json();
+      return {
+        ok: res.status === 200 || res.status === 304,
+        status: res.status,
+        data: data,
+        etag: (res.status === 200 && res.headers.get('ETag')) || etag || null
+      };
+    } catch (e) {
+      return { ok: false, status: 0, data: null, etag: etag || null };
+    }
+  }
+
   // --- Ranking / Share ---
   async function loadRanking(eventId) {
     // GET /api/events/:eventId/ranking
@@ -1114,6 +1142,7 @@ var Api = (function() {
     postHistory: postHistory,
     putLive: putLive,
     loadLive: loadLive,
+    loadWatch: loadWatch,
     loadRanking: loadRanking,
     createShareLink: createShareLink,
     loadShareLink: loadShareLink,
