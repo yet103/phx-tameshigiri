@@ -39,9 +39,9 @@ function parseBearer(header) {
 }
 
 // 無認証で通す API。
-//   共有リンク越しの読み出し（大会 ID は伏せられている）… GET/HEAD の 3 本
+//   共有リンク越しの読み出し（大会 ID は伏せられている）… GET/HEAD の 4 本
 //   招待の交換・自分のセッションの確認と解除 … POST /api/join、GET/HEAD /api/session、POST /api/session/logout
-const PUBLIC_LINK_API = /^\/api\/links\/[^/]+(\/ranking|\/live)?$/;
+const PUBLIC_LINK_API = /^\/api\/links\/[^/]+(\/ranking|\/live|\/watch)?$/;
 function isPublicApi(method, urlPath) {
   const get = method === 'GET' || method === 'HEAD';
   if (get && PUBLIC_LINK_API.test(urlPath)) return true;

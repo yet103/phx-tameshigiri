@@ -4706,8 +4706,9 @@ app.get('/api/links/:token/watch', (req, res) => {
       event: { name: event.name || '', date: event.date || '', status: status, updatedAt: event.updatedAt || '' },
       courts: courts,
       ranking: ranking,
-      // 配点は大会ごと（/live と同じ。端末の Scoring.setTechniques に渡して技ごとの得点を出す）
-      techniques: effectiveTechniques(event)
+      // 配点は大会ごと（端末の Scoring.setTechniques に渡して技ごとの得点を出す）。
+      // 採点表の描画に要る name / strikes / reducedFirst だけを返す（運営の備考 note などは公開しない）
+      techniques: effectiveTechniques(event).map(t => ({ name: t.name, strikes: t.strikes, reducedFirst: t.reducedFirst }))
     });
     const etag = 'W/"' + crypto.createHash('sha1').update(json).digest('hex') + '"';
     res.set('Cache-Control', 'no-cache');

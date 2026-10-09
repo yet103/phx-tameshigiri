@@ -5,7 +5,7 @@
 
 ## 1. 決めたこと
 
-- **公開ページ watch.html**（観戦ダッシュボード）。URL は `watch.html#<共有トークン>`（順位の共有リンク share.html・表彰 present.html・配信用ボード board.html と同じトークン）。認証なし、見るだけ（押せるものは「ダーク」と文字の大きさだけ）。
+- **公開ページ watch.html**（観戦ダッシュボード）。URL は `watch.html#<共有トークン>`（順位の共有リンク share.html・表彰 present.html・配信用ボード board.html と同じトークン）。認証なし、見るだけ（押せるものはライト／ダークの切り替えと文字の大きさだけ）。
 - **まとめ API 1 本** `GET /api/links/:token/watch`（公開）。コートごとの採点中の選手と技の結果・タイマー・確定 n / N、順位（3 部門・ベスト4 の列）、ベスト4（暫定／確定）を 1 回で返す。**ETag** を付け、`If-None-Match` が一致すれば **304**（中身なし）。端末は **5 秒ごと**に 1 回読む。画面が裏に回ったら止め、戻ったら読む。
 - **QR**: PC 運営の試合進行の見出しに「📱 観戦用 QR」。押すと共有リンクを発行（既にあればそれ）し、`watch.html#<トークン>` の QR と URL をダイアログに出す。観戦用は秘密ではない（順位の共有リンクと同じ公開範囲）ので、写真に撮って配ってよい旨を添える。
 - いまの dashboard.html（運営用。中の面は認証付き）はそのまま。観戦用はそれとは別の軽いページ。
@@ -28,7 +28,7 @@
       } }
   ],
   ranking: <computeRanking(event) と同じ: rankings / detail / best4Chance / progress / best4>,
-  techniques: event.techniques（大会の有効な技リスト。/live と同じ。端末は Scoring.setTechniques に渡して技ごとの配点・得点を出す）
+  techniques: 大会の有効な技リストのうち name / strikes / reducedFirst だけ（端末は Scoring.setTechniques に渡して技ごとの配点・得点を出す。運営の備考 note・drawn・repeatable は公開しない）
 }
 ```
 

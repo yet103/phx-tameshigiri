@@ -634,7 +634,7 @@ test('閲覧: 共有リンクは無認証で今どおり。共有トークンを
     const ev = await makeEvent(base, '閲覧テスト');
     const token = (await api(base, 'POST', '/api/links', { targetType: 'event', targetId: ev }, B)).body.token;
     assert.ok(token);
-    for (const p of ['/api/links/' + token, '/api/links/' + token + '/ranking', '/api/links/' + token + '/live']) {
+    for (const p of ['/api/links/' + token, '/api/links/' + token + '/ranking', '/api/links/' + token + '/live', '/api/links/' + token + '/watch']) {
       assert.strictEqual((await get(base, p)).status, 200, p);
     }
     const viaCookie = await api(base, 'PATCH', '/api/events/' + ev + '/players/pa1', { score: 1, baseRev: 0 }, C('tmg_s=' + token));

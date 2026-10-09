@@ -22,9 +22,9 @@ const AUTH_PROD = { NODE_ENV: 'production', AUTH_USER: USER, AUTH_PASS: PASS };
 const { classify } = require('./static-policy');
 
 test('classify: 観客用ページとそのアセットは public', () => {
-  for (const p of ['/share.html', '/present.html', '/board.html', '/help.html',
-                   '/theme.css', '/share.css', '/present.css', '/board.css', '/help.css',
-                   '/api.js', '/share.js', '/present.js', '/board.js', '/scoring.js', '/courts.js',
+  for (const p of ['/share.html', '/present.html', '/board.html', '/help.html', '/watch.html',
+                   '/theme.css', '/share.css', '/present.css', '/board.css', '/help.css', '/watch.css',
+                   '/api.js', '/share.js', '/present.js', '/board.js', '/scoring.js', '/courts.js', '/watch.js',
                    '/help/img/admin_bulk.png', '/fonts/ShipporiMinchoB1-Bold.woff2']) {
     assert.strictEqual(classify(p, { production: true }), 'public', p);
   }
@@ -79,10 +79,11 @@ test('parseBasic: 無い・形式違い・":" なしは null', () => {
   assert.strictEqual(parseBasic('Basic ' + Buffer.from('nocolon').toString('base64')), null);
 });
 
-test('isPublicApi: 共有リンクの GET/HEAD 3 本だけが公開', () => {
+test('isPublicApi: 共有リンクの GET/HEAD 4 本だけが公開', () => {
   assert.strictEqual(isPublicApi('GET', '/api/links/abc123'), true);
   assert.strictEqual(isPublicApi('GET', '/api/links/abc123/ranking'), true);
   assert.strictEqual(isPublicApi('GET', '/api/links/abc123/live'), true);
+  assert.strictEqual(isPublicApi('GET', '/api/links/abc123/watch'), true);
   assert.strictEqual(isPublicApi('HEAD', '/api/links/abc123/ranking'), true);   // 監視の HEAD を通す
   assert.strictEqual(isPublicApi('POST', '/api/links'), false);
   assert.strictEqual(isPublicApi('GET', '/api/links'), false);
@@ -123,8 +124,8 @@ test('開発・認証なし: / と GET /api/events が無認証で 200', async (
 // ── 結合: 開発・認証あり ──
 test('公開ページとアセットは無認証で 200', async () => {
   await withServer(AUTH_DEV, async base => {
-    for (const p of ['/share.html', '/present.html', '/board.html', '/help.html',
-                     '/theme.css', '/api.js', '/scoring.js',
+    for (const p of ['/share.html', '/present.html', '/board.html', '/help.html', '/watch.html',
+                     '/theme.css', '/watch.css', '/api.js', '/scoring.js', '/watch.js',
                      '/fonts/ShipporiMinchoB1-Bold.woff2', '/help/img/admin_bulk.png']) {
       assert.strictEqual((await get(base, p)).status, 200, p);
     }
@@ -133,7 +134,7 @@ test('公開ページとアセットは無認証で 200', async () => {
 
 test('共有リンク API は無認証で通る（存在しないトークンは 404）', async () => {
   await withServer(AUTH_DEV, async base => {
-    for (const p of ['/api/links/zzzzzz', '/api/links/zzzzzz/ranking', '/api/links/zzzzzz/live']) {
+    for (const p of ['/api/links/zzzzzz', '/api/links/zzzzzz/ranking', '/api/links/zzzzzz/live', '/api/links/zzzzzz/watch']) {
       const res = await get(base, p);
       assert.notStrictEqual(res.status, 401, p);
       assert.strictEqual(res.status, 404, p);
