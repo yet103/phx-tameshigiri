@@ -7529,6 +7529,14 @@
     assert('Dashboard.columnsFor', [Dashboard.columnsFor(0), Dashboard.columnsFor(2), Dashboard.columnsFor(3)], [1, 2, 3]);
     assert('Dashboard.clampZoom: 範囲外・NaN は 75、5 刻みに丸める', [Dashboard.clampZoom('60'), Dashboard.clampZoom('120'), Dashboard.clampZoom('x'), Dashboard.clampZoom(73), Dashboard.clampZoom(50)], [60, 75, 75, 75, 50]);
     assert('Dashboard.normalizeMode', [Dashboard.normalizeMode('edit'), Dashboard.normalizeMode('view'), Dashboard.normalizeMode('x'), Dashboard.normalizeMode(null)], ['edit', 'view', 'view', 'view']);
+    assert('Dashboard.paneZoomFor: 面ごとの指定が無ければ一括の値', Dashboard.paneZoomFor('court:A', {}, 75), 75);
+    assert('Dashboard.paneZoomFor: 指定があればそれ（5 刻み・50〜125 に収める）',
+      [Dashboard.paneZoomFor('court:A', { 'court:A': 63 }, 75), Dashboard.paneZoomFor('rank', { rank: 200 }, 75), Dashboard.paneZoomFor('rank', { rank: 10 }, 75), Dashboard.paneZoomFor('desk', { desk: 'x' }, 75), Dashboard.paneZoomFor('toString', {}, 80)], [65, 125, 50, 75, 80]);
+    try { localStorage.removeItem('tmg_dashboard_zoom_pane'); } catch (e) {}
+    Dashboard.savePaneZoom({ 'court:A': 60, rank: 125 });
+    assert('Dashboard.savePaneZoom → loadPaneZoom', Dashboard.loadPaneZoom(), { 'court:A': 60, rank: 125 });
+    try { localStorage.removeItem('tmg_dashboard_zoom_pane'); } catch (e) {}
+    assert('Dashboard.loadPaneZoom: 控えが無ければ空', Dashboard.loadPaneZoom(), {});
     try { localStorage.removeItem('tmg_dashboard_zoom'); localStorage.removeItem('tmg_dashboard_mode'); } catch (e) {}
     assert('Dashboard.loadZoom / loadMode: 控えが無ければ既定', [Dashboard.loadZoom(), Dashboard.loadMode()], [75, 'view']);
     Dashboard.saveZoom(60); Dashboard.saveMode('edit');

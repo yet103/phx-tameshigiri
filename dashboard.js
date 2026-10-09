@@ -8,6 +8,9 @@ var Dashboard = (function() {
   var ZOOM_KEY = 'tmg_dashboard_zoom';
   var MODE_KEY = 'tmg_dashboard_mode';
   var ZOOM_DEFAULT = 75, ZOOM_MIN = 50, ZOOM_MAX = 100, ZOOM_STEP = 5;
+  // 面ごとの倍率（ユーザー要望 2026-10-10）。{ "court:A": 60, "rank": 100 }。上の帯の縮小より優先。上限だけ 125 まで広げる
+  var PANE_ZOOM_KEY = 'tmg_dashboard_zoom_pane';
+  var PANE_ZOOM_MIN = 50, PANE_ZOOM_MAX = 125;
   // 面の仕切り（ユーザー要望 2026-10-05: 枠をリサイズでき、位置を端末に保存）。
   // layout = { row: 2 段のときの上段の高さ %（以前からの控え）,
   //            cols: { top<n> | bottom | bottom<n> | row<段>_<n>: [%...]（段ごとの列の幅）,
@@ -54,6 +57,12 @@ var Dashboard = (function() {
     var n = Number(v);
     if (!isFinite(n) || n < ZOOM_MIN || n > ZOOM_MAX) return ZOOM_DEFAULT;
     return Math.round(n / ZOOM_STEP) * ZOOM_STEP;
+  }
+  // 面ごとの倍率。map に鍵が無い・数でないなら一括の base。あれば 5 刻み・50〜125 に収める
+  function paneZoomFor(key, map, base) {
+    var v = map && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, key) ? Number(map[key]) : NaN;
+    if (!isFinite(v)) return base;
+    return Math.min(PANE_ZOOM_MAX, Math.max(PANE_ZOOM_MIN, Math.round(v / ZOOM_STEP) * ZOOM_STEP));
   }
   function normalizeMode(v) { return v === 'edit' ? 'edit' : 'view'; }
 
@@ -317,11 +326,25 @@ var Dashboard = (function() {
   }
   function loadZoom() { try { return clampZoom(localStorage.getItem(ZOOM_KEY)); } catch (e) { return ZOOM_DEFAULT; } }
   function saveZoom(z) { try { localStorage.setItem(ZOOM_KEY, String(clampZoom(z))); } catch (e) {} }
+  function loadPaneZoom() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(PANE_ZOOM_KEY) || 'null');
+      var out = {};
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        Object.keys(raw).forEach(function(k) {
+          var v = Number(raw[k]);
+          if (isFinite(v)) out[k] = paneZoomFor(k, raw, ZOOM_DEFAULT);
+        });
+      }
+      return out;
+    } catch (e) { return {}; }
+  }
+  function savePaneZoom(map) { try { localStorage.setItem(PANE_ZOOM_KEY, JSON.stringify(map || {})); } catch (e) {} }
   function loadMode() { try { return normalizeMode(localStorage.getItem(MODE_KEY)); } catch (e) { return 'view'; } }
   function saveMode(m) { try { localStorage.setItem(MODE_KEY, normalizeMode(m)); } catch (e) {} }
 
   // --- 画面 ---
-  var mode = 'view', zoom = ZOOM_DEFAULT, eventId = '', courts = [];
+  var mode = 'view', zoom = ZOOM_DEFAULT, paneZoom = {}, eventId = '', courts = [];
   var layout = { row: ROW_DEFAULT, cols: {}, rows: {} };
   var arr = { rows: [], hidden: [] };            // 面の並びと閉じた面（今の大会の鍵に合わせたもの）
   var paneList = [];                             // 今の大会の面（panes() に key を足したもの。nocourt の案内も含む）
@@ -334,7 +357,18 @@ var Dashboard = (function() {
     if (b) b.textContent = theme === 'dark' ? '☀' : '🌙';
   }
 
-  // モード: body.dash-edit で盾（.pane-shield）を消す。見出しの印も付け替える
+  // 採点の面に閲覧／操作を伝える（同一オリジン。読み込み前なら load の後にも。
+  // 採点画面側の ScoringApp.setViewOnly が無ければ何もしない）
+  function notifyViewOnly(frame, flag) {
+    function send() {
+      try { var w = frame.contentWindow; if (w && w.ScoringApp && typeof w.ScoringApp.setViewOnly === 'function') w.ScoringApp.setViewOnly(flag); }
+      catch (e) { /* 読めない・まだ無い */ }
+    }
+    send();
+    frame.addEventListener('load', function() { send(); }, { once: true });
+  }
+
+  // モード: body.dash-edit で運営の面の盾（.pane-shield）を消し、採点の面には閲覧モードを伝える。見出しの印も付け替える
   function applyMode() {
     document.body.classList.toggle('dash-edit', mode === 'edit');
     var vb = document.getElementById('dashModeView'), eb = document.getElementById('dashModeEdit');
@@ -344,17 +378,24 @@ var Dashboard = (function() {
     eb.setAttribute('aria-pressed', mode === 'edit' ? 'true' : 'false');
     var tags = document.querySelectorAll('.dash-pane-head .tag');
     for (var i = 0; i < tags.length; i++) tags[i].textContent = mode === 'view' ? '閲覧専用' : '';
+    var frames = document.querySelectorAll('.dash-pane-court iframe');
+    for (var j = 0; j < frames.length; j++) notifyViewOnly(frames[j], mode === 'view');
   }
 
   // iframe を等倍で読み込み、transform で縮める（中は iframe 自身がスクロール）。
   // 幅と高さを 1/z 倍にしてから z 倍に縮めると、面にぴったり収まる
   function applyZoom() {
-    var z = zoom / 100;
-    var frames = document.querySelectorAll('.dash-pane-body iframe');
-    for (var i = 0; i < frames.length; i++) {
-      frames[i].style.transform = 'scale(' + z + ')';
-      frames[i].style.width = (100 / z) + '%';
-      frames[i].style.height = (100 / z) + '%';
+    var panesEls = document.querySelectorAll('.dash-pane[data-key]');
+    for (var i = 0; i < panesEls.length; i++) {
+      var f = panesEls[i].querySelector('iframe');
+      if (!f) continue;
+      var pz = paneZoomFor(panesEls[i].getAttribute('data-key'), paneZoom, zoom);
+      var z = pz / 100;
+      f.style.transform = 'scale(' + z + ')';
+      f.style.width = (100 / z) + '%';
+      f.style.height = (100 / z) + '%';
+      var val = panesEls[i].querySelector('.dash-pane-zoom-val');
+      if (val) val.textContent = pz + '%';
     }
     document.getElementById('dashZoom').value = zoom;
     document.getElementById('dashZoomVal').textContent = zoom + '%';
@@ -374,6 +415,33 @@ var Dashboard = (function() {
     tag.className = 'tag';
     head.appendChild(name);
     head.appendChild(tag);
+    // 面ごとの倍率「−　75%　＋」（押すとその面だけ 5% ずつ。保存する）
+    var zoomBox = document.createElement('span');
+    zoomBox.className = 'dash-pane-zoom';
+    function zoomBtn(text, label, delta) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'dash-pane-zoom-btn';
+      b.textContent = text;
+      b.title = p.title + ' の倍率を' + (delta < 0 ? '下げます' : '上げます');
+      b.setAttribute('aria-label', p.title + ' の' + label);
+      b.addEventListener('click', function() {
+        var cur = paneZoomFor(p.key, paneZoom, zoom);
+        var want = {}; want[p.key] = cur + delta;
+        paneZoom[p.key] = paneZoomFor(p.key, want, cur);
+        savePaneZoom(paneZoom);
+        applyZoom();
+        renderPanesMenu();   // 「倍率をそろえる」の押せる／押せないを更新
+      });
+      return b;
+    }
+    var zoomVal = document.createElement('span');
+    zoomVal.className = 'dash-pane-zoom-val';
+    zoomVal.setAttribute('aria-live', 'off');
+    zoomBox.appendChild(zoomBtn('−', '縮小', -ZOOM_STEP));
+    zoomBox.appendChild(zoomVal);
+    zoomBox.appendChild(zoomBtn('＋', '拡大', ZOOM_STEP));
+    head.appendChild(zoomBox);
     // × で閉じる。戻すのは上の帯の「▦ 面」（ユーザー要望 2026-10-06）
     var close = document.createElement('button');
     close.type = 'button';
@@ -391,14 +459,18 @@ var Dashboard = (function() {
     frame.src = p.url;
     frame.title = p.title;
     body.appendChild(frame);
-    // 閲覧専用の盾。クリック・タップ・キーは中に届かない。ホイールだけ中へ渡す（同じオリジンなので触れる）
-    var shield = document.createElement('div');
-    shield.className = 'pane-shield';
-    shield.addEventListener('wheel', function(e) {
-      e.preventDefault();
-      try { frame.contentWindow.scrollBy(e.deltaX, e.deltaY); } catch (err) {}
-    }, { passive: false });
-    body.appendChild(shield);
+    if (p.kind === 'desk') {
+      // 運営の面だけの盾（誤押し防止）。クリック・タップ・キーは中に届かない。ホイールだけ中へ渡す（同じオリジンなので触れる）。
+      // 採点の面は閲覧モード（ScoringApp.setViewOnly）、順位の面は触れてよい（設計書 2026-10-10 §1）
+      var shield = document.createElement('div');
+      shield.className = 'pane-shield';
+      shield.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        try { frame.contentWindow.scrollBy(e.deltaX, e.deltaY); } catch (err) {}
+      }, { passive: false });
+      body.appendChild(shield);
+    }
+    if (p.kind === 'court') notifyViewOnly(frame, mode === 'view');
     box.appendChild(body);
     enablePaneDrag(box, head, p.key);
     return box;
@@ -449,7 +521,7 @@ var Dashboard = (function() {
     }
     head.addEventListener('pointerdown', function(e) {
       if (e.button !== 0) return;
-      if (e.target && e.target.closest && e.target.closest('.dash-pane-close')) return;
+      if (e.target && e.target.closest && e.target.closest('.dash-pane-close, .dash-pane-zoom')) return;
       start = { x: e.clientX, y: e.clientY, moving: false };
       head.setPointerCapture(e.pointerId);
       e.preventDefault();
@@ -702,6 +774,10 @@ var Dashboard = (function() {
     button('縦一列に並べる', '全部の面を 1 面ずつの段に縦に並べます', isOneColumn || count === 0, function() {
       arr = oneColumn(arr); savePanes(arr); applyPositions();
     });
+    var anyPaneZoom = Object.keys(paneZoom).length > 0;
+    button('倍率をそろえる', '面ごとの倍率の指定をやめ、全部を上の帯の縮小に合わせます', !anyPaneZoom, function() {
+      paneZoom = {}; savePaneZoom(paneZoom); applyZoom(); renderPanesMenu();
+    });
     button('並びを元に戻す', '既定の 2 段（上にコート、下に運営と順位）に戻し、閉じた面も出します', false, function() {
       arr = arrangePanes(paneList.map(function(p) { return p.key; }), defaultRows, null);
       savePanes(arr);
@@ -795,6 +871,7 @@ var Dashboard = (function() {
     if (!document.getElementById('dashGrid')) return;   // test.html では描かない
     mode = loadMode();
     zoom = loadZoom();
+    paneZoom = loadPaneZoom();
     layout = loadLayout();
     applyTheme(Storage.loadTheme());
     document.getElementById('btnTheme').addEventListener('click', function() {
@@ -835,6 +912,9 @@ var Dashboard = (function() {
     paneKey: paneKey,
     columnsFor: columnsFor,
     clampZoom: clampZoom,
+    paneZoomFor: paneZoomFor,
+    loadPaneZoom: loadPaneZoom,
+    savePaneZoom: savePaneZoom,
     normalizeMode: normalizeMode,
     loadZoom: loadZoom,
     saveZoom: saveZoom,
