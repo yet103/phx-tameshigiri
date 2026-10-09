@@ -470,6 +470,17 @@ var Courts = (function() {
     return left > 0 ? left : 0;
   }
 
+  // ダッシュボードの閲覧専用の採点の面で、一覧の選手を「見るだけ」で選んだあと、採点席の選手を追いかけに戻すか
+  // （設計書 2026-10-10 §2）。pinnedId … 見るだけで選んだ選手の id（無ければ null）、pinnedLiveId … 選んだ時点で
+  // 採点席が映していた選手の id（待機中なら null）、liveId … いま採点席が映している選手の id（待機中なら null）。
+  // 戻り値: 'follow'（追いかける）| 'pinned'（選んだ選手を出したまま）。採点席が次の選手に移った（待機中も含む）ら戻る。
+  function viewFollowDecision(s) {
+    if (!s || !s.pinnedId) return 'follow';
+    var pinnedLive = s.pinnedLiveId || null;
+    var live = s.liveId || null;
+    return live === pinnedLive ? 'pinned' : 'follow';
+  }
+
   // 級位・段位の表示用（「二段」「三段」を「弐段」「参段」に読み替える。EventStatus.normalizeRank）
   function rankLabel(rank) {
     return EventStatus.normalizeRank(rank);
@@ -1299,6 +1310,7 @@ var Courts = (function() {
     rankLabel: rankLabel,
     placeLabel: placeLabel,
     liveRemaining: liveRemaining,
+    viewFollowDecision: viewFollowDecision,
     best4LineText: best4LineText,
     RANK_CATEGORIES: RANK_CATEGORIES,
     rankPanel: rankPanel,

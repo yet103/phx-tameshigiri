@@ -5014,6 +5014,12 @@
       [Courts.liveRemaining({ sec: 10, running: true }, '2026-10-07T00:00:00Z', '2026-10-07T00:01:00Z'),
        Courts.liveRemaining({ sec: 10, running: true }, '2026-10-07T00:05:00Z', '2026-10-07T00:00:00Z'),
        Courts.liveRemaining({ sec: 10, running: true }, 'x', '2026-10-07T00:00:00Z'), Courts.liveRemaining(null, '', '')], [0, 10, 10, 0]);
+    assert('viewFollowDecision: 見るだけの選択が無ければ追いかける', Courts.viewFollowDecision({ pinnedId: null, pinnedLiveId: null, liveId: 'a' }), 'follow');
+    assert('viewFollowDecision: 選択中で採点席が同じ選手なら固定のまま', Courts.viewFollowDecision({ pinnedId: 'x', pinnedLiveId: 'a', liveId: 'a' }), 'pinned');
+    assert('viewFollowDecision: 採点席が次の選手に移ったら追いかけに戻る', Courts.viewFollowDecision({ pinnedId: 'x', pinnedLiveId: 'a', liveId: 'b' }), 'follow');
+    assert('viewFollowDecision: 採点席が待機中（live 無し）になっても戻る', Courts.viewFollowDecision({ pinnedId: 'x', pinnedLiveId: 'a', liveId: null }), 'follow');
+    assert('viewFollowDecision: 選択した時点で採点席が待機中（pinnedLiveId null）→ 採点席が誰かを映したら戻る',
+      [Courts.viewFollowDecision({ pinnedId: 'x', pinnedLiveId: null, liveId: null }), Courts.viewFollowDecision({ pinnedId: 'x', pinnedLiveId: null, liveId: 'a' })], ['pinned', 'follow']);
     assert('placeLabel: コートと巡目（番号は出さない）',
       [Courts.placeLabel({ order: 'A-混合-1-3' }), Courts.placeLabel({ order: 'B-女子-2-1' }), Courts.placeLabel({ order: '' })],
       ['A コート 一巡目', 'B コート 二巡目', '未分類 一巡目']);
