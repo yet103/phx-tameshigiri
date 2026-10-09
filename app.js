@@ -256,9 +256,11 @@ var App = (function() {
   // 衝突の確認は 1 件ずつ出す（複数の選手が同時に衝突することがある）。
   var conflictWaiting = [];
   var conflictOverlay = null;
+  var conflictShowing = null;   // いま確認ダイアログに出しているエントリ（閲覧専用に切り替えたとき待ちへ戻す）
 
   function onSaveConflict(entry) {
-    conflictWaiting.push(entry);
+    // 同じエントリが二度知らされても、確認を二重に積まない
+    if (conflictWaiting.indexOf(entry) === -1 && entry !== conflictShowing) conflictWaiting.push(entry);
     showNextConflict();
   }
 
@@ -358,12 +360,14 @@ var App = (function() {
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     conflictOverlay = overlay;
+    conflictShowing = entry;
     onSaveStatus(Outbox.status());   // 衝突のバナーはダイアログを閉じてから出す
   }
 
   function closeConflictDialog() {
     if (conflictOverlay && conflictOverlay.parentNode) conflictOverlay.parentNode.removeChild(conflictOverlay);
     conflictOverlay = null;
+    conflictShowing = null;
   }
 
   function resolveConflictChoice(entry, action) {
@@ -371,6 +375,11 @@ var App = (function() {
     var server = c.player || null;
     closeConflictDialog();
     Outbox.resolveConflict(entry.eventId, entry.playerId, action);
+    if (action !== 'keep') {
+      // 決着したエントリは、待ちにも印にも残さない（二重に積まれていても再び出さない）
+      delete entry.conflict;
+      conflictWaiting = conflictWaiting.filter(function(w) { return w !== entry; });
+    }
     if (action === 'discard') {
       // サーバーの内容を読み込む。409 に付いてきた選手（サーバーの今の行）で画面を描き直す。
       applyServerPlayer(entry.eventId, server);
@@ -601,6 +610,7 @@ var App = (function() {
       publishLive();
     }
     refreshPlayerList();
+    updatePlayerList();   // 読み直しを待たず、描き直した一覧を今の選手へスクロールする
     renderStatusBanner();
     applyScoringLock();
   }
@@ -2229,12 +2239,17 @@ var App = (function() {
     listRenderPending = false;
     // 作り直す前に各コートの一覧のスクロール位置を控え、作り直した後で戻す（10 秒ごとの読み直しで
     // 見ている位置が先頭に戻らないように。レビュー指摘 2026-10-10）
+    // 大会が変わったら捨てる（前の大会の位置を別の大会の一覧に戻さない）
+    var prevKey = playerListCourts.dataset.listKey || '';
+    var nowKey = currentEvent ? currentEvent.id + '|' + currentCourt : '';
+    var sameEvent = !!currentEvent && prevKey.split('|')[0] === String(currentEvent.id);
     var savedScroll = {};
-    Array.prototype.forEach.call(playerListCourts.querySelectorAll('.court-list'), function(box) {
+    if (sameEvent) Array.prototype.forEach.call(playerListCourts.querySelectorAll('.court-list'), function(box) {
       var b = box.querySelector('.player-list-body');
       if (b && b.scrollTop > 0) savedScroll[box.dataset.court] = b.scrollTop;
     });
     playerListCourts.innerHTML = '';
+    playerListCourts.dataset.listKey = nowKey;   // この一覧を描いた「大会|コート」（updatePlayerList が照らす）
     if (listOpenCourt !== currentCourt) { listOpen = {}; listOpenCourt = currentCourt; }
     var sections = currentEvent ? Scope.listSections(currentEvent, scorerSession, currentCourt) : [];
     playerListSection.hidden = sections.length === 0;
@@ -2271,7 +2286,10 @@ var App = (function() {
       box.classList.toggle('collapsed', !next);
       head.setAttribute('aria-expanded', next ? 'true' : 'false');
       head.querySelector('.court-list-arrow').textContent = next ? '▾' : '▸';
-      if (next && section.current) scrollPlayerListTo(box.querySelector('tr.current-player'));
+      if (next && section.current && scrollPlayerListTo(box.querySelector('tr.current-player')) && currentEvent) {
+        var curP = visiblePlayers[currentIndex];
+        if (curP) listScrolledKey = currentEvent.id + '|' + currentCourt + '|' + curP.id;
+      }
     });
     box.appendChild(head);
 
@@ -2670,6 +2688,8 @@ var App = (function() {
     var body = currentListBody();
     if (!body) return;
     var rows = body.querySelectorAll('tr[data-index]');
+    // 一覧が今の大会・コートのものでなければ（切り替え直後で、まだ描き直す前）、スクロールの記録はしない
+    var listFresh = !!currentEvent && playerListCourts.dataset.listKey === currentEvent.id + '|' + currentCourt;
     for (var i = 0; i < rows.length; i++) {
       var idx = parseInt(rows[i].dataset.index, 10);
       rows[i].classList.toggle('current-player', idx === currentIndex);
@@ -2678,7 +2698,7 @@ var App = (function() {
     // 利用者が一覧をスクロールして見ている位置が戻ってしまう）
     var cur = visiblePlayers[currentIndex];
     var key = currentEvent && cur ? currentEvent.id + '|' + currentCourt + '|' + cur.id : '';
-    if (key !== listScrolledKey && scrollPlayerListTo(body.querySelector('tr.current-player'))) listScrolledKey = key;
+    if (listFresh && key !== listScrolledKey && scrollPlayerListTo(body.querySelector('tr.current-player'))) listScrolledKey = key;
   }
 
   // 一覧の枠（.player-list-body）の中だけをスクロールさせる。
@@ -2895,15 +2915,22 @@ var App = (function() {
       // 入力欄に打ちかけの備考などがあれば、閲覧に入る前に change を発火させて保存させる（入った後は書かない）
       try { if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } catch (e) { /* 無視 */ }
     }
+    var was = viewOnly;
     viewOnly = flag;
     if (viewOnly) {
+      // 操作可能で開いていた衝突の確認は、閲覧専用では出さない（そのエントリを待ちの先頭へ戻して閉じる）
+      if (conflictOverlay && conflictShowing) {
+        conflictWaiting.unshift(conflictShowing);
+        closeConflictDialog();
+        onSaveStatus(Outbox.status());
+      }
       gridEdited = false;   // 編集は 1 操作ごとに保存済み。閲覧に入ったら採点席の選手を追いかけ直す
       liveOwner = false;
     } else {
       clearViewPin();
     }
     applyViewOnlyUi();
-    if (!viewOnly) {
+    if (was && !viewOnly) {
       // 閲覧中は凍結（score-frozen）で描いた採点表を、操作可能な描画に戻す。applyScoringLock だけでは
       // 補正点・備考・文例の disabled が残る（レビュー指摘 2026-10-10）
       var cur = visiblePlayers[currentIndex];
