@@ -106,6 +106,16 @@
     });
     head.appendChild(btnDash);
 
+    // 観戦用ダッシュボード（watch.html。公開・見るだけ。設計書 2026-10-09-watch-dashboard-design.md）
+    var btnWatch = document.createElement('button');
+    btnWatch.type = 'button';
+    btnWatch.className = 'desk-btn';
+    btnWatch.id = 'btnMatchWatchQr';
+    btnWatch.textContent = '📱 観戦用 QR';
+    btnWatch.title = '見るだけの観戦ダッシュボードの QR と URL を出します';
+    btnWatch.addEventListener('click', function() { openWatchQr(btnWatch, ctx); });
+    head.appendChild(btnWatch);
+
     var btnReload = document.createElement('button');
     btnReload.type = 'button';
     btnReload.className = 'desk-btn';
@@ -819,6 +829,47 @@
       }
       var url = new URL('board.html#' + link.token + '/' + encodeURIComponent(court), location.href).href;
       await Desk.copyText(url, court + ' コートの配信用ボードの URL をコピーしました');
+    } finally {
+      if (!ctx.isStale()) btn.disabled = false;
+    }
+  }
+
+  // 観戦用ダッシュボード（watch.html。公開・見るだけ）の QR と URL（設計書 2026-10-09 §4）。
+  // 共有リンク（順位の共有・表彰・配信用ボードと同じトークン）を発行して使う。秘密ではないので写真で配ってよい
+  async function openWatchQr(btn, ctx) {
+    btn.disabled = true;
+    try {
+      var link = await Api.createShareLink(ctx.eventId);
+      if (ctx.isStale()) return;   // 画面を離れていたら alert もダイアログも出さない
+      if (!link || !link.token) {
+        alert('共有リンクを作成できませんでした。通信を確認してください。');
+        return;
+      }
+      var url = new URL('watch.html#' + link.token, location.href).href;
+      var wrap = document.createElement('div');
+      var note = document.createElement('p');
+      note.className = 'desk-note';
+      note.textContent = 'このページは見るだけです（採点中の選手・確定の進み具合・順位。5 秒ごとに更新）。' +
+        '順位の共有リンクと同じ公開範囲なので、写真に撮って配って構いません。';
+      wrap.appendChild(note);
+      var qr = DeskInvites.qrSvg(url, 240);
+      qr.classList.add('desk-watch-qr');
+      wrap.appendChild(qr);
+      var urlBox = document.createElement('p');
+      urlBox.className = 'desk-watch-url';
+      urlBox.textContent = url;
+      wrap.appendChild(urlBox);
+      var btnCopy = document.createElement('button');
+      btnCopy.type = 'button';
+      btnCopy.className = 'desk-btn primary';
+      btnCopy.textContent = 'URL をコピー';
+      btnCopy.addEventListener('click', function() { Desk.copyText(url, '観戦用の URL をコピーしました'); });
+      var btnClose = document.createElement('button');
+      btnClose.type = 'button';
+      btnClose.className = 'desk-btn';
+      btnClose.textContent = '閉じる';
+      var dialog = Desk.openDialog('観戦用ダッシュボード（QR）', wrap, [btnCopy, btnClose]);
+      btnClose.addEventListener('click', function() { dialog.close(); });
     } finally {
       if (!ctx.isStale()) btn.disabled = false;
     }

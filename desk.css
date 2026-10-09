@@ -825,3 +825,7 @@ input[type="text"]:focus, input[type="date"]:focus, input[type="number"]:focus, 
 .desk-arrange-warn { margin-bottom: 0; white-space: pre-line; }
 .desk-radio-row { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .desk-radio-row label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+
+/* 観戦用 QR のダイアログ（設計書 2026-10-09 watch-dashboard §4） */
+.desk-watch-qr { display: block; margin: 8px auto; max-width: 100%; height: auto; }
+.desk-watch-url { word-break: break-all; font-size: 13px; text-align: center; }
