@@ -321,8 +321,8 @@
     return out;
   }
 
-  // 「確定 n / N」で数える巡目（courts.js の Courts.progressRound と同じ規則。サーバーでも使うのでこちらに置く。
-  // 片方を変えたらもう片方も変える。test.html の「progressRoundOf は Courts.progressRound と同じ」で固定）
+  // 「確定 n / N」で数える巡目（規則の本体はこちら。courts.js の Courts.progressRound はここへ委譲する。
+  // サーバーの観戦 API も使うので status.js に置く。test.html の「progressRoundOf は Courts.progressRound と同じ」で固定）
   //   進行中（round1 / round2）→ その巡目、draft（状態が無い場合も）→ 1、round1_done → 2、
   //   round2_done / final / archived → 二巡目の行があれば 2、無ければ 1
   function progressRoundOf(status, players) {

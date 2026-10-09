@@ -52,11 +52,17 @@ var Api = (function() {
 
   // サーバーとの時計のずれ（ms）。応答の Date ヘッダー（秒単位）から求める。配信の状態（live）のタイマーを
   // 面で映すときに使う（配信用ボードの skewMs と同じ考え方）。
+  // Date ヘッダーは秒単位に切り捨てられているので、測るたびの (Date - 端末の現在) は 0〜1 秒ぶん常に小さい側へばらつく
+  // （誤差は負の側にしか出ない）。そのまま上書きすると 5 秒ごとの読み直しでタイマーの秒が戻る・飛ぶので、
+  // 測定値の最大値（いちばん真に近い値）を採る。ページを開いてから端末の時計が大きくずれ直すことは観戦では無視する。
   var serverSkewMs = 0;
+  var serverSkewSeen = false;
   function noteServerDate(res) {
     var d = res && res.headers && res.headers.get('Date');
     var t = d ? Date.parse(d) : NaN;
-    if (Number.isFinite(t)) serverSkewMs = t - Date.now();
+    if (!Number.isFinite(t)) return;
+    var skew = t - Date.now();
+    if (!serverSkewSeen || skew > serverSkewMs) { serverSkewMs = skew; serverSkewSeen = true; }
   }
   function serverNowMs() {
     return Date.now() + serverSkewMs;
@@ -883,13 +889,14 @@ var Api = (function() {
     //   ok     … 200 または 304
     //   data   … 200 のときだけ { event, courts, ranking, techniques }（304・失敗は null）
     //   etag   … 応答の ETag。304・失敗のときは渡した etag をそのまま返す
-    //   status … HTTP ステータス。0 は通信失敗（400/404 はトークンが無効で、叩き続けない）
+    //   status … HTTP ステータス。0 は通信失敗・15 秒の時間切れ（400/404 はトークンが無効で、叩き続けない）
     // 応答の Date ヘッダーで serverNowMs の時計のずれを更新する（304 でも）。
     // fetch の cache は指定しない（If-None-Match を自分で付けると、ブラウザは勝手に補わず 304 をそのまま返す）。
     try {
       var headers = {};
       if (etag) headers['If-None-Match'] = etag;
-      var res = await fetch('/api/links/' + encodeURIComponent(token) + '/watch', { headers: headers });
+      // 15 秒で打ち切る（fetchTimed）。打ち切りは catch で status 0 になり、画面は次の周で読み直す
+      var res = await fetchTimed('/api/links/' + encodeURIComponent(token) + '/watch', { headers: headers });
       noteServerDate(res);
       var data = null;
       if (res.status === 200) data = await res.json();

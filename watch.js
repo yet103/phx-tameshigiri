@@ -14,7 +14,8 @@ var Watch = (function() {
   var CIRCLED = ['①', '②', '③'];
   var ROUND_KANJI = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
 
-  // 大会の状態の表示（EventStatus.LABELS と同じ文言。archived は観客には「最終結果」）
+  // 大会の状態の表示（運営側の EventStatus.LABELS を観客向けに言い換えたもの。
+  // round1_done は「二巡目準備」、archived は「最終結果」。status.js は公開されていないのでここに持つ）
   var STATUS_LABELS = {
     draft: '準備中',
     round1: '一巡目 進行中',
@@ -481,14 +482,35 @@ var Watch = (function() {
     tickTimer = setInterval(tick, TICK_MS);
   }
 
+  // 読み直し 1 回分。どの経路でも（時間切れ・例外・描画の失敗を含めて）busy を必ず false に戻す。
+  // 戻らないと以後の周が全部「実行中」と見なされて読み直しが止まる。
+  // hashchange で切り替わった後の古い応答は捨てる（その場合 busy は切替側の start() がすでに戻している）。
   async function load(force) {
     if (busy) { pending = true; return; }
     busy = true;
     var mySeq = seq;
-    var r = await Api.loadWatch(token, force ? null : etag);
-    if (mySeq !== seq) return;   // hashchange で切り替わった後の古い応答は捨てる（busy は切替側が戻す）
+    var r;
+    try {
+      // loadWatch は 15 秒で打ち切って status 0 を返す（投げない）。念のため例外も通信失敗と同じに扱う
+      r = await Api.loadWatch(token, force ? null : etag);
+    } catch (e) {
+      r = { ok: false, status: 0, data: null, etag: null };
+    }
+    if (mySeq !== seq) return;
     busy = false;
+    try {
+      apply(r);
+    } catch (e) {
+      console.error(e);
+      setNotice('表示できませんでした。5 秒後にもう一度読みます');
+    }
+    if (pending) {
+      pending = false;
+      load(false);
+    }
+  }
 
+  function apply(r) {
     if (r.status === 400 || r.status === 404) {
       showInvalid();
     } else if (r.ok) {
@@ -509,11 +531,6 @@ var Watch = (function() {
       }
     } else {
       setNotice('読み込めませんでした。5 秒後にもう一度読みます');
-    }
-
-    if (pending) {
-      pending = false;
-      load(false);
     }
   }
 
@@ -556,8 +573,11 @@ var Watch = (function() {
       return;
     }
     load(true);
-    startPolling();
-    startTick();
+    // 裏で開かれたときは 1 回だけ読む。定期の読み直しと秒の刻みは visible になってから始める
+    if (!document.hidden) {
+      startPolling();
+      startTick();
+    }
   }
 
   function init() {
