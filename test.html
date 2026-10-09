@@ -2453,6 +2453,58 @@
     await Api.deleteEvent(wEv.id);
     assert('watch: 大会を消すと 404', (await Api.loadWatch(wTok, null)).status, 404);
 
+    // 304 にも ETag と Cache-Control: no-cache が付く（キャッシュ制御は 200 と同じ）
+    var w5Ev = await Api.saveEvent({ name: 'テスト用 観戦 ETag', date: '2026-10-09', venue: '', players: [] });
+    var w5Tok = (await Api.createShareLink(w5Ev.id)).token;
+    var w5a = await fetch('/api/links/' + w5Tok + '/watch', { credentials: 'omit' });
+    var w5b = await fetch('/api/links/' + w5Tok + '/watch', { credentials: 'omit', headers: { 'If-None-Match': w5a.headers.get('ETag') } });
+    assert('watch: 304 にも ETag と Cache-Control: no-cache が付く',
+      [w5a.status, w5b.status, w5b.headers.get('ETag') === w5a.headers.get('ETag') && !!w5b.headers.get('ETag'),
+       w5a.headers.get('Cache-Control'), w5b.headers.get('Cache-Control')],
+      [200, 304, true, 'no-cache', 'no-cache']);
+    // 選手 0 人・settings.courts も無い大会は courts が []
+    var w5 = await Api.loadWatch(w5Tok, null);
+    assert('watch: 選手 0 人の大会は courts が []', [w5.data.courts, w5.data.ranking.rankings !== undefined], [[], true]);
+    // 大会ごとの技リストが techniques に出る。出すのは name / strikes / reducedFirst だけ（備考 note などは公開しない）
+    await Api.saveEventTechniques(w5Ev.id, [
+      { name: '観戦用の技', strikes: [5, 2, null, null], reducedFirst: 3, drawn: true, repeatable: true, note: '運営だけのメモ' }
+    ]);
+    var w5t = await Api.loadWatch(w5Tok, null);
+    assert('watch: 大会ごとの技リストが techniques に出る（name / strikes / reducedFirst だけ。note は出さない）',
+      w5t.data.techniques, [{ name: '観戦用の技', strikes: [5, 2, null, null], reducedFirst: 3 }]);
+    await Api.deleteEvent(w5Ev.id);
+
+    // コートの和集合と並び・未分類は出さない・rank の正規化・混合の progress
+    var w6Ev = await Api.saveEvent({ name: 'テスト用 観戦 コート', date: '2026-10-09', venue: '', players: [
+      { id: 'w6a', name: '観戦 丙', order: 'B-男子-1-1', rank: '三段', bib: 3, tech1: '真', tech2: '', tech3: '', score: 11, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'w6b', name: '観戦 丁', order: 'A-男子-1-1', rank: '', tech1: '', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: false, result: '' },
+      { id: 'w6c', name: '観戦 戊（未分類）', order: '', tech1: '', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: false, result: '' }
+    ] });
+    await Api.updateEventInfo(w6Ev.id, { settings: { courts: ['C'] } });
+    await Api.changeStatus(w6Ev.id, 'round1');
+    await Api.putLive(w6Ev.id, 'B', { playerId: 'w6a', timer: { sec: 300, running: false } });
+    var w6Tok = (await Api.createShareLink(w6Ev.id)).token;
+    var w6 = await Api.loadWatch(w6Tok, null);
+    assert('watch: courts は settings.courts と選手のコートの和集合の昇順（未分類は出さない）',
+      w6.data.courts.map(function(c) { return [c.court, c.progress.done, c.progress.total]; }),
+      [['A', 0, 1], ['B', 1, 1], ['C', 0, 0]]);
+    assert('watch: rank は正規化して返す（三段 → 参段）', w6.data.courts[1].live.player.rank, '参段');
+    await Api.deleteEvent(w6Ev.id);
+
+    var w7Ev = await Api.saveEvent({ name: 'テスト用 観戦 混合', date: '2026-10-09', venue: '', players: [
+      { id: 'w7a', name: '混合 甲', order: 'A-混合-1-1', tech1: '', tech2: '', tech3: '', score: 5, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
+      { id: 'w7b', name: '混合 乙', order: 'A-混合-1-2', tech1: '', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: true, result: '' },
+      { id: 'w7c', name: '混合 丙', order: 'B-混合-1-1', tech1: '', tech2: '', tech3: '', score: 0, isNewFace: false, isFemale: false, result: '' }
+    ] });
+    await Api.updateEventInfo(w7Ev.id, { settings: { mixed: true } });
+    await Api.changeStatus(w7Ev.id, 'round1');
+    var w7Tok = (await Api.createShareLink(w7Ev.id)).token;
+    var w7 = await Api.loadWatch(w7Tok, null);
+    assert('watch: 混合の大会の progress（性別を分けず コート×巡目 で数える）',
+      w7.data.courts.map(function(c) { return [c.court, c.progress.round, c.progress.done, c.progress.total]; }),
+      [['A', 1, 1, 2], ['B', 1, 0, 1]]);
+    await Api.deleteEvent(w7Ev.id);
+
     // --- 順位の細部と静的配信のガード ---
     var rank2Event = await Api.saveEvent({ name: '順位テスト', date: '2026-03-01', venue: '', players: [
       { id: 'r1', name: '田中 ', order: 'A-男子-1-1', tech1: '', tech2: '', tech3: '', score: 7, confirmed: true, isNewFace: false, isFemale: false, result: '1    ' },
@@ -7614,6 +7666,12 @@
         EventStatus.courtProgress(cpP, 1), { A: { done: 1, total: 2 }, B: { done: 1, total: 1 } });
       assert('courtProgress: 二巡目は二巡目の行だけ', EventStatus.courtProgress(cpP, 2), { A: { done: 1, total: 1 } });
       assert('courtProgress: 空・null', [EventStatus.courtProgress([], 1), EventStatus.courtProgress(null, 1)], [{}, {}]);
+      assert('courtProgress: 混合（A-混合-1-n）も男女を分けずコートごとに数える',
+        EventStatus.courtProgress([{ order: 'A-混合-1-1', confirmed: true }, { order: 'A-混合-1-2' }, { order: 'B-混合-1-1' }, { order: 'A-混合-2-1', confirmed: true }], 1),
+        { A: { done: 1, total: 2 }, B: { done: 0, total: 1 } });
+      assert('watchUrlFor: watch.html#<トークン>（いまのページと同じ場所）',
+        [Courts.watchUrlFor('O7KVvuj-', 'http://localhost:3461/desk.html#/events/x/match'), Courts.watchUrlFor('ab c', 'https://example.com/app/index.html?x=1#y')],
+        ['http://localhost:3461/watch.html#O7KVvuj-', 'https://example.com/app/watch.html#ab%20c']);
       assert('courtProgress: 確定は confirmed === true だけ（採点済みでも未確定は数えない）',
         EventStatus.courtProgress([{ order: 'A-男子-1-1', score: 20, result: '1    ' }], 1), { A: { done: 0, total: 1 } });
       assert('progressRoundOf: draft=1, round1=1, round1_done=2, round2=2, round2_done は二巡目の行があれば 2、無ければ 1',

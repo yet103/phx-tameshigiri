@@ -385,13 +385,15 @@ var Courts = (function() {
   //   一巡目終了             → これから採点する二巡目
   //   二巡目終了以降         → 二巡目の行があれば二巡目、無ければ一巡目
   //                            （二巡目なしで終わった大会は一巡目の結果を見せる）
+  // 観戦ダッシュボード（watch.html。公開・見るだけ）の URL。共有リンクのトークンをハッシュに入れる。
+  // baseHref はいま開いているページの URL（location.href）。運営画面の「📱 観戦用 QR」と test.html が使う
+  function watchUrlFor(token, baseHref) {
+    return new URL('watch.html#' + encodeURIComponent(String(token || '')), baseHref).href;
+  }
+
+  // 規則の本体は EventStatus.progressRoundOf（status.js。サーバーの観戦 API と共有）。ここは呼び出し口だけ
   function progressRound(status, players) {
-    var r = EventStatus.scoringRound(status);
-    if (r) return r;
-    if (status === 'draft') return 1;
-    if (status === 'round1_done') return 2;
-    var hasRound2 = (players || []).some(function(p) { return roundOf(p) === 2; });
-    return hasRound2 ? 2 : 1;
+    return EventStatus.progressRoundOf(status, players);
   }
 
   // コートごとの「採点済み n / N」。round の行だけを数える。
@@ -1291,6 +1293,7 @@ var Courts = (function() {
     arrangePlayers: arrangePlayers,
     arrangePreview: arrangePreview,
     progressRound: progressRound,
+    watchUrlFor: watchUrlFor,
     courtProgress: courtProgress,
     livePlayerName: livePlayerName,
     rankLabel: rankLabel,

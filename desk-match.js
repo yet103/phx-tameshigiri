@@ -845,7 +845,7 @@
         alert('共有リンクを作成できませんでした。通信を確認してください。');
         return;
       }
-      var url = new URL('watch.html#' + link.token, location.href).href;
+      var url = Courts.watchUrlFor(link.token, location.href);
       var wrap = document.createElement('div');
       var note = document.createElement('p');
       note.className = 'desk-note';
@@ -854,6 +854,7 @@
       wrap.appendChild(note);
       var qr = DeskInvites.qrSvg(url, 240);
       qr.classList.add('desk-watch-qr');
+      qr.setAttribute('aria-label', '観戦用ダッシュボードの QR コード');   // 既定の文言は採点端末の登録用
       wrap.appendChild(qr);
       var urlBox = document.createElement('p');
       urlBox.className = 'desk-watch-url';
