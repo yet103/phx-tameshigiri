@@ -88,10 +88,10 @@ body.dash-dragging .dash-pane-body iframe { pointer-events: none; }
   background: var(--bg-header); border-bottom: 1px solid var(--border);
   cursor: grab; touch-action: none; user-select: none;   /* 見出しを掴んで別の面と入れ替える */
 }
-.dash-pane-head .name { font-weight: bold; }
-.dash-pane-head .tag { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.dash-pane-head .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-pane-head .tag { margin-left: auto; font-size: 11px; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
 /* 面ごとの倍率「−　75%　＋」 */
-.dash-pane-zoom { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; color: var(--text-muted); }
+.dash-pane-zoom { flex-shrink: 0; display: inline-flex; align-items: center; gap: 2px; font-size: 11px; color: var(--text-muted); }
 .dash-pane-zoom-val { min-width: 3em; text-align: center; font-variant-numeric: tabular-nums; }
 .dash-pane-zoom-btn {
   background: none; border: 0; cursor: pointer; font-size: 14px; line-height: 1; padding: 1px 5px;
@@ -99,6 +99,7 @@ body.dash-dragging .dash-pane-body iframe { pointer-events: none; }
 }
 .dash-pane-zoom-btn:hover { color: var(--text); background: var(--row-selected); }
 .dash-pane-close {
+  flex-shrink: 0;
   background: none; border: 0; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px;
   color: var(--text-muted); border-radius: 3px;
 }

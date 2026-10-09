@@ -7537,6 +7537,16 @@
     assert('Dashboard.savePaneZoom → loadPaneZoom', Dashboard.loadPaneZoom(), { 'court:A': 60, rank: 125 });
     try { localStorage.removeItem('tmg_dashboard_zoom_pane'); } catch (e) {}
     assert('Dashboard.loadPaneZoom: 控えが無ければ空', Dashboard.loadPaneZoom(), {});
+    assert('Dashboard.paneZoomFor: null・空文字・false・配列・オブジェクト・数でない文字は指定なし（一括の値）',
+      [null, '', false, [], [90], {}, 'abc', true].map(function(v) { return Dashboard.paneZoomFor('rank', { rank: v }, 80); }), [80, 80, 80, 80, 80, 80, 80, 80]);
+    assert('Dashboard.paneZoomFor: 数・数の文字列・範囲外は収める',
+      [Dashboard.paneZoomFor('rank', { rank: 90 }, 80), Dashboard.paneZoomFor('rank', { rank: '110' }, 80), Dashboard.paneZoomFor('rank', { rank: 0 }, 80), Dashboard.paneZoomFor('rank', { rank: 9999 }, 80), Dashboard.paneZoomFor('rank', null, 80), Dashboard.paneZoomFor('rank', [60], 80)],
+      [90, 110, 50, 125, 80, 80]);
+    var paneZoomRaw = function(text) { try { localStorage.setItem('tmg_dashboard_zoom_pane', text); } catch (e) {} return Dashboard.loadPaneZoom(); };
+    assert('Dashboard.loadPaneZoom: 壊れた JSON・配列・null・文字列・数は空', [paneZoomRaw('{oops'), paneZoomRaw('[60,70]'), paneZoomRaw('null'), paneZoomRaw('"x"'), paneZoomRaw('60')], [{}, {}, {}, {}, {}]);
+    assert('Dashboard.loadPaneZoom: 数でない値は捨て、範囲外は収める',
+      paneZoomRaw('{"a":null,"b":"","c":false,"d":[],"e":{},"f":"abc","g":"70","h":500,"i":3,"j":80}'), { g: 70, h: 125, i: 50, j: 80 });
+    try { localStorage.removeItem('tmg_dashboard_zoom_pane'); } catch (e) {}
     try { localStorage.removeItem('tmg_dashboard_zoom'); localStorage.removeItem('tmg_dashboard_mode'); } catch (e) {}
     assert('Dashboard.loadZoom / loadMode: 控えが無ければ既定', [Dashboard.loadZoom(), Dashboard.loadMode()], [75, 'view']);
     Dashboard.saveZoom(60); Dashboard.saveMode('edit');

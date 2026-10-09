@@ -59,8 +59,14 @@ var Dashboard = (function() {
     return Math.round(n / ZOOM_STEP) * ZOOM_STEP;
   }
   // 面ごとの倍率。map に鍵が無い・数でないなら一括の base。あれば 5 刻み・50〜125 に収める
+  // 採用するのは数か、空でない文字列が数に読めるときだけ（null・''・false・配列・オブジェクトは Number() だと 0 や数になるので「指定なし」）
+  function paneZoomNumber(raw) {
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string' && raw.trim() !== '') return Number(raw);
+    return NaN;
+  }
   function paneZoomFor(key, map, base) {
-    var v = map && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, key) ? Number(map[key]) : NaN;
+    var v = map && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, key) ? paneZoomNumber(map[key]) : NaN;
     if (!isFinite(v)) return base;
     return Math.min(PANE_ZOOM_MAX, Math.max(PANE_ZOOM_MIN, Math.round(v / ZOOM_STEP) * ZOOM_STEP));
   }
@@ -332,8 +338,7 @@ var Dashboard = (function() {
       var out = {};
       if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
         Object.keys(raw).forEach(function(k) {
-          var v = Number(raw[k]);
-          if (isFinite(v)) out[k] = paneZoomFor(k, raw, ZOOM_DEFAULT);
+          if (isFinite(paneZoomNumber(raw[k]))) out[k] = paneZoomFor(k, raw, ZOOM_DEFAULT);
         });
       }
       return out;
